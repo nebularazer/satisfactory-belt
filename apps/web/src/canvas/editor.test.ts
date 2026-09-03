@@ -190,6 +190,27 @@ describe("canvas editor", () => {
     expect(editor.hitTest({ x: 1_025, y: 1_025 })?.id).toBe("imported");
   });
 
+  it("resets the document and all transient editing state", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({ type: "selection.copy" });
+    editor.dispatch({ type: "selection.move.begin" });
+    editor.dispatch({ type: "selection.move.update", delta: { x: 20, y: 20 } });
+
+    editor.dispatch({ type: "document.reset" });
+
+    expect(editor.getState()).toMatchObject({
+      canRedo: false,
+      canUndo: false,
+      document: { nodes: [], version: 1 },
+      moveDelta: null,
+      selectedIds: [],
+    });
+    expect(editor.getBounds("all")).toBeUndefined();
+    editor.dispatch({ type: "selection.paste" });
+    expect(editor.getState().document.nodes).toHaveLength(0);
+  });
+
   it("bounds operation history", () => {
     const editor = createEditor();
     for (let index = 0; index <= HISTORY_LIMIT; index += 1) {

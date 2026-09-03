@@ -41,10 +41,21 @@ import {
 import type { Point, Viewport } from "@/canvas/viewport";
 import { CanvasContextMenu } from "@/components/canvas-context-menu";
 import { CanvasControls } from "@/components/canvas-controls";
-import { CanvasHint } from "@/components/canvas-hint";
+import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { NodePicker } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
+import { SavedPlansDialog } from "@/components/saved-plans-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Toaster } from "@/components/ui/sonner";
 
 type BootstrapState =
@@ -52,11 +63,16 @@ type BootstrapState =
   | { document?: CanvasDocument; ready: true };
 
 type CanvasWorkspaceProps = {
+  autosaveEnabled: boolean;
   initialDocument?: CanvasDocument;
-  storage?: CanvasDocumentStorage;
+  storage: CanvasDocumentStorage;
 };
 
-function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
+function CanvasWorkspace({
+  autosaveEnabled,
+  initialDocument,
+  storage,
+}: CanvasWorkspaceProps) {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const editor = useMemo(
@@ -113,22 +129,21 @@ function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
   const [showPerformance, setShowPerformance] = useState(() =>
     readBooleanPreference(CANVAS_PREFERENCES.performance, false),
   );
-  const [hintDismissed, setHintDismissed] = useState(() =>
-    readBooleanPreference(CANVAS_PREFERENCES.hintDismissed, false),
-  );
   const [zoom, setZoom] = useState(1);
   const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
+  const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
+  const [savedPlansOpen, setSavedPlansOpen] = useState(false);
   const [contextTarget, setContextTarget] = useState<{
     at: Point;
     nodeId?: string;
   } | null>(null);
 
   useEffect(() => {
-    if (!storage) return;
+    if (!autosaveEnabled) return;
     return attachCanvasAutosave(editor, storage, 300, () => {
       toast.error("The plan could not be saved in this browser.");
     });
-  }, [editor, storage]);
+  }, [autosaveEnabled, editor, storage]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -189,6 +204,7 @@ function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
     try {
       const document = parseCanvasDocument(await file.text());
       editor.dispatch({ type: "document.replace", document });
+      setContextTarget(null);
       requestAnimationFrame(() => canvasRef.current?.fitContent());
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
@@ -214,6 +230,23 @@ function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
   const deleteSelection = () => editor.dispatch({ type: "selection.delete" });
   const duplicateSelection = () =>
     editor.dispatch({ type: "selection.duplicate" });
+  const requestNodeAtCenter = () => {
+    const center = canvasRef.current?.getViewportCenter();
+    if (center) requestNodeAt(center);
+  };
+  const loadDocument = (document: CanvasDocument) => {
+    editor.dispatch({ type: "document.replace", document });
+    setContextTarget(null);
+    requestAnimationFrame(() => canvasRef.current?.fitContent());
+    toast.success(`Loaded ${document.nodes.length} nodes.`);
+  };
+  const resetCanvas = () => {
+    editor.dispatch({ type: "document.reset" });
+    setContextTarget(null);
+    canvasRef.current?.resetView();
+    setResetCanvasOpen(false);
+    toast.success("Canvas reset.");
+  };
 
   return (
     <main className="relative h-dvh w-dvw overflow-hidden bg-canvas text-foreground">
@@ -244,16 +277,20 @@ function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
             canDuplicate={editorState.selectedCount > 0}
             canFitAll={editorState.nodeCount > 0}
             canFitSelection={editorState.selectedCount > 0}
-            onAddNode={() => {
-              const center = canvasRef.current?.getViewportCenter();
-              if (center) requestNodeAt(center);
-            }}
+            canResetCanvas={
+              editorState.nodeCount > 0 ||
+              editorState.canUndo ||
+              editorState.canRedo
+            }
+            onAddNode={requestNodeAtCenter}
             onDelete={deleteSelection}
             onDuplicate={duplicateSelection}
             onExport={exportDocument}
             onFitAll={() => canvasRef.current?.fitContent()}
             onFitSelection={() => canvasRef.current?.fitSelection()}
             onImport={() => importInputRef.current?.click()}
+            onOpenSavedPlans={() => setSavedPlansOpen(true)}
+            onResetCanvas={() => setResetCanvasOpen(true)}
             onResetView={() => canvasRef.current?.resetView()}
             onShowPerformanceChange={handleShowPerformanceChange}
             onSnapToGridChange={(enabled) => {
@@ -265,15 +302,12 @@ function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
           />
         </div>
 
-        {editorState.nodeCount === 0 && !hintDismissed && (
-          <div className="pointer-events-auto absolute left-16 right-3 top-3 flex justify-center sm:left-20 sm:right-20 sm:top-4">
-            <CanvasHint
-              onDismiss={() => {
-                setHintDismissed(true);
-                writeBooleanPreference(CANVAS_PREFERENCES.hintDismissed, true);
-              }}
-            />
-          </div>
+        {editorState.nodeCount === 0 && (
+          <CanvasEmptyState
+            onAddNode={requestNodeAtCenter}
+            onImport={() => importInputRef.current?.click()}
+            onOpenSavedPlans={() => setSavedPlansOpen(true)}
+          />
         )}
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
@@ -315,6 +349,30 @@ function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
         onSelect={addPendingNode}
         open={pendingNode !== null}
       />
+      <SavedPlansDialog
+        currentDocument={editor.getState().document}
+        onLoad={loadDocument}
+        onOpenChange={setSavedPlansOpen}
+        open={savedPlansOpen}
+        storage={storage}
+      />
+      <AlertDialog onOpenChange={setResetCanvasOpen} open={resetCanvasOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset the canvas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This clears every node and the undo history. Your named saved plans
+              are not deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={resetCanvas} variant="destructive">
+              Reset canvas
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }
@@ -328,11 +386,8 @@ export function App() {
     [],
   );
   const storage = useMemo(
-    () =>
-      fixtureNodeCount === 0
-        ? createIndexedDbDocumentStorage()
-        : undefined,
-    [fixtureNodeCount],
+    () => createIndexedDbDocumentStorage(),
+    [],
   );
   const [bootstrap, setBootstrap] = useState<BootstrapState>(() =>
     fixtureNodeCount > 0
@@ -341,10 +396,10 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!storage || bootstrap.ready) return;
+    if (fixtureNodeCount > 0 || bootstrap.ready) return;
     let active = true;
     void storage
-      .load()
+      .loadAutosave()
       .then((document) => {
         if (active) setBootstrap({ document: document ?? undefined, ready: true });
       })
@@ -357,12 +412,13 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [bootstrap.ready, storage]);
+  }, [bootstrap.ready, fixtureNodeCount, storage]);
 
   return (
     <>
       {bootstrap.ready ? (
         <CanvasWorkspace
+          autosaveEnabled={fixtureNodeCount === 0}
           initialDocument={bootstrap.document}
           storage={storage}
         />

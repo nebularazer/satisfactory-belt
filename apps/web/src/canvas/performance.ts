@@ -5,7 +5,7 @@ export type TimingSummary = Readonly<{
 }>;
 
 export type CanvasPerformanceMetrics = Readonly<{
-  fps: number | null;
+  fps: number;
   render: TimingSummary;
   update: TimingSummary;
   visibleNodes: number;
@@ -48,7 +48,7 @@ export function createPerformanceSampler(
     report({
       fps: averageFrameInterval
         ? 1000 / averageFrameInterval
-        : null,
+        : 0,
       render: summarize(renderSamples),
       update: summarize(updateSamples),
       visibleNodes,

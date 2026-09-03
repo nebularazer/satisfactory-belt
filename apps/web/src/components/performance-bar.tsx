@@ -32,11 +32,7 @@ export function PerformanceBar({
   nodeCount,
   selectedCount,
 }: PerformanceBarProps) {
-  const fps = metrics
-    ? metrics.fps === null
-      ? "idle"
-      : Math.round(metrics.fps)
-    : "–";
+  const fps = Math.round(metrics?.fps ?? 0);
   const renderTime = metrics ? metrics.render.averageMs.toFixed(1) : "–";
   const updateTime = metrics ? metrics.update.averageMs.toFixed(1) : "–";
   const nodeLabel = nodeCount === 1 ? "node" : "nodes";

@@ -47,8 +47,10 @@ regenerating textures for off-screen nodes. Hit testing, marquee selection, and
 visibility all use the same incrementally maintained spatial index. Undo history is
 limited to 100 node-level operations rather than retaining entire document snapshots.
 
-Plans are autosaved locally in IndexedDB and recovered when the app reopens. Snap and
-performance settings, plus the dismissible empty-canvas hint, are retained in local
+The active plan is autosaved locally in IndexedDB and recovered when the app reopens.
+The saved-plans dialog can also create, update, load, and delete named browser-local
+snapshots. Resetting the canvas clears the active plan and undo history without
+deleting those snapshots. Snap and performance settings are retained in local
 storage. Imported files are validated against the current document version. During
 this pre-release phase unsupported versions are rejected intentionally; migrations
 will be added after the format stabilizes.
@@ -58,7 +60,8 @@ example, `?nodes=1000` starts the canvas with 1,000 nodes; counts are capped at 
 and fixture sessions do not overwrite the autosaved plan. The optional performance
 bar reports active-render FPS, total and visible nodes, and average update/render
 submission time. Hover a timing value to see its one-second-window p95 and maximum.
-`idle` FPS means the canvas is correctly waiting because nothing needs rendering.
+An FPS value of `0` means the canvas is correctly waiting because nothing needs
+rendering.
 
 For a repeatable worst-case browser benchmark, open `?nodes=10000`, then run this in
 the browser console:

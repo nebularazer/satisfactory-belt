@@ -1,6 +1,8 @@
 import {
   CopyPlus,
+  Database,
   Download,
+  FileX2,
   Focus,
   Gauge,
   Magnet,
@@ -36,6 +38,7 @@ type CanvasMenuProps = {
   canDuplicate: boolean;
   canFitAll: boolean;
   canFitSelection: boolean;
+  canResetCanvas: boolean;
   onAddNode: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
@@ -43,6 +46,8 @@ type CanvasMenuProps = {
   onFitAll: () => void;
   onFitSelection: () => void;
   onImport: () => void;
+  onOpenSavedPlans: () => void;
+  onResetCanvas: () => void;
   onShowPerformanceChange: (enabled: boolean) => void;
   onResetView: () => void;
   onSnapToGridChange: (enabled: boolean) => void;
@@ -55,6 +60,7 @@ export function CanvasMenu({
   canDuplicate,
   canFitAll,
   canFitSelection,
+  canResetCanvas,
   onAddNode,
   onDelete,
   onDuplicate,
@@ -62,6 +68,8 @@ export function CanvasMenu({
   onFitAll,
   onFitSelection,
   onImport,
+  onOpenSavedPlans,
+  onResetCanvas,
   onShowPerformanceChange,
   onResetView,
   onSnapToGridChange,
@@ -84,7 +92,11 @@ export function CanvasMenu({
       >
         <Menu aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-60" sideOffset={8}>
+      <DropdownMenuContent
+        align="start"
+        className="max-h-[calc(100dvh-5rem)] w-60 overflow-y-auto"
+        sideOffset={8}
+      >
         <DropdownMenuGroup>
           <DropdownMenuLabel>Canvas</DropdownMenuLabel>
           <DropdownMenuItem onClick={onAddNode}>
@@ -128,6 +140,10 @@ export function CanvasMenu({
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>Document</DropdownMenuLabel>
+          <DropdownMenuItem onClick={onOpenSavedPlans}>
+            <Database aria-hidden="true" />
+            Saved plans
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onImport}>
             <Upload aria-hidden="true" />
             Import JSON
@@ -135,6 +151,14 @@ export function CanvasMenu({
           <DropdownMenuItem disabled={!canFitAll} onClick={onExport}>
             <Download aria-hidden="true" />
             Export JSON
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!canResetCanvas}
+            onClick={onResetCanvas}
+            variant="destructive"
+          >
+            <FileX2 aria-hidden="true" />
+            Reset canvas
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

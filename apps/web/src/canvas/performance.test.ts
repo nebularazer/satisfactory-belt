@@ -39,7 +39,7 @@ describe("performance sampler", () => {
     sampler.recordRender(1_000, 4);
 
     expect(report).toHaveBeenLastCalledWith({
-      fps: null,
+      fps: 0,
       render: { averageMs: 4, maximumMs: 4, p95Ms: 4 },
       update: { averageMs: 3, maximumMs: 3, p95Ms: 3 },
       visibleNodes: 0,
@@ -55,7 +55,7 @@ describe("performance sampler", () => {
 
     expect(report).toHaveBeenCalledTimes(2);
     expect(report).toHaveBeenLastCalledWith({
-      fps: null,
+      fps: 0,
       render: { averageMs: 5, maximumMs: 5, p95Ms: 5 },
       update: { averageMs: 0, maximumMs: 0, p95Ms: 0 },
       visibleNodes: 0,

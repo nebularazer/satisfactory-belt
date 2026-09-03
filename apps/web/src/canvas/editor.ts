@@ -49,6 +49,7 @@ export type CanvasEditorChange = Readonly<
 
 export type CanvasEditorAction =
   | { type: "document.replace"; document: CanvasDocument }
+  | { type: "document.reset" }
   | { type: "node.create"; at: Point }
   | { type: "selection.clear" }
   | { type: "selection.delete" }
@@ -224,6 +225,19 @@ export function createCanvasEditor(
         spatialIndex.replace(action.document);
         publish(
           { document: action.document, moveDelta: null, selectedIds: [] },
+          { kind: "document" },
+        );
+        return;
+
+      case "document.reset":
+        past.length = 0;
+        future.length = 0;
+        clipboard = [];
+        moveTransaction = undefined;
+        nodeSequence = 0;
+        spatialIndex.replace(EMPTY_DOCUMENT);
+        publish(
+          { document: EMPTY_DOCUMENT, moveDelta: null, selectedIds: [] },
           { kind: "document" },
         );
         return;

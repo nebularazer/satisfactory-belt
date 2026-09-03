@@ -1,5 +1,4 @@
 export const CANVAS_PREFERENCES = {
-  hintDismissed: "satisfactory-belt-canvas-hint-dismissed",
   performance: "satisfactory-belt-performance-metrics",
   snapToGrid: "satisfactory-belt-snap-to-grid",
 } as const;
