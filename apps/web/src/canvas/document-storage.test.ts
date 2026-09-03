@@ -1,10 +1,7 @@
 import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  CANVAS_DOCUMENT_VERSION,
-  type CanvasDocument,
-} from "./document";
+import { CANVAS_DOCUMENT_VERSION, type CanvasDocument } from "./document";
 import {
   attachCanvasAutosave,
   createIndexedDbDocumentStorage,

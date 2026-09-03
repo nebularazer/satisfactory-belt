@@ -21,9 +21,7 @@ import {
   type CanvasDocumentStorage,
   type SavedCanvasDocument,
 } from "@/canvas/document-storage";
-import {
-  createCanvasEditor,
-} from "@/canvas/editor";
+import { createCanvasEditor } from "@/canvas/editor";
 import type { CanvasDocument } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
 import {
@@ -88,10 +86,7 @@ function CanvasWorkspace({
     () =>
       createCanvasEditor({
         document: initialDocument,
-        snapToGrid: readBooleanPreference(
-          CANVAS_PREFERENCES.snapToGrid,
-          true,
-        ),
+        snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
       }),
     [initialDocument],
   );
@@ -143,8 +138,9 @@ function CanvasWorkspace({
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
-  const [activeSave, setActiveSave] =
-    useState<SavedCanvasDocument | null>(initialActiveSave);
+  const [activeSave, setActiveSave] = useState<SavedCanvasDocument | null>(
+    initialActiveSave,
+  );
   const activeSaveRef = useRef<SavedCanvasDocument | null>(initialActiveSave);
   const [contextTarget, setContextTarget] = useState<{
     at: Point;
@@ -231,7 +227,10 @@ function CanvasWorkspace({
 
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== "s"
+      ) {
         return;
       }
       event.preventDefault();
@@ -281,7 +280,9 @@ function CanvasWorkspace({
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "The plan could not be imported.",
+        error instanceof Error
+          ? error.message
+          : "The plan could not be imported.",
       );
     }
   };
@@ -462,8 +463,8 @@ function CanvasWorkspace({
           <AlertDialogHeader>
             <AlertDialogTitle>Reset the canvas?</AlertDialogTitle>
             <AlertDialogDescription>
-              This clears every node and the undo history. Your named saved plans
-              are not deleted.
+              This clears every node and the undo history. Your named saved
+              plans are not deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -481,15 +482,10 @@ function CanvasWorkspace({
 export function App() {
   const fixtureNodeCount = useMemo(
     () =>
-      import.meta.env.DEV
-        ? loadFixtureNodeCount(window.location.search)
-        : 0,
+      import.meta.env.DEV ? loadFixtureNodeCount(window.location.search) : 0,
     [],
   );
-  const storage = useMemo(
-    () => createIndexedDbDocumentStorage(),
-    [],
-  );
+  const storage = useMemo(() => createIndexedDbDocumentStorage(), []);
   const [bootstrap, setBootstrap] = useState<BootstrapState>(() =>
     fixtureNodeCount > 0
       ? {

@@ -36,7 +36,9 @@ function visible(
   screen: { height: number; width: number },
 ) {
   const index = createCanvasSpatialIndex(editorState.document);
-  return visibleCanvasNodes(editorState, viewport, screen, index.query);
+  return visibleCanvasNodes(editorState, viewport, screen, (rectangle) =>
+    index.query(rectangle),
+  );
 }
 
 describe("canvas visibility", () => {

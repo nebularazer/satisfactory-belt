@@ -2,15 +2,23 @@
   "name": "satisfactory-belt",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "build": "pnpm --recursive --if-present build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "dev": "pnpm --filter @satisfactory-belt/web dev",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint --deny-warnings .",
+    "test": "pnpm --recursive --if-present test",
+    "typecheck": "pnpm --recursive --if-present typecheck"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
+    "oxlint-tsgolint": "^7.0.2001"
+  },
   "engines": {
     "node": ">=24"
   },
-  "scripts": {
-    "dev": "pnpm --filter @satisfactory-belt/web dev",
-    "build": "pnpm --recursive --if-present build",
-    "check": "pnpm typecheck && pnpm test && pnpm build",
-    "test": "pnpm --recursive --if-present test",
-    "typecheck": "pnpm --recursive --if-present typecheck"
-  }
+  "packageManager": "pnpm@11.18.0"
 }

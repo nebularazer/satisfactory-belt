@@ -73,7 +73,7 @@ For a repeatable worst-case browser benchmark, open `?nodes=10000`, then run thi
 the browser console:
 
 ```js
-window.satisfactoryBeltBenchmark()
+window.satisfactoryBeltBenchmark();
 ```
 
 It returns synchronous pan, zoom, marquee, and transient drag timings in milliseconds

@@ -43,7 +43,8 @@ function parseNode(value: unknown, index: number): CanvasNode {
 }
 
 export function validateCanvasDocument(value: unknown): CanvasDocument {
-  if (!isRecord(value)) throw new Error("The file does not contain a document.");
+  if (!isRecord(value))
+    throw new Error("The file does not contain a document.");
   if (value.version !== CANVAS_DOCUMENT_VERSION) {
     throw new Error(`Unsupported document version: ${String(value.version)}.`);
   }

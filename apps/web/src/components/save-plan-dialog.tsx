@@ -77,9 +77,7 @@ export function SavePlanDialog({
   const normalizedName = name.trim();
   const normalizedSearch = normalizedName.toLocaleLowerCase();
   const existing = normalizedSearch
-    ? saves.find(
-        (save) => save.name.toLocaleLowerCase() === normalizedSearch,
-      )
+    ? saves.find((save) => save.name.toLocaleLowerCase() === normalizedSearch)
     : undefined;
   const filteredSaves = normalizedSearch
     ? saves.filter((save) =>

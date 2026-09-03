@@ -25,11 +25,7 @@ describe("render scheduler", () => {
 
   it("cancels a pending render", () => {
     const cancelFrame = vi.fn();
-    const scheduler = createRenderScheduler(
-      vi.fn(),
-      () => 42,
-      cancelFrame,
-    );
+    const scheduler = createRenderScheduler(vi.fn(), () => 42, cancelFrame);
 
     scheduler.request();
     scheduler.cancel();

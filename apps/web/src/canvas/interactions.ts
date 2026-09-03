@@ -1,10 +1,6 @@
 import { SNAP_INTERVAL, type CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
-import {
-  screenToWorld,
-  ZOOM_STEP,
-  type Viewport,
-} from "./viewport";
+import { screenToWorld, ZOOM_STEP, type Viewport } from "./viewport";
 
 const DRAG_THRESHOLD = 4;
 
@@ -50,8 +46,14 @@ function passedDragThreshold(start: Point, current: Point) {
 }
 
 function isEditableTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement &&
-    Boolean(target.closest("input, textarea, [contenteditable='true'], [role='menu']"));
+  return (
+    target instanceof HTMLElement &&
+    Boolean(
+      target.closest(
+        "input, textarea, [contenteditable='true'], [role='menu']",
+      ),
+    )
+  );
 }
 
 export function attachCanvasInteractions(
@@ -81,7 +83,8 @@ export function attachCanvasInteractions(
   };
 
   const releasePointer = (pointerId: number) => {
-    if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+    if (canvas.hasPointerCapture(pointerId))
+      canvas.releasePointerCapture(pointerId);
   };
 
   const touchPair = () => [...touches.entries()].slice(0, 2);
@@ -105,9 +108,10 @@ export function attachCanvasInteractions(
 
     if (interaction.kind === "move") {
       editor.dispatch({
-        type: cancelled || !interaction.moved
-          ? "selection.move.cancel"
-          : "selection.move.commit",
+        type:
+          cancelled || !interaction.moved
+            ? "selection.move.cancel"
+            : "selection.move.commit",
       });
       if (!cancelled && !interaction.moved) {
         editor.dispatch({
@@ -244,7 +248,10 @@ export function attachCanvasInteractions(
           x: geometry.midpoint.x - touchGesture.midpoint.x,
           y: geometry.midpoint.y - touchGesture.midpoint.y,
         });
-        host.zoomAt(geometry.distance / touchGesture.distance, geometry.midpoint);
+        host.zoomAt(
+          geometry.distance / touchGesture.distance,
+          geometry.midpoint,
+        );
         touchGesture = geometry;
         return;
       }
@@ -261,7 +268,10 @@ export function attachCanvasInteractions(
     }
 
     if (interaction.kind === "pan") {
-      if (!interaction.moved && !passedDragThreshold(interaction.startScreen, screen)) {
+      if (
+        !interaction.moved &&
+        !passedDragThreshold(interaction.startScreen, screen)
+      ) {
         return;
       }
       interaction.moved = true;
@@ -275,7 +285,10 @@ export function attachCanvasInteractions(
     }
 
     if (interaction.kind === "move") {
-      if (!interaction.moved && !passedDragThreshold(interaction.startScreen, screen)) {
+      if (
+        !interaction.moved &&
+        !passedDragThreshold(interaction.startScreen, screen)
+      ) {
         return;
       }
       interaction.moved = true;
@@ -290,7 +303,10 @@ export function attachCanvasInteractions(
       return;
     }
 
-    if (!interaction.dragging && !passedDragThreshold(interaction.startScreen, screen)) {
+    if (
+      !interaction.dragging &&
+      !passedDragThreshold(interaction.startScreen, screen)
+    ) {
       return;
     }
     interaction.dragging = true;
@@ -366,9 +382,10 @@ export function attachCanvasInteractions(
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     };
-    const deltaY = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-      ? event.deltaY * 16
-      : event.deltaY;
+    const deltaY =
+      event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 16
+        : event.deltaY;
     host.zoomAt(Math.exp(-deltaY * 0.002), anchor);
   };
 
@@ -380,7 +397,9 @@ export function attachCanvasInteractions(
 
     if (modifier && key === "z") {
       event.preventDefault();
-      editor.dispatch({ type: event.shiftKey ? "history.redo" : "history.undo" });
+      editor.dispatch({
+        type: event.shiftKey ? "history.redo" : "history.undo",
+      });
     } else if (modifier && key === "y") {
       event.preventDefault();
       editor.dispatch({ type: "history.redo" });
@@ -413,13 +432,23 @@ export function attachCanvasInteractions(
       const state = editor.getState();
       if (state.selectedIds.length === 0) return;
       event.preventDefault();
-      const step = (state.snapToGrid ? SNAP_INTERVAL : 1) *
-        (event.shiftKey ? 4 : 1);
+      const step =
+        (state.snapToGrid ? SNAP_INTERVAL : 1) * (event.shiftKey ? 4 : 1);
       editor.dispatch({
         type: "selection.nudge",
         delta: {
-          x: event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0,
-          y: event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0,
+          x:
+            event.key === "ArrowLeft"
+              ? -step
+              : event.key === "ArrowRight"
+                ? step
+                : 0,
+          y:
+            event.key === "ArrowUp"
+              ? -step
+              : event.key === "ArrowDown"
+                ? step
+                : 0,
         },
       });
     } else if (!modifier && key === "n" && !event.repeat) {
@@ -447,7 +476,8 @@ export function attachCanvasInteractions(
       host.fit("selection");
     } else if (
       event.code === "Space" &&
-      (document.activeElement === canvas || document.activeElement === document.body)
+      (document.activeElement === canvas ||
+        document.activeElement === document.body)
     ) {
       event.preventDefault();
       spacePressed = true;

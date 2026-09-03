@@ -173,10 +173,7 @@ export function createCanvasEditor(
       entry.before.map(({ node }) => node),
       entry.after.map(({ node }) => node),
     );
-    publish(
-      { document, moveDelta: null, selectedIds },
-      { kind: "document" },
-    );
+    publish({ document, moveDelta: null, selectedIds }, { kind: "document" });
   };
 
   const duplicateNodes = (nodes: readonly CanvasNode[]) => {
@@ -300,7 +297,9 @@ export function createCanvasEditor(
         commit(
           {
             ...state.document,
-            nodes: state.document.nodes.filter((node) => !selected.has(node.id)),
+            nodes: state.document.nodes.filter(
+              (node) => !selected.has(node.id),
+            ),
           },
           [],
           {
@@ -346,7 +345,10 @@ export function createCanvasEditor(
         const startIndex = state.document.nodes.length;
         const selectedIds = duplicates.map((node) => node.id);
         commit(
-          { ...state.document, nodes: [...state.document.nodes, ...duplicates] },
+          {
+            ...state.document,
+            nodes: [...state.document.nodes, ...duplicates],
+          },
           selectedIds,
           {
             after: duplicates.map((node, index) => ({
@@ -406,7 +408,11 @@ export function createCanvasEditor(
           if (state.moveDelta) {
             publish(
               { moveDelta: null },
-              { delta: transaction.delta, kind: "move", nodeIds: state.selectedIds },
+              {
+                delta: transaction.delta,
+                kind: "move",
+                nodeIds: state.selectedIds,
+              },
             );
           }
           return;
@@ -443,7 +449,10 @@ export function createCanvasEditor(
 
       case "selection.nudge": {
         const before = indexedSelection();
-        if (before.length === 0 || (action.delta.x === 0 && action.delta.y === 0)) {
+        if (
+          before.length === 0 ||
+          (action.delta.x === 0 && action.delta.y === 0)
+        ) {
           return;
         }
         const after = before.map(({ index, node }) => ({
@@ -509,10 +518,7 @@ export function createCanvasEditor(
 
       case "settings.snap":
         if (state.snapToGrid !== action.enabled) {
-          publish(
-            { snapToGrid: action.enabled },
-            { kind: "settings" },
-          );
+          publish({ snapToGrid: action.enabled }, { kind: "settings" });
         }
         return;
     }
@@ -521,9 +527,10 @@ export function createCanvasEditor(
   return {
     dispatch,
     getBounds: (scope) => {
-      const nodes = scope === "all"
-        ? state.document.nodes
-        : indexedSelection().map(({ node }) => node);
+      const nodes =
+        scope === "all"
+          ? state.document.nodes
+          : indexedSelection().map(({ node }) => node);
       const bounds = boundsFor(nodes);
       return bounds && scope === "selection" && state.moveDelta
         ? {
@@ -534,8 +541,8 @@ export function createCanvasEditor(
         : bounds;
     },
     getState: () => state,
-    hitTest: spatialIndex.hitTest,
-    query: spatialIndex.query,
+    hitTest: (point) => spatialIndex.hitTest(point),
+    query: (rectangle) => spatialIndex.query(rectangle),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
