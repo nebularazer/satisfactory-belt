@@ -5,6 +5,7 @@ import {
   FolderOpen,
   Focus,
   Gauge,
+  Grid3X3,
   Magnet,
   Maximize2,
   Menu,
@@ -53,9 +54,11 @@ type CanvasMenuProps = {
   onResetCanvas: () => void;
   onSave: () => void;
   onSaveAs: () => void;
+  onShowGridDotsChange: (enabled: boolean) => void;
   onShowPerformanceChange: (enabled: boolean) => void;
   onResetView: () => void;
   onSnapToGridChange: (enabled: boolean) => void;
+  showGridDots: boolean;
   showPerformance: boolean;
   snapToGrid: boolean;
 };
@@ -78,9 +81,11 @@ export function CanvasMenu({
   onResetCanvas,
   onSave,
   onSaveAs,
+  onShowGridDotsChange,
   onShowPerformanceChange,
   onResetView,
   onSnapToGridChange,
+  showGridDots,
   showPerformance,
   snapToGrid,
 }: CanvasMenuProps) {
@@ -198,6 +203,13 @@ export function CanvasMenu({
           >
             <Magnet aria-hidden="true" />
             Snap to grid
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={showGridDots}
+            onCheckedChange={onShowGridDotsChange}
+          >
+            <Grid3X3 aria-hidden="true" />
+            Show grid dots
           </DropdownMenuCheckboxItem>
           <DropdownMenuCheckboxItem
             checked={showPerformance}

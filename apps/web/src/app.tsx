@@ -133,6 +133,9 @@ function CanvasWorkspace({
   const [showPerformance, setShowPerformance] = useState(() =>
     readBooleanPreference(CANVAS_PREFERENCES.performance, false),
   );
+  const [showGridDots, setShowGridDots] = useState(() =>
+    readBooleanPreference(CANVAS_PREFERENCES.showGridDots, true),
+  );
   const [zoom, setZoom] = useState(1);
   const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
@@ -192,6 +195,10 @@ function CanvasWorkspace({
     setShowPerformance(enabled);
     setPerformanceMetrics(null);
     writeBooleanPreference(CANVAS_PREFERENCES.performance, enabled);
+  };
+  const handleShowGridDotsChange = (enabled: boolean) => {
+    setShowGridDots(enabled);
+    writeBooleanPreference(CANVAS_PREFERENCES.showGridDots, enabled);
   };
   const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
 
@@ -347,6 +354,7 @@ function CanvasWorkspace({
           onViewportChange={handleViewportChange}
           performanceMetricsEnabled={showPerformance}
           ref={canvasRef}
+          showGridDots={showGridDots}
         />
       </CanvasContextMenu>
 
@@ -375,11 +383,13 @@ function CanvasWorkspace({
             onSaveAs={openSavePlan}
             onResetCanvas={() => setResetCanvasOpen(true)}
             onResetView={() => canvasRef.current?.resetView()}
+            onShowGridDotsChange={handleShowGridDotsChange}
             onShowPerformanceChange={handleShowPerformanceChange}
             onSnapToGridChange={(enabled) => {
               editor.dispatch({ type: "settings.snap", enabled });
               writeBooleanPreference(CANVAS_PREFERENCES.snapToGrid, enabled);
             }}
+            showGridDots={showGridDots}
             showPerformance={showPerformance}
             snapToGrid={editorState.snapToGrid}
           />

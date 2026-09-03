@@ -33,6 +33,7 @@ import {
 } from "./viewport";
 
 const MAX_POOLED_NODE_DISPLAYS = 256;
+const GRID_DOT_RADIUS = 1;
 
 export type InfiniteCanvasHandle = {
   fitContent: () => void;
@@ -52,6 +53,7 @@ type InfiniteCanvasProps = {
   onRequestAddNode: (at: Point) => void;
   onViewportChange: (viewport: Viewport) => void;
   performanceMetricsEnabled: boolean;
+  showGridDots: boolean;
 };
 
 type NodeDisplay = {
@@ -88,7 +90,13 @@ function createGridTexture(spacing: number) {
   if (context) {
     context.fillStyle = "white";
     context.beginPath();
-    context.arc(size / 2, size / 2, 1.25 / tileScale, 0, Math.PI * 2);
+    context.arc(
+      size / 2,
+      size / 2,
+      GRID_DOT_RADIUS / tileScale,
+      0,
+      Math.PI * 2,
+    );
     context.fill();
   }
 
@@ -314,6 +322,7 @@ export const InfiniteCanvas = forwardRef<
     onRequestAddNode,
     onViewportChange,
     performanceMetricsEnabled,
+    showGridDots,
   },
   ref,
 ) {
@@ -335,9 +344,11 @@ export const InfiniteCanvas = forwardRef<
   > | null>(null);
   const textResolutionRef = useRef(1);
   const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
+  const showGridDotsRef = useRef(showGridDots);
 
   onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
   performanceMetricsEnabledRef.current = performanceMetricsEnabled;
+  showGridDotsRef.current = showGridDots;
 
   const syncVisibleScene = () => {
     const app = appRef.current;
@@ -441,6 +452,13 @@ export const InfiniteCanvas = forwardRef<
   }, [performanceMetricsEnabled]);
 
   useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    grid.sprite.visible = showGridDots;
+    renderSchedulerRef.current?.request();
+  }, [showGridDots]);
+
+  useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
@@ -504,6 +522,7 @@ export const InfiniteCanvas = forwardRef<
           app.screen.height,
           initialViewport.zoom,
         );
+        grid.sprite.visible = showGridDotsRef.current;
         const world = new Container();
         const scene = new Container();
         const marquee = new Graphics();

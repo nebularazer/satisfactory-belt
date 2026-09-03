@@ -38,8 +38,9 @@ The canvas interaction slice supports:
 - importing and exporting versioned JSON plan files; and
 - selecting light, system, or dark appearance from the canvas menu.
 
-The grid uses a fixed 32-unit interval. Snap can be switched off in the menu without
-changing the visual scale of the canvas.
+The grid uses a fixed 32-unit interval and its dots are shown by default. Snap and
+the grid dots can be switched off independently in the menu without changing the
+visual scale of the canvas.
 
 Rendering is scheduled only when canvas state changes. Node drags update the selected
 Pixi objects transiently and commit the document once when the drag ends, while the
