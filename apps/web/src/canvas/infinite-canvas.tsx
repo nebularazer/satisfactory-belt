@@ -40,7 +40,12 @@ function positiveModulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
 }
 
-function drawGrid(graphics: Graphics, viewport: Viewport, width: number, height: number) {
+function drawGrid(
+  graphics: Graphics,
+  viewport: Viewport,
+  width: number,
+  height: number,
+) {
   graphics.clear();
 
   let spacing = GRID_SIZE * viewport.zoom;
@@ -51,14 +56,13 @@ function drawGrid(graphics: Graphics, viewport: Viewport, width: number, height:
   const offsetY = positiveModulo(viewport.y, spacing);
 
   for (let x = offsetX; x <= width; x += spacing) {
-    graphics.moveTo(x, 0).lineTo(x, height);
+    for (let y = offsetY; y <= height; y += spacing) {
+      graphics.circle(x, y, 1);
+    }
   }
 
-  for (let y = offsetY; y <= height; y += spacing) {
-    graphics.moveTo(0, y).lineTo(width, y);
-  }
-
-  graphics.stroke({ color: 0xb7bfca, alpha: 0.28, pixelLine: true, width: 1 });
+  const dark = document.documentElement.classList.contains("dark");
+  graphics.fill({ color: dark ? 0xa1a1aa : 0x9ca3af, alpha: dark ? 0.4 : 0.34 });
 }
 
 export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
@@ -116,6 +120,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
       const app = new Application();
       let active = true;
       let resizeObserver: ResizeObserver | undefined;
+      let themeObserver: MutationObserver | undefined;
       let removeListeners: (() => void) | undefined;
 
       void app
@@ -143,11 +148,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
 
           const grid = new Graphics();
           const world = new Container();
-          const origin = new Graphics()
-            .circle(0, 0, 4)
-            .fill({ color: 0x6965db, alpha: 0.9 });
 
-          world.addChild(origin);
           app.stage.addChild(grid, world);
           gridRef.current = grid;
           worldRef.current = world;
@@ -196,29 +197,21 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
 
           const wheel = (event: WheelEvent) => {
             event.preventDefault();
-
-            if (event.ctrlKey || event.metaKey) {
-              const bounds = canvas.getBoundingClientRect();
-              const anchor = {
-                x: event.clientX - bounds.left,
-                y: event.clientY - bounds.top,
-              };
-              const factor = Math.exp(-event.deltaY * 0.005);
-              renderViewport(
-                zoomViewportAt(
-                  viewportRef.current,
-                  viewportRef.current.zoom * factor,
-                  anchor,
-                ),
-              );
-              return;
-            }
-
+            const bounds = canvas.getBoundingClientRect();
+            const anchor = {
+              x: event.clientX - bounds.left,
+              y: event.clientY - bounds.top,
+            };
+            const deltaY = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+              ? event.deltaY * 16
+              : event.deltaY;
+            const factor = Math.exp(-deltaY * 0.002);
             renderViewport(
-              panViewport(viewportRef.current, {
-                x: event.shiftKey ? -event.deltaY : -event.deltaX,
-                y: event.shiftKey ? 0 : -event.deltaY,
-              }),
+              zoomViewportAt(
+                viewportRef.current,
+                viewportRef.current.zoom * factor,
+                anchor,
+              ),
             );
           };
 
@@ -263,6 +256,13 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
             canvasSize = nextSize;
           });
           resizeObserver.observe(host);
+          themeObserver = new MutationObserver(() => {
+            drawGrid(grid, viewportRef.current, app.screen.width, app.screen.height);
+          });
+          themeObserver.observe(document.documentElement, {
+            attributeFilter: ["class"],
+            attributes: true,
+          });
 
           removeListeners = () => {
             canvas.removeEventListener("pointerdown", pointerDown);
@@ -278,6 +278,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         active = false;
         removeListeners?.();
         resizeObserver?.disconnect();
+        themeObserver?.disconnect();
         dragRef.current = null;
         gridRef.current = null;
         worldRef.current = null;

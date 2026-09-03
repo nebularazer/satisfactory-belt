@@ -33,36 +33,37 @@ export function CanvasControls({
         aria-label="Undo"
         disabled={!canUndo}
         onClick={onUndo}
-        size="icon"
+        size="icon-lg"
         title="Undo (Ctrl/Cmd+Z)"
         variant="ghost"
       >
-        <Undo2 aria-hidden="true" className="size-4" />
+        <Undo2 aria-hidden="true" />
       </Button>
       <Button
         aria-label="Redo"
         disabled={!canRedo}
         onClick={onRedo}
-        size="icon"
+        size="icon-lg"
         title="Redo (Ctrl/Cmd+Shift+Z)"
         variant="ghost"
       >
-        <Redo2 aria-hidden="true" className="size-4" />
+        <Redo2 aria-hidden="true" />
       </Button>
       <div aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
       <Button
         aria-label="Zoom out"
         onClick={onZoomOut}
-        size="icon"
+        size="icon-lg"
         title="Zoom out (-)"
         variant="ghost"
       >
-        <Minus aria-hidden="true" className="size-4" />
+        <Minus aria-hidden="true" />
       </Button>
       <Button
         aria-label={`Reset zoom, currently ${Math.round(zoom * 100)} percent`}
         onClick={onResetView}
-        size="compact"
+        className="min-w-14 tabular-nums"
+        size="lg"
         title="Reset view (0)"
         variant="ghost"
       >
@@ -71,11 +72,11 @@ export function CanvasControls({
       <Button
         aria-label="Zoom in"
         onClick={onZoomIn}
-        size="icon"
+        size="icon-lg"
         title="Zoom in (+)"
         variant="ghost"
       >
-        <Plus aria-hidden="true" className="size-4" />
+        <Plus aria-hidden="true" />
       </Button>
     </div>
   );

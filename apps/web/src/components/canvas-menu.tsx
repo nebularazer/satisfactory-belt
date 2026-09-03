@@ -1,45 +1,78 @@
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Menu, RotateCcw } from "lucide-react";
+import { Menu, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
 
+import { useTheme, type Theme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type CanvasMenuProps = {
   onResetView: () => void;
 };
 
 export function CanvasMenu({ onResetView }: CanvasMenuProps) {
+  const { setTheme, theme } = useTheme();
+
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <Button aria-label="Open canvas menu" size="icon" variant="outline">
-          <Menu aria-hidden="true" className="size-4" />
-        </Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="start"
-          className="z-50 min-w-56 rounded-xl border border-border bg-card p-1.5 text-foreground shadow-lg"
-          sideOffset={8}
-        >
-          <DropdownMenu.Label className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-            Canvas
-          </DropdownMenu.Label>
-          <DropdownMenu.Item
-            className="flex cursor-default select-none items-center gap-2 rounded-md px-2 py-2 text-sm outline-none hover:bg-accent focus:bg-accent"
-            onSelect={onResetView}
-          >
-            <RotateCcw aria-hidden="true" className="size-4" />
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="Open canvas menu"
+            className="size-9 bg-card/95 shadow-sm"
+            size="icon-lg"
+            variant="outline"
+          />
+        }
+      >
+        <Menu aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60" sideOffset={8}>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Canvas</DropdownMenuLabel>
+          <DropdownMenuItem onClick={onResetView}>
+            <RotateCcw aria-hidden="true" />
             Reset view
-            <span className="ml-auto text-xs text-muted-foreground">0</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          <div className="px-2 py-1.5 text-xs leading-5 text-muted-foreground">
-            Drag to pan
-            <br />
-            Ctrl/Cmd + scroll to zoom
-          </div>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+            <DropdownMenuShortcut>0</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Theme</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            onValueChange={(value) => setTheme(value as Theme)}
+            value={theme}
+          >
+            <DropdownMenuRadioItem value="dark">
+              <Moon aria-hidden="true" />
+              Dark
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="system">
+              <Monitor aria-hidden="true" />
+              System
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="light">
+              <Sun aria-hidden="true" />
+              Light
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+          Drag to pan
+          <br />
+          Scroll to zoom
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

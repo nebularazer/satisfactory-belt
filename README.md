@@ -17,10 +17,10 @@ pnpm dev
 The first interaction slice supports:
 
 - dragging the canvas to pan;
-- scrolling to pan;
-- Ctrl/Cmd + scrolling to zoom around the pointer;
+- scrolling to zoom around the pointer;
 - zooming with the floating controls or `+` and `-`;
 - resetting the view with the zoom percentage or `0`.
+- selecting light, system, or dark appearance from the canvas menu.
 
 Undo and redo are visible but disabled until the canvas has document mutations.
 
@@ -28,4 +28,3 @@ Undo and redo are visible but disabled until the canvas has document mutations.
 
 - Branches: `<type>/<short-description>`, for example `feat/infinite-canvas`
 - Commits and pull requests: Conventional Commits, for example `feat(canvas): add pan and zoom controls`
-
