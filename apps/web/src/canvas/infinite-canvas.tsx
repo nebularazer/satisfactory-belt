@@ -155,7 +155,7 @@ function drawScene(
     display.card
       .clear()
       .roundRect(0, 0, node.width, node.height, 10)
-      .fill({ color: dark ? 0x202024 : 0xffffff, alpha: 0.98 })
+      .fill({ color: dark ? 0x202024 : 0xffffff })
       .stroke({
         color: selected ? 0x6366f1 : dark ? 0x52525b : 0xd4d4d8,
         width: selected ? 2 : 1,
