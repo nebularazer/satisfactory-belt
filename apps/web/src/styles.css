@@ -118,13 +118,25 @@ canvas {
   display: block;
   height: 100%;
   width: 100%;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
   user-select: none;
 }
 
-.infinite-canvas__surface[data-dragging="true"] {
+.infinite-canvas__surface[data-cursor="grab"] {
+  cursor: grab;
+}
+
+.infinite-canvas__surface[data-cursor="grabbing"] {
   cursor: grabbing;
+}
+
+.infinite-canvas__surface[data-cursor="move"] {
+  cursor: move;
+}
+
+.infinite-canvas__surface[data-cursor="crosshair"] {
+  cursor: crosshair;
 }
 
 .dark {

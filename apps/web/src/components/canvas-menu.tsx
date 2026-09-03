@@ -1,9 +1,20 @@
-import { Menu, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import {
+  CopyPlus,
+  Magnet,
+  Menu,
+  Monitor,
+  Moon,
+  Plus,
+  RotateCcw,
+  Sun,
+  Trash2,
+} from "lucide-react";
 
 import { useTheme, type Theme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -16,10 +27,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type CanvasMenuProps = {
+  canDelete: boolean;
+  canDuplicate: boolean;
+  onAddNode: () => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
   onResetView: () => void;
+  onSnapToGridChange: (enabled: boolean) => void;
+  snapToGrid: boolean;
 };
 
-export function CanvasMenu({ onResetView }: CanvasMenuProps) {
+export function CanvasMenu({
+  canDelete,
+  canDuplicate,
+  onAddNode,
+  onDelete,
+  onDuplicate,
+  onResetView,
+  onSnapToGridChange,
+  snapToGrid,
+}: CanvasMenuProps) {
   const { setTheme, theme } = useTheme();
 
   return (
@@ -39,6 +66,33 @@ export function CanvasMenu({ onResetView }: CanvasMenuProps) {
       <DropdownMenuContent align="start" className="w-60" sideOffset={8}>
         <DropdownMenuGroup>
           <DropdownMenuLabel>Canvas</DropdownMenuLabel>
+          <DropdownMenuItem onClick={onAddNode}>
+            <Plus aria-hidden="true" />
+            Add node
+            <DropdownMenuShortcut>N</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canDuplicate} onClick={onDuplicate}>
+            <CopyPlus aria-hidden="true" />
+            Duplicate selection
+            <DropdownMenuShortcut>⌘/Ctrl D</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!canDelete}
+            onClick={onDelete}
+            variant="destructive"
+          >
+            <Trash2 aria-hidden="true" />
+            Delete selection
+            <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={snapToGrid}
+            onCheckedChange={onSnapToGridChange}
+          >
+            <Magnet aria-hidden="true" />
+            Snap to grid
+          </DropdownMenuCheckboxItem>
           <DropdownMenuItem onClick={onResetView}>
             <RotateCcw aria-hidden="true" />
             Reset view
@@ -68,9 +122,13 @@ export function CanvasMenu({ onResetView }: CanvasMenuProps) {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-xs leading-5 text-muted-foreground">
-          Drag to pan
+          Drag a node to move it
           <br />
-          Scroll to zoom
+          Drag empty space to select
+          <br />
+          Space + drag to pan · Scroll to zoom
+          <br />
+          Hold Alt while moving to bypass snap
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
