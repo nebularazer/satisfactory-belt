@@ -19,6 +19,7 @@ import {
   attachCanvasAutosave,
   createIndexedDbDocumentStorage,
   type CanvasDocumentStorage,
+  type SavedCanvasDocument,
 } from "@/canvas/document-storage";
 import {
   createCanvasEditor,
@@ -60,16 +61,22 @@ import { Toaster } from "@/components/ui/sonner";
 
 type BootstrapState =
   | { ready: false }
-  | { document?: CanvasDocument; ready: true };
+  | {
+      activeSave: SavedCanvasDocument | null;
+      document?: CanvasDocument;
+      ready: true;
+    };
 
 type CanvasWorkspaceProps = {
   autosaveEnabled: boolean;
+  initialActiveSave: SavedCanvasDocument | null;
   initialDocument?: CanvasDocument;
   storage: CanvasDocumentStorage;
 };
 
 function CanvasWorkspace({
   autosaveEnabled,
+  initialActiveSave,
   initialDocument,
   storage,
 }: CanvasWorkspaceProps) {
@@ -133,16 +140,30 @@ function CanvasWorkspace({
   const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [savedPlansOpen, setSavedPlansOpen] = useState(false);
+  const [activeSave, setActiveSave] =
+    useState<SavedCanvasDocument | null>(initialActiveSave);
+  const activeSaveRef = useRef<SavedCanvasDocument | null>(initialActiveSave);
   const [contextTarget, setContextTarget] = useState<{
     at: Point;
     nodeId?: string;
   } | null>(null);
 
+  const selectActiveSave = useCallback((save: SavedCanvasDocument | null) => {
+    activeSaveRef.current = save;
+    setActiveSave(save);
+  }, []);
+
   useEffect(() => {
     if (!autosaveEnabled) return;
-    return attachCanvasAutosave(editor, storage, 300, () => {
-      toast.error("The plan could not be saved in this browser.");
-    });
+    return attachCanvasAutosave(
+      editor,
+      storage,
+      () => activeSaveRef.current?.id ?? null,
+      300,
+      () => {
+        toast.error("The plan could not be saved in this browser.");
+      },
+    );
   }, [autosaveEnabled, editor, storage]);
 
   useEffect(() => {
@@ -175,6 +196,44 @@ function CanvasWorkspace({
   };
   const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
 
+  const saveCurrentPlan = useCallback(async () => {
+    const current = activeSaveRef.current;
+    if (!current) {
+      setPendingNode(null);
+      setResetCanvasOpen(false);
+      setSavedPlansOpen(true);
+      return;
+    }
+
+    try {
+      const saved = await storage.saveNamed({
+        document: editor.getState().document,
+        id: current.id,
+      });
+      selectActiveSave(saved);
+      toast.success(`Updated “${saved.name}”.`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "The current plan could not be updated.",
+      );
+    }
+  }, [editor, selectActiveSave, storage]);
+
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") {
+        return;
+      }
+      event.preventDefault();
+      if (event.repeat || savedPlansOpen) return;
+      void saveCurrentPlan();
+    };
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [saveCurrentPlan, savedPlansOpen]);
+
   const addPendingNode = () => {
     if (!pendingNode) return;
     editor.dispatch({ type: "node.create", at: pendingNode.at });
@@ -203,6 +262,7 @@ function CanvasWorkspace({
 
     try {
       const document = parseCanvasDocument(await file.text());
+      selectActiveSave(null);
       editor.dispatch({ type: "document.replace", document });
       setContextTarget(null);
       requestAnimationFrame(() => canvasRef.current?.fitContent());
@@ -234,13 +294,20 @@ function CanvasWorkspace({
     const center = canvasRef.current?.getViewportCenter();
     if (center) requestNodeAt(center);
   };
-  const loadDocument = (document: CanvasDocument) => {
-    editor.dispatch({ type: "document.replace", document });
+  const loadDocument = (save: SavedCanvasDocument) => {
+    selectActiveSave(save);
+    editor.dispatch({ type: "document.replace", document: save.document });
     setContextTarget(null);
     requestAnimationFrame(() => canvasRef.current?.fitContent());
-    toast.success(`Loaded ${document.nodes.length} nodes.`);
+    if (autosaveEnabled) {
+      void storage.saveWorkspace(save.document, save.id).catch(() => {
+        toast.error("The current saved plan could not be remembered.");
+      });
+    }
+    toast.success(`Loaded “${save.name}”.`);
   };
   const resetCanvas = () => {
+    selectActiveSave(null);
     editor.dispatch({ type: "document.reset" });
     setContextTarget(null);
     canvasRef.current?.resetView();
@@ -273,6 +340,7 @@ function CanvasWorkspace({
       <div className="pointer-events-none absolute inset-0 z-10">
         <div className="pointer-events-auto absolute left-3 top-3 sm:left-4 sm:top-4">
           <CanvasMenu
+            activeSaveName={activeSave?.name}
             canDelete={editorState.selectedCount > 0}
             canDuplicate={editorState.selectedCount > 0}
             canFitAll={editorState.nodeCount > 0}
@@ -290,6 +358,7 @@ function CanvasWorkspace({
             onFitSelection={() => canvasRef.current?.fitSelection()}
             onImport={() => importInputRef.current?.click()}
             onOpenSavedPlans={() => setSavedPlansOpen(true)}
+            onSave={() => void saveCurrentPlan()}
             onResetCanvas={() => setResetCanvasOpen(true)}
             onResetView={() => canvasRef.current?.resetView()}
             onShowPerformanceChange={handleShowPerformanceChange}
@@ -350,9 +419,22 @@ function CanvasWorkspace({
         open={pendingNode !== null}
       />
       <SavedPlansDialog
+        activeSave={activeSave}
         currentDocument={editor.getState().document}
+        onDelete={(save) => {
+          if (save.id !== activeSaveRef.current?.id) return;
+          selectActiveSave(null);
+          if (autosaveEnabled) {
+            void storage
+              .saveWorkspace(editor.getState().document, null)
+              .catch(() => {
+                toast.error("The current saved plan could not be cleared.");
+              });
+          }
+        }}
         onLoad={loadDocument}
         onOpenChange={setSavedPlansOpen}
+        onSaved={selectActiveSave}
         open={savedPlansOpen}
         storage={storage}
       />
@@ -391,7 +473,11 @@ export function App() {
   );
   const [bootstrap, setBootstrap] = useState<BootstrapState>(() =>
     fixtureNodeCount > 0
-      ? { document: createCanvasLoadFixture(fixtureNodeCount), ready: true }
+      ? {
+          activeSave: null,
+          document: createCanvasLoadFixture(fixtureNodeCount),
+          ready: true,
+        }
       : { ready: false },
   );
 
@@ -399,13 +485,19 @@ export function App() {
     if (fixtureNodeCount > 0 || bootstrap.ready) return;
     let active = true;
     void storage
-      .loadAutosave()
-      .then((document) => {
-        if (active) setBootstrap({ document: document ?? undefined, ready: true });
+      .loadWorkspace()
+      .then((workspace) => {
+        if (active) {
+          setBootstrap({
+            activeSave: workspace.activeSave,
+            document: workspace.document ?? undefined,
+            ready: true,
+          });
+        }
       })
       .catch(() => {
         if (active) {
-          setBootstrap({ ready: true });
+          setBootstrap({ activeSave: null, ready: true });
           toast.error("The previous browser session could not be restored.");
         }
       });
@@ -419,6 +511,7 @@ export function App() {
       {bootstrap.ready ? (
         <CanvasWorkspace
           autosaveEnabled={fixtureNodeCount === 0}
+          initialActiveSave={bootstrap.activeSave}
           initialDocument={bootstrap.document}
           storage={storage}
         />

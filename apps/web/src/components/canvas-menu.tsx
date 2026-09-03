@@ -12,6 +12,7 @@ import {
   Moon,
   Plus,
   RotateCcw,
+  Save,
   Sun,
   Trash2,
   Upload,
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type CanvasMenuProps = {
+  activeSaveName?: string;
   canDelete: boolean;
   canDuplicate: boolean;
   canFitAll: boolean;
@@ -48,6 +50,7 @@ type CanvasMenuProps = {
   onImport: () => void;
   onOpenSavedPlans: () => void;
   onResetCanvas: () => void;
+  onSave: () => void;
   onShowPerformanceChange: (enabled: boolean) => void;
   onResetView: () => void;
   onSnapToGridChange: (enabled: boolean) => void;
@@ -56,6 +59,7 @@ type CanvasMenuProps = {
 };
 
 export function CanvasMenu({
+  activeSaveName,
   canDelete,
   canDuplicate,
   canFitAll,
@@ -70,6 +74,7 @@ export function CanvasMenu({
   onImport,
   onOpenSavedPlans,
   onResetCanvas,
+  onSave,
   onShowPerformanceChange,
   onResetView,
   onSnapToGridChange,
@@ -139,7 +144,22 @@ export function CanvasMenu({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Document</DropdownMenuLabel>
+          <DropdownMenuLabel className="flex items-center justify-between gap-3">
+            <span>Document</span>
+            {activeSaveName && (
+              <span
+                className="max-w-32 truncate font-normal text-muted-foreground"
+                title={activeSaveName}
+              >
+                {activeSaveName}
+              </span>
+            )}
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={onSave}>
+            <Save aria-hidden="true" />
+            {activeSaveName ? "Save current plan" : "Save plan as…"}
+            <DropdownMenuShortcut>⌘/Ctrl S</DropdownMenuShortcut>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onOpenSavedPlans}>
             <Database aria-hidden="true" />
             Saved plans

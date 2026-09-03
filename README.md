@@ -29,6 +29,8 @@ The canvas interaction slice supports:
 - fitting every node with `1` (or an empty-canvas double-click), and fitting the selection with `2`;
 - moving selected nodes with the arrow keys, or four grid intervals with Shift + arrow;
 - copying, pasting, and duplicating selections with the standard keyboard shortcuts;
+- saving the current named plan with Ctrl/Cmd + `S`, or opening Save As when the
+  canvas is not associated with a named plan;
 - deleting selections with Delete or Backspace;
 - undoing and redoing document changes from the controls or keyboard;
 - showing optional live canvas performance metrics from the Settings menu;
@@ -47,13 +49,14 @@ regenerating textures for off-screen nodes. Hit testing, marquee selection, and
 visibility all use the same incrementally maintained spatial index. Undo history is
 limited to 100 node-level operations rather than retaining entire document snapshots.
 
-The active plan is autosaved locally in IndexedDB and recovered when the app reopens.
-The saved-plans dialog can also create, update, load, and delete named browser-local
-snapshots. Resetting the canvas clears the active plan and undo history without
-deleting those snapshots. Snap and performance settings are retained in local
-storage. Imported files are validated against the current document version. During
-this pre-release phase unsupported versions are rejected intentionally; migrations
-will be added after the format stabilizes.
+The active canvas is autosaved locally in IndexedDB and recovered when the app
+reopens. The saved-plans dialog can also create, update, load, and delete named
+browser-local snapshots, and remembers which named plan is currently loaded.
+Resetting the canvas clears the canvas and undo history and detaches it from the
+current named save without deleting any snapshots. Snap and performance settings are
+retained in local storage. Imported files are validated against the current document
+version. During this pre-release phase unsupported versions are rejected
+intentionally; migrations will be added after the format stabilizes.
 
 In development, append `?nodes=<count>` to create a deterministic load fixture. For
 example, `?nodes=1000` starts the canvas with 1,000 nodes; counts are capped at 10,000

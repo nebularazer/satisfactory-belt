@@ -8,20 +8,33 @@ export type SavedCanvasDocument = Readonly<{
   updatedAt: string;
 }>;
 
+export type CanvasWorkspaceSnapshot = Readonly<{
+  activeSave: SavedCanvasDocument | null;
+  document: CanvasDocument | null;
+}>;
+
+export type SaveCanvasDocumentRequest = Readonly<{
+  document: CanvasDocument;
+  id?: string;
+  name?: string;
+}>;
+
 export type CanvasDocumentStorage = Readonly<{
   deleteNamed: (id: string) => Promise<void>;
   listNamed: () => Promise<readonly SavedCanvasDocument[]>;
-  loadAutosave: () => Promise<CanvasDocument | null>;
-  saveAutosave: (document: CanvasDocument) => Promise<void>;
-  saveNamed: (
-    name: string,
+  loadWorkspace: () => Promise<CanvasWorkspaceSnapshot>;
+  saveWorkspace: (
     document: CanvasDocument,
-    id?: string,
+    activeSaveId: string | null,
+  ) => Promise<void>;
+  saveNamed: (
+    request: SaveCanvasDocumentRequest,
   ) => Promise<SavedCanvasDocument>;
 }>;
 
 const DATABASE_NAME = "satisfactory-belt";
 const AUTOSAVE_KEY = "autosave";
+const ACTIVE_SAVE_KEY = "active-save";
 const NAMED_SAVE_PREFIX = "save:";
 const STORE_NAME = "documents";
 
@@ -77,11 +90,16 @@ export function createIndexedDbDocumentStorage(
     });
   };
 
-  const write = async (key: string, value: unknown): Promise<void> => {
+  const writeWorkspace = async (
+    document: CanvasDocument,
+    activeSaveId: string | null,
+  ): Promise<void> => {
     const db = await database;
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, "readwrite");
-      transaction.objectStore(STORE_NAME).put(value, key);
+      const store = transaction.objectStore(STORE_NAME);
+      store.put(document, AUTOSAVE_KEY);
+      store.put(activeSaveId, ACTIVE_SAVE_KEY);
       transaction.onerror = () => reject(transaction.error);
       transaction.oncomplete = () => resolve();
     });
@@ -113,16 +131,31 @@ export function createIndexedDbDocumentStorage(
         .filter((save): save is SavedCanvasDocument => save !== null)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     },
-    async loadAutosave() {
-      const value = await read(AUTOSAVE_KEY);
-      return value === undefined ? null : validateCanvasDocument(value);
+    async loadWorkspace() {
+      const documentValue = await read(AUTOSAVE_KEY);
+      const activeSaveId = await read(ACTIVE_SAVE_KEY);
+      const document =
+        documentValue === undefined
+          ? null
+          : validateCanvasDocument(documentValue);
+      if (typeof activeSaveId !== "string") {
+        return { activeSave: null, document };
+      }
+
+      const activeSave = readStoredNamedDocument(
+        await read(`${NAMED_SAVE_PREFIX}${activeSaveId}`),
+      );
+      return { activeSave, document };
     },
-    async saveAutosave(document) {
-      await write(AUTOSAVE_KEY, document);
+    async saveWorkspace(document, activeSaveId) {
+      await writeWorkspace(document, activeSaveId);
     },
-    async saveNamed(name, document, id = crypto.randomUUID()) {
-      const normalizedName = name.trim();
-      if (normalizedName.length === 0) {
+    async saveNamed({ document, id = crypto.randomUUID(), name }) {
+      const existing = readStoredNamedDocument(
+        await read(`${NAMED_SAVE_PREFIX}${id}`),
+      );
+      const normalizedName = name?.trim() ?? existing?.name;
+      if (!normalizedName) {
         throw new Error("A saved plan needs a name.");
       }
       const stored: StoredNamedDocument = {
@@ -132,7 +165,16 @@ export function createIndexedDbDocumentStorage(
         name: normalizedName,
         updatedAt: new Date().toISOString(),
       };
-      await write(`${NAMED_SAVE_PREFIX}${id}`, stored);
+      const db = await database;
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, "readwrite");
+        const store = transaction.objectStore(STORE_NAME);
+        store.put(stored, `${NAMED_SAVE_PREFIX}${id}`);
+        store.put(document, AUTOSAVE_KEY);
+        store.put(id, ACTIVE_SAVE_KEY);
+        transaction.onerror = () => reject(transaction.error);
+        transaction.oncomplete = () => resolve();
+      });
       return readStoredNamedDocument(stored)!;
     },
   };
@@ -141,6 +183,7 @@ export function createIndexedDbDocumentStorage(
 export function attachCanvasAutosave(
   editor: CanvasEditor,
   storage: CanvasDocumentStorage,
+  getActiveSaveId: () => string | null,
   delay = 300,
   onError: (error: unknown) => void = console.error,
 ) {
@@ -153,7 +196,7 @@ export function attachCanvasAutosave(
     pendingDocument = undefined;
     if (timer) clearTimeout(timer);
     timer = undefined;
-    void storage.saveAutosave(document).catch(onError);
+    void storage.saveWorkspace(document, getActiveSaveId()).catch(onError);
   };
 
   const unsubscribe = editor.subscribe((change) => {
