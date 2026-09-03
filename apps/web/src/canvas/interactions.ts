@@ -1,4 +1,4 @@
-import type { CanvasEditor, Rectangle } from "./editor";
+import { SNAP_INTERVAL, type CanvasEditor, type Rectangle } from "./editor";
 import {
   screenToWorld,
   ZOOM_STEP,
@@ -35,6 +35,7 @@ type Interaction =
     };
 
 export type CanvasInteractionHost = Readonly<{
+  fit: (scope: "all" | "selection") => void;
   getViewport: () => Viewport;
   getViewportCenter: () => Point;
   panBy: (delta: Point) => void;
@@ -61,6 +62,11 @@ export function attachCanvasInteractions(
   let interaction: Interaction | null = null;
   let lastPointerScreen: Point | null = null;
   let spacePressed = false;
+  const touches = new Map<number, Point>();
+  let touchGesture: {
+    distance: number;
+    midpoint: Point;
+  } | null = null;
 
   const screenPoint = (event: MouseEvent): Point => {
     const bounds = canvas.getBoundingClientRect();
@@ -76,6 +82,22 @@ export function attachCanvasInteractions(
 
   const releasePointer = (pointerId: number) => {
     if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+  };
+
+  const touchPair = () => [...touches.entries()].slice(0, 2);
+
+  const touchGeometry = () => {
+    const pair = touchPair();
+    const first = pair[0]?.[1];
+    const second = pair[1]?.[1];
+    if (!first || !second) return undefined;
+    return {
+      distance: Math.max(Math.hypot(second.x - first.x, second.y - first.y), 1),
+      midpoint: {
+        x: (first.x + second.x) / 2,
+        y: (first.y + second.y) / 2,
+      },
+    };
   };
 
   const finishInteraction = (event: PointerEvent, cancelled = false) => {
@@ -135,6 +157,20 @@ export function attachCanvasInteractions(
     const selectionModifier = event.ctrlKey || event.metaKey;
 
     canvas.setPointerCapture(event.pointerId);
+
+    if (event.pointerType === "touch") {
+      touches.set(event.pointerId, screen);
+      if (touches.size >= 2) {
+        if (interaction?.kind === "move") {
+          editor.dispatch({ type: "selection.move.cancel" });
+        }
+        if (interaction?.kind === "select") host.setMarquee();
+        interaction = null;
+        touchGesture = touchGeometry() ?? null;
+        canvas.dataset.cursor = "grabbing";
+        return;
+      }
+    }
 
     if (event.button === 1 || spacePressed) {
       interaction = {
@@ -200,6 +236,20 @@ export function attachCanvasInteractions(
     const screen = screenPoint(event);
     lastPointerScreen = screen;
 
+    if (event.pointerType === "touch" && touches.has(event.pointerId)) {
+      touches.set(event.pointerId, screen);
+      const geometry = touchGeometry();
+      if (touchGesture && geometry) {
+        host.panBy({
+          x: geometry.midpoint.x - touchGesture.midpoint.x,
+          y: geometry.midpoint.y - touchGesture.midpoint.y,
+        });
+        host.zoomAt(geometry.distance / touchGesture.distance, geometry.midpoint);
+        touchGesture = geometry;
+        return;
+      }
+    }
+
     if (!interaction || interaction.pointerId !== event.pointerId) {
       const selectionModifier = event.ctrlKey || event.metaKey;
       canvas.dataset.cursor = selectionModifier
@@ -257,7 +307,7 @@ export function attachCanvasInteractions(
     host.setMarquee(screenRectangle);
     editor.dispatch({
       type: "selection.marquee",
-      baseIds: [],
+      baseIds: interaction.baseIds,
       rectangle: {
         height: currentWorld.y - startWorld.y,
         width: currentWorld.x - startWorld.x,
@@ -267,14 +317,46 @@ export function attachCanvasInteractions(
     });
   };
 
-  const pointerUp = (event: PointerEvent) => finishInteraction(event);
-  const pointerCancel = (event: PointerEvent) => finishInteraction(event, true);
+  const finishTouch = (event: PointerEvent, cancelled = false) => {
+    if (!touches.has(event.pointerId)) {
+      finishInteraction(event, cancelled);
+      return;
+    }
 
-  const contextMenu = (event: MouseEvent) => {
-    event.preventDefault();
+    touches.delete(event.pointerId);
+    if (!touchGesture) {
+      finishInteraction(event, cancelled);
+      return;
+    }
+
+    releasePointer(event.pointerId);
+    touchGesture = null;
+    const remaining = touchPair()[0];
+    if (remaining && !cancelled) {
+      interaction = {
+        clearSelectionOnClick: false,
+        kind: "pan",
+        lastScreen: remaining[1],
+        moved: true,
+        pointerId: remaining[0],
+        startScreen: remaining[1],
+      };
+      canvas.dataset.cursor = "grabbing";
+    } else {
+      interaction = null;
+      canvas.dataset.cursor = "grab";
+    }
+  };
+
+  const pointerUp = (event: PointerEvent) => finishTouch(event);
+  const pointerCancel = (event: PointerEvent) => finishTouch(event, true);
+
+  const doubleClick = (event: MouseEvent) => {
+    if (event.button !== 0) return;
     const screen = screenPoint(event);
-    lastPointerScreen = screen;
-    host.requestNode(screenToWorld(screen, host.getViewport()));
+    if (!editor.hitTest(screenToWorld(screen, host.getViewport()))) {
+      host.fit("all");
+    }
   };
 
   const wheel = (event: WheelEvent) => {
@@ -324,8 +406,22 @@ export function attachCanvasInteractions(
         releasePointer(interaction.pointerId);
         interaction = null;
         canvas.dataset.cursor = "grab";
+        return;
       }
       editor.dispatch({ type: "selection.clear" });
+    } else if (event.key.startsWith("Arrow")) {
+      const state = editor.getState();
+      if (state.selectedIds.length === 0) return;
+      event.preventDefault();
+      const step = (state.snapToGrid ? SNAP_INTERVAL : 1) *
+        (event.shiftKey ? 4 : 1);
+      editor.dispatch({
+        type: "selection.nudge",
+        delta: {
+          x: event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0,
+          y: event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0,
+        },
+      });
     } else if (!modifier && key === "n" && !event.repeat) {
       event.preventDefault();
       host.requestNode(
@@ -343,6 +439,12 @@ export function attachCanvasInteractions(
     } else if (event.key === "0") {
       event.preventDefault();
       host.resetView();
+    } else if (event.key === "1") {
+      event.preventDefault();
+      host.fit("all");
+    } else if (event.key === "2") {
+      event.preventDefault();
+      host.fit("selection");
     } else if (
       event.code === "Space" &&
       (document.activeElement === canvas || document.activeElement === document.body)
@@ -363,7 +465,7 @@ export function attachCanvasInteractions(
   canvas.addEventListener("pointermove", pointerMove);
   canvas.addEventListener("pointerup", pointerUp);
   canvas.addEventListener("pointercancel", pointerCancel);
-  canvas.addEventListener("contextmenu", contextMenu);
+  canvas.addEventListener("dblclick", doubleClick);
   canvas.addEventListener("wheel", wheel, { passive: false });
   window.addEventListener("keydown", keyDown);
   window.addEventListener("keyup", keyUp);
@@ -376,12 +478,14 @@ export function attachCanvasInteractions(
     if (interaction) releasePointer(interaction.pointerId);
     interaction = null;
     spacePressed = false;
+    touches.clear();
+    touchGesture = null;
 
     canvas.removeEventListener("pointerdown", pointerDown);
     canvas.removeEventListener("pointermove", pointerMove);
     canvas.removeEventListener("pointerup", pointerUp);
     canvas.removeEventListener("pointercancel", pointerCancel);
-    canvas.removeEventListener("contextmenu", contextMenu);
+    canvas.removeEventListener("dblclick", doubleClick);
     canvas.removeEventListener("wheel", wheel);
     window.removeEventListener("keydown", keyDown);
     window.removeEventListener("keyup", keyUp);

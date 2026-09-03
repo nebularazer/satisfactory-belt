@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CanvasEditorState, CanvasNode } from "./editor";
 import { createCanvasLoadFixture } from "./load-fixture";
+import { createCanvasSpatialIndex } from "./spatial-index";
 import { visibleCanvasNodes } from "./visibility";
 
 const node = (id: string, x: number, y: number): CanvasNode => ({
@@ -28,6 +29,15 @@ function state(
   };
 }
 
+function visible(
+  editorState: CanvasEditorState,
+  viewport: { x: number; y: number; zoom: number },
+  screen: { height: number; width: number },
+) {
+  const index = createCanvasSpatialIndex(editorState.document);
+  return visibleCanvasNodes(editorState, viewport, screen, index.query);
+}
+
 describe("canvas visibility", () => {
   it("selects nodes in and just beyond the viewport in document order", () => {
     const nodes = [
@@ -37,7 +47,7 @@ describe("canvas visibility", () => {
     ];
 
     expect(
-      visibleCanvasNodes(
+      visible(
         state(nodes),
         { x: 0, y: 0, zoom: 1 },
         { height: 100, width: 100 },
@@ -49,7 +59,7 @@ describe("canvas visibility", () => {
     const nodes = [node("origin", 0, 0), node("panned-to", 1_000, 1_000)];
 
     expect(
-      visibleCanvasNodes(
+      visible(
         state(nodes),
         { x: -2_000, y: -2_000, zoom: 2 },
         { height: 100, width: 100 },
@@ -61,7 +71,7 @@ describe("canvas visibility", () => {
     const moving = node("moving", 1_000, 1_000);
 
     expect(
-      visibleCanvasNodes(
+      visible(
         state([moving], {
           moveDelta: { x: -1_000, y: -1_000 },
           selectedIds: [moving.id],
@@ -76,7 +86,7 @@ describe("canvas visibility", () => {
     const fixture = createCanvasLoadFixture(10_000);
 
     expect(
-      visibleCanvasNodes(
+      visible(
         state(fixture.nodes),
         { x: 640, y: 400, zoom: 1 },
         { height: 800, width: 1_280 },

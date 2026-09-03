@@ -43,15 +43,15 @@ export function PerformanceBar({
 
   return (
     <div
-      aria-label={`Performance metrics: ${fps} FPS, ${updateTime} milliseconds updating, ${renderTime} milliseconds rendering, ${nodeCount} ${nodeLabel}, ${selectedCount} selected`}
-      className="flex h-[42px] items-center rounded-xl border border-border bg-card px-1 shadow-md"
+      aria-label={`Performance metrics: ${fps} FPS, ${updateTime} milliseconds updating, ${renderTime} milliseconds rendering, ${nodeCount} ${nodeLabel}, ${metrics?.visibleNodes ?? "unknown"} visible, ${selectedCount} selected`}
+      className="flex h-[42px] max-w-[calc(100vw-1.5rem)] items-center overflow-x-auto rounded-xl border border-border bg-card px-1 shadow-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       <Metric label="FPS" value={fps} />
       <Separator />
       <Metric
         label="update"
         title={metrics
-          ? `Editor and scene update: ${updateTime} ms average, ${metrics.update.p95Ms.toFixed(1)} ms p95`
+          ? `Editor and scene update: ${updateTime} ms average, ${metrics.update.p95Ms.toFixed(1)} ms p95, ${metrics.update.maximumMs.toFixed(1)} ms maximum`
           : "Editor and scene update time"}
         value={updateTime}
       />
@@ -59,12 +59,14 @@ export function PerformanceBar({
       <Metric
         label="render"
         title={metrics
-          ? `CPU render submission: ${renderTime} ms average, ${metrics.render.p95Ms.toFixed(1)} ms p95`
+          ? `CPU render submission: ${renderTime} ms average, ${metrics.render.p95Ms.toFixed(1)} ms p95, ${metrics.render.maximumMs.toFixed(1)} ms maximum`
           : "CPU render submission time"}
         value={renderTime}
       />
       <Separator />
       <Metric label="nodes" value={nodeCount} />
+      <Separator />
+      <Metric label="visible" value={metrics?.visibleNodes ?? "–"} />
       <Separator />
       <Metric label="selected" value={selectedCount} />
     </div>

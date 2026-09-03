@@ -29,6 +29,7 @@ import {
 import { createRenderScheduler } from "./render-scheduler";
 import { visibleCanvasNodes } from "./visibility";
 import {
+  fitRectangleInViewport,
   panViewport,
   screenToWorld,
   ZOOM_STEP,
@@ -40,8 +41,13 @@ import {
 const MAX_POOLED_NODE_DISPLAYS = 256;
 
 export type InfiniteCanvasHandle = {
+  fitContent: () => void;
+  fitSelection: () => void;
+  flushRender: () => void;
   getViewportCenter: () => Point;
+  panBy: (delta: Point) => void;
   resetView: () => void;
+  screenToWorld: (point: Point) => Point;
   zoomIn: () => void;
   zoomOut: () => void;
 };
@@ -69,6 +75,12 @@ type GridDisplay = {
   spacing: number;
   sprite: TilingSprite;
   texture: Texture;
+};
+
+type SelectionBoundsDisplay = {
+  bounds?: Rectangle;
+  graphics: Graphics;
+  visualKey: string;
 };
 
 function gridSpacing(zoom: number) {
@@ -141,8 +153,9 @@ function updateNodeVisual(
   dark: boolean,
   selected: boolean,
   textResolution: number,
+  zoom: number,
 ) {
-  const cardVisualKey = `${dark}:${selected}:${node.width}:${node.height}`;
+  const cardVisualKey = `${dark}:${selected}:${node.width}:${node.height}:${selected ? zoom : ""}`;
   if (display.cardVisualKey !== cardVisualKey) {
     display.card
       .clear()
@@ -150,7 +163,7 @@ function updateNodeVisual(
       .fill({ color: dark ? 0x202024 : 0xffffff })
       .stroke({
         color: selected ? 0x6366f1 : dark ? 0x52525b : 0xd4d4d8,
-        width: selected ? 2 : 1,
+        width: selected ? 2 / zoom : 1,
       });
     display.cardVisualKey = cardVisualKey;
   }
@@ -213,6 +226,7 @@ function syncDocument(
   pool: NodeDisplay[],
   visibleNodes: readonly CanvasNode[],
   textResolution: number,
+  zoom: number,
 ) {
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = new Set(state.selectedIds);
@@ -246,7 +260,7 @@ function syncDocument(
       scene.setChildIndex(display.container, index);
     }
 
-    updateNodeVisual(display, node, dark, selected, textResolution);
+    updateNodeVisual(display, node, dark, selected, textResolution, zoom);
   }
 }
 
@@ -255,6 +269,7 @@ function syncEditorChange(
   displays: Map<string, NodeDisplay>,
   change: CanvasEditorChange,
   textResolution: number,
+  zoom: number,
 ) {
   if (change.kind === "document" || change.kind === "settings") return false;
 
@@ -279,6 +294,7 @@ function syncEditorChange(
         dark,
         selectedIds?.has(id) ?? false,
         textResolution,
+        zoom,
       );
     }
   }
@@ -301,6 +317,44 @@ function drawMarquee(graphics: Graphics, rectangle?: Rectangle) {
     .stroke({ color: 0x6366f1, alpha: 0.8, pixelLine: true, width: 1 });
 }
 
+function syncSelectionBounds(
+  display: SelectionBoundsDisplay,
+  state: CanvasEditorState,
+  editor: CanvasEditor,
+  zoom: number,
+  refreshBounds: boolean,
+) {
+  if (refreshBounds) {
+    display.bounds = state.selectedIds.length > 1
+      ? editor.getBounds("selection")
+      : undefined;
+  }
+
+  display.graphics.position.set(
+    state.moveDelta?.x ?? 0,
+    state.moveDelta?.y ?? 0,
+  );
+  const bounds = display.bounds;
+  const visualKey = bounds
+    ? `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}:${zoom}`
+    : "empty";
+  if (display.visualKey === visualKey) return;
+
+  display.visualKey = visualKey;
+  display.graphics.clear();
+  if (!bounds) return;
+  const padding = 4 / zoom;
+  display.graphics
+    .roundRect(
+      bounds.x - padding,
+      bounds.y - padding,
+      bounds.width + padding * 2,
+      bounds.height + padding * 2,
+      4 / zoom,
+    )
+    .stroke({ color: 0x6366f1, alpha: 0.8, width: 1 / zoom });
+}
+
 export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
   function InfiniteCanvas(
     {
@@ -320,6 +374,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     const nodeDisplayPoolRef = useRef<NodeDisplay[]>([]);
     const worldRef = useRef<Container | null>(null);
     const marqueeRef = useRef<Graphics | null>(null);
+    const selectionBoundsRef = useRef<SelectionBoundsDisplay | null>(null);
     const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
     const performanceSamplerRef = useRef<ReturnType<
       typeof createPerformanceSampler
@@ -345,9 +400,20 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         state,
         nodeDisplaysRef.current,
         nodeDisplayPoolRef.current,
-        visibleCanvasNodes(state, viewportRef.current, app.screen),
+        visibleCanvasNodes(state, viewportRef.current, app.screen, editor.query),
         textResolutionRef.current,
+        viewportRef.current.zoom,
       );
+      const selectionBounds = selectionBoundsRef.current;
+      if (selectionBounds) {
+        syncSelectionBounds(
+          selectionBounds,
+          state,
+          editor,
+          viewportRef.current.zoom,
+          false,
+        );
+      }
     };
 
     const renderViewport = (viewport: Viewport) => {
@@ -401,9 +467,32 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     const getViewportCenter = () =>
       screenToWorld(viewportCenter(), viewportRef.current);
 
+    const fit = (scope: "all" | "selection") => {
+      const app = appRef.current;
+      const bounds = editor.getBounds(scope);
+      if (!app || !bounds) return;
+      renderViewport(
+        fitRectangleInViewport(
+          bounds,
+          app.screen,
+          scope === "selection" ? 2 : 1,
+        ),
+      );
+    };
+
     useImperativeHandle(ref, () => ({
+      fitContent: () => fit("all"),
+      fitSelection: () => fit("selection"),
+      flushRender: () => {
+        renderSchedulerRef.current?.cancel();
+        appRef.current?.render();
+      },
       getViewportCenter,
+      panBy: (delta) => {
+        renderViewport(panViewport(viewportRef.current, delta));
+      },
       resetView,
+      screenToWorld: (point) => screenToWorld(point, viewportRef.current),
       zoomIn: () => zoomBy(ZOOM_STEP),
       zoomOut: () => zoomBy(1 / ZOOM_STEP),
     }));
@@ -460,6 +549,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
               performanceSampler.recordRender(
                 timestamp,
                 performance.now() - renderStartedAt,
+                nodeDisplaysRef.current.size,
               );
             }
           });
@@ -478,14 +568,19 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           );
           const world = new Container();
           const scene = new Container();
+          const selectionBounds: SelectionBoundsDisplay = {
+            graphics: new Graphics(),
+            visualKey: "empty",
+          };
           const marquee = new Graphics();
           app.stage.eventMode = "none";
           scene.eventMode = "none";
-          world.addChild(scene);
+          world.addChild(selectionBounds.graphics, scene);
           app.stage.addChild(grid.sprite, world, marquee);
           gridRef.current = grid;
           worldRef.current = world;
           sceneRef.current = scene;
+          selectionBoundsRef.current = selectionBounds;
           marqueeRef.current = marquee;
 
           textResolutionRef.current = textResolutionForZoom(
@@ -501,6 +596,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           const canvas = app.canvas;
 
           removeListeners = attachCanvasInteractions(canvas, editor, {
+            fit,
             getViewport: () => viewportRef.current,
             getViewportCenter: viewportCenter,
             panBy: (delta) => {
@@ -572,9 +668,18 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
                 nodeDisplaysRef.current,
                 change,
                 textResolutionRef.current,
+                viewportRef.current.zoom,
               );
             }
             if (!needsRender) return;
+
+            syncSelectionBounds(
+              selectionBounds,
+              editor.getState(),
+              editor,
+              viewportRef.current.zoom,
+              change.kind === "document" || change.kind === "selection",
+            );
 
             if (performanceMetricsEnabledRef.current) {
               performanceSampler.recordUpdate(
@@ -597,6 +702,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         performanceSamplerRef.current = null;
         renderSchedulerRef.current = null;
         sceneRef.current = null;
+        selectionBoundsRef.current = null;
         worldRef.current = null;
         marqueeRef.current = null;
         nodeDisplaysRef.current.clear();

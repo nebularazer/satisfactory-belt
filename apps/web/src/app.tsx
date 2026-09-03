@@ -1,12 +1,29 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
+  type ChangeEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
+import { toast } from "sonner";
 
-import { createCanvasEditor } from "@/canvas/editor";
+import { runCanvasBenchmark } from "@/canvas/benchmark";
+import {
+  parseCanvasDocument,
+  serializeCanvasDocument,
+} from "@/canvas/document-format";
+import {
+  attachCanvasAutosave,
+  createIndexedDbDocumentStorage,
+  type CanvasDocumentStorage,
+} from "@/canvas/document-storage";
+import {
+  createCanvasEditor,
+  type CanvasDocument,
+} from "@/canvas/editor";
 import {
   createCanvasLoadFixture,
   loadFixtureNodeCount,
@@ -16,24 +33,43 @@ import {
   type InfiniteCanvasHandle,
 } from "@/canvas/infinite-canvas";
 import type { CanvasPerformanceMetrics } from "@/canvas/performance";
+import {
+  CANVAS_PREFERENCES,
+  readBooleanPreference,
+  writeBooleanPreference,
+} from "@/canvas/preferences";
 import type { Point, Viewport } from "@/canvas/viewport";
+import { CanvasContextMenu } from "@/components/canvas-context-menu";
 import { CanvasControls } from "@/components/canvas-controls";
+import { CanvasHint } from "@/components/canvas-hint";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { NodePicker } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
+import { Toaster } from "@/components/ui/sonner";
 
-export function App() {
+type BootstrapState =
+  | { ready: false }
+  | { document?: CanvasDocument; ready: true };
+
+type CanvasWorkspaceProps = {
+  initialDocument?: CanvasDocument;
+  storage?: CanvasDocumentStorage;
+};
+
+function CanvasWorkspace({ initialDocument, storage }: CanvasWorkspaceProps) {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
-  const editor = useMemo(() => {
-    const fixtureNodeCount = import.meta.env.DEV
-      ? loadFixtureNodeCount(window.location.search)
-      : 0;
-    return createCanvasEditor({
-      document: fixtureNodeCount > 0
-        ? createCanvasLoadFixture(fixtureNodeCount)
-        : undefined,
-    });
-  }, []);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const editor = useMemo(
+    () =>
+      createCanvasEditor({
+        document: initialDocument,
+        snapToGrid: readBooleanPreference(
+          CANVAS_PREFERENCES.snapToGrid,
+          true,
+        ),
+      }),
+    [initialDocument],
+  );
   const getEditorUiState = useMemo(() => {
     const initialState = editor.getState();
     let cached = {
@@ -74,9 +110,41 @@ export function App() {
   );
   const [performanceMetrics, setPerformanceMetrics] =
     useState<CanvasPerformanceMetrics | null>(null);
-  const [showPerformance, setShowPerformance] = useState(false);
+  const [showPerformance, setShowPerformance] = useState(() =>
+    readBooleanPreference(CANVAS_PREFERENCES.performance, false),
+  );
+  const [hintDismissed, setHintDismissed] = useState(() =>
+    readBooleanPreference(CANVAS_PREFERENCES.hintDismissed, false),
+  );
   const [zoom, setZoom] = useState(1);
   const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
+  const [contextTarget, setContextTarget] = useState<{
+    at: Point;
+    nodeId?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!storage) return;
+    return attachCanvasAutosave(editor, storage, 300, () => {
+      toast.error("The plan could not be saved in this browser.");
+    });
+  }, [editor, storage]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const benchmark = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) throw new Error("The canvas is not ready yet.");
+      return runCanvasBenchmark(editor, canvas);
+    };
+    const benchmarkWindow = window as Window & {
+      satisfactoryBeltBenchmark?: typeof benchmark;
+    };
+    benchmarkWindow.satisfactoryBeltBenchmark = benchmark;
+    return () => {
+      delete benchmarkWindow.satisfactoryBeltBenchmark;
+    };
+  }, [editor]);
 
   const handleViewportChange = useCallback((viewport: Viewport) => {
     setZoom(viewport.zoom);
@@ -88,9 +156,8 @@ export function App() {
   const handleShowPerformanceChange = (enabled: boolean) => {
     setShowPerformance(enabled);
     setPerformanceMetrics(null);
+    writeBooleanPreference(CANVAS_PREFERENCES.performance, enabled);
   };
-
-  const resetView = () => canvasRef.current?.resetView();
   const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
 
   const addPendingNode = () => {
@@ -99,45 +166,122 @@ export function App() {
     setPendingNode(null);
   };
 
+  const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const at = canvas.screenToWorld({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    });
+    const hit = editor.hitTest(at);
+    if (hit && !editor.getState().selectedIds.includes(hit.id)) {
+      editor.dispatch({ type: "selection.node", additive: false, id: hit.id });
+    }
+    setContextTarget({ at, nodeId: hit?.id });
+  };
+
+  const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const document = parseCanvasDocument(await file.text());
+      editor.dispatch({ type: "document.replace", document });
+      requestAnimationFrame(() => canvasRef.current?.fitContent());
+      toast.success(`Imported ${document.nodes.length} nodes.`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "The plan could not be imported.",
+      );
+    }
+  };
+
+  const exportDocument = () => {
+    const serialized = serializeCanvasDocument(editor.getState().document);
+    const url = URL.createObjectURL(
+      new Blob([serialized], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.download = "satisfactory-belt-plan.json";
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Plan exported.");
+  };
+
+  const deleteSelection = () => editor.dispatch({ type: "selection.delete" });
+  const duplicateSelection = () =>
+    editor.dispatch({ type: "selection.duplicate" });
+
   return (
     <main className="relative h-dvh w-dvw overflow-hidden bg-canvas text-foreground">
       <h1 className="sr-only">Satisfactory Belt canvas</h1>
-      <InfiniteCanvas
-        editor={editor}
-        onPerformanceMetricsChange={handlePerformanceMetricsChange}
-        onRequestAddNode={requestNodeAt}
-        onViewportChange={handleViewportChange}
-        performanceMetricsEnabled={showPerformance}
-        ref={canvasRef}
-      />
+      <CanvasContextMenu
+        hasNodeTarget={contextTarget?.nodeId !== undefined}
+        onAddNode={() => {
+          if (contextTarget) requestNodeAt(contextTarget.at);
+        }}
+        onContextMenu={handleContextMenu}
+        onDelete={deleteSelection}
+        onDuplicate={duplicateSelection}
+      >
+        <InfiniteCanvas
+          editor={editor}
+          onPerformanceMetricsChange={handlePerformanceMetricsChange}
+          onRequestAddNode={requestNodeAt}
+          onViewportChange={handleViewportChange}
+          performanceMetricsEnabled={showPerformance}
+          ref={canvasRef}
+        />
+      </CanvasContextMenu>
 
       <div className="pointer-events-none absolute inset-0 z-10">
-        <div className="pointer-events-auto absolute left-4 top-4">
+        <div className="pointer-events-auto absolute left-3 top-3 sm:left-4 sm:top-4">
           <CanvasMenu
             canDelete={editorState.selectedCount > 0}
             canDuplicate={editorState.selectedCount > 0}
+            canFitAll={editorState.nodeCount > 0}
+            canFitSelection={editorState.selectedCount > 0}
             onAddNode={() => {
               const center = canvasRef.current?.getViewportCenter();
               if (center) requestNodeAt(center);
             }}
-            onDelete={() => editor.dispatch({ type: "selection.delete" })}
-            onDuplicate={() => editor.dispatch({ type: "selection.duplicate" })}
-            onResetView={resetView}
+            onDelete={deleteSelection}
+            onDuplicate={duplicateSelection}
+            onExport={exportDocument}
+            onFitAll={() => canvasRef.current?.fitContent()}
+            onFitSelection={() => canvasRef.current?.fitSelection()}
+            onImport={() => importInputRef.current?.click()}
+            onResetView={() => canvasRef.current?.resetView()}
             onShowPerformanceChange={handleShowPerformanceChange}
-            onSnapToGridChange={(enabled) =>
-              editor.dispatch({ type: "settings.snap", enabled })
-            }
+            onSnapToGridChange={(enabled) => {
+              editor.dispatch({ type: "settings.snap", enabled });
+              writeBooleanPreference(CANVAS_PREFERENCES.snapToGrid, enabled);
+            }}
             showPerformance={showPerformance}
             snapToGrid={editorState.snapToGrid}
           />
         </div>
 
-        <div className="pointer-events-auto absolute bottom-4 left-4">
+        {editorState.nodeCount === 0 && !hintDismissed && (
+          <div className="pointer-events-auto absolute left-16 right-3 top-3 flex justify-center sm:left-20 sm:right-20 sm:top-4">
+            <CanvasHint
+              onDismiss={() => {
+                setHintDismissed(true);
+                writeBooleanPreference(CANVAS_PREFERENCES.hintDismissed, true);
+              }}
+            />
+          </div>
+        )}
+
+        <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
           <CanvasControls
             canRedo={editorState.canRedo}
             canUndo={editorState.canUndo}
             onRedo={() => editor.dispatch({ type: "history.redo" })}
-            onResetView={resetView}
+            onResetView={() => canvasRef.current?.resetView()}
             onUndo={() => editor.dispatch({ type: "history.undo" })}
             onZoomIn={() => canvasRef.current?.zoomIn()}
             onZoomOut={() => canvasRef.current?.zoomOut()}
@@ -146,7 +290,7 @@ export function App() {
         </div>
 
         {showPerformance && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+          <div className="pointer-events-auto absolute bottom-16 left-1/2 max-w-full -translate-x-1/2 lg:bottom-4">
             <PerformanceBar
               metrics={performanceMetrics}
               nodeCount={editorState.nodeCount}
@@ -156,6 +300,14 @@ export function App() {
         )}
       </div>
 
+      <input
+        accept="application/json,.json"
+        className="sr-only"
+        onChange={(event) => void handleImport(event)}
+        ref={importInputRef}
+        tabIndex={-1}
+        type="file"
+      />
       <NodePicker
         onOpenChange={(open) => {
           if (!open) setPendingNode(null);
@@ -164,5 +316,64 @@ export function App() {
         open={pendingNode !== null}
       />
     </main>
+  );
+}
+
+export function App() {
+  const fixtureNodeCount = useMemo(
+    () =>
+      import.meta.env.DEV
+        ? loadFixtureNodeCount(window.location.search)
+        : 0,
+    [],
+  );
+  const storage = useMemo(
+    () =>
+      fixtureNodeCount === 0
+        ? createIndexedDbDocumentStorage()
+        : undefined,
+    [fixtureNodeCount],
+  );
+  const [bootstrap, setBootstrap] = useState<BootstrapState>(() =>
+    fixtureNodeCount > 0
+      ? { document: createCanvasLoadFixture(fixtureNodeCount), ready: true }
+      : { ready: false },
+  );
+
+  useEffect(() => {
+    if (!storage || bootstrap.ready) return;
+    let active = true;
+    void storage
+      .load()
+      .then((document) => {
+        if (active) setBootstrap({ document: document ?? undefined, ready: true });
+      })
+      .catch(() => {
+        if (active) {
+          setBootstrap({ ready: true });
+          toast.error("The previous browser session could not be restored.");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [bootstrap.ready, storage]);
+
+  return (
+    <>
+      {bootstrap.ready ? (
+        <CanvasWorkspace
+          initialDocument={bootstrap.document}
+          storage={storage}
+        />
+      ) : (
+        <main
+          aria-busy="true"
+          aria-label="Loading canvas"
+          className="h-dvh w-dvw bg-canvas"
+        />
+      )}
+      <Toaster position="top-center" richColors />
+    </>
   );
 }

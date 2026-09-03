@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { createCanvasEditor, SNAP_INTERVAL } from "./editor";
+import {
+  createCanvasEditor,
+  HISTORY_LIMIT,
+  SNAP_INTERVAL,
+} from "./editor";
 
 function createEditor() {
   let id = 0;
@@ -133,5 +137,69 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "history.undo" });
     expect(editor.getState().document.nodes).toHaveLength(3);
     expect(editor.getState().selectedIds).toEqual(["node-3"]);
+  });
+
+  it("nudges selected nodes as an undoable operation", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({ type: "selection.nudge", delta: { x: 32, y: -32 } });
+
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: 64 });
+  });
+
+  it("calculates all-node and selection bounds", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+
+    expect(editor.getBounds("all")).toEqual({
+      height: 288,
+      width: 496,
+      x: 0,
+      y: 64,
+    });
+    expect(editor.getBounds("selection")).toEqual({
+      height: 96,
+      width: 176,
+      x: 320,
+      y: 256,
+    });
+  });
+
+  it("replaces a document and clears history", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "document.replace",
+      document: {
+        nodes: [{
+          height: 50,
+          id: "imported",
+          label: "Imported",
+          width: 50,
+          x: 1_000,
+          y: 1_000,
+        }],
+        version: 1,
+      },
+    });
+
+    expect(editor.getState().canUndo).toBe(false);
+    expect(editor.hitTest({ x: 1_025, y: 1_025 })?.id).toBe("imported");
+  });
+
+  it("bounds operation history", () => {
+    const editor = createEditor();
+    for (let index = 0; index <= HISTORY_LIMIT; index += 1) {
+      editor.dispatch({ type: "node.create", at: { x: index * 200, y: 100 } });
+    }
+    for (let index = 0; index <= HISTORY_LIMIT; index += 1) {
+      editor.dispatch({ type: "history.undo" });
+    }
+
+    expect(editor.getState().document.nodes).toHaveLength(1);
+    expect(editor.getState().canUndo).toBe(false);
   });
 });

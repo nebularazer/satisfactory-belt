@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fitRectangleInViewport,
   MAX_ZOOM,
   MIN_ZOOM,
   panViewport,
@@ -39,5 +40,24 @@ describe("viewport", () => {
   it("clamps zoom to the supported range", () => {
     expect(zoomViewportAt(viewport, 0, { x: 0, y: 0 }).zoom).toBe(MIN_ZOOM);
     expect(zoomViewportAt(viewport, 10, { x: 0, y: 0 }).zoom).toBe(MAX_ZOOM);
+  });
+
+  it("fits a world rectangle into the screen with padding", () => {
+    const fitted = fitRectangleInViewport(
+      { height: 400, width: 800, x: 100, y: 200 },
+      { height: 600, width: 1_000 },
+    );
+
+    expect(fitted).toEqual({ x: 0, y: -100, zoom: 1 });
+  });
+
+  it("limits selection fitting to the requested zoom", () => {
+    expect(
+      fitRectangleInViewport(
+        { height: 10, width: 10, x: 0, y: 0 },
+        { height: 600, width: 1_000 },
+        2,
+      ).zoom,
+    ).toBe(2);
   });
 });

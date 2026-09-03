@@ -1,7 +1,10 @@
 import {
   CopyPlus,
+  Download,
+  Focus,
   Gauge,
   Magnet,
+  Maximize2,
   Menu,
   Monitor,
   Moon,
@@ -9,6 +12,7 @@ import {
   RotateCcw,
   Sun,
   Trash2,
+  Upload,
 } from "lucide-react";
 
 import { useTheme, type Theme } from "@/components/theme-provider";
@@ -30,9 +34,15 @@ import {
 type CanvasMenuProps = {
   canDelete: boolean;
   canDuplicate: boolean;
+  canFitAll: boolean;
+  canFitSelection: boolean;
   onAddNode: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onExport: () => void;
+  onFitAll: () => void;
+  onFitSelection: () => void;
+  onImport: () => void;
   onShowPerformanceChange: (enabled: boolean) => void;
   onResetView: () => void;
   onSnapToGridChange: (enabled: boolean) => void;
@@ -43,9 +53,15 @@ type CanvasMenuProps = {
 export function CanvasMenu({
   canDelete,
   canDuplicate,
+  canFitAll,
+  canFitSelection,
   onAddNode,
   onDelete,
   onDuplicate,
+  onExport,
+  onFitAll,
+  onFitSelection,
+  onImport,
   onShowPerformanceChange,
   onResetView,
   onSnapToGridChange,
@@ -94,6 +110,31 @@ export function CanvasMenu({
             <RotateCcw aria-hidden="true" />
             Reset view
             <DropdownMenuShortcut>0</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canFitAll} onClick={onFitAll}>
+            <Maximize2 aria-hidden="true" />
+            Fit all
+            <DropdownMenuShortcut>1</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!canFitSelection}
+            onClick={onFitSelection}
+          >
+            <Focus aria-hidden="true" />
+            Fit selection
+            <DropdownMenuShortcut>2</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Document</DropdownMenuLabel>
+          <DropdownMenuItem onClick={onImport}>
+            <Upload aria-hidden="true" />
+            Import JSON
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canFitAll} onClick={onExport}>
+            <Download aria-hidden="true" />
+            Export JSON
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
@@ -144,6 +185,8 @@ export function CanvasMenu({
           Ctrl/Cmd + click toggles selection
           <br />
           Ctrl/Cmd + drag creates a selection box
+          <br />
+          Arrow keys move selected nodes · 1/2 fits content
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

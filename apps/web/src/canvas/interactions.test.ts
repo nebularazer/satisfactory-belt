@@ -14,6 +14,7 @@ import {
 
 type PointerOptions = MouseEventInit & {
   pointerId?: number;
+  pointerType?: string;
 };
 
 const destroyers: Array<() => void> = [];
@@ -34,6 +35,7 @@ function createHarness(options: {
     snapToGrid: options.snapToGrid,
   });
   const canvas = document.createElement("canvas");
+  const fits: Array<"all" | "selection"> = [];
   const marquees: Array<Parameters<CanvasInteractionHost["setMarquee"]>[0]> = [];
   const nodeRequests: Point[] = [];
   const zooms: Array<{ anchor: Point; factor: number }> = [];
@@ -70,6 +72,7 @@ function createHarness(options: {
   });
 
   const host: CanvasInteractionHost = {
+    fit: (scope) => fits.push(scope),
     getViewport: () => viewport,
     getViewportCenter: () => ({ x: 500, y: 400 }),
     panBy: (delta) => {
@@ -109,6 +112,9 @@ function createHarness(options: {
     Object.defineProperty(event, "pointerId", {
       value: pointerOptions.pointerId ?? 1,
     });
+    Object.defineProperty(event, "pointerType", {
+      value: pointerOptions.pointerType ?? "mouse",
+    });
     canvas.dispatchEvent(event);
   };
 
@@ -124,6 +130,7 @@ function createHarness(options: {
   return {
     canvas,
     editor,
+    fits,
     key,
     marquees,
     nodeRequests,
@@ -231,6 +238,19 @@ describe("canvas interactions", () => {
     ]);
   });
 
+  it("adds a Ctrl/Cmd marquee to the existing selection", () => {
+    const { editor, pointer } = createHarness();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({ type: "selection.node", additive: false, id: "node-2" });
+
+    pointer("pointerdown", 0, 50, { ctrlKey: true });
+    pointer("pointermove", 200, 180, { ctrlKey: true });
+    pointer("pointerup", 200, 180, { ctrlKey: true });
+
+    expect(editor.getState().selectedIds).toEqual(["node-2", "node-1"]);
+  });
+
   it("opens the node picker at the pointer's transformed world position", () => {
     const { key, nodeRequests, pointer } = createHarness({
       viewport: { x: 100, y: 50, zoom: 2 },
@@ -242,21 +262,17 @@ describe("canvas interactions", () => {
     expect(nodeRequests).toEqual([{ x: 100, y: 100 }]);
   });
 
-  it("opens the node picker at the right-clicked world position", () => {
-    const { canvas, nodeRequests } = createHarness({
-      viewport: { x: 100, y: 50, zoom: 2 },
-    });
-    const event = new MouseEvent("contextmenu", {
+  it("fits all nodes when empty space is double-clicked", () => {
+    const { canvas, fits } = createHarness();
+    canvas.dispatchEvent(new MouseEvent("dblclick", {
       bubbles: true,
+      button: 0,
       cancelable: true,
-      clientX: 300,
-      clientY: 250,
-    });
+      clientX: 500,
+      clientY: 500,
+    }));
 
-    canvas.dispatchEvent(event);
-
-    expect(event.defaultPrevented).toBe(true);
-    expect(nodeRequests).toEqual([{ x: 100, y: 100 }]);
+    expect(fits).toEqual(["all"]);
   });
 
   it("cancels an active move with Escape", () => {
@@ -272,11 +288,14 @@ describe("canvas interactions", () => {
     key("Escape");
     expect(editor.getState().document.nodes[0]).toEqual(original);
     expect(editor.getState().moveDelta).toBeNull();
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+
+    key("Escape");
     expect(editor.getState().selectedIds).toEqual([]);
   });
 
   it("zooms around the wheel pointer and maps view shortcuts", () => {
-    const { canvas, key, viewport, zooms } = createHarness();
+    const { canvas, editor, fits, key, viewport, zooms } = createHarness();
     canvas.dispatchEvent(new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
@@ -293,5 +312,26 @@ describe("canvas interactions", () => {
 
     key("0");
     expect(viewport()).toEqual({ x: 500, y: 400, zoom: 1 });
+
+    key("1");
+    key("2");
+    expect(fits).toEqual(["all", "selection"]);
+
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    key("ArrowRight");
+    expect(editor.getState().document.nodes[0]?.x).toBe(32);
+  });
+
+  it("supports two-pointer pan and pinch gestures", () => {
+    const { pointer, zooms } = createHarness();
+
+    pointer("pointerdown", 100, 100, { pointerId: 1, pointerType: "touch" });
+    pointer("pointerdown", 200, 100, { pointerId: 2, pointerType: "touch" });
+    pointer("pointermove", 250, 100, { pointerId: 2, pointerType: "touch" });
+
+    expect(zooms.at(-1)).toEqual({
+      anchor: { x: 175, y: 100 },
+      factor: 1.5,
+    });
   });
 });

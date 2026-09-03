@@ -1,8 +1,11 @@
+import { createCanvasSpatialIndex } from "./spatial-index";
 import type { Point } from "./viewport";
 
 export const SNAP_INTERVAL = 32;
 export const NODE_WIDTH = 176;
 export const NODE_HEIGHT = 96;
+export const HISTORY_LIMIT = 100;
+export const CANVAS_DOCUMENT_VERSION = 1;
 
 export type CanvasNode = Readonly<{
   height: number;
@@ -15,7 +18,7 @@ export type CanvasNode = Readonly<{
 
 export type CanvasDocument = Readonly<{
   nodes: readonly CanvasNode[];
-  version: 1;
+  version: typeof CANVAS_DOCUMENT_VERSION;
 }>;
 
 export type Rectangle = Readonly<{
@@ -45,6 +48,7 @@ export type CanvasEditorChange = Readonly<
 >;
 
 export type CanvasEditorAction =
+  | { type: "document.replace"; document: CanvasDocument }
   | { type: "node.create"; at: Point }
   | { type: "selection.clear" }
   | { type: "selection.delete" }
@@ -61,26 +65,36 @@ export type CanvasEditorAction =
   | { type: "selection.move.update"; delta: Point }
   | { type: "selection.move.commit" }
   | { type: "selection.move.cancel" }
+  | { type: "selection.nudge"; delta: Point }
   | { type: "history.undo" }
   | { type: "history.redo" }
   | { type: "settings.snap"; enabled: boolean };
 
 export type CanvasEditor = Readonly<{
   dispatch: (action: CanvasEditorAction) => void;
+  getBounds: (scope: "all" | "selection") => Rectangle | undefined;
   getState: () => CanvasEditorState;
   hitTest: (point: Point) => CanvasNode | undefined;
+  query: (rectangle: Rectangle) => readonly CanvasNode[];
   subscribe: (listener: (change: CanvasEditorChange) => void) => () => void;
 }>;
 
-type Snapshot = Readonly<{
-  document: CanvasDocument;
-  selectedIds: readonly string[];
+type IndexedNode = Readonly<{
+  index: number;
+  node: CanvasNode;
+}>;
+
+type HistoryEntry = Readonly<{
+  after: readonly IndexedNode[];
+  afterSelection: readonly string[];
+  before: readonly IndexedNode[];
+  beforeSelection: readonly string[];
 }>;
 
 type MoveTransaction = {
+  before: readonly IndexedNode[];
   delta: Point;
-  snapshot: Snapshot;
-  positions: ReadonlyMap<string, Point>;
+  selectionBefore: readonly string[];
 };
 
 type CreateCanvasEditorOptions = {
@@ -89,29 +103,40 @@ type CreateCanvasEditorOptions = {
   snapToGrid?: boolean;
 };
 
-const EMPTY_DOCUMENT: CanvasDocument = { nodes: [], version: 1 };
+const EMPTY_DOCUMENT: CanvasDocument = {
+  nodes: [],
+  version: CANVAS_DOCUMENT_VERSION,
+};
 
 function snap(value: number) {
   return Math.round(value / SNAP_INTERVAL) * SNAP_INTERVAL;
 }
 
-function normalizeRectangle(rectangle: Rectangle): Rectangle {
-  return {
-    height: Math.abs(rectangle.height),
-    width: Math.abs(rectangle.width),
-    x: rectangle.width < 0 ? rectangle.x + rectangle.width : rectangle.x,
-    y: rectangle.height < 0 ? rectangle.y + rectangle.height : rectangle.y,
-  };
+function applyPatch(
+  document: CanvasDocument,
+  source: readonly IndexedNode[],
+  target: readonly IndexedNode[],
+): CanvasDocument {
+  const affectedIds = new Set([
+    ...source.map(({ node }) => node.id),
+    ...target.map(({ node }) => node.id),
+  ]);
+  const nodes = document.nodes.filter((node) => !affectedIds.has(node.id));
+
+  for (const { index, node } of [...target].sort((a, b) => a.index - b.index)) {
+    nodes.splice(Math.max(0, Math.min(index, nodes.length)), 0, node);
+  }
+
+  return { ...document, nodes };
 }
 
-function intersects(node: CanvasNode, rectangle: Rectangle) {
-  const normalized = normalizeRectangle(rectangle);
-  return (
-    node.x < normalized.x + normalized.width &&
-    node.x + node.width > normalized.x &&
-    node.y < normalized.y + normalized.height &&
-    node.y + node.height > normalized.y
-  );
+function boundsFor(nodes: readonly CanvasNode[]): Rectangle | undefined {
+  if (nodes.length === 0) return undefined;
+  const left = Math.min(...nodes.map((node) => node.x));
+  const top = Math.min(...nodes.map((node) => node.y));
+  const right = Math.max(...nodes.map((node) => node.x + node.width));
+  const bottom = Math.max(...nodes.map((node) => node.y + node.height));
+  return { height: bottom - top, width: right - left, x: left, y: top };
 }
 
 export function createCanvasEditor(
@@ -119,8 +144,8 @@ export function createCanvasEditor(
 ): CanvasEditor {
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const listeners = new Set<(change: CanvasEditorChange) => void>();
-  const past: Snapshot[] = [];
-  const future: Snapshot[] = [];
+  const past: HistoryEntry[] = [];
+  const future: HistoryEntry[] = [];
   let clipboard: readonly CanvasNode[] = [];
   let dispatchStartedAt = 0;
   let moveTransaction: MoveTransaction | undefined;
@@ -133,11 +158,7 @@ export function createCanvasEditor(
     selectedIds: [],
     snapToGrid: options.snapToGrid ?? true,
   };
-
-  const snapshot = (): Snapshot => ({
-    document: state.document,
-    selectedIds: state.selectedIds,
-  });
+  const spatialIndex = createCanvasSpatialIndex(state.document);
 
   const publish = (
     partial: Partial<CanvasEditorState>,
@@ -153,13 +174,26 @@ export function createCanvasEditor(
     listeners.forEach((listener) => listener({ ...change, updateTimeMs }));
   };
 
+  const indexedSelection = (): readonly IndexedNode[] =>
+    state.selectedIds.flatMap((id) => {
+      const node = spatialIndex.get(id);
+      const index = spatialIndex.indexOf(id);
+      return node && index !== undefined ? [{ index, node }] : [];
+    });
+
   const commit = (
     document: CanvasDocument,
     selectedIds: readonly string[],
-    previous = snapshot(),
+    entry: HistoryEntry,
   ) => {
-    past.push(previous);
+    past.push(entry);
+    if (past.length > HISTORY_LIMIT) past.shift();
     future.length = 0;
+    spatialIndex.apply(
+      document,
+      entry.before.map(({ node }) => node),
+      entry.after.map(({ node }) => node),
+    );
     publish(
       { document, moveDelta: null, selectedIds },
       { kind: "document" },
@@ -177,15 +211,23 @@ export function createCanvasEditor(
     }));
   };
 
-  const selectedNodes = () => {
-    const selected = new Set(state.selectedIds);
-    return state.document.nodes.filter((node) => selected.has(node.id));
-  };
-
   const dispatch = (action: CanvasEditorAction) => {
     dispatchStartedAt = performance.now();
 
     switch (action.type) {
+      case "document.replace":
+        past.length = 0;
+        future.length = 0;
+        clipboard = [];
+        moveTransaction = undefined;
+        nodeSequence = action.document.nodes.length;
+        spatialIndex.replace(action.document);
+        publish(
+          { document: action.document, moveDelta: null, selectedIds: [] },
+          { kind: "document" },
+        );
+        return;
+
       case "node.create": {
         nodeSequence += 1;
         const x = action.at.x - NODE_WIDTH / 2;
@@ -198,9 +240,17 @@ export function createCanvasEditor(
           x: state.snapToGrid ? snap(x) : x,
           y: state.snapToGrid ? snap(y) : y,
         };
+        const index = state.document.nodes.length;
+        const selectedIds = [node.id];
         commit(
           { ...state.document, nodes: [...state.document.nodes, node] },
-          [node.id],
+          selectedIds,
+          {
+            after: [{ index, node }],
+            afterSelection: selectedIds,
+            before: [],
+            beforeSelection: state.selectedIds,
+          },
         );
         return;
       }
@@ -221,6 +271,7 @@ export function createCanvasEditor(
           : alreadySelected && state.selectedIds.length === 1
             ? state.selectedIds
             : [action.id];
+        if (selectedIds === state.selectedIds) return;
         publish(
           { selectedIds },
           {
@@ -232,8 +283,8 @@ export function createCanvasEditor(
       }
 
       case "selection.marquee": {
-        const matchingIds = state.document.nodes
-          .filter((node) => intersects(node, action.rectangle))
+        const matchingIds = spatialIndex
+          .query(action.rectangle)
           .map((node) => node.id);
         const selectedIds = [...new Set([...action.baseIds, ...matchingIds])];
         publish(
@@ -248,6 +299,7 @@ export function createCanvasEditor(
 
       case "selection.delete": {
         if (state.selectedIds.length === 0) return;
+        const before = indexedSelection();
         const selected = new Set(state.selectedIds);
         commit(
           {
@@ -255,32 +307,60 @@ export function createCanvasEditor(
             nodes: state.document.nodes.filter((node) => !selected.has(node.id)),
           },
           [],
+          {
+            after: [],
+            afterSelection: [],
+            before,
+            beforeSelection: state.selectedIds,
+          },
         );
         return;
       }
 
       case "selection.copy":
-        clipboard = selectedNodes().map((node) => ({ ...node }));
+        clipboard = indexedSelection().map(({ node }) => ({ ...node }));
         return;
 
       case "selection.paste": {
         if (clipboard.length === 0) return;
         const pasted = duplicateNodes(clipboard);
-        clipboard = pasted;
+        const startIndex = state.document.nodes.length;
+        const selectedIds = pasted.map((node) => node.id);
         commit(
           { ...state.document, nodes: [...state.document.nodes, ...pasted] },
-          pasted.map((node) => node.id),
+          selectedIds,
+          {
+            after: pasted.map((node, index) => ({
+              index: startIndex + index,
+              node,
+            })),
+            afterSelection: selectedIds,
+            before: [],
+            beforeSelection: state.selectedIds,
+          },
         );
+        clipboard = pasted;
         return;
       }
 
       case "selection.duplicate": {
-        const nodes = selectedNodes();
-        if (nodes.length === 0) return;
-        const duplicates = duplicateNodes(nodes);
+        const selected = indexedSelection().map(({ node }) => node);
+        if (selected.length === 0) return;
+        const duplicates = duplicateNodes(selected);
+        const startIndex = state.document.nodes.length;
+        const selectedIds = duplicates.map((node) => node.id);
         commit(
           { ...state.document, nodes: [...state.document.nodes, ...duplicates] },
-          duplicates.map((node) => node.id),
+          selectedIds,
+          {
+            after: duplicates.map((node, index) => ({
+              index: startIndex + index,
+              node,
+            })),
+            afterSelection: selectedIds,
+            before: [],
+            beforeSelection: state.selectedIds,
+          },
         );
         return;
       }
@@ -288,19 +368,16 @@ export function createCanvasEditor(
       case "selection.move.begin": {
         if (state.selectedIds.length === 0 || moveTransaction) return;
         moveTransaction = {
+          before: indexedSelection(),
           delta: { x: 0, y: 0 },
-          positions: new Map(
-            selectedNodes().map((node) => [node.id, { x: node.x, y: node.y }]),
-          ),
-          snapshot: snapshot(),
+          selectionBefore: state.selectedIds,
         };
         return;
       }
 
       case "selection.move.update": {
         if (!moveTransaction) return;
-        const anchorId = state.selectedIds[0];
-        const anchor = anchorId ? moveTransaction.positions.get(anchorId) : undefined;
+        const anchor = moveTransaction.before[0]?.node;
         let delta = action.delta;
 
         if (state.snapToGrid && anchor) {
@@ -327,58 +404,110 @@ export function createCanvasEditor(
 
       case "selection.move.commit": {
         if (!moveTransaction) return;
-        const { delta, positions, snapshot: previous } = moveTransaction;
+        const transaction = moveTransaction;
         moveTransaction = undefined;
-        if (delta.x === 0 && delta.y === 0) {
+        if (transaction.delta.x === 0 && transaction.delta.y === 0) {
           if (state.moveDelta) {
             publish(
               { moveDelta: null },
-              { delta, kind: "move", nodeIds: state.selectedIds },
+              { delta: transaction.delta, kind: "move", nodeIds: state.selectedIds },
             );
           }
           return;
         }
 
-        const nodes = state.document.nodes.map((node) => {
-          const origin = positions.get(node.id);
-          return origin
-            ? { ...node, x: origin.x + delta.x, y: origin.y + delta.y }
-            : node;
+        const after = transaction.before.map(({ index, node }) => ({
+          index,
+          node: {
+            ...node,
+            x: node.x + transaction.delta.x,
+            y: node.y + transaction.delta.y,
+          },
+        }));
+        const document = applyPatch(state.document, transaction.before, after);
+        commit(document, state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before: transaction.before,
+          beforeSelection: transaction.selectionBefore,
         });
-        commit({ ...state.document, nodes }, state.selectedIds, previous);
         return;
       }
 
       case "selection.move.cancel":
         if (moveTransaction) {
-          const previous = moveTransaction.snapshot;
           const nodeIds = state.selectedIds;
           moveTransaction = undefined;
           publish(
-            { ...previous, moveDelta: null },
+            { moveDelta: null },
             { delta: { x: 0, y: 0 }, kind: "move", nodeIds },
           );
         }
         return;
 
+      case "selection.nudge": {
+        const before = indexedSelection();
+        if (before.length === 0 || (action.delta.x === 0 && action.delta.y === 0)) {
+          return;
+        }
+        const after = before.map(({ index, node }) => ({
+          index,
+          node: {
+            ...node,
+            x: node.x + action.delta.x,
+            y: node.y + action.delta.y,
+          },
+        }));
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
+        return;
+      }
+
       case "history.undo": {
-        const previous = past.pop();
-        if (!previous) return;
-        future.push(snapshot());
+        const entry = past.pop();
+        if (!entry) return;
+        future.push(entry);
         moveTransaction = undefined;
+        const document = applyPatch(state.document, entry.after, entry.before);
+        spatialIndex.apply(
+          document,
+          entry.after.map(({ node }) => node),
+          entry.before.map(({ node }) => node),
+        );
         publish(
-          { ...previous, moveDelta: null },
+          {
+            document,
+            moveDelta: null,
+            selectedIds: entry.beforeSelection,
+          },
           { kind: "document" },
         );
         return;
       }
 
       case "history.redo": {
-        const next = future.pop();
-        if (!next) return;
-        past.push(snapshot());
+        const entry = future.pop();
+        if (!entry) return;
+        past.push(entry);
         moveTransaction = undefined;
-        publish({ ...next, moveDelta: null }, { kind: "document" });
+        const document = applyPatch(state.document, entry.before, entry.after);
+        spatialIndex.apply(
+          document,
+          entry.before.map(({ node }) => node),
+          entry.after.map(({ node }) => node),
+        );
+        publish(
+          {
+            document,
+            moveDelta: null,
+            selectedIds: entry.afterSelection,
+          },
+          { kind: "document" },
+        );
         return;
       }
 
@@ -395,22 +524,22 @@ export function createCanvasEditor(
 
   return {
     dispatch,
-    getState: () => state,
-    hitTest: (point) => {
-      for (let index = state.document.nodes.length - 1; index >= 0; index -= 1) {
-        const node = state.document.nodes[index];
-        if (
-          node &&
-          point.x >= node.x &&
-          point.x <= node.x + node.width &&
-          point.y >= node.y &&
-          point.y <= node.y + node.height
-        ) {
-          return node;
-        }
-      }
-      return undefined;
+    getBounds: (scope) => {
+      const nodes = scope === "all"
+        ? state.document.nodes
+        : indexedSelection().map(({ node }) => node);
+      const bounds = boundsFor(nodes);
+      return bounds && scope === "selection" && state.moveDelta
+        ? {
+            ...bounds,
+            x: bounds.x + state.moveDelta.x,
+            y: bounds.y + state.moveDelta.y,
+          }
+        : bounds;
     },
+    getState: () => state,
+    hitTest: spatialIndex.hitTest,
+    query: spatialIndex.query,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

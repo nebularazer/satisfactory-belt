@@ -1,4 +1,5 @@
 import {
+  CANVAS_DOCUMENT_VERSION,
   NODE_HEIGHT,
   NODE_WIDTH,
   SNAP_INTERVAL,
@@ -25,7 +26,7 @@ export function createCanvasLoadFixture(nodeCount: number): CanvasDocument {
       x: originX + (index % columns) * horizontalStep,
       y: originY + Math.floor(index / columns) * verticalStep,
     })),
-    version: 1,
+    version: CANVAS_DOCUMENT_VERSION,
   };
 }
 
