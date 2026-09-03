@@ -8,8 +8,9 @@
   },
   "scripts": {
     "dev": "pnpm --filter @satisfactory-belt/web dev",
-    "build": "pnpm --filter @satisfactory-belt/web build",
-    "test": "pnpm --filter @satisfactory-belt/web test",
-    "typecheck": "pnpm --filter @satisfactory-belt/web typecheck"
+    "build": "pnpm --recursive --if-present build",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "test": "pnpm --recursive --if-present test",
+    "typecheck": "pnpm --recursive --if-present typecheck"
   }
 }
