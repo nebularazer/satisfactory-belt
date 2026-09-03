@@ -1,0 +1,15 @@
+{
+  "name": "satisfactory-belt",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @satisfactory-belt/web dev",
+    "build": "pnpm --filter @satisfactory-belt/web build",
+    "test": "pnpm --filter @satisfactory-belt/web test",
+    "typecheck": "pnpm --filter @satisfactory-belt/web typecheck"
+  }
+}
