@@ -53,7 +53,7 @@ test("keeps recipe search usable in a compact mobile viewport", async ({
   await page.getByRole("button", { name: "Add your first node" }).click();
 
   const nodePicker = page.getByRole("dialog", { name: "Add node" });
-  const search = page.getByPlaceholder("Search machines or recipes...");
+  const search = page.getByPlaceholder("Search buildings or recipes...");
   await expect(nodePicker).toBeVisible();
   await expect(search).not.toBeFocused();
 

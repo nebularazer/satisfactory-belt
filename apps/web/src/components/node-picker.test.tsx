@@ -34,7 +34,7 @@ describe("NodePicker", () => {
     );
 
     fireEvent.change(
-      screen.getByPlaceholderText("Search machines or recipes..."),
+      screen.getByPlaceholderText("Search buildings or recipes..."),
       { target: { value: "reinforced iron plate" } },
     );
     expect(
@@ -47,9 +47,9 @@ describe("NodePicker", () => {
     );
 
     expect(onSelect).toHaveBeenCalledWith({
+      label: "Reinforced Iron Plate",
       machineId: "Build_AssemblerMk1_C",
       recipeId: "Recipe_IronPlateReinforced_C",
-      recipeName: "Reinforced Iron Plate",
     });
   });
 
@@ -63,7 +63,7 @@ describe("NodePicker", () => {
     );
 
     fireEvent.change(
-      screen.getByPlaceholderText("Search machines or recipes..."),
+      screen.getByPlaceholderText("Search buildings or recipes..."),
       { target: { value: "cast screws" } },
     );
 
@@ -84,7 +84,7 @@ describe("NodePicker", () => {
     );
 
     fireEvent.change(
-      screen.getByPlaceholderText("Search machines or recipes..."),
+      screen.getByPlaceholderText("Search buildings or recipes..."),
       { target: { value: "screws" } },
     );
     expect(screen.getAllByRole("option")[0]).toHaveAccessibleName(/^Screws/);
@@ -119,9 +119,9 @@ describe("NodePicker", () => {
       screen.getByRole("option", { name: /^Steel ScrewsAlternate/ }),
     );
     expect(onSelect).toHaveBeenCalledWith({
+      label: "Steel Screws",
       machineId: "Build_ConstructorMk1_C",
       recipeId: "Recipe_Alternate_Screw_2_C",
-      recipeName: "Steel Screws",
     });
   });
 
@@ -147,9 +147,59 @@ describe("NodePicker", () => {
     );
 
     expect(onSelect).toHaveBeenCalledWith({
+      label: "Iron Plate",
       machineId: "Build_ConstructorMk1_C",
       recipeId: "Recipe_IronPlate_C",
-      recipeName: "Iron Plate",
     });
+  });
+
+  it("sorts machines alphabetically", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    const machineNames = screen
+      .getByRole("group", { name: "Machines" })
+      .querySelectorAll('[role="option"]');
+    expect([...machineNames].map((option) => option.textContent)).toEqual([
+      "Assembler66 recipes",
+      "Blender17 recipes",
+      "Constructor48 recipes",
+      "Converter25 recipes",
+      "Foundry16 recipes",
+      "Manufacturer37 recipes",
+      "Packager24 recipes",
+      "Particle Accelerator12 recipes",
+      "Quantum Encoder6 recipes",
+      "Refinery34 recipes",
+      "Smelter6 recipes",
+    ]);
+  });
+
+  it.each([
+    ["miner mk.1", "Miner Mk.1", "Build_MinerMk1_C"],
+    [
+      "conveyor splitter",
+      "Conveyor Splitter",
+      "Build_ConveyorAttachmentSplitter_C",
+    ],
+    ["awesome sink", "AWESOME Sink", "Build_ResourceSink_C"],
+  ])("places the %s buildable directly", (query, label, machineId) => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: query } },
+    );
+    fireEvent.click(screen.getByRole("option", { name: label }));
+
+    expect(onSelect).toHaveBeenCalledWith({ label, machineId });
   });
 });

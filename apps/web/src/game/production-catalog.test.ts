@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { productionItem, recipesProducing } from "./production-catalog";
+import {
+  catalogBuildable,
+  productionItem,
+  recipesProducing,
+} from "./production-catalog";
 
 describe("production catalog", () => {
   it("normalizes alternate recipes and calculates per-minute rates", () => {
@@ -49,5 +53,13 @@ describe("production catalog", () => {
     expect(
       wetConcrete?.inputs.find(({ itemId }) => itemId === "Desc_Water_C"),
     ).toMatchObject({ amount: 5, ratePerMinute: 100 });
+  });
+
+  it("includes directly placeable infrastructure", () => {
+    expect(catalogBuildable("Build_MinerMk1_C")?.name).toBe("Miner Mk.1");
+    expect(catalogBuildable("Build_ConveyorAttachmentSplitter_C")?.name).toBe(
+      "Conveyor Splitter",
+    );
+    expect(catalogBuildable("Build_ResourceSink_C")?.name).toBe("AWESOME Sink");
   });
 });

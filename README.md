@@ -32,8 +32,9 @@ pnpm test:e2e
 
 The canvas interaction slice supports:
 
-- searching machines or recipes, comparing production routes, and seeing nominal
-  input, output, and power rates in the node picker from the menu or with `N`;
+- searching production machines, infrastructure, or recipes; comparing production
+  routes; and seeing nominal input, output, and power rates in the node picker from
+  the menu or with `N`;
 - opening a contextual menu with right-click: add on empty canvas, duplicate/delete on nodes;
 - selecting a node with primary click and moving it with primary drag;
 - adding or removing nodes from the selection with Ctrl/Cmd + primary click;
@@ -100,8 +101,9 @@ and restores the fitted view when finished.
 Choosing a recipe inserts its production machine at the last canvas cursor position
 when opened with `N`, at the clicked position when opened from the context menu, or at
 the viewport center when opened from the main menu. Choosing a machine first narrows
-the picker to the recipes available for that machine. Recipes with multiple ways
-to produce their output expose a separate route button without changing the main
+the picker to the recipes available for that machine. Resource extractors, logistics
+buildings, and the AWESOME Sink can be added directly. Recipes with multiple ways to
+produce their output expose a separate route button without changing the main
 click-to-add action. On compact viewports the picker fills the available space and
 does not open the software keyboard until the search field is selected.
 

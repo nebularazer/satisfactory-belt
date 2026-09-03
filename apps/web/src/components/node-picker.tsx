@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ListTree } from "lucide-react";
 
 import {
+  LOGISTICS_BUILDABLES,
   PRODUCTION_MACHINES,
   PRODUCTION_RECIPES,
+  RESOURCE_EXTRACTORS,
+  SPECIAL_BUILDABLES,
   productionItem,
   productionMachine,
   recipesForMachine,
   recipesProducing,
-  type MachineRecipeSelection,
+  type CatalogBuildable,
+  type NodePickerSelection,
   type ProductionMachine,
   type ProductionMaterial,
   type ProductionRecipe,
@@ -25,7 +29,7 @@ import {
 
 type NodePickerProps = {
   onOpenChange: (open: boolean) => void;
-  onSelect: (selection: MachineRecipeSelection) => void;
+  onSelect: (selection: NodePickerSelection) => void;
   open: boolean;
 };
 
@@ -58,6 +62,22 @@ function filterProductionCatalog(
   return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term))
     ? 1
     : 0;
+}
+
+function matchingBuildables(
+  buildables: readonly CatalogBuildable[],
+  query: string,
+  categoryKeywords: string[],
+) {
+  return buildables
+    .filter(
+      (buildable) =>
+        filterProductionCatalog(buildable.name, query, [
+          buildable.id,
+          ...categoryKeywords,
+        ]) > 0,
+    )
+    .toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
 function recipeSearchScore(
@@ -234,6 +254,42 @@ function RecipeRow({
   );
 }
 
+type BuildableGroupProps = {
+  buildables: readonly CatalogBuildable[];
+  heading: string;
+  onSelect: (buildable: CatalogBuildable) => void;
+};
+
+function BuildableGroup({
+  buildables,
+  heading,
+  onSelect,
+}: BuildableGroupProps) {
+  if (buildables.length === 0) return null;
+
+  return (
+    <CommandGroup heading={heading}>
+      {buildables.map((buildable) => (
+        <CommandItem
+          key={buildable.id}
+          className="min-h-11"
+          keywords={[buildable.id]}
+          onSelect={() => onSelect(buildable)}
+          value={`buildable ${buildable.name}`}
+        >
+          <img
+            alt=""
+            aria-hidden="true"
+            className="size-9 object-contain"
+            src={buildable.imageUrl}
+          />
+          <div className="font-medium">{buildable.name}</div>
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
 export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const [scope, setScope] = useState<PickerScope>({ type: "root" });
   const [query, setQuery] = useState("");
@@ -274,6 +330,27 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             ]) > 0,
         ).toSorted((left, right) => left.name.localeCompare(right.name))
       : [];
+  const matchingExtractors =
+    scope.type === "root"
+      ? matchingBuildables(RESOURCE_EXTRACTORS, query, [
+          "resource",
+          "extraction",
+          "extractor",
+          "miner",
+        ])
+      : [];
+  const matchingLogistics =
+    scope.type === "root"
+      ? matchingBuildables(LOGISTICS_BUILDABLES, query, [
+          "logistics",
+          "conveyor",
+          "pipeline",
+        ])
+      : [];
+  const matchingSpecial =
+    scope.type === "root"
+      ? matchingBuildables(SPECIAL_BUILDABLES, query, ["special", "sink"])
+      : [];
   const autoFocusSearch =
     typeof window !== "undefined" &&
     window.matchMedia?.("(min-width: 640px) and (pointer: fine)").matches;
@@ -299,7 +376,12 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   };
 
   const selectRecipe = (recipe: ProductionRecipe, machineId: string) => {
-    onSelect({ machineId, recipeId: recipe.id, recipeName: recipe.name });
+    onSelect({ label: recipe.name, machineId, recipeId: recipe.id });
+    setOpen(false);
+  };
+
+  const selectBuildable = (buildable: CatalogBuildable) => {
+    onSelect({ label: buildable.name, machineId: buildable.id });
     setOpen(false);
   };
 
@@ -330,7 +412,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   return (
     <CommandDialog
       className="top-2 bottom-2 h-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none translate-y-0 sm:top-1/2 sm:bottom-auto sm:h-auto sm:w-full sm:max-w-2xl sm:-translate-y-1/2"
-      description="Search production machines and their recipes"
+      description="Search production buildings and recipes"
       initialFocus={autoFocusSearch ? undefined : false}
       onOpenChange={setOpen}
       open={open}
@@ -372,7 +454,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
               ? `Search ${selectedMachine.name} recipes...`
               : routeItem
                 ? `Search ways to produce ${routeItem.name}...`
-                : "Search machines or recipes..."
+                : "Search buildings or recipes..."
           }
           value={query}
         />
@@ -380,7 +462,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
           className="min-h-0 flex-1 max-h-none overscroll-contain sm:max-h-[min(32rem,calc(100dvh-12rem))]"
           ref={listRef}
         >
-          <CommandEmpty>No machines or recipes found.</CommandEmpty>
+          <CommandEmpty>No buildings or recipes found.</CommandEmpty>
           {scope.type === "root" && matchingMachines.length > 0 && (
             <CommandGroup heading="Machines">
               {matchingMachines.map((machine) => {
@@ -412,31 +494,54 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
               })}
             </CommandGroup>
           )}
-          <CommandGroup
-            heading={scope.type === "routes" ? "Production routes" : "Recipes"}
-          >
-            {matchingRecipes.map((recipe) => {
-              const machine =
-                selectedMachine ?? productionMachine(recipe.machineIds[0]);
-              if (!machine) return null;
-              return (
-                <RecipeRow
-                  key={`${machine.id}:${recipe.id}`}
-                  machine={machine}
-                  onOpenRoutes={
-                    scope.type === "routes"
-                      ? undefined
-                      : (itemId) => enterScope({ itemId, type: "routes" })
-                  }
-                  onSelect={() => selectRecipe(recipe, machine.id)}
-                  query={query}
-                  recipe={recipe}
-                  showDetailedMaterials={scope.type === "routes"}
-                  showStandardBadge={scope.type === "routes"}
-                />
-              );
-            })}
-          </CommandGroup>
+          {scope.type === "root" && (
+            <>
+              <BuildableGroup
+                buildables={matchingExtractors}
+                heading="Resource extraction"
+                onSelect={selectBuildable}
+              />
+              <BuildableGroup
+                buildables={matchingLogistics}
+                heading="Logistics"
+                onSelect={selectBuildable}
+              />
+              <BuildableGroup
+                buildables={matchingSpecial}
+                heading="Special"
+                onSelect={selectBuildable}
+              />
+            </>
+          )}
+          {matchingRecipes.length > 0 && (
+            <CommandGroup
+              heading={
+                scope.type === "routes" ? "Production routes" : "Recipes"
+              }
+            >
+              {matchingRecipes.map((recipe) => {
+                const machine =
+                  selectedMachine ?? productionMachine(recipe.machineIds[0]);
+                if (!machine) return null;
+                return (
+                  <RecipeRow
+                    key={`${machine.id}:${recipe.id}`}
+                    machine={machine}
+                    onOpenRoutes={
+                      scope.type === "routes"
+                        ? undefined
+                        : (itemId) => enterScope({ itemId, type: "routes" })
+                    }
+                    onSelect={() => selectRecipe(recipe, machine.id)}
+                    query={query}
+                    recipe={recipe}
+                    showDetailedMaterials={scope.type === "routes"}
+                    showStandardBadge={scope.type === "routes"}
+                  />
+                );
+              })}
+            </CommandGroup>
+          )}
         </CommandList>
       </Command>
     </CommandDialog>

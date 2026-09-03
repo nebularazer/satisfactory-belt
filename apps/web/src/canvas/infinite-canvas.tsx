@@ -11,8 +11,8 @@ import {
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 import {
-  PRODUCTION_MACHINE_IMAGE_URLS,
-  productionMachine,
+  CATALOG_BUILDABLE_IMAGE_URLS,
+  catalogBuildable,
 } from "@/game/production-catalog";
 
 import {
@@ -192,9 +192,7 @@ function updateNodeVisual(
     display.labelVisualKey = labelVisualKey;
   }
 
-  const machine = node.machineId
-    ? productionMachine(node.machineId)
-    : undefined;
+  const machine = node.machineId ? catalogBuildable(node.machineId) : undefined;
   const imageVisualKey = machine?.imageUrl ?? "";
   if (display.imageVisualKey !== imageVisualKey) {
     const texture = imageVisualKey
@@ -518,9 +516,7 @@ export const InfiniteCanvas = forwardRef<
       })
       .then(async () => {
         await Promise.allSettled(
-          PRODUCTION_MACHINE_IMAGE_URLS.map((imageUrl) =>
-            Assets.load(imageUrl),
-          ),
+          CATALOG_BUILDABLE_IMAGE_URLS.map((imageUrl) => Assets.load(imageUrl)),
         );
         if (!active) {
           app.destroy(true);

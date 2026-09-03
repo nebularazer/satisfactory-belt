@@ -9,16 +9,35 @@ import refineryImage from "@/assets/machines/Desc_OilRefinery_C.png";
 import packagerImage from "@/assets/machines/Desc_Packager_C.png";
 import quantumEncoderImage from "@/assets/machines/Desc_QuantumEncoder_C.png";
 import smelterImage from "@/assets/machines/Desc_SmelterMk1_C.png";
+import conveyorMergerImage from "@/assets/buildables/Desc_ConveyorAttachmentMerger_C.png";
+import priorityMergerImage from "@/assets/buildables/Desc_ConveyorAttachmentMergerPriority_C.png";
+import programmableSplitterImage from "@/assets/buildables/Desc_ConveyorAttachmentSplitterProgrammable_C.png";
+import smartSplitterImage from "@/assets/buildables/Desc_ConveyorAttachmentSplitterSmart_C.png";
+import conveyorSplitterImage from "@/assets/buildables/Desc_ConveyorAttachmentSplitter_C.png";
+import resourceWellExtractorImage from "@/assets/buildables/Desc_FrackingExtractor_C.png";
+import resourceWellPressurizerImage from "@/assets/buildables/Desc_FrackingSmasher_C.png";
+import minerMk1Image from "@/assets/buildables/Desc_MinerMk1_C.png";
+import minerMk2Image from "@/assets/buildables/Desc_MinerMk2_C.png";
+import minerMk3Image from "@/assets/buildables/Desc_MinerMk3_C.png";
+import oilExtractorImage from "@/assets/buildables/Desc_OilPump_C.png";
+import pipelineJunctionImage from "@/assets/buildables/Desc_PipelineJunction_Cross_C.png";
+import pipelineTJunctionImage from "@/assets/buildables/Desc_PipelineJunction_T_C.png";
+import awesomeSinkImage from "@/assets/buildables/Desc_ResourceSink_C.png";
+import waterExtractorImage from "@/assets/buildables/Desc_WaterPump_C.png";
 
 import itemData from "./items.json";
 import recipeData from "./recipes.json";
 
-export type ProductionMachine = Readonly<{
-  basePowerMw: number;
+export type CatalogBuildable = Readonly<{
   id: string;
   imageUrl: string;
   name: string;
 }>;
+
+export type ProductionMachine = CatalogBuildable &
+  Readonly<{
+    basePowerMw: number;
+  }>;
 
 export type ProductionItem = Readonly<{
   form: "gas" | "liquid" | "solid";
@@ -46,10 +65,10 @@ export type ProductionRecipe = Readonly<{
   }>;
 }>;
 
-export type MachineRecipeSelection = Readonly<{
+export type NodePickerSelection = Readonly<{
+  label: string;
   machineId: string;
-  recipeId: string;
-  recipeName: string;
+  recipeId?: string;
 }>;
 
 export const PRODUCTION_MACHINES: readonly ProductionMachine[] = [
@@ -121,11 +140,105 @@ export const PRODUCTION_MACHINES: readonly ProductionMachine[] = [
   },
 ];
 
+export const RESOURCE_EXTRACTORS: readonly CatalogBuildable[] = [
+  {
+    id: "Build_MinerMk1_C",
+    imageUrl: minerMk1Image,
+    name: "Miner Mk.1",
+  },
+  {
+    id: "Build_MinerMk2_C",
+    imageUrl: minerMk2Image,
+    name: "Miner Mk.2",
+  },
+  {
+    id: "Build_MinerMk3_C",
+    imageUrl: minerMk3Image,
+    name: "Miner Mk.3",
+  },
+  {
+    id: "Build_OilPump_C",
+    imageUrl: oilExtractorImage,
+    name: "Oil Extractor",
+  },
+  {
+    id: "Build_FrackingExtractor_C",
+    imageUrl: resourceWellExtractorImage,
+    name: "Resource Well Extractor",
+  },
+  {
+    id: "Build_FrackingSmasher_C",
+    imageUrl: resourceWellPressurizerImage,
+    name: "Resource Well Pressurizer",
+  },
+  {
+    id: "Build_WaterPump_C",
+    imageUrl: waterExtractorImage,
+    name: "Water Extractor",
+  },
+];
+
+export const LOGISTICS_BUILDABLES: readonly CatalogBuildable[] = [
+  {
+    id: "Build_ConveyorAttachmentMerger_C",
+    imageUrl: conveyorMergerImage,
+    name: "Conveyor Merger",
+  },
+  {
+    id: "Build_ConveyorAttachmentSplitter_C",
+    imageUrl: conveyorSplitterImage,
+    name: "Conveyor Splitter",
+  },
+  {
+    id: "Build_PipelineJunction_Cross_C",
+    imageUrl: pipelineJunctionImage,
+    name: "Pipeline Junction",
+  },
+  {
+    id: "Build_PipelineJunction_T_C",
+    imageUrl: pipelineTJunctionImage,
+    name: "Pipeline T-Junction",
+  },
+  {
+    id: "Build_ConveyorAttachmentSplitterProgrammable_C",
+    imageUrl: programmableSplitterImage,
+    name: "Programmable Splitter",
+  },
+  {
+    id: "Build_ConveyorAttachmentMergerPriority_C",
+    imageUrl: priorityMergerImage,
+    name: "Priority Merger",
+  },
+  {
+    id: "Build_ConveyorAttachmentSplitterSmart_C",
+    imageUrl: smartSplitterImage,
+    name: "Smart Splitter",
+  },
+];
+
+export const SPECIAL_BUILDABLES: readonly CatalogBuildable[] = [
+  {
+    id: "Build_ResourceSink_C",
+    imageUrl: awesomeSinkImage,
+    name: "AWESOME Sink",
+  },
+];
+
+export const CATALOG_BUILDABLES: readonly CatalogBuildable[] = [
+  ...PRODUCTION_MACHINES,
+  ...RESOURCE_EXTRACTORS,
+  ...LOGISTICS_BUILDABLES,
+  ...SPECIAL_BUILDABLES,
+];
+
 export const PRODUCTION_ITEMS = itemData as readonly ProductionItem[];
 export const PRODUCTION_RECIPES = recipeData as readonly ProductionRecipe[];
 
 const machinesById = new Map(
   PRODUCTION_MACHINES.map((machine) => [machine.id, machine]),
+);
+const buildablesById = new Map(
+  CATALOG_BUILDABLES.map((buildable) => [buildable.id, buildable]),
 );
 const itemsById = new Map(PRODUCTION_ITEMS.map((item) => [item.id, item]));
 const recipesByMachineId = new Map(
@@ -161,9 +274,13 @@ const recipesByOutputItemId = new Map(
   ]),
 );
 
-export const PRODUCTION_MACHINE_IMAGE_URLS = PRODUCTION_MACHINES.map(
+export const CATALOG_BUILDABLE_IMAGE_URLS = CATALOG_BUILDABLES.map(
   ({ imageUrl }) => imageUrl,
 );
+
+export function catalogBuildable(buildableId: string) {
+  return buildablesById.get(buildableId);
+}
 
 export function productionMachine(machineId: string) {
   return machinesById.get(machineId);
