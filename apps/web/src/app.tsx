@@ -11,9 +11,10 @@ import {
   InfiniteCanvas,
   type InfiniteCanvasHandle,
 } from "@/canvas/infinite-canvas";
-import type { Viewport } from "@/canvas/viewport";
+import type { Point, Viewport } from "@/canvas/viewport";
 import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasMenu } from "@/components/canvas-menu";
+import { NodePicker } from "@/components/node-picker";
 
 export function App() {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
@@ -53,18 +54,27 @@ export function App() {
     getEditorUiState,
   );
   const [zoom, setZoom] = useState(1);
+  const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
 
   const handleViewportChange = useCallback((viewport: Viewport) => {
     setZoom(viewport.zoom);
   }, []);
 
   const resetView = () => canvasRef.current?.resetView();
+  const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
+
+  const addPendingNode = () => {
+    if (!pendingNode) return;
+    editor.dispatch({ type: "node.create", at: pendingNode.at });
+    setPendingNode(null);
+  };
 
   return (
     <main className="relative h-dvh w-dvw overflow-hidden bg-canvas text-foreground">
       <h1 className="sr-only">Satisfactory Belt canvas</h1>
       <InfiniteCanvas
         editor={editor}
+        onRequestAddNode={requestNodeAt}
         onViewportChange={handleViewportChange}
         ref={canvasRef}
       />
@@ -74,7 +84,10 @@ export function App() {
           <CanvasMenu
             canDelete={editorState.selectedCount > 0}
             canDuplicate={editorState.selectedCount > 0}
-            onAddNode={() => canvasRef.current?.addNode()}
+            onAddNode={() => {
+              const center = canvasRef.current?.getViewportCenter();
+              if (center) requestNodeAt(center);
+            }}
             onDelete={() => editor.dispatch({ type: "selection.delete" })}
             onDuplicate={() => editor.dispatch({ type: "selection.duplicate" })}
             onResetView={resetView}
@@ -98,6 +111,14 @@ export function App() {
           />
         </div>
       </div>
+
+      <NodePicker
+        onOpenChange={(open) => {
+          if (!open) setPendingNode(null);
+        }}
+        onSelect={addPendingNode}
+        open={pendingNode !== null}
+      />
     </main>
   );
 }

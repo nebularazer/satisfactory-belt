@@ -122,13 +122,13 @@ export function CanvasMenu({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-xs leading-5 text-muted-foreground">
-          Drag to pan · Scroll to zoom
+          Drag empty space to pan · Scroll to zoom
           <br />
-          Ctrl/Cmd + click or drag to select
+          Click a node to select · Drag it to move
           <br />
-          Ctrl/Cmd + drag a node to move it
+          Ctrl/Cmd + click toggles selection
           <br />
-          Shift adds · Alt bypasses snap
+          Ctrl/Cmd + drag creates a selection box
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

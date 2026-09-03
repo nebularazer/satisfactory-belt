@@ -26,13 +26,25 @@ describe("canvas editor", () => {
     expect(editor.getState().selectedIds).toEqual(["node-1"]);
   });
 
+  it("toggles nodes in an additive selection", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+
+    editor.dispatch({ type: "selection.node", additive: false, id: "node-1" });
+    editor.dispatch({ type: "selection.node", additive: true, id: "node-2" });
+    expect(editor.getState().selectedIds).toEqual(["node-1", "node-2"]);
+
+    editor.dispatch({ type: "selection.node", additive: true, id: "node-1" });
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
+  });
+
   it("moves a selection as one undoable operation", () => {
     const editor = createEditor();
     editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({
       type: "selection.move.update",
-      bypassSnap: false,
       delta: { x: 45, y: 10 },
     });
     editor.dispatch({ type: "selection.move.commit" });
@@ -56,7 +68,6 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({
       type: "selection.move.update",
-      bypassSnap: false,
       delta: { x: 32, y: -32 },
     });
     editor.dispatch({ type: "selection.move.commit" });
@@ -67,18 +78,21 @@ describe("canvas editor", () => {
     ]);
   });
 
-  it("bypasses snapping while Alt is held", () => {
-    const editor = createEditor();
+  it("moves freely when snapping is disabled", () => {
+    let id = 0;
+    const editor = createCanvasEditor({
+      idFactory: () => `node-${++id}`,
+      snapToGrid: false,
+    });
     editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({
       type: "selection.move.update",
-      bypassSnap: true,
       delta: { x: 13, y: 17 },
     });
     editor.dispatch({ type: "selection.move.commit" });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 13, y: 81 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 25, y: 69 });
   });
 
   it("copies, pastes, duplicates, deletes, and restores selections", () => {

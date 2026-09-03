@@ -47,7 +47,7 @@ export type CanvasEditorAction =
       baseIds: readonly string[];
     }
   | { type: "selection.move.begin" }
-  | { type: "selection.move.update"; delta: Point; bypassSnap: boolean }
+  | { type: "selection.move.update"; delta: Point }
   | { type: "selection.move.commit" }
   | { type: "selection.move.cancel" }
   | { type: "history.undo" }
@@ -278,7 +278,7 @@ export function createCanvasEditor(
         const anchor = anchorId ? moveTransaction.positions.get(anchorId) : undefined;
         let delta = action.delta;
 
-        if (state.snapToGrid && !action.bypassSnap && anchor) {
+        if (state.snapToGrid && anchor) {
           delta = {
             x: snap(anchor.x + delta.x) - anchor.x,
             y: snap(anchor.y + delta.y) - anchor.y,
