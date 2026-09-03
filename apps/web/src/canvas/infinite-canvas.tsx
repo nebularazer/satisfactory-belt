@@ -1,4 +1,11 @@
-import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
+import {
+  Application,
+  Container,
+  Graphics,
+  Text,
+  Texture,
+  TilingSprite,
+} from "pixi.js";
 import {
   forwardRef,
   useEffect,
@@ -9,7 +16,9 @@ import {
 import {
   SNAP_INTERVAL,
   type CanvasEditor,
+  type CanvasEditorChange,
   type CanvasEditorState,
+  type CanvasNode,
   type Rectangle,
 } from "./editor";
 import { attachCanvasInteractions } from "./interactions";
@@ -17,6 +26,7 @@ import {
   createPerformanceSampler,
   type CanvasPerformanceMetrics,
 } from "./performance";
+import { createRenderScheduler } from "./render-scheduler";
 import {
   panViewport,
   screenToWorld,
@@ -44,41 +54,80 @@ type InfiniteCanvasProps = {
 };
 
 type NodeDisplay = {
+  baseX: number;
+  baseY: number;
   card: Graphics;
+  cardVisualKey: string;
   container: Container;
   label: Text;
-  visualKey: string;
+  labelVisualKey: string;
+  node: CanvasNode;
 };
 
-function positiveModulo(value: number, divisor: number) {
-  return ((value % divisor) + divisor) % divisor;
+type GridDisplay = {
+  spacing: number;
+  sprite: TilingSprite;
+  texture: Texture;
+};
+
+function gridSpacing(zoom: number) {
+  let spacing = SNAP_INTERVAL * zoom;
+  while (spacing < 20) spacing *= 2;
+  return spacing;
 }
 
-function drawGrid(
-  graphics: Graphics,
+function createGridTexture(spacing: number) {
+  const size = Math.max(1, Math.ceil(spacing));
+  const tileScale = spacing / size;
+  const canvas = document.createElement("canvas");
+  canvas.height = size;
+  canvas.width = size;
+  const context = canvas.getContext("2d");
+
+  if (context) {
+    context.fillStyle = "white";
+    context.beginPath();
+    context.arc(size / 2, size / 2, 1.25 / tileScale, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  return { texture: Texture.from(canvas), tileScale };
+}
+
+function createGridDisplay(width: number, height: number, zoom: number) {
+  const spacing = gridSpacing(zoom);
+  const { texture, tileScale } = createGridTexture(spacing);
+  const sprite = new TilingSprite({ height, texture, width });
+  sprite.eventMode = "none";
+  sprite.tileScale.set(tileScale);
+  return { spacing, sprite, texture };
+}
+
+function updateGrid(
+  display: GridDisplay,
   viewport: Viewport,
   width: number,
   height: number,
 ) {
-  graphics.clear();
-
-  let spacing = SNAP_INTERVAL * viewport.zoom;
-  while (spacing < 20) spacing *= 2;
-
-  const offsetX = positiveModulo(viewport.x, spacing);
-  const offsetY = positiveModulo(viewport.y, spacing);
-
-  for (let x = offsetX; x <= width; x += spacing) {
-    for (let y = offsetY; y <= height; y += spacing) {
-      graphics.circle(x, y, 1.25);
-    }
+  const spacing = gridSpacing(viewport.zoom);
+  if (display.spacing !== spacing) {
+    const previousTexture = display.texture;
+    const { texture, tileScale } = createGridTexture(spacing);
+    display.spacing = spacing;
+    display.sprite.texture = texture;
+    display.sprite.tileScale.set(tileScale);
+    display.texture = texture;
+    previousTexture.destroy(true);
   }
 
+  display.sprite.setSize(width, height);
+  display.sprite.tilePosition.set(
+    viewport.x - spacing / 2,
+    viewport.y - spacing / 2,
+  );
   const dark = document.documentElement.classList.contains("dark");
-  graphics.fill({
-    color: dark ? 0xd4d4d8 : 0x71717a,
-    alpha: dark ? 0.34 : 0.4,
-  });
+  display.sprite.tint = dark ? 0xd4d4d8 : 0x71717a;
+  display.sprite.alpha = dark ? 0.34 : 0.4;
 }
 
 function textResolutionForZoom(zoom: number, rendererResolution: number) {
@@ -88,10 +137,49 @@ function textResolutionForZoom(zoom: number, rendererResolution: number) {
   );
 }
 
-function drawScene(
+function updateNodeVisual(
+  display: NodeDisplay,
+  node: CanvasNode,
+  dark: boolean,
+  selected: boolean,
+  textResolution: number,
+) {
+  const cardVisualKey = `${dark}:${selected}:${node.width}:${node.height}`;
+  if (display.cardVisualKey !== cardVisualKey) {
+    display.card
+      .clear()
+      .roundRect(0, 0, node.width, node.height, 10)
+      .fill({ color: dark ? 0x202024 : 0xffffff })
+      .stroke({
+        color: selected ? 0x6366f1 : dark ? 0x52525b : 0xd4d4d8,
+        width: selected ? 2 : 1,
+      });
+    display.cardVisualKey = cardVisualKey;
+  }
+
+  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}`;
+  if (display.labelVisualKey !== labelVisualKey) {
+    display.label.text = node.label;
+    display.label.position.set(node.width / 2, node.height / 2);
+    display.label.style = {
+      fill: dark ? 0xf4f4f5 : 0x27272a,
+      fontFamily: "Inter Variable, Inter, sans-serif",
+      fontSize: 14,
+      fontWeight: "600",
+    };
+    display.labelVisualKey = labelVisualKey;
+  }
+
+  if (display.label.resolution !== textResolution) {
+    display.label.resolution = textResolution;
+  }
+}
+
+function syncDocument(
   scene: Container,
   state: CanvasEditorState,
   displays: Map<string, NodeDisplay>,
+  textResolution: number,
 ) {
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = new Set(state.selectedIds);
@@ -106,7 +194,6 @@ function drawScene(
 
   for (const [index, node] of state.document.nodes.entries()) {
     const selected = selectedIds.has(node.id);
-    const visualKey = `${dark}:${selected}:${node.width}:${node.height}:${node.label}`;
     let display = displays.get(node.id);
 
     if (!display) {
@@ -115,37 +202,75 @@ function drawScene(
       const label = new Text({ text: node.label });
       label.anchor.set(0.5);
       container.addChild(card, label);
-      display = { card, container, label, visualKey: "" };
+      display = {
+        baseX: node.x,
+        baseY: node.y,
+        card,
+        cardVisualKey: "",
+        container,
+        label,
+        labelVisualKey: "",
+        node,
+      };
       displays.set(node.id, display);
     }
 
-    display.container.position.set(node.x, node.y);
+    display.baseX = node.x;
+    display.baseY = node.y;
+    display.node = node;
+    const moveDelta = selected ? state.moveDelta : null;
+    display.container.position.set(
+      node.x + (moveDelta?.x ?? 0),
+      node.y + (moveDelta?.y ?? 0),
+    );
     if (display.container.parent !== scene) scene.addChild(display.container);
     if (scene.children[index] !== display.container) {
       scene.setChildIndex(display.container, index);
     }
 
-    if (display.visualKey === visualKey) continue;
-
-    display.card
-      .clear()
-      .roundRect(0, 0, node.width, node.height, 10)
-      .fill({ color: dark ? 0x202024 : 0xffffff })
-      .stroke({
-        color: selected ? 0x6366f1 : dark ? 0x52525b : 0xd4d4d8,
-        width: selected ? 2 : 1,
-      });
-
-    display.label.text = node.label;
-    display.label.position.set(node.width / 2, node.height / 2);
-    display.label.style = {
-      fill: dark ? 0xf4f4f5 : 0x27272a,
-      fontFamily: "Inter Variable, Inter, sans-serif",
-      fontSize: 14,
-      fontWeight: "600",
-    };
-    display.visualKey = visualKey;
+    updateNodeVisual(display, node, dark, selected, textResolution);
   }
+}
+
+function syncEditorChange(
+  scene: Container,
+  state: CanvasEditorState,
+  displays: Map<string, NodeDisplay>,
+  change: CanvasEditorChange,
+  textResolution: number,
+) {
+  if (change.kind === "settings") return false;
+  if (change.kind === "document") {
+    syncDocument(scene, state, displays, textResolution);
+    return true;
+  }
+
+  const dark = document.documentElement.classList.contains("dark");
+  const selectedIds = change.kind === "selection"
+    ? new Set(state.selectedIds)
+    : undefined;
+
+  for (const id of change.nodeIds) {
+    const display = displays.get(id);
+    if (!display) continue;
+
+    if (change.kind === "move") {
+      display.container.position.set(
+        display.baseX + change.delta.x,
+        display.baseY + change.delta.y,
+      );
+    } else {
+      updateNodeVisual(
+        display,
+        display.node,
+        dark,
+        selectedIds?.has(id) ?? false,
+        textResolution,
+      );
+    }
+  }
+
+  return true;
 }
 
 function drawMarquee(graphics: Graphics, rectangle?: Rectangle) {
@@ -176,13 +301,20 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
   ) {
     const hostRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
-    const gridRef = useRef<Graphics | null>(null);
+    const gridRef = useRef<GridDisplay | null>(null);
     const sceneRef = useRef<Container | null>(null);
     const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
     const worldRef = useRef<Container | null>(null);
     const marqueeRef = useRef<Graphics | null>(null);
     const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
+    const performanceSamplerRef = useRef<ReturnType<
+      typeof createPerformanceSampler
+    > | null>(null);
     const performanceMetricsEnabledRef = useRef(performanceMetricsEnabled);
+    const renderSchedulerRef = useRef<ReturnType<
+      typeof createRenderScheduler
+    > | null>(null);
+    const textResolutionRef = useRef(1);
     const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
 
     onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
@@ -196,6 +328,9 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         viewportRef.current.zoom,
         app.renderer.resolution,
       );
+      if (textResolutionRef.current === resolution) return;
+
+      textResolutionRef.current = resolution;
       for (const { label } of nodeDisplaysRef.current.values()) {
         if (label.resolution !== resolution) label.resolution = resolution;
       }
@@ -203,11 +338,19 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
 
     const redraw = () => {
       const scene = sceneRef.current;
-      if (scene) drawScene(scene, editor.getState(), nodeDisplaysRef.current);
-      updateTextResolution();
+      if (scene) {
+        syncDocument(
+          scene,
+          editor.getState(),
+          nodeDisplaysRef.current,
+          textResolutionRef.current,
+        );
+        renderSchedulerRef.current?.request();
+      }
     };
 
     const renderViewport = (viewport: Viewport) => {
+      const previousZoom = viewportRef.current.zoom;
       viewportRef.current = viewport;
 
       const app = appRef.current;
@@ -217,11 +360,12 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
       if (app && grid && world) {
         world.position.set(viewport.x, viewport.y);
         world.scale.set(viewport.zoom);
-        drawGrid(grid, viewport, app.screen.width, app.screen.height);
-        updateTextResolution();
+        updateGrid(grid, viewport, app.screen.width, app.screen.height);
+        if (previousZoom !== viewport.zoom) updateTextResolution();
+        renderSchedulerRef.current?.request();
       }
 
-      onViewportChange(viewport);
+      if (previousZoom !== viewport.zoom) onViewportChange(viewport);
     };
 
     const viewportCenter = (): Point => {
@@ -252,13 +396,17 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     }));
 
     useEffect(() => {
+      performanceSamplerRef.current?.reset();
+      if (performanceMetricsEnabled) renderSchedulerRef.current?.request();
+    }, [performanceMetricsEnabled]);
+
+    useEffect(() => {
       const host = hostRef.current;
       if (!host) return;
 
       const app = new Application();
       let active = true;
       let resizeObserver: ResizeObserver | undefined;
-      let removePerformanceListener: (() => void) | undefined;
       let themeObserver: MutationObserver | undefined;
       let unsubscribeEditor: (() => void) | undefined;
       let removeListeners: (() => void) | undefined;
@@ -266,6 +414,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
       void app
         .init({
           antialias: true,
+          autoStart: false,
           autoDensity: true,
           backgroundAlpha: 0,
           height: Math.max(host.clientHeight, 1),
@@ -287,22 +436,49 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           app.canvas.tabIndex = 0;
           host.appendChild(app.canvas);
 
-          const grid = new Graphics();
-          const world = new Container();
-          const scene = new Container();
-          const marquee = new Graphics();
-          world.addChild(scene);
-          app.stage.addChild(grid, world, marquee);
-          gridRef.current = grid;
-          worldRef.current = world;
-          sceneRef.current = scene;
-          marqueeRef.current = marquee;
+          const performanceSampler = createPerformanceSampler((metrics) => {
+            onPerformanceMetricsChangeRef.current(metrics);
+          });
+          const renderScheduler = createRenderScheduler((timestamp) => {
+            if (!active) return;
+            const renderStartedAt = performance.now();
+            app.render();
+            if (performanceMetricsEnabledRef.current) {
+              performanceSampler.recordRender(
+                timestamp,
+                performance.now() - renderStartedAt,
+              );
+            }
+          });
+          performanceSamplerRef.current = performanceSampler;
+          renderSchedulerRef.current = renderScheduler;
 
           const initialViewport = {
             x: app.screen.width / 2,
             y: app.screen.height / 2,
             zoom: 1,
           };
+          const grid = createGridDisplay(
+            app.screen.width,
+            app.screen.height,
+            initialViewport.zoom,
+          );
+          const world = new Container();
+          const scene = new Container();
+          const marquee = new Graphics();
+          app.stage.eventMode = "none";
+          scene.eventMode = "none";
+          world.addChild(scene);
+          app.stage.addChild(grid.sprite, world, marquee);
+          gridRef.current = grid;
+          worldRef.current = world;
+          sceneRef.current = scene;
+          marqueeRef.current = marquee;
+
+          textResolutionRef.current = textResolutionForZoom(
+            initialViewport.zoom,
+            app.renderer.resolution,
+          );
           renderViewport(initialViewport);
           redraw();
           let canvasSize = {
@@ -320,7 +496,10 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
             },
             requestNode: onRequestAddNode,
             resetView,
-            setMarquee: (rectangle) => drawMarquee(marquee, rectangle),
+            setMarquee: (rectangle) => {
+              drawMarquee(marquee, rectangle);
+              renderScheduler.request();
+            },
             zoomAt: (factor, anchor) => {
               const current = viewportRef.current;
               renderViewport(
@@ -328,25 +507,6 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
               );
             },
           });
-
-          const performanceSampler = createPerformanceSampler((metrics) => {
-            onPerformanceMetricsChangeRef.current(metrics);
-          });
-          let wasSamplingPerformance = false;
-          const samplePerformance = (ticker: Ticker) => {
-            if (!performanceMetricsEnabledRef.current) {
-              if (wasSamplingPerformance) performanceSampler.reset();
-              wasSamplingPerformance = false;
-              return;
-            }
-
-            wasSamplingPerformance = true;
-            performanceSampler.addFrame(performance.now(), ticker.elapsedMS);
-          };
-          app.ticker.add(samplePerformance);
-          removePerformanceListener = () => {
-            app.ticker.remove(samplePerformance);
-          };
 
           resizeObserver = new ResizeObserver(([entry]) => {
             if (!entry) return;
@@ -368,29 +528,67 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           resizeObserver.observe(host);
 
           themeObserver = new MutationObserver(() => {
-            drawGrid(grid, viewportRef.current, app.screen.width, app.screen.height);
-            redraw();
+            const updateStartedAt = performance.now();
+            updateGrid(
+              grid,
+              viewportRef.current,
+              app.screen.width,
+              app.screen.height,
+            );
+            syncDocument(
+              scene,
+              editor.getState(),
+              nodeDisplaysRef.current,
+              textResolutionRef.current,
+            );
+            if (performanceMetricsEnabledRef.current) {
+              performanceSampler.recordUpdate(
+                performance.now() - updateStartedAt,
+              );
+            }
+            renderScheduler.request();
           });
           themeObserver.observe(document.documentElement, {
             attributeFilter: ["class"],
             attributes: true,
           });
 
-          unsubscribeEditor = editor.subscribe(redraw);
+          unsubscribeEditor = editor.subscribe((change) => {
+            const updateStartedAt = performance.now();
+            const needsRender = syncEditorChange(
+              scene,
+              editor.getState(),
+              nodeDisplaysRef.current,
+              change,
+              textResolutionRef.current,
+            );
+            if (!needsRender) return;
+
+            if (performanceMetricsEnabledRef.current) {
+              performanceSampler.recordUpdate(
+                change.updateTimeMs + performance.now() - updateStartedAt,
+              );
+            }
+            renderScheduler.request();
+          });
         });
 
       return () => {
         active = false;
         removeListeners?.();
-        removePerformanceListener?.();
         unsubscribeEditor?.();
         resizeObserver?.disconnect();
         themeObserver?.disconnect();
+        renderSchedulerRef.current?.cancel();
+        gridRef.current?.texture.destroy(true);
         gridRef.current = null;
+        performanceSamplerRef.current = null;
+        renderSchedulerRef.current = null;
         sceneRef.current = null;
         worldRef.current = null;
         marqueeRef.current = null;
         nodeDisplaysRef.current.clear();
+        textResolutionRef.current = 1;
 
         if (appRef.current === app) {
           appRef.current = null;

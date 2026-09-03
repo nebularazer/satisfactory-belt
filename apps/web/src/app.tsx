@@ -8,6 +8,10 @@ import {
 
 import { createCanvasEditor } from "@/canvas/editor";
 import {
+  createCanvasLoadFixture,
+  loadFixtureNodeCount,
+} from "@/canvas/load-fixture";
+import {
   InfiniteCanvas,
   type InfiniteCanvasHandle,
 } from "@/canvas/infinite-canvas";
@@ -20,7 +24,16 @@ import { PerformanceBar } from "@/components/performance-bar";
 
 export function App() {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
-  const editor = useMemo(() => createCanvasEditor(), []);
+  const editor = useMemo(() => {
+    const fixtureNodeCount = import.meta.env.DEV
+      ? loadFixtureNodeCount(window.location.search)
+      : 0;
+    return createCanvasEditor({
+      document: fixtureNodeCount > 0
+        ? createCanvasLoadFixture(fixtureNodeCount)
+        : undefined,
+    });
+  }, []);
   const getEditorUiState = useMemo(() => {
     const initialState = editor.getState();
     let cached = {

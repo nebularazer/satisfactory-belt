@@ -56,6 +56,28 @@ describe("canvas editor", () => {
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 64 });
   });
 
+  it("keeps pointer movement transient until the move is committed", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    const document = editor.getState().document;
+    const changes: Array<{ kind: string }> = [];
+    editor.subscribe((change) => changes.push(change));
+
+    editor.dispatch({ type: "selection.move.begin" });
+    editor.dispatch({
+      type: "selection.move.update",
+      delta: { x: 45, y: 10 },
+    });
+
+    expect(editor.getState().document).toBe(document);
+    expect(editor.getState().moveDelta).toEqual({ x: 32, y: 0 });
+    expect(changes.at(-1)).toMatchObject({ kind: "move" });
+
+    editor.dispatch({ type: "selection.move.commit" });
+    expect(editor.getState().moveDelta).toBeNull();
+    expect(editor.getState().document).not.toBe(document);
+  });
+
   it("moves every node in a multi-selection", () => {
     const editor = createEditor();
     editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });

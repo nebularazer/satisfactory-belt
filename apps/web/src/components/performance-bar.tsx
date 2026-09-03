@@ -32,18 +32,37 @@ export function PerformanceBar({
   nodeCount,
   selectedCount,
 }: PerformanceBarProps) {
-  const fps = metrics ? Math.round(metrics.fps) : "–";
-  const frameTime = metrics ? metrics.frameTimeMs.toFixed(1) : "–";
+  const fps = metrics
+    ? metrics.fps === null
+      ? "idle"
+      : Math.round(metrics.fps)
+    : "–";
+  const renderTime = metrics ? metrics.render.averageMs.toFixed(1) : "–";
+  const updateTime = metrics ? metrics.update.averageMs.toFixed(1) : "–";
   const nodeLabel = nodeCount === 1 ? "node" : "nodes";
 
   return (
     <div
-      aria-label={`Performance metrics: ${fps} FPS, ${frameTime} milliseconds per frame, ${nodeCount} ${nodeLabel}, ${selectedCount} selected`}
+      aria-label={`Performance metrics: ${fps} FPS, ${updateTime} milliseconds updating, ${renderTime} milliseconds rendering, ${nodeCount} ${nodeLabel}, ${selectedCount} selected`}
       className="flex h-[42px] items-center rounded-xl border border-border bg-card px-1 shadow-md"
     >
       <Metric label="FPS" value={fps} />
       <Separator />
-      <Metric label="ms" title="Average frame time" value={frameTime} />
+      <Metric
+        label="update"
+        title={metrics
+          ? `Editor and scene update: ${updateTime} ms average, ${metrics.update.p95Ms.toFixed(1)} ms p95`
+          : "Editor and scene update time"}
+        value={updateTime}
+      />
+      <Separator />
+      <Metric
+        label="render"
+        title={metrics
+          ? `CPU render submission: ${renderTime} ms average, ${metrics.render.p95Ms.toFixed(1)} ms p95`
+          : "CPU render submission time"}
+        value={renderTime}
+      />
       <Separator />
       <Metric label="nodes" value={nodeCount} />
       <Separator />

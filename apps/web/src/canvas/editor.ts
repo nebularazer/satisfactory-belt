@@ -29,9 +29,20 @@ export type CanvasEditorState = Readonly<{
   canRedo: boolean;
   canUndo: boolean;
   document: CanvasDocument;
+  moveDelta: Point | null;
   selectedIds: readonly string[];
   snapToGrid: boolean;
 }>;
+
+type CanvasEditorChangeData =
+  | { kind: "document" }
+  | { kind: "selection"; nodeIds: readonly string[] }
+  | { delta: Point; kind: "move"; nodeIds: readonly string[] }
+  | { kind: "settings" };
+
+export type CanvasEditorChange = Readonly<
+  CanvasEditorChangeData & { updateTimeMs: number }
+>;
 
 export type CanvasEditorAction =
   | { type: "node.create"; at: Point }
@@ -58,7 +69,7 @@ export type CanvasEditor = Readonly<{
   dispatch: (action: CanvasEditorAction) => void;
   getState: () => CanvasEditorState;
   hitTest: (point: Point) => CanvasNode | undefined;
-  subscribe: (listener: () => void) => () => void;
+  subscribe: (listener: (change: CanvasEditorChange) => void) => () => void;
 }>;
 
 type Snapshot = Readonly<{
@@ -66,10 +77,11 @@ type Snapshot = Readonly<{
   selectedIds: readonly string[];
 }>;
 
-type MoveTransaction = Readonly<{
+type MoveTransaction = {
+  delta: Point;
   snapshot: Snapshot;
   positions: ReadonlyMap<string, Point>;
-}>;
+};
 
 type CreateCanvasEditorOptions = {
   document?: CanvasDocument;
@@ -102,35 +114,22 @@ function intersects(node: CanvasNode, rectangle: Rectangle) {
   );
 }
 
-function snapshotsEqual(left: Snapshot, right: Snapshot) {
-  if (left.document.nodes.length !== right.document.nodes.length) return false;
-
-  return left.document.nodes.every((node, index) => {
-    const other = right.document.nodes[index];
-    return other &&
-      node.id === other.id &&
-      node.x === other.x &&
-      node.y === other.y &&
-      node.width === other.width &&
-      node.height === other.height &&
-      node.label === other.label;
-  });
-}
-
 export function createCanvasEditor(
   options: CreateCanvasEditorOptions = {},
 ): CanvasEditor {
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
-  const listeners = new Set<() => void>();
+  const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: Snapshot[] = [];
   const future: Snapshot[] = [];
   let clipboard: readonly CanvasNode[] = [];
+  let dispatchStartedAt = 0;
   let moveTransaction: MoveTransaction | undefined;
   let nodeSequence = options.document?.nodes.length ?? 0;
   let state: CanvasEditorState = {
     canRedo: false,
     canUndo: false,
     document: options.document ?? EMPTY_DOCUMENT,
+    moveDelta: null,
     selectedIds: [],
     snapToGrid: options.snapToGrid ?? true,
   };
@@ -140,14 +139,18 @@ export function createCanvasEditor(
     selectedIds: state.selectedIds,
   });
 
-  const publish = (partial: Partial<CanvasEditorState>) => {
+  const publish = (
+    partial: Partial<CanvasEditorState>,
+    change: CanvasEditorChangeData,
+  ) => {
     state = {
       ...state,
       ...partial,
       canRedo: future.length > 0,
       canUndo: past.length > 0,
     };
-    listeners.forEach((listener) => listener());
+    const updateTimeMs = performance.now() - dispatchStartedAt;
+    listeners.forEach((listener) => listener({ ...change, updateTimeMs }));
   };
 
   const commit = (
@@ -157,7 +160,10 @@ export function createCanvasEditor(
   ) => {
     past.push(previous);
     future.length = 0;
-    publish({ document, selectedIds });
+    publish(
+      { document, moveDelta: null, selectedIds },
+      { kind: "document" },
+    );
   };
 
   const duplicateNodes = (nodes: readonly CanvasNode[]) => {
@@ -177,6 +183,8 @@ export function createCanvasEditor(
   };
 
   const dispatch = (action: CanvasEditorAction) => {
+    dispatchStartedAt = performance.now();
+
     switch (action.type) {
       case "node.create": {
         nodeSequence += 1;
@@ -198,7 +206,10 @@ export function createCanvasEditor(
       }
 
       case "selection.clear":
-        if (state.selectedIds.length > 0) publish({ selectedIds: [] });
+        if (state.selectedIds.length > 0) {
+          const nodeIds = state.selectedIds;
+          publish({ selectedIds: [] }, { kind: "selection", nodeIds });
+        }
         return;
 
       case "selection.node": {
@@ -210,7 +221,13 @@ export function createCanvasEditor(
           : alreadySelected && state.selectedIds.length === 1
             ? state.selectedIds
             : [action.id];
-        publish({ selectedIds });
+        publish(
+          { selectedIds },
+          {
+            kind: "selection",
+            nodeIds: [...new Set([...state.selectedIds, ...selectedIds])],
+          },
+        );
         return;
       }
 
@@ -218,7 +235,14 @@ export function createCanvasEditor(
         const matchingIds = state.document.nodes
           .filter((node) => intersects(node, action.rectangle))
           .map((node) => node.id);
-        publish({ selectedIds: [...new Set([...action.baseIds, ...matchingIds])] });
+        const selectedIds = [...new Set([...action.baseIds, ...matchingIds])];
+        publish(
+          { selectedIds },
+          {
+            kind: "selection",
+            nodeIds: [...new Set([...state.selectedIds, ...selectedIds])],
+          },
+        );
         return;
       }
 
@@ -264,6 +288,7 @@ export function createCanvasEditor(
       case "selection.move.begin": {
         if (state.selectedIds.length === 0 || moveTransaction) return;
         moveTransaction = {
+          delta: { x: 0, y: 0 },
           positions: new Map(
             selectedNodes().map((node) => [node.id, { x: node.x, y: node.y }]),
           ),
@@ -285,33 +310,54 @@ export function createCanvasEditor(
           };
         }
 
-        const nodes = state.document.nodes.map((node) => {
-          const origin = moveTransaction?.positions.get(node.id);
-          return origin
-            ? { ...node, x: origin.x + delta.x, y: origin.y + delta.y }
-            : node;
-        });
-        publish({ document: { ...state.document, nodes } });
+        if (
+          moveTransaction.delta.x === delta.x &&
+          moveTransaction.delta.y === delta.y
+        ) {
+          return;
+        }
+
+        moveTransaction.delta = delta;
+        publish(
+          { moveDelta: delta },
+          { delta, kind: "move", nodeIds: state.selectedIds },
+        );
         return;
       }
 
       case "selection.move.commit": {
         if (!moveTransaction) return;
-        const previous = moveTransaction.snapshot;
+        const { delta, positions, snapshot: previous } = moveTransaction;
         moveTransaction = undefined;
-        const current = snapshot();
-        if (snapshotsEqual(previous, current)) return;
-        past.push(previous);
-        future.length = 0;
-        publish({});
+        if (delta.x === 0 && delta.y === 0) {
+          if (state.moveDelta) {
+            publish(
+              { moveDelta: null },
+              { delta, kind: "move", nodeIds: state.selectedIds },
+            );
+          }
+          return;
+        }
+
+        const nodes = state.document.nodes.map((node) => {
+          const origin = positions.get(node.id);
+          return origin
+            ? { ...node, x: origin.x + delta.x, y: origin.y + delta.y }
+            : node;
+        });
+        commit({ ...state.document, nodes }, state.selectedIds, previous);
         return;
       }
 
       case "selection.move.cancel":
         if (moveTransaction) {
           const previous = moveTransaction.snapshot;
+          const nodeIds = state.selectedIds;
           moveTransaction = undefined;
-          publish(previous);
+          publish(
+            { ...previous, moveDelta: null },
+            { delta: { x: 0, y: 0 }, kind: "move", nodeIds },
+          );
         }
         return;
 
@@ -320,7 +366,10 @@ export function createCanvasEditor(
         if (!previous) return;
         future.push(snapshot());
         moveTransaction = undefined;
-        publish(previous);
+        publish(
+          { ...previous, moveDelta: null },
+          { kind: "document" },
+        );
         return;
       }
 
@@ -329,13 +378,16 @@ export function createCanvasEditor(
         if (!next) return;
         past.push(snapshot());
         moveTransaction = undefined;
-        publish(next);
+        publish({ ...next, moveDelta: null }, { kind: "document" });
         return;
       }
 
       case "settings.snap":
         if (state.snapToGrid !== action.enabled) {
-          publish({ snapToGrid: action.enabled });
+          publish(
+            { snapToGrid: action.enabled },
+            { kind: "settings" },
+          );
         }
         return;
     }

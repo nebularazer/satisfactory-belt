@@ -266,10 +266,12 @@ describe("canvas interactions", () => {
 
     pointer("pointerdown", 30, 70);
     pointer("pointermove", 60, 100);
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 42, y: 82 });
+    expect(editor.getState().document.nodes[0]).toEqual(original);
+    expect(editor.getState().moveDelta).toEqual({ x: 30, y: 30 });
 
     key("Escape");
     expect(editor.getState().document.nodes[0]).toEqual(original);
+    expect(editor.getState().moveDelta).toBeNull();
     expect(editor.getState().selectedIds).toEqual([]);
   });
 

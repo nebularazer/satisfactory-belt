@@ -33,6 +33,16 @@ The canvas interaction slice supports:
 The grid uses a fixed 32-unit interval. Snap can be switched off in the menu without
 changing the visual scale of the canvas.
 
+Rendering is scheduled only when canvas state changes. Node drags update the selected
+Pixi objects transiently and commit the document once when the drag ends, while the
+dot grid is rendered as a repeating texture.
+
+In development, append `?nodes=<count>` to create a deterministic load fixture. For
+example, `?nodes=1000` starts the canvas with 1,000 nodes; counts are capped at 10,000.
+The optional performance bar reports active-render FPS plus average update and render
+submission time. Hover the timing values to see their p95 measurements. `idle` FPS
+means the canvas is correctly waiting because nothing needs to be rendered.
+
 Choosing `Node` in the picker inserts it at the last canvas cursor position when
 opened with `N`, at the clicked position when opened by right-clicking, or at the
 viewport center when opened from the menu.
