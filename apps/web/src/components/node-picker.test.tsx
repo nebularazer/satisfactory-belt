@@ -77,6 +77,30 @@ describe("NodePicker", () => {
     expect(screen.getByText("Constructor · 4 MW")).toBeInTheDocument();
   });
 
+  it("shows every recipe material without collapsing complex recipes", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "adaptive control unit" } },
+    );
+
+    expect(screen.getByText("Automated Wiring 5/min")).toBeInTheDocument();
+    expect(screen.getByText("Circuit Board 5/min")).toBeInTheDocument();
+    expect(screen.getByText("Heavy Modular Frame 1/min")).toBeInTheDocument();
+    expect(screen.getByText("Computer 2/min")).toBeInTheDocument();
+    expect(
+      screen.getByText("→ Adaptive Control Unit 1/min"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("4 inputs")).not.toBeInTheDocument();
+  });
+
   it("opens production routes without selecting the recipe", () => {
     const onSelect = vi.fn();
     render(
@@ -180,26 +204,58 @@ describe("NodePicker", () => {
     ]);
   });
 
-  it.each([
-    ["miner mk.1", "Miner Mk.1", "Build_MinerMk1_C"],
-    [
-      "conveyor splitter",
-      "Conveyor Splitter",
-      "Build_ConveyorAttachmentSplitter_C",
-    ],
-    ["awesome sink", "AWESOME Sink", "Build_ResourceSink_C"],
-  ])("places the %s buildable directly", (query, label, machineId) => {
+  it("places infrastructure buildables directly", () => {
     const onSelect = vi.fn();
     render(
       <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
     );
 
-    fireEvent.change(
-      screen.getByPlaceholderText("Search buildings or recipes..."),
-      { target: { value: query } },
-    );
-    fireEvent.click(screen.getByRole("option", { name: label }));
+    const cases = [
+      ["miner mk.1", "Miner Mk.1", "Build_MinerMk1_C"],
+      [
+        "conveyor splitter",
+        "Conveyor Splitter",
+        "Build_ConveyorAttachmentSplitter_C",
+      ],
+      ["awesome sink", "AWESOME Sink", "Build_ResourceSink_C"],
+    ] as const;
 
-    expect(onSelect).toHaveBeenCalledWith({ label, machineId });
-  });
+    for (const [query, label, machineId] of cases) {
+      fireEvent.change(
+        screen.getByPlaceholderText("Search buildings or recipes..."),
+        { target: { value: query } },
+      );
+      fireEvent.click(screen.getByRole("option", { name: label }));
+
+      expect(onSelect).toHaveBeenLastCalledWith({ label, machineId });
+    }
+  }, 15_000);
+
+  it("finds extractors by the resources they produce", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    const cases = [
+      ["iron ore", ["Miner Mk.1", "Miner Mk.2", "Miner Mk.3"]],
+      ["water", ["Resource Well Extractor", "Water Extractor"]],
+      ["crude oil", ["Oil Extractor", "Resource Well Extractor"]],
+      ["nitrogen gas", ["Resource Well Extractor"]],
+    ] as const;
+
+    for (const [query, extractorNames] of cases) {
+      fireEvent.change(
+        screen.getByPlaceholderText("Search buildings or recipes..."),
+        { target: { value: query } },
+      );
+
+      for (const name of extractorNames) {
+        expect(screen.getByRole("option", { name })).toBeInTheDocument();
+      }
+    }
+  }, 15_000);
 });

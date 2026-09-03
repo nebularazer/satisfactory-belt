@@ -32,6 +32,7 @@ export type CatalogBuildable = Readonly<{
   id: string;
   imageUrl: string;
   name: string;
+  searchTerms?: readonly string[];
 }>;
 
 export type ProductionMachine = CatalogBuildable &
@@ -140,41 +141,63 @@ export const PRODUCTION_MACHINES: readonly ProductionMachine[] = [
   },
 ];
 
+const MINER_RESOURCE_SEARCH_TERMS = [
+  "bauxite",
+  "caterium ore",
+  "coal",
+  "copper ore",
+  "iron ore",
+  "limestone",
+  "raw quartz",
+  "sam",
+  "sulfur",
+  "uranium ore",
+];
+
+const RESOURCE_WELL_SEARCH_TERMS = ["crude oil", "nitrogen gas", "water"];
+
 export const RESOURCE_EXTRACTORS: readonly CatalogBuildable[] = [
   {
     id: "Build_MinerMk1_C",
     imageUrl: minerMk1Image,
     name: "Miner Mk.1",
+    searchTerms: MINER_RESOURCE_SEARCH_TERMS,
   },
   {
     id: "Build_MinerMk2_C",
     imageUrl: minerMk2Image,
     name: "Miner Mk.2",
+    searchTerms: MINER_RESOURCE_SEARCH_TERMS,
   },
   {
     id: "Build_MinerMk3_C",
     imageUrl: minerMk3Image,
     name: "Miner Mk.3",
+    searchTerms: MINER_RESOURCE_SEARCH_TERMS,
   },
   {
     id: "Build_OilPump_C",
     imageUrl: oilExtractorImage,
     name: "Oil Extractor",
+    searchTerms: ["crude oil"],
   },
   {
     id: "Build_FrackingExtractor_C",
     imageUrl: resourceWellExtractorImage,
     name: "Resource Well Extractor",
+    searchTerms: RESOURCE_WELL_SEARCH_TERMS,
   },
   {
     id: "Build_FrackingSmasher_C",
     imageUrl: resourceWellPressurizerImage,
     name: "Resource Well Pressurizer",
+    searchTerms: RESOURCE_WELL_SEARCH_TERMS,
   },
   {
     id: "Build_WaterPump_C",
     imageUrl: waterExtractorImage,
     name: "Water Extractor",
+    searchTerms: ["water"],
   },
 ];
 

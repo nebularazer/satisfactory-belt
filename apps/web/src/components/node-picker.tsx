@@ -75,6 +75,7 @@ function matchingBuildables(
         filterProductionCatalog(buildable.name, query, [
           buildable.id,
           ...categoryKeywords,
+          ...(buildable.searchTerms ?? []),
         ]) > 0,
     )
     .toSorted((left, right) => left.name.localeCompare(right.name));
@@ -131,7 +132,9 @@ function formatMaterialRate(material: ProductionMaterial) {
 }
 
 function formatMaterials(materials: readonly ProductionMaterial[]) {
-  return materials.map(formatMaterialRate).filter(Boolean).join(" + ");
+  return materials
+    .map(formatMaterialRate)
+    .filter((material): material is string => Boolean(material));
 }
 
 function formatPower(recipe: ProductionRecipe, machine: ProductionMachine) {
@@ -161,7 +164,6 @@ type RecipeRowProps = {
   onSelect: () => void;
   query: string;
   recipe: ProductionRecipe;
-  showDetailedMaterials?: boolean;
   showStandardBadge?: boolean;
 };
 
@@ -171,22 +173,19 @@ function RecipeRow({
   onSelect,
   query,
   recipe,
-  showDetailedMaterials = false,
   showStandardBadge = false,
 }: RecipeRowProps) {
   const output = routeOutput(recipe, query);
   const routes = output ? recipesProducing(output.itemId) : [];
   const outputItem = output ? productionItem(output.itemId) : undefined;
-  const inputSummary = formatMaterials(recipe.inputs);
-  const outputSummary = formatMaterials(recipe.outputs);
+  const inputMaterials = formatMaterials(recipe.inputs);
+  const outputMaterials = formatMaterials(recipe.outputs);
   const itemKeywords = [...recipe.inputs, ...recipe.outputs]
     .map(({ itemId }) => productionItem(itemId)?.name)
     .filter((name): name is string => Boolean(name));
   const routeLabel = outputItem
     ? `Show ${routes.length} ways to produce ${outputItem.name}`
     : "Show production routes";
-  const compactMaterialSummary = `${recipe.inputs.length} ${recipe.inputs.length === 1 ? "input" : "inputs"} → ${outputSummary}`;
-  const showFullInputs = showDetailedMaterials || recipe.inputs.length <= 2;
 
   return (
     <div className="flex items-stretch rounded-md has-[>[data-selected=true]]:bg-muted">
@@ -217,18 +216,18 @@ function RecipeRow({
               </span>
             )}
           </div>
-          {showFullInputs ? (
-            <div className="mt-0.5 text-[0.625rem] leading-relaxed text-muted-foreground">
-              {inputSummary && (
-                <div className="line-clamp-1">{inputSummary}</div>
-              )}
-              <div className="line-clamp-1">→ {outputSummary}</div>
-            </div>
-          ) : (
-            <div className="mt-0.5 line-clamp-1 text-[0.625rem] leading-relaxed text-muted-foreground">
-              {compactMaterialSummary}
-            </div>
-          )}
+          <div className="mt-0.5 text-[0.625rem] leading-relaxed text-muted-foreground">
+            {inputMaterials.map((material) => (
+              <div className="line-clamp-1" key={`input:${material}`}>
+                {material}
+              </div>
+            ))}
+            {outputMaterials.map((material, index) => (
+              <div className="line-clamp-1" key={`output:${material}`}>
+                {index === 0 ? "→" : "+"} {material}
+              </div>
+            ))}
+          </div>
           <div
             className="mt-0.5 text-[0.625rem] text-muted-foreground"
             title="Power at 100% clock speed without production amplification"
@@ -535,7 +534,6 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                     onSelect={() => selectRecipe(recipe, machine.id)}
                     query={query}
                     recipe={recipe}
-                    showDetailedMaterials={scope.type === "routes"}
                     showStandardBadge={scope.type === "routes"}
                   />
                 );
