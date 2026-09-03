@@ -14,6 +14,13 @@ pnpm install
 pnpm dev
 ```
 
+Install Chromium once and run the real-browser canvas smoke test with:
+
+```bash
+pnpm --filter @satisfactory-belt/web exec playwright install chromium
+pnpm test:e2e
+```
+
 The canvas interaction slice supports:
 
 - opening a searchable node picker from the menu or with `N`;

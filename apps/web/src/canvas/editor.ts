@@ -256,6 +256,7 @@ export function createCanvasEditor(
         return;
 
       case "selection.node": {
+        if (!spatialIndex.get(action.id)) return;
         const alreadySelected = state.selectedIds.includes(action.id);
         const selectedIds = action.additive
           ? alreadySelected
@@ -276,10 +277,11 @@ export function createCanvasEditor(
       }
 
       case "selection.marquee": {
+        const baseIds = action.baseIds.filter((id) => spatialIndex.get(id));
         const matchingIds = spatialIndex
           .query(action.rectangle)
           .map((node) => node.id);
-        const selectedIds = [...new Set([...action.baseIds, ...matchingIds])];
+        const selectedIds = [...new Set([...baseIds, ...matchingIds])];
         publish(
           { selectedIds },
           {

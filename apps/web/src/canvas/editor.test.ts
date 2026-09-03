@@ -39,6 +39,22 @@ describe("canvas editor", () => {
     expect(editor.getState().selectedIds).toEqual(["node-2"]);
   });
 
+  it("keeps unknown node ids out of the selection", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+
+    editor.dispatch({ type: "selection.node", additive: false, id: "missing" });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+
+    editor.dispatch({ type: "selection.clear" });
+    editor.dispatch({
+      type: "selection.marquee",
+      baseIds: ["missing", "node-1"],
+      rectangle: { height: 10, width: 10, x: 1_000, y: 1_000 },
+    });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+  });
+
   it("moves a selection as one undoable operation", () => {
     const editor = createEditor();
     editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
