@@ -221,16 +221,16 @@ function RecipeRow({
               </span>
             )}
           </div>
-          <div className="mt-0.5 grid grid-cols-[1.5rem_max-content_minmax(0,1fr)] gap-x-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+          <div className="mt-0.5 grid grid-cols-[1.5rem_max-content_minmax(0,1fr)] items-baseline gap-x-1 text-[0.625rem] leading-relaxed text-muted-foreground">
             {inputMaterials.map((material, index) => (
               <div className="contents" key={`input:${material.name}:${index}`}>
                 <span
                   aria-label={index === 0 ? "Inputs" : undefined}
-                  className="text-[0.5rem] font-medium tracking-wide text-muted-foreground/70"
+                  className="font-medium tracking-wide text-muted-foreground/70"
                 >
                   {index === 0 ? "IN" : ""}
                 </span>
-                <span className="tabular-nums">{material.rate}</span>
+                <span className="text-right tabular-nums">{material.rate}</span>
                 <span className="truncate" title={material.name}>
                   {material.name}
                 </span>
@@ -243,11 +243,11 @@ function RecipeRow({
               >
                 <span
                   aria-label={index === 0 ? "Outputs" : undefined}
-                  className="text-[0.5rem] font-medium tracking-wide text-muted-foreground/70"
+                  className="font-medium tracking-wide text-muted-foreground/70"
                 >
                   {index === 0 ? "OUT" : ""}
                 </span>
-                <span className="tabular-nums">{material.rate}</span>
+                <span className="text-right tabular-nums">{material.rate}</span>
                 <span className="truncate" title={material.name}>
                   {material.name}
                 </span>
