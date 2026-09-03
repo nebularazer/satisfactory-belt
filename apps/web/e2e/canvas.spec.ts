@@ -13,7 +13,9 @@ test("edits and restores a canvas in a real browser", async ({ page }) => {
   await emptyStateAction.click();
   const nodePicker = page.getByRole("dialog", { name: "Add node" });
   await expect(nodePicker).toBeVisible();
-  await page.getByRole("option", { name: /Iron Plate Constructor/ }).click();
+  await page
+    .getByRole("option", { name: /^Iron Plate Iron Ingot.*Constructor/ })
+    .click();
   await expect(nodePicker).toBeHidden();
   await expect(emptyStateAction).toBeHidden();
 
@@ -41,4 +43,32 @@ test("edits and restores a canvas in a real browser", async ({ page }) => {
   await expect(canvas).toBeVisible();
   await expect(emptyStateAction).toBeHidden();
   await expect(undo).toBeDisabled();
+});
+
+test("keeps recipe search usable in a compact mobile viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 500, width: 412 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Add your first node" }).click();
+
+  const nodePicker = page.getByRole("dialog", { name: "Add node" });
+  const search = page.getByPlaceholder("Search machines or recipes...");
+  await expect(nodePicker).toBeVisible();
+  await expect(search).not.toBeFocused();
+
+  const bounds = await nodePicker.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(500);
+
+  await search.fill("screws");
+  await expect(page.getByRole("option").first()).toHaveAccessibleName(
+    /^Screws/,
+  );
+  await page
+    .getByRole("button", { name: "Show 3 ways to produce Screws" })
+    .first()
+    .click();
+  await expect(page.getByText("Ways to produce Screws")).toBeVisible();
 });

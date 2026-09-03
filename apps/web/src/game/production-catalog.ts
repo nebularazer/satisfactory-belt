@@ -128,17 +128,37 @@ const machinesById = new Map(
   PRODUCTION_MACHINES.map((machine) => [machine.id, machine]),
 );
 const itemsById = new Map(PRODUCTION_ITEMS.map((item) => [item.id, item]));
-const recipesByMachineId = Map.groupBy(
-  PRODUCTION_RECIPES.flatMap((recipe) =>
-    recipe.machineIds.map((machineId) => ({ machineId, recipe })),
-  ),
-  ({ machineId }) => machineId,
+const recipesByMachineId = new Map(
+  [
+    ...Map.groupBy(
+      PRODUCTION_RECIPES.flatMap((recipe) =>
+        recipe.machineIds.map((machineId) => ({ machineId, recipe })),
+      ),
+      ({ machineId }) => machineId,
+    ),
+  ].map(([machineId, entries]) => [
+    machineId,
+    entries.map(({ recipe }) => recipe),
+  ]),
 );
-const recipesByOutputItemId = Map.groupBy(
-  PRODUCTION_RECIPES.flatMap((recipe) =>
-    recipe.outputs.map(({ itemId }) => ({ itemId, recipe })),
-  ),
-  ({ itemId }) => itemId,
+const recipesByOutputItemId = new Map(
+  [
+    ...Map.groupBy(
+      PRODUCTION_RECIPES.flatMap((recipe) =>
+        recipe.outputs.map(({ itemId }) => ({ itemId, recipe })),
+      ),
+      ({ itemId }) => itemId,
+    ),
+  ].map(([itemId, entries]) => [
+    itemId,
+    entries
+      .map(({ recipe }) => recipe)
+      .toSorted(
+        (left, right) =>
+          Number(left.alternate) - Number(right.alternate) ||
+          left.name.localeCompare(right.name),
+      ),
+  ]),
 );
 
 export const PRODUCTION_MACHINE_IMAGE_URLS = PRODUCTION_MACHINES.map(
@@ -154,15 +174,9 @@ export function productionItem(itemId: string) {
 }
 
 export function recipesForMachine(machineId: string) {
-  return (recipesByMachineId.get(machineId) ?? []).map(({ recipe }) => recipe);
+  return recipesByMachineId.get(machineId) ?? [];
 }
 
 export function recipesProducing(itemId: string) {
-  return (recipesByOutputItemId.get(itemId) ?? [])
-    .map(({ recipe }) => recipe)
-    .toSorted(
-      (left, right) =>
-        Number(left.alternate) - Number(right.alternate) ||
-        left.name.localeCompare(right.name),
-    );
+  return recipesByOutputItemId.get(itemId) ?? [];
 }
