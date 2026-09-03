@@ -16,7 +16,7 @@ pnpm dev
 
 The canvas interaction slice supports:
 
-- opening a searchable node picker from the menu or with `N`;
+- opening a searchable node picker from the menu, with `N`, or by right-clicking;
 - selecting a node with primary click and moving it with primary drag;
 - adding or removing nodes from the selection with Ctrl/Cmd + primary click;
 - dragging a selection box with Ctrl/Cmd + primary drag;
@@ -34,7 +34,8 @@ The grid uses a fixed 32-unit interval. Snap can be switched off in the menu wit
 changing the visual scale of the canvas.
 
 Choosing `Node` in the picker inserts it at the last canvas cursor position when
-opened with `N`, or at the viewport center when opened from the menu.
+opened with `N`, at the clicked position when opened by right-clicking, or at the
+viewport center when opened from the menu.
 
 ## Contribution conventions
 

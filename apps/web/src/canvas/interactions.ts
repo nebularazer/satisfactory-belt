@@ -62,7 +62,7 @@ export function attachCanvasInteractions(
   let lastPointerScreen: Point | null = null;
   let spacePressed = false;
 
-  const screenPoint = (event: PointerEvent): Point => {
+  const screenPoint = (event: MouseEvent): Point => {
     const bounds = canvas.getBoundingClientRect();
     return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
   };
@@ -270,6 +270,13 @@ export function attachCanvasInteractions(
   const pointerUp = (event: PointerEvent) => finishInteraction(event);
   const pointerCancel = (event: PointerEvent) => finishInteraction(event, true);
 
+  const contextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    const screen = screenPoint(event);
+    lastPointerScreen = screen;
+    host.requestNode(screenToWorld(screen, host.getViewport()));
+  };
+
   const wheel = (event: WheelEvent) => {
     event.preventDefault();
     const bounds = canvas.getBoundingClientRect();
@@ -356,6 +363,7 @@ export function attachCanvasInteractions(
   canvas.addEventListener("pointermove", pointerMove);
   canvas.addEventListener("pointerup", pointerUp);
   canvas.addEventListener("pointercancel", pointerCancel);
+  canvas.addEventListener("contextmenu", contextMenu);
   canvas.addEventListener("wheel", wheel, { passive: false });
   window.addEventListener("keydown", keyDown);
   window.addEventListener("keyup", keyUp);
@@ -373,6 +381,7 @@ export function attachCanvasInteractions(
     canvas.removeEventListener("pointermove", pointerMove);
     canvas.removeEventListener("pointerup", pointerUp);
     canvas.removeEventListener("pointercancel", pointerCancel);
+    canvas.removeEventListener("contextmenu", contextMenu);
     canvas.removeEventListener("wheel", wheel);
     window.removeEventListener("keydown", keyDown);
     window.removeEventListener("keyup", keyUp);

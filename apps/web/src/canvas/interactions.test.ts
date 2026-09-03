@@ -242,6 +242,23 @@ describe("canvas interactions", () => {
     expect(nodeRequests).toEqual([{ x: 100, y: 100 }]);
   });
 
+  it("opens the node picker at the right-clicked world position", () => {
+    const { canvas, nodeRequests } = createHarness({
+      viewport: { x: 100, y: 50, zoom: 2 },
+    });
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 300,
+      clientY: 250,
+    });
+
+    canvas.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(nodeRequests).toEqual([{ x: 100, y: 100 }]);
+  });
+
   it("cancels an active move with Escape", () => {
     const { editor, key, pointer } = createHarness({ snapToGrid: false });
     editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });

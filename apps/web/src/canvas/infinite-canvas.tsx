@@ -4,7 +4,6 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
@@ -400,12 +399,6 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
       };
     }, [editor, onRequestAddNode, onViewportChange]);
 
-    return (
-      <div
-        className="infinite-canvas"
-        onContextMenu={(event: ReactMouseEvent<HTMLDivElement>) => event.preventDefault()}
-        ref={hostRef}
-      />
-    );
+    return <div className="infinite-canvas" ref={hostRef} />;
   },
 );
