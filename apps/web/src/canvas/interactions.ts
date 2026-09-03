@@ -1,8 +1,8 @@
-import { SNAP_INTERVAL, type CanvasEditor, type Rectangle } from "./editor";
+import { SNAP_INTERVAL, type CanvasEditor } from "./editor";
+import type { Point, Rectangle } from "./geometry";
 import {
   screenToWorld,
   ZOOM_STEP,
-  type Point,
   type Viewport,
 } from "./viewport";
 

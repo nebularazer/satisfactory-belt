@@ -1,11 +1,8 @@
+import type { Point, Rectangle } from "./geometry";
+
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 4;
 export const ZOOM_STEP = 1.2;
-
-export type Point = Readonly<{
-  x: number;
-  y: number;
-}>;
 
 export type Viewport = Readonly<{
   x: number;
@@ -16,13 +13,6 @@ export type Viewport = Readonly<{
 type ScreenSize = Readonly<{
   height: number;
   width: number;
-}>;
-
-type Rectangle = Readonly<{
-  height: number;
-  width: number;
-  x: number;
-  y: number;
 }>;
 
 export function clampZoom(zoom: number) {

@@ -1,9 +1,11 @@
 import {
   CANVAS_DOCUMENT_VERSION,
+  type CanvasDocument,
+} from "./document";
+import {
   NODE_HEIGHT,
   NODE_WIDTH,
   SNAP_INTERVAL,
-  type CanvasDocument,
 } from "./editor";
 
 export const LOAD_FIXTURE_LIMIT = 10_000;

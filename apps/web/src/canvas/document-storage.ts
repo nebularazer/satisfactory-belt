@@ -1,4 +1,5 @@
-import type { CanvasDocument, CanvasEditor } from "./editor";
+import type { CanvasDocument } from "./document";
+import type { CanvasEditor } from "./editor";
 import { validateCanvasDocument } from "./document-format";
 
 export type SavedCanvasDocument = Readonly<{

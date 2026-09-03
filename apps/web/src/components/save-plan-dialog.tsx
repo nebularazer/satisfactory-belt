@@ -6,7 +6,7 @@ import type {
   CanvasDocumentStorage,
   SavedCanvasDocument,
 } from "@/canvas/document-storage";
-import type { CanvasDocument } from "@/canvas/editor";
+import type { CanvasDocument } from "@/canvas/document";
 import {
   AlertDialog,
   AlertDialogAction,

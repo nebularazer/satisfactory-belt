@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { CanvasEditorState, CanvasNode } from "./editor";
+import type { CanvasNode } from "./document";
+import type { CanvasEditorState } from "./editor";
 import { createCanvasLoadFixture } from "./load-fixture";
 import { createCanvasSpatialIndex } from "./spatial-index";
 import { visibleCanvasNodes } from "./visibility";

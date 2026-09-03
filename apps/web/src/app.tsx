@@ -23,8 +23,9 @@ import {
 } from "@/canvas/document-storage";
 import {
   createCanvasEditor,
-  type CanvasDocument,
 } from "@/canvas/editor";
+import type { CanvasDocument } from "@/canvas/document";
+import type { Point } from "@/canvas/geometry";
 import {
   createCanvasLoadFixture,
   loadFixtureNodeCount,
@@ -39,7 +40,7 @@ import {
   readBooleanPreference,
   writeBooleanPreference,
 } from "@/canvas/preferences";
-import type { Point, Viewport } from "@/canvas/viewport";
+import type { Viewport } from "@/canvas/viewport";
 import { CanvasContextMenu } from "@/components/canvas-context-menu";
 import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";

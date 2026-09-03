@@ -1,32 +1,15 @@
+import {
+  EMPTY_CANVAS_DOCUMENT,
+  type CanvasDocument,
+  type CanvasNode,
+} from "./document";
+import type { Point, Rectangle } from "./geometry";
 import { createCanvasSpatialIndex } from "./spatial-index";
-import type { Point } from "./viewport";
 
 export const SNAP_INTERVAL = 32;
 export const NODE_WIDTH = 176;
 export const NODE_HEIGHT = 96;
 export const HISTORY_LIMIT = 100;
-export const CANVAS_DOCUMENT_VERSION = 1;
-
-export type CanvasNode = Readonly<{
-  height: number;
-  id: string;
-  label: string;
-  width: number;
-  x: number;
-  y: number;
-}>;
-
-export type CanvasDocument = Readonly<{
-  nodes: readonly CanvasNode[];
-  version: typeof CANVAS_DOCUMENT_VERSION;
-}>;
-
-export type Rectangle = Readonly<{
-  height: number;
-  width: number;
-  x: number;
-  y: number;
-}>;
 
 export type CanvasEditorState = Readonly<{
   canRedo: boolean;
@@ -104,11 +87,6 @@ type CreateCanvasEditorOptions = {
   snapToGrid?: boolean;
 };
 
-const EMPTY_DOCUMENT: CanvasDocument = {
-  nodes: [],
-  version: CANVAS_DOCUMENT_VERSION,
-};
-
 function snap(value: number) {
   return Math.round(value / SNAP_INTERVAL) * SNAP_INTERVAL;
 }
@@ -154,7 +132,7 @@ export function createCanvasEditor(
   let state: CanvasEditorState = {
     canRedo: false,
     canUndo: false,
-    document: options.document ?? EMPTY_DOCUMENT,
+    document: options.document ?? EMPTY_CANVAS_DOCUMENT,
     moveDelta: null,
     selectedIds: [],
     snapToGrid: options.snapToGrid ?? true,
@@ -235,9 +213,13 @@ export function createCanvasEditor(
         clipboard = [];
         moveTransaction = undefined;
         nodeSequence = 0;
-        spatialIndex.replace(EMPTY_DOCUMENT);
+        spatialIndex.replace(EMPTY_CANVAS_DOCUMENT);
         publish(
-          { document: EMPTY_DOCUMENT, moveDelta: null, selectedIds: [] },
+          {
+            document: EMPTY_CANVAS_DOCUMENT,
+            moveDelta: null,
+            selectedIds: [],
+          },
           { kind: "document" },
         );
         return;

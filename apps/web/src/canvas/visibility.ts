@@ -1,15 +1,12 @@
-import type {
-  CanvasEditor,
-  CanvasEditorState,
-  CanvasNode,
-  Rectangle,
-} from "./editor";
+import type { CanvasDocument, CanvasNode } from "./document";
+import type { Point, Rectangle } from "./geometry";
 import type { Viewport } from "./viewport";
 
-type CanvasVisibilityState = Pick<
-  CanvasEditorState,
-  "document" | "moveDelta" | "selectedIds"
->;
+type CanvasVisibilityState = Readonly<{
+  document: CanvasDocument;
+  moveDelta: Point | null;
+  selectedIds: readonly string[];
+}>;
 
 type ScreenSize = Readonly<{
   height: number;
@@ -22,7 +19,7 @@ export function visibleCanvasNodes(
   state: CanvasVisibilityState,
   viewport: Viewport,
   screen: ScreenSize,
-  query: CanvasEditor["query"],
+  query: (rectangle: Rectangle) => readonly CanvasNode[],
 ): readonly CanvasNode[] {
   const overscan = VIEWPORT_OVERSCAN_PIXELS / viewport.zoom;
   const viewportBounds: Rectangle = {

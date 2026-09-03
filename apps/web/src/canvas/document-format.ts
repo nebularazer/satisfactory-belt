@@ -2,7 +2,7 @@ import {
   CANVAS_DOCUMENT_VERSION,
   type CanvasDocument,
   type CanvasNode,
-} from "./editor";
+} from "./document";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

@@ -1,5 +1,5 @@
-import type { CanvasDocument, CanvasNode, Rectangle } from "./editor";
-import type { Point } from "./viewport";
+import type { CanvasDocument, CanvasNode } from "./document";
+import type { Point, Rectangle } from "./geometry";
 
 const CELL_SIZE = 512;
 

@@ -8,9 +8,9 @@ import {
 import {
   panViewport,
   zoomViewportAt,
-  type Point,
   type Viewport,
 } from "./viewport";
+import type { Point } from "./geometry";
 
 type PointerOptions = MouseEventInit & {
   pointerId?: number;

@@ -18,9 +18,9 @@ import {
   type CanvasEditor,
   type CanvasEditorChange,
   type CanvasEditorState,
-  type CanvasNode,
-  type Rectangle,
 } from "./editor";
+import type { CanvasNode } from "./document";
+import type { Point, Rectangle } from "./geometry";
 import { attachCanvasInteractions } from "./interactions";
 import {
   createPerformanceSampler,
@@ -34,7 +34,6 @@ import {
   screenToWorld,
   ZOOM_STEP,
   zoomViewportAt,
-  type Point,
   type Viewport,
 } from "./viewport";
 
