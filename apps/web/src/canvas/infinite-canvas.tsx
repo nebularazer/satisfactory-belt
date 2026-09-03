@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text } from "pixi.js";
+import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
 import {
   forwardRef,
   useEffect,
@@ -14,6 +14,10 @@ import {
   type Rectangle,
 } from "./editor";
 import { attachCanvasInteractions } from "./interactions";
+import {
+  createPerformanceSampler,
+  type CanvasPerformanceMetrics,
+} from "./performance";
 import {
   panViewport,
   screenToWorld,
@@ -34,8 +38,10 @@ export type InfiniteCanvasHandle = {
 
 type InfiniteCanvasProps = {
   editor: CanvasEditor;
+  onPerformanceMetricsChange: (metrics: CanvasPerformanceMetrics) => void;
   onRequestAddNode: (at: Point) => void;
   onViewportChange: (viewport: Viewport) => void;
+  performanceMetricsEnabled: boolean;
 };
 
 type NodeDisplay = {
@@ -159,7 +165,16 @@ function drawMarquee(graphics: Graphics, rectangle?: Rectangle) {
 }
 
 export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
-  function InfiniteCanvas({ editor, onRequestAddNode, onViewportChange }, ref) {
+  function InfiniteCanvas(
+    {
+      editor,
+      onPerformanceMetricsChange,
+      onRequestAddNode,
+      onViewportChange,
+      performanceMetricsEnabled,
+    },
+    ref,
+  ) {
     const hostRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
     const gridRef = useRef<Graphics | null>(null);
@@ -167,7 +182,12 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
     const worldRef = useRef<Container | null>(null);
     const marqueeRef = useRef<Graphics | null>(null);
+    const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
+    const performanceMetricsEnabledRef = useRef(performanceMetricsEnabled);
     const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
+
+    onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
+    performanceMetricsEnabledRef.current = performanceMetricsEnabled;
 
     const updateTextResolution = () => {
       const app = appRef.current;
@@ -239,6 +259,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
       const app = new Application();
       let active = true;
       let resizeObserver: ResizeObserver | undefined;
+      let removePerformanceListener: (() => void) | undefined;
       let themeObserver: MutationObserver | undefined;
       let unsubscribeEditor: (() => void) | undefined;
       let removeListeners: (() => void) | undefined;
@@ -309,6 +330,25 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
             },
           });
 
+          const performanceSampler = createPerformanceSampler((metrics) => {
+            onPerformanceMetricsChangeRef.current(metrics);
+          });
+          let wasSamplingPerformance = false;
+          const samplePerformance = (ticker: Ticker) => {
+            if (!performanceMetricsEnabledRef.current) {
+              if (wasSamplingPerformance) performanceSampler.reset();
+              wasSamplingPerformance = false;
+              return;
+            }
+
+            wasSamplingPerformance = true;
+            performanceSampler.addFrame(performance.now(), ticker.elapsedMS);
+          };
+          app.ticker.add(samplePerformance);
+          removePerformanceListener = () => {
+            app.ticker.remove(samplePerformance);
+          };
+
           resizeObserver = new ResizeObserver(([entry]) => {
             if (!entry) return;
 
@@ -343,6 +383,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
       return () => {
         active = false;
         removeListeners?.();
+        removePerformanceListener?.();
         unsubscribeEditor?.();
         resizeObserver?.disconnect();
         themeObserver?.disconnect();

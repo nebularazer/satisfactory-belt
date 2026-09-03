@@ -1,5 +1,6 @@
 import {
   CopyPlus,
+  Gauge,
   Magnet,
   Menu,
   Monitor,
@@ -32,8 +33,10 @@ type CanvasMenuProps = {
   onAddNode: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onShowPerformanceChange: (enabled: boolean) => void;
   onResetView: () => void;
   onSnapToGridChange: (enabled: boolean) => void;
+  showPerformance: boolean;
   snapToGrid: boolean;
 };
 
@@ -43,8 +46,10 @@ export function CanvasMenu({
   onAddNode,
   onDelete,
   onDuplicate,
+  onShowPerformanceChange,
   onResetView,
   onSnapToGridChange,
+  showPerformance,
   snapToGrid,
 }: CanvasMenuProps) {
   const { setTheme, theme } = useTheme();
@@ -55,7 +60,7 @@ export function CanvasMenu({
         render={
           <Button
             aria-label="Open canvas menu"
-            className="size-9 bg-card/95 shadow-sm"
+            className="size-9 bg-card shadow-sm hover:bg-muted dark:bg-card dark:hover:bg-muted"
             size="icon-lg"
             variant="outline"
           />
@@ -85,7 +90,15 @@ export function CanvasMenu({
             Delete selection
             <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onResetView}>
+            <RotateCcw aria-hidden="true" />
+            Reset view
+            <DropdownMenuShortcut>0</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Settings</DropdownMenuLabel>
           <DropdownMenuCheckboxItem
             checked={snapToGrid}
             onCheckedChange={onSnapToGridChange}
@@ -93,11 +106,13 @@ export function CanvasMenu({
             <Magnet aria-hidden="true" />
             Snap to grid
           </DropdownMenuCheckboxItem>
-          <DropdownMenuItem onClick={onResetView}>
-            <RotateCcw aria-hidden="true" />
-            Reset view
-            <DropdownMenuShortcut>0</DropdownMenuShortcut>
-          </DropdownMenuItem>
+          <DropdownMenuCheckboxItem
+            checked={showPerformance}
+            onCheckedChange={onShowPerformanceChange}
+          >
+            <Gauge aria-hidden="true" />
+            Performance metrics
+          </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

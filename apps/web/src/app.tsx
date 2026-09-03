@@ -11,10 +11,12 @@ import {
   InfiniteCanvas,
   type InfiniteCanvasHandle,
 } from "@/canvas/infinite-canvas";
+import type { CanvasPerformanceMetrics } from "@/canvas/performance";
 import type { Point, Viewport } from "@/canvas/viewport";
 import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { NodePicker } from "@/components/node-picker";
+import { PerformanceBar } from "@/components/performance-bar";
 
 export function App() {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
@@ -24,22 +26,26 @@ export function App() {
     let cached = {
       canRedo: initialState.canRedo,
       canUndo: initialState.canUndo,
+      nodeCount: initialState.document.nodes.length,
       selectedCount: initialState.selectedIds.length,
       snapToGrid: initialState.snapToGrid,
     };
 
     return () => {
       const state = editor.getState();
+      const nodeCount = state.document.nodes.length;
       const selectedCount = state.selectedIds.length;
       if (
         cached.canRedo !== state.canRedo ||
         cached.canUndo !== state.canUndo ||
+        cached.nodeCount !== nodeCount ||
         cached.selectedCount !== selectedCount ||
         cached.snapToGrid !== state.snapToGrid
       ) {
         cached = {
           canRedo: state.canRedo,
           canUndo: state.canUndo,
+          nodeCount,
           selectedCount,
           snapToGrid: state.snapToGrid,
         };
@@ -53,12 +59,23 @@ export function App() {
     getEditorUiState,
     getEditorUiState,
   );
+  const [performanceMetrics, setPerformanceMetrics] =
+    useState<CanvasPerformanceMetrics | null>(null);
+  const [showPerformance, setShowPerformance] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
 
   const handleViewportChange = useCallback((viewport: Viewport) => {
     setZoom(viewport.zoom);
   }, []);
+  const handlePerformanceMetricsChange = useCallback(
+    (metrics: CanvasPerformanceMetrics) => setPerformanceMetrics(metrics),
+    [],
+  );
+  const handleShowPerformanceChange = (enabled: boolean) => {
+    setShowPerformance(enabled);
+    setPerformanceMetrics(null);
+  };
 
   const resetView = () => canvasRef.current?.resetView();
   const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
@@ -74,8 +91,10 @@ export function App() {
       <h1 className="sr-only">Satisfactory Belt canvas</h1>
       <InfiniteCanvas
         editor={editor}
+        onPerformanceMetricsChange={handlePerformanceMetricsChange}
         onRequestAddNode={requestNodeAt}
         onViewportChange={handleViewportChange}
+        performanceMetricsEnabled={showPerformance}
         ref={canvasRef}
       />
 
@@ -91,9 +110,11 @@ export function App() {
             onDelete={() => editor.dispatch({ type: "selection.delete" })}
             onDuplicate={() => editor.dispatch({ type: "selection.duplicate" })}
             onResetView={resetView}
+            onShowPerformanceChange={handleShowPerformanceChange}
             onSnapToGridChange={(enabled) =>
               editor.dispatch({ type: "settings.snap", enabled })
             }
+            showPerformance={showPerformance}
             snapToGrid={editorState.snapToGrid}
           />
         </div>
@@ -110,6 +131,16 @@ export function App() {
             zoom={zoom}
           />
         </div>
+
+        {showPerformance && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+            <PerformanceBar
+              metrics={performanceMetrics}
+              nodeCount={editorState.nodeCount}
+              selectedCount={editorState.selectedCount}
+            />
+          </div>
+        )}
       </div>
 
       <NodePicker

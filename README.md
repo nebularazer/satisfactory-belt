@@ -26,7 +26,8 @@ The canvas interaction slice supports:
 - resetting the view with the zoom percentage or `0`;
 - copying, pasting, and duplicating selections with the standard keyboard shortcuts;
 - deleting selections with Delete or Backspace;
-- undoing and redoing document changes from the controls or keyboard; and
+- undoing and redoing document changes from the controls or keyboard;
+- showing optional live canvas performance metrics from the Settings menu; and
 - selecting light, system, or dark appearance from the canvas menu.
 
 The grid uses a fixed 32-unit interval. Snap can be switched off in the menu without
