@@ -13,16 +13,16 @@ import {
   type CanvasEditorState,
   type Rectangle,
 } from "./editor";
+import { attachCanvasInteractions } from "./interactions";
 import {
   panViewport,
   screenToWorld,
+  ZOOM_STEP,
   zoomViewportAt,
   type Point,
   type Viewport,
 } from "./viewport";
 
-const ZOOM_STEP = 1.2;
-const DRAG_THRESHOLD = 4;
 const MAX_TEXT_RESOLUTION = 4;
 
 export type InfiniteCanvasHandle = {
@@ -37,36 +37,6 @@ type InfiniteCanvasProps = {
   onRequestAddNode: (at: Point) => void;
   onViewportChange: (viewport: Viewport) => void;
 };
-
-type Interaction =
-  | {
-      clearSelectionOnClick: boolean;
-      kind: "pan";
-      lastScreen: Point;
-      moved: boolean;
-      pointerId: number;
-      startScreen: Point;
-    }
-  | {
-      kind: "move";
-      moved: boolean;
-      nodeId: string;
-      pointerId: number;
-      startScreen: Point;
-      startWorld: Point;
-    }
-  | {
-      baseIds: readonly string[];
-      dragging: boolean;
-      hitId?: string;
-      kind: "select";
-      pointerId: number;
-      startScreen: Point;
-    };
-
-function passedDragThreshold(start: Point, current: Point) {
-  return Math.hypot(current.x - start.x, current.y - start.y) >= DRAG_THRESHOLD;
-}
 
 type NodeDisplay = {
   card: Graphics;
@@ -188,11 +158,6 @@ function drawMarquee(graphics: Graphics, rectangle?: Rectangle) {
     .stroke({ color: 0x6366f1, alpha: 0.8, pixelLine: true, width: 1 });
 }
 
-function isEditableTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement &&
-    Boolean(target.closest("input, textarea, [contenteditable='true'], [role='menu']"));
-}
-
 export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
   function InfiniteCanvas({ editor, onRequestAddNode, onViewportChange }, ref) {
     const hostRef = useRef<HTMLDivElement>(null);
@@ -202,9 +167,6 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
     const worldRef = useRef<Container | null>(null);
     const marqueeRef = useRef<Graphics | null>(null);
-    const interactionRef = useRef<Interaction | null>(null);
-    const lastPointerScreenRef = useRef<Point | null>(null);
-    const spacePressedRef = useRef(false);
     const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
 
     const updateTextResolution = () => {
@@ -329,322 +291,23 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           };
 
           const canvas = app.canvas;
-          const screenPoint = (event: PointerEvent): Point => {
-            const bounds = canvas.getBoundingClientRect();
-            return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
-          };
 
-          const restoreSelection = (ids: readonly string[]) => {
-            editor.dispatch({ type: "selection.clear" });
-            for (const id of ids) {
-              editor.dispatch({ type: "selection.node", additive: true, id });
-            }
-          };
-
-          const finishInteraction = (event: PointerEvent, cancelled = false) => {
-            const interaction = interactionRef.current;
-            if (!interaction || interaction.pointerId !== event.pointerId) return;
-
-            if (interaction.kind === "move") {
-              editor.dispatch({
-                type: cancelled || !interaction.moved
-                  ? "selection.move.cancel"
-                  : "selection.move.commit",
-              });
-              if (!cancelled && !interaction.moved) {
-                editor.dispatch({
-                  type: "selection.node",
-                  additive: false,
-                  id: interaction.nodeId,
-                });
-              }
-            }
-
-            if (interaction.kind === "select") {
-              drawMarquee(marquee);
-              if (cancelled) {
-                restoreSelection(interaction.baseIds);
-              } else if (!interaction.dragging && interaction.hitId) {
-                editor.dispatch({
-                  type: "selection.node",
-                  additive: true,
-                  id: interaction.hitId,
-                });
-              }
-            }
-
-            if (
-              interaction.kind === "pan" &&
-              !cancelled &&
-              !interaction.moved &&
-              interaction.clearSelectionOnClick
-            ) {
-              editor.dispatch({ type: "selection.clear" });
-            }
-
-            interactionRef.current = null;
-            canvas.dataset.cursor = "grab";
-            if (canvas.hasPointerCapture(event.pointerId)) {
-              canvas.releasePointerCapture(event.pointerId);
-            }
-          };
-
-          const pointerUp = (event: PointerEvent) => finishInteraction(event);
-          const pointerCancel = (event: PointerEvent) =>
-            finishInteraction(event, true);
-
-          const pointerDown = (event: PointerEvent) => {
-            if (event.button !== 0 && event.button !== 1) return;
-            event.preventDefault();
-            canvas.focus();
-
-            const screen = screenPoint(event);
-            lastPointerScreenRef.current = screen;
-            const worldPoint = screenToWorld(screen, viewportRef.current);
-            const hit = editor.hitTest(worldPoint);
-            const selectionModifier = event.ctrlKey || event.metaKey;
-
-            canvas.setPointerCapture(event.pointerId);
-
-            if (event.button === 1 || spacePressedRef.current) {
-              interactionRef.current = {
-                clearSelectionOnClick: false,
-                kind: "pan",
-                lastScreen: screen,
-                moved: false,
-                pointerId: event.pointerId,
-                startScreen: screen,
-              };
-              canvas.dataset.cursor = "grabbing";
-              return;
-            }
-
-            if (selectionModifier) {
-              interactionRef.current = {
-                baseIds: editor.getState().selectedIds,
-                dragging: false,
-                hitId: hit?.id,
-                kind: "select",
-                pointerId: event.pointerId,
-                startScreen: screen,
-              };
-              canvas.dataset.cursor = "crosshair";
-              return;
-            }
-
-            if (hit) {
-              const hitIsSelected = editor.getState().selectedIds.includes(hit.id);
-              if (!hitIsSelected) {
-                editor.dispatch({
-                  type: "selection.node",
-                  additive: false,
-                  id: hit.id,
-                });
-              }
-
-              editor.dispatch({ type: "selection.move.begin" });
-              interactionRef.current = {
-                kind: "move",
-                moved: false,
-                nodeId: hit.id,
-                pointerId: event.pointerId,
-                startScreen: screen,
-                startWorld: worldPoint,
-              };
-              canvas.dataset.cursor = "grabbing";
-              return;
-            }
-
-            interactionRef.current = {
-              clearSelectionOnClick: true,
-              kind: "pan",
-              lastScreen: screen,
-              moved: false,
-              pointerId: event.pointerId,
-              startScreen: screen,
-            };
-            canvas.dataset.cursor = "grabbing";
-          };
-
-          const pointerMove = (event: PointerEvent) => {
-            const screen = screenPoint(event);
-            lastPointerScreenRef.current = screen;
-            const interaction = interactionRef.current;
-
-            if (!interaction || interaction.pointerId !== event.pointerId) {
-              const selectionModifier = event.ctrlKey || event.metaKey;
-              canvas.dataset.cursor = selectionModifier
-                ? "crosshair"
-                : editor.hitTest(screenToWorld(screen, viewportRef.current))
-                  ? "move"
-                  : "grab";
-              return;
-            }
-
-            if (interaction.kind === "pan") {
-              if (
-                !interaction.moved &&
-                !passedDragThreshold(interaction.startScreen, screen)
-              ) {
-                return;
-              }
-              interaction.moved = true;
-              const delta = {
-                x: screen.x - interaction.lastScreen.x,
-                y: screen.y - interaction.lastScreen.y,
-              };
-              interaction.lastScreen = screen;
+          removeListeners = attachCanvasInteractions(canvas, editor, {
+            getViewport: () => viewportRef.current,
+            getViewportCenter: viewportCenter,
+            panBy: (delta) => {
               renderViewport(panViewport(viewportRef.current, delta));
-              return;
-            }
-
-            if (interaction.kind === "move") {
-              if (
-                !interaction.moved &&
-                !passedDragThreshold(interaction.startScreen, screen)
-              ) {
-                return;
-              }
-              interaction.moved = true;
-              const worldPoint = screenToWorld(screen, viewportRef.current);
-              editor.dispatch({
-                type: "selection.move.update",
-                delta: {
-                  x: worldPoint.x - interaction.startWorld.x,
-                  y: worldPoint.y - interaction.startWorld.y,
-                },
-              });
-              return;
-            }
-
-            if (
-              !interaction.dragging &&
-              !passedDragThreshold(interaction.startScreen, screen)
-            ) {
-              return;
-            }
-            interaction.dragging = true;
-
-            const screenRectangle = {
-              height: screen.y - interaction.startScreen.y,
-              width: screen.x - interaction.startScreen.x,
-              x: interaction.startScreen.x,
-              y: interaction.startScreen.y,
-            };
-            const startWorld = screenToWorld(interaction.startScreen, viewportRef.current);
-            const currentWorld = screenToWorld(screen, viewportRef.current);
-            drawMarquee(marquee, screenRectangle);
-            editor.dispatch({
-              type: "selection.marquee",
-              baseIds: [],
-              rectangle: {
-                height: currentWorld.y - startWorld.y,
-                width: currentWorld.x - startWorld.x,
-                x: startWorld.x,
-                y: startWorld.y,
-              },
-            });
-          };
-
-          const wheel = (event: WheelEvent) => {
-            event.preventDefault();
-            const bounds = canvas.getBoundingClientRect();
-            const anchor = {
-              x: event.clientX - bounds.left,
-              y: event.clientY - bounds.top,
-            };
-            const deltaY = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-              ? event.deltaY * 16
-              : event.deltaY;
-            const factor = Math.exp(-deltaY * 0.002);
-            renderViewport(
-              zoomViewportAt(
-                viewportRef.current,
-                viewportRef.current.zoom * factor,
-                anchor,
-              ),
-            );
-          };
-
-          const keyDown = (event: KeyboardEvent) => {
-            if (isEditableTarget(event.target)) return;
-
-            const modifier = event.ctrlKey || event.metaKey;
-            const key = event.key.toLowerCase();
-
-            if (modifier && key === "z") {
-              event.preventDefault();
-              editor.dispatch({ type: event.shiftKey ? "history.redo" : "history.undo" });
-            } else if (modifier && key === "y") {
-              event.preventDefault();
-              editor.dispatch({ type: "history.redo" });
-            } else if (modifier && key === "c") {
-              event.preventDefault();
-              editor.dispatch({ type: "selection.copy" });
-            } else if (modifier && key === "v") {
-              event.preventDefault();
-              editor.dispatch({ type: "selection.paste" });
-            } else if (modifier && key === "d") {
-              event.preventDefault();
-              editor.dispatch({ type: "selection.duplicate" });
-            } else if (event.key === "Delete" || event.key === "Backspace") {
-              event.preventDefault();
-              editor.dispatch({ type: "selection.delete" });
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              const interaction = interactionRef.current;
-              if (interaction?.kind === "move") {
-                editor.dispatch({ type: "selection.move.cancel" });
-              }
-              if (interaction?.kind === "select") drawMarquee(marquee);
-              if (interaction) {
-                if (canvas.hasPointerCapture(interaction.pointerId)) {
-                  canvas.releasePointerCapture(interaction.pointerId);
-                }
-                interactionRef.current = null;
-                canvas.dataset.cursor = "grab";
-              }
-              editor.dispatch({ type: "selection.clear" });
-            } else if (!modifier && key === "n" && !event.repeat) {
-              event.preventDefault();
-              onRequestAddNode(
-                screenToWorld(
-                  lastPointerScreenRef.current ?? viewportCenter(),
-                  viewportRef.current,
-                ),
+            },
+            requestNode: onRequestAddNode,
+            resetView,
+            setMarquee: (rectangle) => drawMarquee(marquee, rectangle),
+            zoomAt: (factor, anchor) => {
+              const current = viewportRef.current;
+              renderViewport(
+                zoomViewportAt(current, current.zoom * factor, anchor),
               );
-            } else if (event.key === "+" || event.key === "=") {
-              event.preventDefault();
-              zoomBy(ZOOM_STEP);
-            } else if (event.key === "-") {
-              event.preventDefault();
-              zoomBy(1 / ZOOM_STEP);
-            } else if (event.key === "0") {
-              event.preventDefault();
-              resetView();
-            } else if (
-              event.code === "Space" &&
-              (document.activeElement === canvas || document.activeElement === document.body)
-            ) {
-              event.preventDefault();
-              spacePressedRef.current = true;
-              if (!interactionRef.current) canvas.dataset.cursor = "grab";
-            }
-          };
-
-          const keyUp = (event: KeyboardEvent) => {
-            if (event.code !== "Space") return;
-            spacePressedRef.current = false;
-            if (!interactionRef.current) canvas.dataset.cursor = "grab";
-          };
-
-          canvas.addEventListener("pointerdown", pointerDown);
-          canvas.addEventListener("pointermove", pointerMove);
-          canvas.addEventListener("pointerup", pointerUp);
-          canvas.addEventListener("pointercancel", pointerCancel);
-          canvas.addEventListener("wheel", wheel, { passive: false });
-          window.addEventListener("keydown", keyDown);
-          window.addEventListener("keyup", keyUp);
+            },
+          });
 
           resizeObserver = new ResizeObserver(([entry]) => {
             if (!entry) return;
@@ -675,16 +338,6 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           });
 
           unsubscribeEditor = editor.subscribe(redraw);
-
-          removeListeners = () => {
-            canvas.removeEventListener("pointerdown", pointerDown);
-            canvas.removeEventListener("pointermove", pointerMove);
-            canvas.removeEventListener("pointerup", pointerUp);
-            canvas.removeEventListener("pointercancel", pointerCancel);
-            canvas.removeEventListener("wheel", wheel);
-            window.removeEventListener("keydown", keyDown);
-            window.removeEventListener("keyup", keyUp);
-          };
         });
 
       return () => {
@@ -693,7 +346,6 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         unsubscribeEditor?.();
         resizeObserver?.disconnect();
         themeObserver?.disconnect();
-        interactionRef.current = null;
         gridRef.current = null;
         sceneRef.current = null;
         worldRef.current = null;
