@@ -13,7 +13,7 @@ test("edits and restores a canvas in a real browser", async ({ page }) => {
   await emptyStateAction.click();
   const nodePicker = page.getByRole("dialog", { name: "Add node" });
   await expect(nodePicker).toBeVisible();
-  await page.getByRole("option", { name: "Node", exact: true }).click();
+  await page.getByRole("option", { name: /Iron Plate Constructor/ }).click();
   await expect(nodePicker).toBeHidden();
   await expect(emptyStateAction).toBeHidden();
 

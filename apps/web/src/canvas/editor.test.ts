@@ -8,6 +8,23 @@ function createEditor() {
 }
 
 describe("canvas editor", () => {
+  it("creates a machine with its selected recipe", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Iron Plate",
+      machineId: "Build_ConstructorMk1_C",
+      recipeId: "Recipe_IronPlate_C",
+    });
+
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      label: "Iron Plate",
+      machineId: "Build_ConstructorMk1_C",
+      recipeId: "Recipe_IronPlate_C",
+    });
+  });
+
   it("creates snapped nodes and selects by point and marquee", () => {
     const editor = createEditor();
     editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });

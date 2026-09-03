@@ -4,6 +4,8 @@ export type CanvasNode = Readonly<{
   height: number;
   id: string;
   label: string;
+  machineId?: string;
+  recipeId?: string;
   width: number;
   x: number;
   y: number;

@@ -47,6 +47,7 @@ import { ManagePlansDialog } from "@/components/manage-plans-dialog";
 import { NodePicker } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
+import type { MachineRecipeSelection } from "@/game/production-catalog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -252,9 +253,15 @@ function CanvasWorkspace({
     return () => window.removeEventListener("keydown", handleSaveShortcut);
   }, [managePlansOpen, openSavePlan, saveCurrentPlan, savePlanOpen]);
 
-  const addPendingNode = () => {
+  const addPendingNode = (selection: MachineRecipeSelection) => {
     if (!pendingNode) return;
-    editor.dispatch({ type: "node.create", at: pendingNode.at });
+    editor.dispatch({
+      type: "node.create",
+      at: pendingNode.at,
+      label: selection.recipeName,
+      machineId: selection.machineId,
+      recipeId: selection.recipeId,
+    });
     setPendingNode(null);
   };
 

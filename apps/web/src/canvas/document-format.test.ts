@@ -12,6 +12,8 @@ const document = {
       height: 96,
       id: "node-1",
       label: "Node 1",
+      machineId: "Build_ConstructorMk1_C",
+      recipeId: "Recipe_IronPlate_C",
       width: 176,
       x: 0,
       y: 32,

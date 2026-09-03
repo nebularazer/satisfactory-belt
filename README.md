@@ -23,7 +23,7 @@ pnpm test:e2e
 
 The canvas interaction slice supports:
 
-- opening a searchable node picker from the menu or with `N`;
+- searching machines or recipes in the node picker from the menu or with `N`;
 - opening a contextual menu with right-click: add on empty canvas, duplicate/delete on nodes;
 - selecting a node with primary click and moving it with primary drag;
 - adding or removing nodes from the selection with Ctrl/Cmd + primary click;
@@ -87,9 +87,10 @@ window.satisfactoryBeltBenchmark();
 It returns synchronous pan, zoom, marquee, and transient drag timings in milliseconds
 and restores the fitted view when finished.
 
-Choosing `Node` in the picker inserts it at the last canvas cursor position when
-opened with `N`, at the clicked position when opened from the context menu, or at the
-viewport center when opened from the main menu.
+Choosing a recipe inserts its production machine at the last canvas cursor position
+when opened with `N`, at the clicked position when opened from the context menu, or at
+the viewport center when opened from the main menu. Choosing a machine first narrows
+the picker to the recipes available for that machine.
 
 ## Contribution conventions
 
