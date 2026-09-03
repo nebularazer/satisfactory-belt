@@ -96,10 +96,7 @@ export function ManagePlansDialog({
   return (
     <>
       <Dialog onOpenChange={onOpenChange} open={open}>
-        <DialogContent
-          className="sm:max-w-xl"
-          overlayClassName="bg-transparent supports-backdrop-filter:backdrop-blur-none"
-        >
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Manage plans</DialogTitle>
             <DialogDescription>
@@ -201,7 +198,7 @@ export function ManagePlansDialog({
         }}
         open={deleting !== null}
       >
-        <AlertDialogContent overlayClassName="bg-transparent supports-backdrop-filter:backdrop-blur-none">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{deleting?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>

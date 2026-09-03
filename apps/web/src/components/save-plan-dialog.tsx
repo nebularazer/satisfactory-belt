@@ -134,10 +134,7 @@ export function SavePlanDialog({
   return (
     <>
       <Dialog onOpenChange={handleOpenChange} open={open}>
-        <DialogContent
-          className="sm:max-w-lg"
-          overlayClassName="bg-transparent supports-backdrop-filter:backdrop-blur-none"
-        >
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Save plan as</DialogTitle>
             <DialogDescription>
@@ -263,7 +260,7 @@ export function SavePlanDialog({
         }}
         open={overwriteTarget !== null}
       >
-        <AlertDialogContent overlayClassName="bg-transparent supports-backdrop-filter:backdrop-blur-none">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               Overwrite “{overwriteTarget?.name}”?

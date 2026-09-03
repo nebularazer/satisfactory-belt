@@ -22,7 +22,6 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       description="Search the available canvas node types"
       onOpenChange={onOpenChange}
       open={open}
-      overlayClassName="bg-transparent supports-backdrop-filter:backdrop-blur-none"
       title="Add node"
     >
       <Command>
