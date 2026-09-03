@@ -72,10 +72,9 @@ describe("NodePicker", () => {
     expect(
       screen.queryByText("Alternate: Cast Screws"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Iron Ingot 12.5/min → Screws 50/min"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Constructor · 4 MW @100%")).toBeInTheDocument();
+    expect(screen.getByText("Iron Ingot 12.5/min")).toBeInTheDocument();
+    expect(screen.getByText("→ Screws 50/min")).toBeInTheDocument();
+    expect(screen.getByText("Constructor · 4 MW")).toBeInTheDocument();
   });
 
   it("opens production routes without selecting the recipe", () => {
@@ -89,6 +88,7 @@ describe("NodePicker", () => {
       { target: { value: "screws" } },
     );
     expect(screen.getAllByRole("option")[0]).toHaveAccessibleName(/^Screws/);
+    expect(screen.queryByText("3 ways")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getAllByRole("button", {
         name: "Show 3 ways to produce Screws",

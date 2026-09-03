@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ListTree } from "lucide-react";
 
 import {
   PRODUCTION_MACHINES,
@@ -141,6 +141,7 @@ type RecipeRowProps = {
   onSelect: () => void;
   query: string;
   recipe: ProductionRecipe;
+  showDetailedMaterials?: boolean;
   showStandardBadge?: boolean;
 };
 
@@ -150,6 +151,7 @@ function RecipeRow({
   onSelect,
   query,
   recipe,
+  showDetailedMaterials = false,
   showStandardBadge = false,
 }: RecipeRowProps) {
   const output = routeOutput(recipe, query);
@@ -163,11 +165,13 @@ function RecipeRow({
   const routeLabel = outputItem
     ? `Show ${routes.length} ways to produce ${outputItem.name}`
     : "Show production routes";
+  const compactMaterialSummary = `${recipe.inputs.length} ${recipe.inputs.length === 1 ? "input" : "inputs"} → ${outputSummary}`;
+  const showFullInputs = showDetailedMaterials || recipe.inputs.length <= 2;
 
   return (
-    <div className="flex items-stretch gap-px">
+    <div className="flex items-stretch rounded-md has-[>[data-selected=true]]:bg-muted">
       <CommandItem
-        className="min-w-0 flex-1 items-start rounded-r-none px-2.5 py-2"
+        className="min-w-0 flex-1 items-start px-2.5 py-2 data-selected:bg-transparent"
         keywords={[
           machine.name,
           machine.id,
@@ -193,28 +197,38 @@ function RecipeRow({
               </span>
             )}
           </div>
-          <div className="mt-0.5 line-clamp-2 text-[0.625rem] leading-relaxed text-muted-foreground">
-            {inputSummary ? `${inputSummary} → ` : ""}
-            {outputSummary}
-          </div>
+          {showFullInputs ? (
+            <div className="mt-0.5 text-[0.625rem] leading-relaxed text-muted-foreground">
+              {inputSummary && (
+                <div className="line-clamp-1">{inputSummary}</div>
+              )}
+              <div className="line-clamp-1">→ {outputSummary}</div>
+            </div>
+          ) : (
+            <div className="mt-0.5 line-clamp-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+              {compactMaterialSummary}
+            </div>
+          )}
           <div
             className="mt-0.5 text-[0.625rem] text-muted-foreground"
             title="Power at 100% clock speed without production amplification"
           >
-            {machine.name} · {formatPower(recipe, machine)} @100%
+            {machine.name} · {formatPower(recipe, machine)}
           </div>
         </div>
       </CommandItem>
-      {onOpenRoutes && output && routes.length > 1 && (
+      {onOpenRoutes && output && routes.length > 1 ? (
         <button
           aria-label={routeLabel}
-          className="flex min-w-16 shrink-0 items-center justify-center gap-0.5 rounded-r-md border-l border-border/60 px-2 text-[0.625rem] font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="flex size-11 shrink-0 items-center justify-center self-center rounded-md text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground focus-visible:bg-muted-foreground/10 focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           onClick={() => onOpenRoutes(output.itemId)}
+          title={routeLabel}
           type="button"
         >
-          {routes.length} ways
-          <ChevronRight aria-hidden="true" className="size-3" />
+          <ListTree aria-hidden="true" className="size-4" />
         </button>
+      ) : (
+        <span aria-hidden="true" className="size-11 shrink-0" />
       )}
     </div>
   );
@@ -258,7 +272,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             filterProductionCatalog(`machine ${machine.name}`, query, [
               machine.id,
             ]) > 0,
-        )
+        ).toSorted((left, right) => left.name.localeCompare(right.name))
       : [];
   const autoFocusSearch =
     typeof window !== "undefined" &&
@@ -417,6 +431,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                   onSelect={() => selectRecipe(recipe, machine.id)}
                   query={query}
                   recipe={recipe}
+                  showDetailedMaterials={scope.type === "routes"}
                   showStandardBadge={scope.type === "routes"}
                 />
               );
