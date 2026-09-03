@@ -6,6 +6,7 @@
     "build": "pnpm --recursive --if-present build",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "dev": "pnpm --filter @satisfactory-belt/web dev",
+    "dev:https": "pnpm --filter @satisfactory-belt/web dev:https",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint --deny-warnings .",
