@@ -45,6 +45,13 @@ type Interaction =
       baseIds: readonly string[];
     };
 
+type NodeDisplay = {
+  card: Graphics;
+  container: Container;
+  label: Text;
+  visualKey: string;
+};
+
 function positiveModulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
 }
@@ -73,38 +80,63 @@ function drawGrid(
   graphics.fill({ color: dark ? 0xa1a1aa : 0x9ca3af, alpha: dark ? 0.4 : 0.34 });
 }
 
-function drawScene(scene: Container, state: CanvasEditorState) {
-  scene.removeChildren().forEach((child) => child.destroy({ children: true }));
-
+function drawScene(
+  scene: Container,
+  state: CanvasEditorState,
+  displays: Map<string, NodeDisplay>,
+) {
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = new Set(state.selectedIds);
+  const liveIds = new Set(state.document.nodes.map((node) => node.id));
 
-  for (const node of state.document.nodes) {
+  for (const [id, display] of displays) {
+    if (liveIds.has(id)) continue;
+    scene.removeChild(display.container);
+    display.container.destroy({ children: true });
+    displays.delete(id);
+  }
+
+  for (const [index, node] of state.document.nodes.entries()) {
     const selected = selectedIds.has(node.id);
-    const card = new Graphics()
-      .roundRect(node.x, node.y, node.width, node.height, 10)
+    const visualKey = `${dark}:${selected}:${node.width}:${node.height}:${node.label}`;
+    let display = displays.get(node.id);
+
+    if (!display) {
+      const container = new Container();
+      const card = new Graphics();
+      const label = new Text({ text: node.label });
+      label.anchor.set(0.5);
+      container.addChild(card, label);
+      display = { card, container, label, visualKey: "" };
+      displays.set(node.id, display);
+    }
+
+    display.container.position.set(node.x, node.y);
+    if (display.container.parent !== scene) scene.addChild(display.container);
+    if (scene.children[index] !== display.container) {
+      scene.setChildIndex(display.container, index);
+    }
+
+    if (display.visualKey === visualKey) continue;
+
+    display.card
+      .clear()
+      .roundRect(0, 0, node.width, node.height, 10)
       .fill({ color: dark ? 0x202024 : 0xffffff, alpha: 0.98 })
       .stroke({
         color: selected ? 0x6366f1 : dark ? 0x52525b : 0xd4d4d8,
         width: selected ? 2 : 1,
       });
 
-    const label = new Text({
-      anchor: 0.5,
-      position: {
-        x: node.x + node.width / 2,
-        y: node.y + node.height / 2,
-      },
-      style: {
-        fill: dark ? 0xf4f4f5 : 0x27272a,
-        fontFamily: "Inter Variable, Inter, sans-serif",
-        fontSize: 14,
-        fontWeight: "600",
-      },
-      text: node.label,
-    });
-
-    scene.addChild(card, label);
+    display.label.text = node.label;
+    display.label.position.set(node.width / 2, node.height / 2);
+    display.label.style = {
+      fill: dark ? 0xf4f4f5 : 0x27272a,
+      fontFamily: "Inter Variable, Inter, sans-serif",
+      fontSize: 14,
+      fontWeight: "600",
+    };
+    display.visualKey = visualKey;
   }
 }
 
@@ -134,6 +166,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     const appRef = useRef<Application | null>(null);
     const gridRef = useRef<Graphics | null>(null);
     const sceneRef = useRef<Container | null>(null);
+    const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
     const worldRef = useRef<Container | null>(null);
     const marqueeRef = useRef<Graphics | null>(null);
     const interactionRef = useRef<Interaction | null>(null);
@@ -142,7 +175,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
 
     const redraw = () => {
       const scene = sceneRef.current;
-      if (scene) drawScene(scene, editor.getState());
+      if (scene) drawScene(scene, editor.getState(), nodeDisplaysRef.current);
     };
 
     const renderViewport = (viewport: Viewport) => {
@@ -223,6 +256,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           app.canvas.className = "infinite-canvas__surface";
           app.canvas.setAttribute("aria-label", "Infinite canvas");
           app.canvas.setAttribute("role", "application");
+          app.canvas.dataset.cursor = "grab";
           app.canvas.tabIndex = 0;
           host.appendChild(app.canvas);
 
@@ -277,7 +311,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
             }
 
             interactionRef.current = null;
-            canvas.dataset.cursor = "default";
+            canvas.dataset.cursor = "grab";
             if (canvas.hasPointerCapture(event.pointerId)) {
               canvas.releasePointerCapture(event.pointerId);
             }
@@ -295,10 +329,12 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
             const screen = screenPoint(event);
             const worldPoint = screenToWorld(screen, viewportRef.current);
             const hit = editor.hitTest(worldPoint);
+            const selectionModifier =
+              event.ctrlKey || event.metaKey || event.shiftKey;
             const shouldPan =
               event.button === 1 ||
               spacePressedRef.current ||
-              (event.pointerType === "touch" && !hit);
+              (event.button === 0 && !selectionModifier);
 
             canvas.setPointerCapture(event.pointerId);
 
@@ -351,13 +387,13 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
             const interaction = interactionRef.current;
 
             if (!interaction || interaction.pointerId !== event.pointerId) {
-              canvas.dataset.cursor = editor.hitTest(
-                screenToWorld(screen, viewportRef.current),
-              )
-                ? "move"
-                : spacePressedRef.current
-                  ? "grab"
-                  : "default";
+              const selectionModifier =
+                event.ctrlKey || event.metaKey || event.shiftKey;
+              canvas.dataset.cursor = selectionModifier
+                ? editor.hitTest(screenToWorld(screen, viewportRef.current))
+                  ? "move"
+                  : "crosshair"
+                : "grab";
               return;
             }
 
@@ -461,7 +497,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
                   canvas.releasePointerCapture(interaction.pointerId);
                 }
                 interactionRef.current = null;
-                canvas.dataset.cursor = "default";
+                canvas.dataset.cursor = "grab";
               }
               editor.dispatch({ type: "selection.clear" });
             } else if (!modifier && key === "n" && !event.repeat) {
@@ -489,7 +525,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
           const keyUp = (event: KeyboardEvent) => {
             if (event.code !== "Space") return;
             spacePressedRef.current = false;
-            if (!interactionRef.current) canvas.dataset.cursor = "default";
+            if (!interactionRef.current) canvas.dataset.cursor = "grab";
           };
 
           canvas.addEventListener("pointerdown", pointerDown);
@@ -552,6 +588,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         sceneRef.current = null;
         worldRef.current = null;
         marqueeRef.current = null;
+        nodeDisplaysRef.current.clear();
 
         if (appRef.current === app) {
           appRef.current = null;

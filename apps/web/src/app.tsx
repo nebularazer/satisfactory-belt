@@ -18,10 +18,39 @@ import { CanvasMenu } from "@/components/canvas-menu";
 export function App() {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
   const editor = useMemo(() => createCanvasEditor(), []);
+  const getEditorUiState = useMemo(() => {
+    const initialState = editor.getState();
+    let cached = {
+      canRedo: initialState.canRedo,
+      canUndo: initialState.canUndo,
+      selectedCount: initialState.selectedIds.length,
+      snapToGrid: initialState.snapToGrid,
+    };
+
+    return () => {
+      const state = editor.getState();
+      const selectedCount = state.selectedIds.length;
+      if (
+        cached.canRedo !== state.canRedo ||
+        cached.canUndo !== state.canUndo ||
+        cached.selectedCount !== selectedCount ||
+        cached.snapToGrid !== state.snapToGrid
+      ) {
+        cached = {
+          canRedo: state.canRedo,
+          canUndo: state.canUndo,
+          selectedCount,
+          snapToGrid: state.snapToGrid,
+        };
+      }
+
+      return cached;
+    };
+  }, [editor]);
   const editorState = useSyncExternalStore(
     editor.subscribe,
-    editor.getState,
-    editor.getState,
+    getEditorUiState,
+    getEditorUiState,
   );
   const [zoom, setZoom] = useState(1);
 
@@ -43,8 +72,8 @@ export function App() {
       <div className="pointer-events-none absolute inset-0 z-10">
         <div className="pointer-events-auto absolute left-4 top-4">
           <CanvasMenu
-            canDelete={editorState.selectedIds.length > 0}
-            canDuplicate={editorState.selectedIds.length > 0}
+            canDelete={editorState.selectedCount > 0}
+            canDuplicate={editorState.selectedCount > 0}
             onAddNode={() => canvasRef.current?.addNode()}
             onDelete={() => editor.dispatch({ type: "selection.delete" })}
             onDuplicate={() => editor.dispatch({ type: "selection.duplicate" })}

@@ -17,9 +17,9 @@ pnpm dev
 The canvas interaction slice supports:
 
 - adding generic nodes from the menu or with `N`;
-- selecting a node, Shift-clicking to toggle it, or dragging a marquee over nodes;
-- dragging selected nodes, with fixed-grid snapping and an `Alt` bypass;
-- panning with the middle mouse button or Space + primary drag;
+- selecting a node or dragging a marquee with Ctrl/Cmd, with Shift adding to a selection;
+- dragging nodes with Ctrl/Cmd, with fixed-grid snapping and an `Alt` bypass;
+- panning with primary drag, the middle mouse button, or Space + primary drag;
 - scrolling to zoom around the pointer;
 - zooming with the floating controls or `+` and `-`;
 - resetting the view with the zoom percentage or `0`;
