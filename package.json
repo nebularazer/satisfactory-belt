@@ -7,6 +7,7 @@
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "dev": "pnpm --filter @satisfactory-belt/web dev",
     "dev:https": "pnpm --filter @satisfactory-belt/web dev:https",
+    "extract:production": "node scripts/extract-production-data.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint --deny-warnings .",
