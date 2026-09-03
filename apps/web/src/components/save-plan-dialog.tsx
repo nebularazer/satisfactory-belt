@@ -6,7 +6,7 @@ import type {
   CanvasDocumentStorage,
   SavedCanvasDocument,
 } from "@/canvas/document-storage";
-import type { CanvasDocument } from "@/canvas/editor";
+import type { CanvasDocument } from "@/canvas/document";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,9 +77,7 @@ export function SavePlanDialog({
   const normalizedName = name.trim();
   const normalizedSearch = normalizedName.toLocaleLowerCase();
   const existing = normalizedSearch
-    ? saves.find(
-        (save) => save.name.toLocaleLowerCase() === normalizedSearch,
-      )
+    ? saves.find((save) => save.name.toLocaleLowerCase() === normalizedSearch)
     : undefined;
   const filteredSaves = normalizedSearch
     ? saves.filter((save) =>

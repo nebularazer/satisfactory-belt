@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CanvasDocument, CanvasNode } from "./editor";
+import type { CanvasDocument, CanvasNode } from "./document";
 import { createCanvasSpatialIndex } from "./spatial-index";
 
 const node = (id: string, x: number, y: number): CanvasNode => ({

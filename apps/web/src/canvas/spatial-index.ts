@@ -1,5 +1,5 @@
-import type { CanvasDocument, CanvasNode, Rectangle } from "./editor";
-import type { Point } from "./viewport";
+import type { CanvasDocument, CanvasNode } from "./document";
+import type { Point, Rectangle } from "./geometry";
 
 const CELL_SIZE = 512;
 
@@ -130,9 +130,11 @@ export function createCanvasSpatialIndex(initialDocument: CanvasDocument) {
       const area = normalized(rectangle);
       const cellCount =
         (Math.floor((area.x + area.width) / CELL_SIZE) -
-          Math.floor(area.x / CELL_SIZE) + 1) *
+          Math.floor(area.x / CELL_SIZE) +
+          1) *
         (Math.floor((area.y + area.height) / CELL_SIZE) -
-          Math.floor(area.y / CELL_SIZE) + 1);
+          Math.floor(area.y / CELL_SIZE) +
+          1);
       const candidateIds = new Set<string>();
 
       if (cellCount > Math.max(buckets.size * 4, 10_000)) {
@@ -145,7 +147,9 @@ export function createCanvasSpatialIndex(initialDocument: CanvasDocument) {
 
       return [...candidateIds]
         .map((id) => entries.get(id)?.node)
-        .filter((node): node is CanvasNode => Boolean(node && intersects(node, area)))
+        .filter((node): node is CanvasNode =>
+          Boolean(node && intersects(node, area)),
+        )
         .sort(
           (left, right) =>
             (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0),

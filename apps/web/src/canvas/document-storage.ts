@@ -1,4 +1,5 @@
-import type { CanvasDocument, CanvasEditor } from "./editor";
+import type { CanvasDocument } from "./document";
+import type { CanvasEditor } from "./editor";
 import { validateCanvasDocument } from "./document-format";
 
 export type SavedCanvasDocument = Readonly<{
@@ -38,9 +39,10 @@ const ACTIVE_SAVE_KEY = "active-save";
 const NAMED_SAVE_PREFIX = "save:";
 const STORE_NAME = "documents";
 
-type StoredNamedDocument = SavedCanvasDocument & Readonly<{
-  kind: "named";
-}>;
+type StoredNamedDocument = SavedCanvasDocument &
+  Readonly<{
+    kind: "named";
+  }>;
 
 function readStoredNamedDocument(value: unknown): SavedCanvasDocument | null {
   if (typeof value !== "object" || value === null) return null;

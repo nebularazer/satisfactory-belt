@@ -1,15 +1,12 @@
-import type {
-  CanvasEditor,
-  CanvasEditorState,
-  CanvasNode,
-  Rectangle,
-} from "./editor";
+import type { CanvasDocument, CanvasNode } from "./document";
+import type { Point, Rectangle } from "./geometry";
 import type { Viewport } from "./viewport";
 
-type CanvasVisibilityState = Pick<
-  CanvasEditorState,
-  "document" | "moveDelta" | "selectedIds"
->;
+type CanvasVisibilityState = Readonly<{
+  document: CanvasDocument;
+  moveDelta: Point | null;
+  selectedIds: readonly string[];
+}>;
 
 type ScreenSize = Readonly<{
   height: number;
@@ -22,7 +19,7 @@ export function visibleCanvasNodes(
   state: CanvasVisibilityState,
   viewport: Viewport,
   screen: ScreenSize,
-  query: CanvasEditor["query"],
+  query: (rectangle: Rectangle) => readonly CanvasNode[],
 ): readonly CanvasNode[] {
   const overscan = VIEWPORT_OVERSCAN_PIXELS / viewport.zoom;
   const viewportBounds: Rectangle = {
@@ -31,9 +28,7 @@ export function visibleCanvasNodes(
     x: -viewport.x / viewport.zoom - overscan,
     y: -viewport.y / viewport.zoom - overscan,
   };
-  const movingIds = state.moveDelta
-    ? new Set(state.selectedIds)
-    : undefined;
+  const movingIds = state.moveDelta ? new Set(state.selectedIds) : undefined;
   const queryBounds = state.moveDelta
     ? {
         height: viewportBounds.height + Math.abs(state.moveDelta.y),
@@ -45,8 +40,8 @@ export function visibleCanvasNodes(
 
   return query(queryBounds).filter((node) => {
     const moving = movingIds?.has(node.id);
-    const x = node.x + (moving ? state.moveDelta?.x ?? 0 : 0);
-    const y = node.y + (moving ? state.moveDelta?.y ?? 0 : 0);
+    const x = node.x + (moving ? (state.moveDelta?.x ?? 0) : 0);
+    const y = node.y + (moving ? (state.moveDelta?.y ?? 0) : 0);
 
     return (
       x < viewportBounds.x + viewportBounds.width &&

@@ -46,17 +46,21 @@ export function PerformanceBar({
       <Separator />
       <Metric
         label="update"
-        title={metrics
-          ? `Editor and scene update: ${updateTime} ms average, ${metrics.update.p95Ms.toFixed(1)} ms p95, ${metrics.update.maximumMs.toFixed(1)} ms maximum`
-          : "Editor and scene update time"}
+        title={
+          metrics
+            ? `Editor and scene update: ${updateTime} ms average, ${metrics.update.p95Ms.toFixed(1)} ms p95, ${metrics.update.maximumMs.toFixed(1)} ms maximum`
+            : "Editor and scene update time"
+        }
         value={updateTime}
       />
       <Separator />
       <Metric
         label="render"
-        title={metrics
-          ? `CPU render submission: ${renderTime} ms average, ${metrics.render.p95Ms.toFixed(1)} ms p95, ${metrics.render.maximumMs.toFixed(1)} ms maximum`
-          : "CPU render submission time"}
+        title={
+          metrics
+            ? `CPU render submission: ${renderTime} ms average, ${metrics.render.p95Ms.toFixed(1)} ms p95, ${metrics.render.maximumMs.toFixed(1)} ms maximum`
+            : "CPU render submission time"
+        }
         value={renderTime}
       />
       <Separator />

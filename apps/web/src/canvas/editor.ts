@@ -1,32 +1,15 @@
+import {
+  EMPTY_CANVAS_DOCUMENT,
+  type CanvasDocument,
+  type CanvasNode,
+} from "./document";
+import type { Point, Rectangle } from "./geometry";
 import { createCanvasSpatialIndex } from "./spatial-index";
-import type { Point } from "./viewport";
 
 export const SNAP_INTERVAL = 32;
 export const NODE_WIDTH = 176;
 export const NODE_HEIGHT = 96;
 export const HISTORY_LIMIT = 100;
-export const CANVAS_DOCUMENT_VERSION = 1;
-
-export type CanvasNode = Readonly<{
-  height: number;
-  id: string;
-  label: string;
-  width: number;
-  x: number;
-  y: number;
-}>;
-
-export type CanvasDocument = Readonly<{
-  nodes: readonly CanvasNode[];
-  version: typeof CANVAS_DOCUMENT_VERSION;
-}>;
-
-export type Rectangle = Readonly<{
-  height: number;
-  width: number;
-  x: number;
-  y: number;
-}>;
 
 export type CanvasEditorState = Readonly<{
   canRedo: boolean;
@@ -104,11 +87,6 @@ type CreateCanvasEditorOptions = {
   snapToGrid?: boolean;
 };
 
-const EMPTY_DOCUMENT: CanvasDocument = {
-  nodes: [],
-  version: CANVAS_DOCUMENT_VERSION,
-};
-
 function snap(value: number) {
   return Math.round(value / SNAP_INTERVAL) * SNAP_INTERVAL;
 }
@@ -154,7 +132,7 @@ export function createCanvasEditor(
   let state: CanvasEditorState = {
     canRedo: false,
     canUndo: false,
-    document: options.document ?? EMPTY_DOCUMENT,
+    document: options.document ?? EMPTY_CANVAS_DOCUMENT,
     moveDelta: null,
     selectedIds: [],
     snapToGrid: options.snapToGrid ?? true,
@@ -195,10 +173,7 @@ export function createCanvasEditor(
       entry.before.map(({ node }) => node),
       entry.after.map(({ node }) => node),
     );
-    publish(
-      { document, moveDelta: null, selectedIds },
-      { kind: "document" },
-    );
+    publish({ document, moveDelta: null, selectedIds }, { kind: "document" });
   };
 
   const duplicateNodes = (nodes: readonly CanvasNode[]) => {
@@ -235,9 +210,13 @@ export function createCanvasEditor(
         clipboard = [];
         moveTransaction = undefined;
         nodeSequence = 0;
-        spatialIndex.replace(EMPTY_DOCUMENT);
+        spatialIndex.replace(EMPTY_CANVAS_DOCUMENT);
         publish(
-          { document: EMPTY_DOCUMENT, moveDelta: null, selectedIds: [] },
+          {
+            document: EMPTY_CANVAS_DOCUMENT,
+            moveDelta: null,
+            selectedIds: [],
+          },
           { kind: "document" },
         );
         return;
@@ -277,6 +256,7 @@ export function createCanvasEditor(
         return;
 
       case "selection.node": {
+        if (!spatialIndex.get(action.id)) return;
         const alreadySelected = state.selectedIds.includes(action.id);
         const selectedIds = action.additive
           ? alreadySelected
@@ -297,10 +277,11 @@ export function createCanvasEditor(
       }
 
       case "selection.marquee": {
+        const baseIds = action.baseIds.filter((id) => spatialIndex.get(id));
         const matchingIds = spatialIndex
           .query(action.rectangle)
           .map((node) => node.id);
-        const selectedIds = [...new Set([...action.baseIds, ...matchingIds])];
+        const selectedIds = [...new Set([...baseIds, ...matchingIds])];
         publish(
           { selectedIds },
           {
@@ -318,7 +299,9 @@ export function createCanvasEditor(
         commit(
           {
             ...state.document,
-            nodes: state.document.nodes.filter((node) => !selected.has(node.id)),
+            nodes: state.document.nodes.filter(
+              (node) => !selected.has(node.id),
+            ),
           },
           [],
           {
@@ -364,7 +347,10 @@ export function createCanvasEditor(
         const startIndex = state.document.nodes.length;
         const selectedIds = duplicates.map((node) => node.id);
         commit(
-          { ...state.document, nodes: [...state.document.nodes, ...duplicates] },
+          {
+            ...state.document,
+            nodes: [...state.document.nodes, ...duplicates],
+          },
           selectedIds,
           {
             after: duplicates.map((node, index) => ({
@@ -424,7 +410,11 @@ export function createCanvasEditor(
           if (state.moveDelta) {
             publish(
               { moveDelta: null },
-              { delta: transaction.delta, kind: "move", nodeIds: state.selectedIds },
+              {
+                delta: transaction.delta,
+                kind: "move",
+                nodeIds: state.selectedIds,
+              },
             );
           }
           return;
@@ -461,7 +451,10 @@ export function createCanvasEditor(
 
       case "selection.nudge": {
         const before = indexedSelection();
-        if (before.length === 0 || (action.delta.x === 0 && action.delta.y === 0)) {
+        if (
+          before.length === 0 ||
+          (action.delta.x === 0 && action.delta.y === 0)
+        ) {
           return;
         }
         const after = before.map(({ index, node }) => ({
@@ -527,10 +520,7 @@ export function createCanvasEditor(
 
       case "settings.snap":
         if (state.snapToGrid !== action.enabled) {
-          publish(
-            { snapToGrid: action.enabled },
-            { kind: "settings" },
-          );
+          publish({ snapToGrid: action.enabled }, { kind: "settings" });
         }
         return;
     }
@@ -539,9 +529,10 @@ export function createCanvasEditor(
   return {
     dispatch,
     getBounds: (scope) => {
-      const nodes = scope === "all"
-        ? state.document.nodes
-        : indexedSelection().map(({ node }) => node);
+      const nodes =
+        scope === "all"
+          ? state.document.nodes
+          : indexedSelection().map(({ node }) => node);
       const bounds = boundsFor(nodes);
       return bounds && scope === "selection" && state.moveDelta
         ? {
@@ -552,8 +543,8 @@ export function createCanvasEditor(
         : bounds;
     },
     getState: () => state,
-    hitTest: spatialIndex.hitTest,
-    query: spatialIndex.query,
+    hitTest: (point) => spatialIndex.hitTest(point),
+    query: (rectangle) => spatialIndex.query(rectangle),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

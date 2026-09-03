@@ -1,11 +1,18 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   CanvasDocumentStorage,
   SavedCanvasDocument,
 } from "@/canvas/document-storage";
-import type { CanvasDocument } from "@/canvas/editor";
+import type { CanvasDocument } from "@/canvas/document";
 
 import { SavePlanDialog } from "./save-plan-dialog";
 

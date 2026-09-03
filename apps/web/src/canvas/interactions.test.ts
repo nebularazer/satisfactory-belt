@@ -5,12 +5,8 @@ import {
   attachCanvasInteractions,
   type CanvasInteractionHost,
 } from "./interactions";
-import {
-  panViewport,
-  zoomViewportAt,
-  type Point,
-  type Viewport,
-} from "./viewport";
+import { panViewport, zoomViewportAt, type Viewport } from "./viewport";
+import type { Point } from "./geometry";
 
 type PointerOptions = MouseEventInit & {
   pointerId?: number;
@@ -23,10 +19,12 @@ afterEach(() => {
   for (const destroy of destroyers.splice(0)) destroy();
 });
 
-function createHarness(options: {
-  snapToGrid?: boolean;
-  viewport?: Viewport;
-} = {}) {
+function createHarness(
+  options: {
+    snapToGrid?: boolean;
+    viewport?: Viewport;
+  } = {},
+) {
   let id = 0;
   let viewport = options.viewport ?? { x: 0, y: 0, zoom: 1 };
   let capturedPointer: number | undefined;
@@ -36,7 +34,8 @@ function createHarness(options: {
   });
   const canvas = document.createElement("canvas");
   const fits: Array<"all" | "selection"> = [];
-  const marquees: Array<Parameters<CanvasInteractionHost["setMarquee"]>[0]> = [];
+  const marquees: Array<Parameters<CanvasInteractionHost["setMarquee"]>[0]> =
+    [];
   const nodeRequests: Point[] = [];
   const zooms: Array<{ anchor: Point; factor: number }> = [];
 
@@ -119,12 +118,14 @@ function createHarness(options: {
   };
 
   const key = (value: string, init: KeyboardEventInit = {}) => {
-    window.dispatchEvent(new KeyboardEvent("keydown", {
-      bubbles: true,
-      cancelable: true,
-      key: value,
-      ...init,
-    }));
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: value,
+        ...init,
+      }),
+    );
   };
 
   return {
@@ -264,13 +265,15 @@ describe("canvas interactions", () => {
 
   it("fits all nodes when empty space is double-clicked", () => {
     const { canvas, fits } = createHarness();
-    canvas.dispatchEvent(new MouseEvent("dblclick", {
-      bubbles: true,
-      button: 0,
-      cancelable: true,
-      clientX: 500,
-      clientY: 500,
-    }));
+    canvas.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 500,
+        clientY: 500,
+      }),
+    );
 
     expect(fits).toEqual(["all"]);
   });
@@ -296,13 +299,15 @@ describe("canvas interactions", () => {
 
   it("zooms around the wheel pointer and maps view shortcuts", () => {
     const { canvas, editor, fits, key, viewport, zooms } = createHarness();
-    canvas.dispatchEvent(new WheelEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
-      clientX: 250,
-      clientY: 300,
-      deltaY: -100,
-    }));
+    canvas.dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 250,
+        clientY: 300,
+        deltaY: -100,
+      }),
+    );
 
     expect(zooms[0]).toMatchObject({ anchor: { x: 250, y: 300 } });
     expect(zooms[0]?.factor).toBeGreaterThan(1);

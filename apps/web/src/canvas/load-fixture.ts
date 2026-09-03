@@ -1,15 +1,13 @@
-import {
-  CANVAS_DOCUMENT_VERSION,
-  NODE_HEIGHT,
-  NODE_WIDTH,
-  SNAP_INTERVAL,
-  type CanvasDocument,
-} from "./editor";
+import { CANVAS_DOCUMENT_VERSION, type CanvasDocument } from "./document";
+import { NODE_HEIGHT, NODE_WIDTH, SNAP_INTERVAL } from "./editor";
 
 export const LOAD_FIXTURE_LIMIT = 10_000;
 
 export function createCanvasLoadFixture(nodeCount: number): CanvasDocument {
-  const count = Math.max(0, Math.min(LOAD_FIXTURE_LIMIT, Math.floor(nodeCount)));
+  const count = Math.max(
+    0,
+    Math.min(LOAD_FIXTURE_LIMIT, Math.floor(nodeCount)),
+  );
   const columns = Math.max(1, Math.ceil(Math.sqrt(count)));
   const rows = Math.ceil(count / columns);
   const horizontalStep = NODE_WIDTH + SNAP_INTERVAL;

@@ -14,6 +14,13 @@ pnpm install
 pnpm dev
 ```
 
+Install Chromium once and run the real-browser canvas smoke test with:
+
+```bash
+pnpm --filter @satisfactory-belt/web exec playwright install chromium
+pnpm test:e2e
+```
+
 The canvas interaction slice supports:
 
 - opening a searchable node picker from the menu or with `N`;
@@ -38,8 +45,9 @@ The canvas interaction slice supports:
 - importing and exporting versioned JSON plan files; and
 - selecting light, system, or dark appearance from the canvas menu.
 
-The grid uses a fixed 32-unit interval. Snap can be switched off in the menu without
-changing the visual scale of the canvas.
+The grid uses a fixed 32-unit interval and its dots are shown by default. Snap and
+the grid dots can be switched off independently in the menu without changing the
+visual scale of the canvas.
 
 Rendering is scheduled only when canvas state changes. Node drags update the selected
 Pixi objects transiently and commit the document once when the drag ends, while the
@@ -73,7 +81,7 @@ For a repeatable worst-case browser benchmark, open `?nodes=10000`, then run thi
 the browser console:
 
 ```js
-window.satisfactoryBeltBenchmark()
+window.satisfactoryBeltBenchmark();
 ```
 
 It returns synchronous pan, zoom, marquee, and transient drag timings in milliseconds

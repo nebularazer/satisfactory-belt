@@ -22,8 +22,8 @@ function summarize(samples: readonly number[]): TimingSummary {
   const sorted = [...samples].sort((left, right) => left - right);
   const p95Index = Math.max(0, Math.ceil(sorted.length * 0.95) - 1);
   return {
-    averageMs: samples.reduce((total, sample) => total + sample, 0) /
-      samples.length,
+    averageMs:
+      samples.reduce((total, sample) => total + sample, 0) / samples.length,
     maximumMs: sorted.at(-1) ?? 0,
     p95Ms: sorted[p95Index] ?? 0,
   };
@@ -40,15 +40,14 @@ export function createPerformanceSampler(
   let visibleNodes = 0;
 
   const emit = () => {
-    const averageFrameInterval = frameIntervals.length > 0
-      ? frameIntervals.reduce((total, interval) => total + interval, 0) /
-        frameIntervals.length
-      : undefined;
+    const averageFrameInterval =
+      frameIntervals.length > 0
+        ? frameIntervals.reduce((total, interval) => total + interval, 0) /
+          frameIntervals.length
+        : undefined;
 
     report({
-      fps: averageFrameInterval
-        ? 1000 / averageFrameInterval
-        : 0,
+      fps: averageFrameInterval ? 1000 / averageFrameInterval : 0,
       render: summarize(renderSamples),
       update: summarize(updateSamples),
       visibleNodes,
@@ -60,9 +59,8 @@ export function createPerformanceSampler(
 
   return {
     recordRender(now: number, renderTimeMs: number, visibleNodeCount = 0) {
-      const frameInterval = lastRenderAt === undefined
-        ? undefined
-        : now - lastRenderAt;
+      const frameInterval =
+        lastRenderAt === undefined ? undefined : now - lastRenderAt;
       const startedActiveWindow =
         frameInterval === undefined || frameInterval > ACTIVE_FRAME_GAP_MS;
 

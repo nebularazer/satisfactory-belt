@@ -21,10 +21,9 @@ import {
   type CanvasDocumentStorage,
   type SavedCanvasDocument,
 } from "@/canvas/document-storage";
-import {
-  createCanvasEditor,
-  type CanvasDocument,
-} from "@/canvas/editor";
+import { createCanvasEditor } from "@/canvas/editor";
+import type { CanvasDocument } from "@/canvas/document";
+import type { Point } from "@/canvas/geometry";
 import {
   createCanvasLoadFixture,
   loadFixtureNodeCount,
@@ -39,7 +38,7 @@ import {
   readBooleanPreference,
   writeBooleanPreference,
 } from "@/canvas/preferences";
-import type { Point, Viewport } from "@/canvas/viewport";
+import type { Viewport } from "@/canvas/viewport";
 import { CanvasContextMenu } from "@/components/canvas-context-menu";
 import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
@@ -87,10 +86,7 @@ function CanvasWorkspace({
     () =>
       createCanvasEditor({
         document: initialDocument,
-        snapToGrid: readBooleanPreference(
-          CANVAS_PREFERENCES.snapToGrid,
-          true,
-        ),
+        snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
       }),
     [initialDocument],
   );
@@ -137,13 +133,17 @@ function CanvasWorkspace({
   const [showPerformance, setShowPerformance] = useState(() =>
     readBooleanPreference(CANVAS_PREFERENCES.performance, false),
   );
+  const [showGridDots, setShowGridDots] = useState(() =>
+    readBooleanPreference(CANVAS_PREFERENCES.showGridDots, true),
+  );
   const [zoom, setZoom] = useState(1);
   const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
-  const [activeSave, setActiveSave] =
-    useState<SavedCanvasDocument | null>(initialActiveSave);
+  const [activeSave, setActiveSave] = useState<SavedCanvasDocument | null>(
+    initialActiveSave,
+  );
   const activeSaveRef = useRef<SavedCanvasDocument | null>(initialActiveSave);
   const [contextTarget, setContextTarget] = useState<{
     at: Point;
@@ -196,6 +196,10 @@ function CanvasWorkspace({
     setPerformanceMetrics(null);
     writeBooleanPreference(CANVAS_PREFERENCES.performance, enabled);
   };
+  const handleShowGridDotsChange = (enabled: boolean) => {
+    setShowGridDots(enabled);
+    writeBooleanPreference(CANVAS_PREFERENCES.showGridDots, enabled);
+  };
   const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
 
   const openSavePlan = useCallback(() => {
@@ -230,7 +234,10 @@ function CanvasWorkspace({
 
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== "s"
+      ) {
         return;
       }
       event.preventDefault();
@@ -280,7 +287,9 @@ function CanvasWorkspace({
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "The plan could not be imported.",
+        error instanceof Error
+          ? error.message
+          : "The plan could not be imported.",
       );
     }
   };
@@ -345,6 +354,7 @@ function CanvasWorkspace({
           onViewportChange={handleViewportChange}
           performanceMetricsEnabled={showPerformance}
           ref={canvasRef}
+          showGridDots={showGridDots}
         />
       </CanvasContextMenu>
 
@@ -373,11 +383,13 @@ function CanvasWorkspace({
             onSaveAs={openSavePlan}
             onResetCanvas={() => setResetCanvasOpen(true)}
             onResetView={() => canvasRef.current?.resetView()}
+            onShowGridDotsChange={handleShowGridDotsChange}
             onShowPerformanceChange={handleShowPerformanceChange}
             onSnapToGridChange={(enabled) => {
               editor.dispatch({ type: "settings.snap", enabled });
               writeBooleanPreference(CANVAS_PREFERENCES.snapToGrid, enabled);
             }}
+            showGridDots={showGridDots}
             showPerformance={showPerformance}
             snapToGrid={editorState.snapToGrid}
           />
@@ -461,8 +473,8 @@ function CanvasWorkspace({
           <AlertDialogHeader>
             <AlertDialogTitle>Reset the canvas?</AlertDialogTitle>
             <AlertDialogDescription>
-              This clears every node and the undo history. Your named saved plans
-              are not deleted.
+              This clears every node and the undo history. Your named saved
+              plans are not deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -480,15 +492,10 @@ function CanvasWorkspace({
 export function App() {
   const fixtureNodeCount = useMemo(
     () =>
-      import.meta.env.DEV
-        ? loadFixtureNodeCount(window.location.search)
-        : 0,
+      import.meta.env.DEV ? loadFixtureNodeCount(window.location.search) : 0,
     [],
   );
-  const storage = useMemo(
-    () => createIndexedDbDocumentStorage(),
-    [],
-  );
+  const storage = useMemo(() => createIndexedDbDocumentStorage(), []);
   const [bootstrap, setBootstrap] = useState<BootstrapState>(() =>
     fixtureNodeCount > 0
       ? {

@@ -6,21 +6,16 @@ import {
   Texture,
   TilingSprite,
 } from "pixi.js";
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-} from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 import {
   SNAP_INTERVAL,
   type CanvasEditor,
   type CanvasEditorChange,
   type CanvasEditorState,
-  type CanvasNode,
-  type Rectangle,
 } from "./editor";
+import type { CanvasNode } from "./document";
+import type { Point, Rectangle } from "./geometry";
 import { attachCanvasInteractions } from "./interactions";
 import {
   createPerformanceSampler,
@@ -34,11 +29,11 @@ import {
   screenToWorld,
   ZOOM_STEP,
   zoomViewportAt,
-  type Point,
   type Viewport,
 } from "./viewport";
 
 const MAX_POOLED_NODE_DISPLAYS = 256;
+const GRID_DOT_RADIUS = 1;
 
 export type InfiniteCanvasHandle = {
   fitContent: () => void;
@@ -58,6 +53,7 @@ type InfiniteCanvasProps = {
   onRequestAddNode: (at: Point) => void;
   onViewportChange: (viewport: Viewport) => void;
   performanceMetricsEnabled: boolean;
+  showGridDots: boolean;
 };
 
 type NodeDisplay = {
@@ -94,7 +90,13 @@ function createGridTexture(spacing: number) {
   if (context) {
     context.fillStyle = "white";
     context.beginPath();
-    context.arc(size / 2, size / 2, 1.25 / tileScale, 0, Math.PI * 2);
+    context.arc(
+      size / 2,
+      size / 2,
+      GRID_DOT_RADIUS / tileScale,
+      0,
+      Math.PI * 2,
+    );
     context.fill();
   }
 
@@ -268,9 +270,8 @@ function syncEditorChange(
   if (change.kind === "document" || change.kind === "settings") return false;
 
   const dark = document.documentElement.classList.contains("dark");
-  const selectedIds = change.kind === "selection"
-    ? new Set(state.selectedIds)
-    : undefined;
+  const selectedIds =
+    change.kind === "selection" ? new Set(state.selectedIds) : undefined;
 
   for (const id of change.nodeIds) {
     const display = displays.get(id);
@@ -311,345 +312,355 @@ function drawMarquee(graphics: Graphics, rectangle?: Rectangle) {
     .stroke({ color: 0x6366f1, alpha: 0.8, pixelLine: true, width: 1 });
 }
 
-export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
-  function InfiniteCanvas(
-    {
-      editor,
-      onPerformanceMetricsChange,
-      onRequestAddNode,
-      onViewportChange,
-      performanceMetricsEnabled,
-    },
-    ref,
-  ) {
-    const hostRef = useRef<HTMLDivElement>(null);
-    const appRef = useRef<Application | null>(null);
-    const gridRef = useRef<GridDisplay | null>(null);
-    const sceneRef = useRef<Container | null>(null);
-    const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
-    const nodeDisplayPoolRef = useRef<NodeDisplay[]>([]);
-    const worldRef = useRef<Container | null>(null);
-    const marqueeRef = useRef<Graphics | null>(null);
-    const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
-    const performanceSamplerRef = useRef<ReturnType<
-      typeof createPerformanceSampler
-    > | null>(null);
-    const performanceMetricsEnabledRef = useRef(performanceMetricsEnabled);
-    const renderSchedulerRef = useRef<ReturnType<
-      typeof createRenderScheduler
-    > | null>(null);
-    const textResolutionRef = useRef(1);
-    const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
+export const InfiniteCanvas = forwardRef<
+  InfiniteCanvasHandle,
+  InfiniteCanvasProps
+>(function InfiniteCanvas(
+  {
+    editor,
+    onPerformanceMetricsChange,
+    onRequestAddNode,
+    onViewportChange,
+    performanceMetricsEnabled,
+    showGridDots,
+  },
+  ref,
+) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const appRef = useRef<Application | null>(null);
+  const gridRef = useRef<GridDisplay | null>(null);
+  const sceneRef = useRef<Container | null>(null);
+  const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
+  const nodeDisplayPoolRef = useRef<NodeDisplay[]>([]);
+  const worldRef = useRef<Container | null>(null);
+  const marqueeRef = useRef<Graphics | null>(null);
+  const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
+  const performanceSamplerRef = useRef<ReturnType<
+    typeof createPerformanceSampler
+  > | null>(null);
+  const performanceMetricsEnabledRef = useRef(performanceMetricsEnabled);
+  const renderSchedulerRef = useRef<ReturnType<
+    typeof createRenderScheduler
+  > | null>(null);
+  const textResolutionRef = useRef(1);
+  const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
+  const showGridDotsRef = useRef(showGridDots);
 
-    onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
-    performanceMetricsEnabledRef.current = performanceMetricsEnabled;
+  onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
+  performanceMetricsEnabledRef.current = performanceMetricsEnabled;
+  showGridDotsRef.current = showGridDots;
 
-    const syncVisibleScene = () => {
-      const app = appRef.current;
-      const scene = sceneRef.current;
-      if (!app || !scene) return;
+  const syncVisibleScene = () => {
+    const app = appRef.current;
+    const scene = sceneRef.current;
+    if (!app || !scene) return;
 
-      const state = editor.getState();
-      syncDocument(
-        scene,
-        state,
-        nodeDisplaysRef.current,
-        nodeDisplayPoolRef.current,
-        visibleCanvasNodes(state, viewportRef.current, app.screen, editor.query),
-        textResolutionRef.current,
-        viewportRef.current.zoom,
-      );
-    };
+    const state = editor.getState();
+    syncDocument(
+      scene,
+      state,
+      nodeDisplaysRef.current,
+      nodeDisplayPoolRef.current,
+      visibleCanvasNodes(state, viewportRef.current, app.screen, editor.query),
+      textResolutionRef.current,
+      viewportRef.current.zoom,
+    );
+  };
 
-    const renderViewport = (viewport: Viewport) => {
-      const previousZoom = viewportRef.current.zoom;
-      viewportRef.current = viewport;
+  const renderViewport = (viewport: Viewport) => {
+    const previousZoom = viewportRef.current.zoom;
+    viewportRef.current = viewport;
 
-      const app = appRef.current;
-      const grid = gridRef.current;
-      const world = worldRef.current;
+    const app = appRef.current;
+    const grid = gridRef.current;
+    const world = worldRef.current;
 
-      if (app && grid && world) {
-        const updateStartedAt = performance.now();
-        world.position.set(viewport.x, viewport.y);
-        world.scale.set(viewport.zoom);
-        updateGrid(grid, viewport, app.screen.width, app.screen.height);
-        if (previousZoom !== viewport.zoom) {
-          textResolutionRef.current = textResolutionForZoom(
-            viewport.zoom,
-            app.renderer.resolution,
-          );
-        }
-        syncVisibleScene();
-        if (performanceMetricsEnabledRef.current) {
-          performanceSamplerRef.current?.recordUpdate(
-            performance.now() - updateStartedAt,
-          );
-        }
-        renderSchedulerRef.current?.request();
+    if (app && grid && world) {
+      const updateStartedAt = performance.now();
+      world.position.set(viewport.x, viewport.y);
+      world.scale.set(viewport.zoom);
+      updateGrid(grid, viewport, app.screen.width, app.screen.height);
+      if (previousZoom !== viewport.zoom) {
+        textResolutionRef.current = textResolutionForZoom(
+          viewport.zoom,
+          app.renderer.resolution,
+        );
       }
+      syncVisibleScene();
+      if (performanceMetricsEnabledRef.current) {
+        performanceSamplerRef.current?.recordUpdate(
+          performance.now() - updateStartedAt,
+        );
+      }
+      renderSchedulerRef.current?.request();
+    }
 
-      if (previousZoom !== viewport.zoom) onViewportChange(viewport);
-    };
+    if (previousZoom !== viewport.zoom) onViewportChange(viewport);
+  };
 
-    const viewportCenter = (): Point => {
-      const app = appRef.current;
-      return app
-        ? { x: app.screen.width / 2, y: app.screen.height / 2 }
-        : { x: 0, y: 0 };
-    };
+  const viewportCenter = (): Point => {
+    const app = appRef.current;
+    return app
+      ? { x: app.screen.width / 2, y: app.screen.height / 2 }
+      : { x: 0, y: 0 };
+  };
 
-    const zoomBy = (factor: number) => {
-      const current = viewportRef.current;
-      renderViewport(zoomViewportAt(current, current.zoom * factor, viewportCenter()));
-    };
+  const zoomBy = (factor: number) => {
+    const current = viewportRef.current;
+    renderViewport(
+      zoomViewportAt(current, current.zoom * factor, viewportCenter()),
+    );
+  };
 
-    const resetView = () => {
-      const center = viewportCenter();
-      renderViewport({ x: center.x, y: center.y, zoom: 1 });
-    };
+  const resetView = () => {
+    const center = viewportCenter();
+    renderViewport({ x: center.x, y: center.y, zoom: 1 });
+  };
 
-    const getViewportCenter = () =>
-      screenToWorld(viewportCenter(), viewportRef.current);
+  const getViewportCenter = () =>
+    screenToWorld(viewportCenter(), viewportRef.current);
 
-    const fit = (scope: "all" | "selection") => {
-      const app = appRef.current;
-      const bounds = editor.getBounds(scope);
-      if (!app || !bounds) return;
-      renderViewport(
-        fitRectangleInViewport(
-          bounds,
-          app.screen,
-          scope === "selection" ? 2 : 1,
-        ),
-      );
-    };
+  const fit = (scope: "all" | "selection") => {
+    const app = appRef.current;
+    const bounds = editor.getBounds(scope);
+    if (!app || !bounds) return;
+    renderViewport(
+      fitRectangleInViewport(bounds, app.screen, scope === "selection" ? 2 : 1),
+    );
+  };
 
-    useImperativeHandle(ref, () => ({
-      fitContent: () => fit("all"),
-      fitSelection: () => fit("selection"),
-      flushRender: () => {
-        renderSchedulerRef.current?.cancel();
-        appRef.current?.render();
-      },
-      getViewportCenter,
-      panBy: (delta) => {
-        renderViewport(panViewport(viewportRef.current, delta));
-      },
-      resetView,
-      screenToWorld: (point) => screenToWorld(point, viewportRef.current),
-      zoomIn: () => zoomBy(ZOOM_STEP),
-      zoomOut: () => zoomBy(1 / ZOOM_STEP),
-    }));
+  useImperativeHandle(ref, () => ({
+    fitContent: () => fit("all"),
+    fitSelection: () => fit("selection"),
+    flushRender: () => {
+      renderSchedulerRef.current?.cancel();
+      appRef.current?.render();
+    },
+    getViewportCenter,
+    panBy: (delta) => {
+      renderViewport(panViewport(viewportRef.current, delta));
+    },
+    resetView,
+    screenToWorld: (point) => screenToWorld(point, viewportRef.current),
+    zoomIn: () => zoomBy(ZOOM_STEP),
+    zoomOut: () => zoomBy(1 / ZOOM_STEP),
+  }));
 
-    useEffect(() => {
-      performanceSamplerRef.current?.reset();
-      if (performanceMetricsEnabled) renderSchedulerRef.current?.request();
-    }, [performanceMetricsEnabled]);
+  useEffect(() => {
+    performanceSamplerRef.current?.reset();
+    if (performanceMetricsEnabled) renderSchedulerRef.current?.request();
+  }, [performanceMetricsEnabled]);
 
-    useEffect(() => {
-      const host = hostRef.current;
-      if (!host) return;
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    grid.sprite.visible = showGridDots;
+    renderSchedulerRef.current?.request();
+  }, [showGridDots]);
 
-      const app = new Application();
-      let active = true;
-      let resizeObserver: ResizeObserver | undefined;
-      let themeObserver: MutationObserver | undefined;
-      let unsubscribeEditor: (() => void) | undefined;
-      let removeListeners: (() => void) | undefined;
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
 
-      void app
-        .init({
-          antialias: true,
-          autoStart: false,
-          autoDensity: true,
-          backgroundAlpha: 0,
-          height: Math.max(host.clientHeight, 1),
-          preference: "webgl",
-          resolution: Math.min(window.devicePixelRatio, 2),
-          width: Math.max(host.clientWidth, 1),
-        })
-        .then(() => {
-          if (!active) {
-            app.destroy(true);
-            return;
+    const app = new Application();
+    let active = true;
+    let resizeObserver: ResizeObserver | undefined;
+    let themeObserver: MutationObserver | undefined;
+    let unsubscribeEditor: (() => void) | undefined;
+    let removeListeners: (() => void) | undefined;
+
+    void app
+      .init({
+        antialias: true,
+        autoStart: false,
+        autoDensity: true,
+        backgroundAlpha: 0,
+        height: Math.max(host.clientHeight, 1),
+        preference: "webgl",
+        resolution: Math.min(window.devicePixelRatio, 2),
+        width: Math.max(host.clientWidth, 1),
+      })
+      .then(() => {
+        if (!active) {
+          app.destroy(true);
+          return;
+        }
+
+        appRef.current = app;
+        app.canvas.className = "infinite-canvas__surface";
+        app.canvas.setAttribute("aria-label", "Infinite canvas");
+        app.canvas.setAttribute("role", "application");
+        app.canvas.dataset.cursor = "grab";
+        app.canvas.tabIndex = 0;
+        host.appendChild(app.canvas);
+
+        const performanceSampler = createPerformanceSampler((metrics) => {
+          onPerformanceMetricsChangeRef.current(metrics);
+        });
+        const renderScheduler = createRenderScheduler((timestamp) => {
+          if (!active) return;
+          const renderStartedAt = performance.now();
+          app.render();
+          if (performanceMetricsEnabledRef.current) {
+            performanceSampler.recordRender(
+              timestamp,
+              performance.now() - renderStartedAt,
+              nodeDisplaysRef.current.size,
+            );
           }
+        });
+        performanceSamplerRef.current = performanceSampler;
+        renderSchedulerRef.current = renderScheduler;
 
-          appRef.current = app;
-          app.canvas.className = "infinite-canvas__surface";
-          app.canvas.setAttribute("aria-label", "Infinite canvas");
-          app.canvas.setAttribute("role", "application");
-          app.canvas.dataset.cursor = "grab";
-          app.canvas.tabIndex = 0;
-          host.appendChild(app.canvas);
+        const initialViewport = {
+          x: app.screen.width / 2,
+          y: app.screen.height / 2,
+          zoom: 1,
+        };
+        const grid = createGridDisplay(
+          app.screen.width,
+          app.screen.height,
+          initialViewport.zoom,
+        );
+        grid.sprite.visible = showGridDotsRef.current;
+        const world = new Container();
+        const scene = new Container();
+        const marquee = new Graphics();
+        app.stage.eventMode = "none";
+        scene.eventMode = "none";
+        world.addChild(scene);
+        app.stage.addChild(grid.sprite, world, marquee);
+        gridRef.current = grid;
+        worldRef.current = world;
+        sceneRef.current = scene;
+        marqueeRef.current = marquee;
 
-          const performanceSampler = createPerformanceSampler((metrics) => {
-            onPerformanceMetricsChangeRef.current(metrics);
-          });
-          const renderScheduler = createRenderScheduler((timestamp) => {
-            if (!active) return;
-            const renderStartedAt = performance.now();
-            app.render();
-            if (performanceMetricsEnabledRef.current) {
-              performanceSampler.recordRender(
-                timestamp,
-                performance.now() - renderStartedAt,
-                nodeDisplaysRef.current.size,
-              );
-            }
-          });
-          performanceSamplerRef.current = performanceSampler;
-          renderSchedulerRef.current = renderScheduler;
+        textResolutionRef.current = textResolutionForZoom(
+          initialViewport.zoom,
+          app.renderer.resolution,
+        );
+        renderViewport(initialViewport);
+        let canvasSize = {
+          height: app.screen.height,
+          width: app.screen.width,
+        };
 
-          const initialViewport = {
-            x: app.screen.width / 2,
-            y: app.screen.height / 2,
-            zoom: 1,
-          };
-          const grid = createGridDisplay(
-            app.screen.width,
-            app.screen.height,
-            initialViewport.zoom,
-          );
-          const world = new Container();
-          const scene = new Container();
-          const marquee = new Graphics();
-          app.stage.eventMode = "none";
-          scene.eventMode = "none";
-          world.addChild(scene);
-          app.stage.addChild(grid.sprite, world, marquee);
-          gridRef.current = grid;
-          worldRef.current = world;
-          sceneRef.current = scene;
-          marqueeRef.current = marquee;
+        const canvas = app.canvas;
 
-          textResolutionRef.current = textResolutionForZoom(
-            initialViewport.zoom,
-            app.renderer.resolution,
-          );
-          renderViewport(initialViewport);
-          let canvasSize = {
-            height: app.screen.height,
-            width: app.screen.width,
-          };
-
-          const canvas = app.canvas;
-
-          removeListeners = attachCanvasInteractions(canvas, editor, {
-            fit,
-            getViewport: () => viewportRef.current,
-            getViewportCenter: viewportCenter,
-            panBy: (delta) => {
-              renderViewport(panViewport(viewportRef.current, delta));
-            },
-            requestNode: onRequestAddNode,
-            resetView,
-            setMarquee: (rectangle) => {
-              drawMarquee(marquee, rectangle);
-              renderScheduler.request();
-            },
-            zoomAt: (factor, anchor) => {
-              const current = viewportRef.current;
-              renderViewport(
-                zoomViewportAt(current, current.zoom * factor, anchor),
-              );
-            },
-          });
-
-          resizeObserver = new ResizeObserver(([entry]) => {
-            if (!entry) return;
-
-            const nextSize = {
-              height: Math.max(entry.contentRect.height, 1),
-              width: Math.max(entry.contentRect.width, 1),
-            };
-
-            app.renderer.resize(nextSize.width, nextSize.height);
+        removeListeners = attachCanvasInteractions(canvas, editor, {
+          fit,
+          getViewport: () => viewportRef.current,
+          getViewportCenter: viewportCenter,
+          panBy: (delta) => {
+            renderViewport(panViewport(viewportRef.current, delta));
+          },
+          requestNode: onRequestAddNode,
+          resetView,
+          setMarquee: (rectangle) => {
+            drawMarquee(marquee, rectangle);
+            renderScheduler.request();
+          },
+          zoomAt: (factor, anchor) => {
+            const current = viewportRef.current;
             renderViewport(
-              panViewport(viewportRef.current, {
-                x: (nextSize.width - canvasSize.width) / 2,
-                y: (nextSize.height - canvasSize.height) / 2,
-              }),
+              zoomViewportAt(current, current.zoom * factor, anchor),
             );
-            canvasSize = nextSize;
-          });
-          resizeObserver.observe(host);
-
-          themeObserver = new MutationObserver(() => {
-            const updateStartedAt = performance.now();
-            updateGrid(
-              grid,
-              viewportRef.current,
-              app.screen.width,
-              app.screen.height,
-            );
-            syncVisibleScene();
-            if (performanceMetricsEnabledRef.current) {
-              performanceSampler.recordUpdate(
-                performance.now() - updateStartedAt,
-              );
-            }
-            renderScheduler.request();
-          });
-          themeObserver.observe(document.documentElement, {
-            attributeFilter: ["class"],
-            attributes: true,
-          });
-
-          unsubscribeEditor = editor.subscribe((change) => {
-            const updateStartedAt = performance.now();
-            let needsRender: boolean;
-            if (change.kind === "document") {
-              syncVisibleScene();
-              needsRender = true;
-            } else {
-              needsRender = syncEditorChange(
-                editor.getState(),
-                nodeDisplaysRef.current,
-                change,
-                textResolutionRef.current,
-                viewportRef.current.zoom,
-              );
-            }
-            if (!needsRender) return;
-
-            if (performanceMetricsEnabledRef.current) {
-              performanceSampler.recordUpdate(
-                change.updateTimeMs + performance.now() - updateStartedAt,
-              );
-            }
-            renderScheduler.request();
-          });
+          },
         });
 
-      return () => {
-        active = false;
-        removeListeners?.();
-        unsubscribeEditor?.();
-        resizeObserver?.disconnect();
-        themeObserver?.disconnect();
-        renderSchedulerRef.current?.cancel();
-        gridRef.current?.texture.destroy(true);
-        gridRef.current = null;
-        performanceSamplerRef.current = null;
-        renderSchedulerRef.current = null;
-        sceneRef.current = null;
-        worldRef.current = null;
-        marqueeRef.current = null;
-        nodeDisplaysRef.current.clear();
-        for (const display of nodeDisplayPoolRef.current) {
-          display.container.destroy({ children: true });
-        }
-        nodeDisplayPoolRef.current = [];
-        textResolutionRef.current = 1;
+        resizeObserver = new ResizeObserver(([entry]) => {
+          if (!entry) return;
 
-        if (appRef.current === app) {
-          appRef.current = null;
-          app.destroy(true, { children: true });
-        }
-      };
-    }, [editor, onRequestAddNode, onViewportChange]);
+          const nextSize = {
+            height: Math.max(entry.contentRect.height, 1),
+            width: Math.max(entry.contentRect.width, 1),
+          };
 
-    return <div className="infinite-canvas" ref={hostRef} />;
-  },
-);
+          app.renderer.resize(nextSize.width, nextSize.height);
+          renderViewport(
+            panViewport(viewportRef.current, {
+              x: (nextSize.width - canvasSize.width) / 2,
+              y: (nextSize.height - canvasSize.height) / 2,
+            }),
+          );
+          canvasSize = nextSize;
+        });
+        resizeObserver.observe(host);
+
+        themeObserver = new MutationObserver(() => {
+          const updateStartedAt = performance.now();
+          updateGrid(
+            grid,
+            viewportRef.current,
+            app.screen.width,
+            app.screen.height,
+          );
+          syncVisibleScene();
+          if (performanceMetricsEnabledRef.current) {
+            performanceSampler.recordUpdate(
+              performance.now() - updateStartedAt,
+            );
+          }
+          renderScheduler.request();
+        });
+        themeObserver.observe(document.documentElement, {
+          attributeFilter: ["class"],
+          attributes: true,
+        });
+
+        unsubscribeEditor = editor.subscribe((change) => {
+          const updateStartedAt = performance.now();
+          let needsRender: boolean;
+          if (change.kind === "document") {
+            syncVisibleScene();
+            needsRender = true;
+          } else {
+            needsRender = syncEditorChange(
+              editor.getState(),
+              nodeDisplaysRef.current,
+              change,
+              textResolutionRef.current,
+              viewportRef.current.zoom,
+            );
+          }
+          if (!needsRender) return;
+
+          if (performanceMetricsEnabledRef.current) {
+            performanceSampler.recordUpdate(
+              change.updateTimeMs + performance.now() - updateStartedAt,
+            );
+          }
+          renderScheduler.request();
+        });
+      });
+
+    return () => {
+      active = false;
+      removeListeners?.();
+      unsubscribeEditor?.();
+      resizeObserver?.disconnect();
+      themeObserver?.disconnect();
+      renderSchedulerRef.current?.cancel();
+      gridRef.current?.texture.destroy(true);
+      gridRef.current = null;
+      performanceSamplerRef.current = null;
+      renderSchedulerRef.current = null;
+      sceneRef.current = null;
+      worldRef.current = null;
+      marqueeRef.current = null;
+      nodeDisplaysRef.current.clear();
+      for (const display of nodeDisplayPoolRef.current) {
+        display.container.destroy({ children: true });
+      }
+      nodeDisplayPoolRef.current = [];
+      textResolutionRef.current = 1;
+
+      if (appRef.current === app) {
+        appRef.current = null;
+        app.destroy(true, { children: true });
+      }
+    };
+  }, [editor, onRequestAddNode, onViewportChange]);
+
+  return <div className="infinite-canvas" ref={hostRef} />;
+});

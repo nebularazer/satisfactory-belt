@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createCanvasEditor,
-  HISTORY_LIMIT,
-  SNAP_INTERVAL,
-} from "./editor";
+import { createCanvasEditor, HISTORY_LIMIT, SNAP_INTERVAL } from "./editor";
 
 function createEditor() {
   let id = 0;
@@ -41,6 +37,22 @@ describe("canvas editor", () => {
 
     editor.dispatch({ type: "selection.node", additive: true, id: "node-1" });
     expect(editor.getState().selectedIds).toEqual(["node-2"]);
+  });
+
+  it("keeps unknown node ids out of the selection", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+
+    editor.dispatch({ type: "selection.node", additive: false, id: "missing" });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+
+    editor.dispatch({ type: "selection.clear" });
+    editor.dispatch({
+      type: "selection.marquee",
+      baseIds: ["missing", "node-1"],
+      rectangle: { height: 10, width: 10, x: 1_000, y: 1_000 },
+    });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
   });
 
   it("moves a selection as one undoable operation", () => {
@@ -174,14 +186,16 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "document.replace",
       document: {
-        nodes: [{
-          height: 50,
-          id: "imported",
-          label: "Imported",
-          width: 50,
-          x: 1_000,
-          y: 1_000,
-        }],
+        nodes: [
+          {
+            height: 50,
+            id: "imported",
+            label: "Imported",
+            width: 50,
+            x: 1_000,
+            y: 1_000,
+          },
+        ],
         version: 1,
       },
     });

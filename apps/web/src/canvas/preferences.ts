@@ -1,5 +1,6 @@
 export const CANVAS_PREFERENCES = {
   performance: "satisfactory-belt-performance-metrics",
+  showGridDots: "satisfactory-belt-show-grid-dots",
   snapToGrid: "satisfactory-belt-snap-to-grid",
 } as const;
 
