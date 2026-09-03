@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 type CanvasEmptyStateProps = {
   onAddNode: () => void;
   onImport: () => void;
-  onOpenSavedPlans: () => void;
+  onManagePlans: () => void;
 };
 
 export function CanvasEmptyState({
   onAddNode,
   onImport,
-  onOpenSavedPlans,
+  onManagePlans,
 }: CanvasEmptyStateProps) {
   return (
     <div className="pointer-events-none absolute left-1/2 top-1/2 w-72 -translate-x-1/2 -translate-y-1/2 text-center">
@@ -40,7 +40,7 @@ export function CanvasEmptyState({
         </Button>
         <Button
           className="justify-start text-muted-foreground"
-          onClick={onOpenSavedPlans}
+          onClick={onManagePlans}
           variant="ghost"
         >
           <FolderOpen aria-hidden="true" />

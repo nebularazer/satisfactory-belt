@@ -31,6 +31,7 @@ The canvas interaction slice supports:
 - copying, pasting, and duplicating selections with the standard keyboard shortcuts;
 - saving the current named plan with Ctrl/Cmd + `S`, or opening Save As when the
   canvas is not associated with a named plan;
+- opening Save As directly with Ctrl/Cmd + Shift + `S`;
 - deleting selections with Delete or Backspace;
 - undoing and redoing document changes from the controls or keyboard;
 - showing optional live canvas performance metrics from the Settings menu;
@@ -50,8 +51,10 @@ visibility all use the same incrementally maintained spatial index. Undo history
 limited to 100 node-level operations rather than retaining entire document snapshots.
 
 The active canvas is autosaved locally in IndexedDB and recovered when the app
-reopens. The saved-plans dialog can also create, update, load, and delete named
-browser-local snapshots, and remembers which named plan is currently loaded.
+reopens. Save updates the loaded named plan without opening a dialog. Save As creates
+a new plan or explicitly overwrites an existing one after confirmation, while Manage
+Plans is dedicated to opening and deleting browser-local plans. The app remembers
+which named plan is currently loaded.
 Resetting the canvas clears the canvas and undo history and detaches it from the
 current named save without deleting any snapshots. Snap and performance settings are
 retained in local storage. Imported files are validated against the current document

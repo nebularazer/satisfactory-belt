@@ -1,12 +1,17 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2, Clock3, Database, Save, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Clock3,
+  Database,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import type {
   CanvasDocumentStorage,
   SavedCanvasDocument,
 } from "@/canvas/document-storage";
-import type { CanvasDocument } from "@/canvas/editor";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,17 +30,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-type SavedPlansDialogProps = {
+type ManagePlansDialogProps = {
   activeSave: SavedCanvasDocument | null;
-  currentDocument: CanvasDocument;
   onDelete: (save: SavedCanvasDocument) => void;
   onLoad: (save: SavedCanvasDocument) => void;
   onOpenChange: (open: boolean) => void;
-  onSaved: (save: SavedCanvasDocument) => void;
   open: boolean;
   storage: CanvasDocumentStorage;
 };
@@ -45,20 +53,16 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
-export function SavedPlansDialog({
+export function ManagePlansDialog({
   activeSave,
-  currentDocument,
   onDelete,
   onLoad,
   onOpenChange,
-  onSaved,
   open,
   storage,
-}: SavedPlansDialogProps) {
+}: ManagePlansDialogProps) {
   const [deleting, setDeleting] = useState<SavedCanvasDocument | null>(null);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [name, setName] = useState("");
   const [saves, setSaves] = useState<readonly SavedCanvasDocument[]>([]);
 
   const refresh = useCallback(async () => {
@@ -75,56 +79,6 @@ export function SavedPlansDialog({
   useEffect(() => {
     if (open) void refresh();
   }, [open, refresh]);
-
-  const existingName = name.trim().toLocaleLowerCase();
-  const existing = existingName
-    ? saves.find((save) => save.name.toLocaleLowerCase() === existingName)
-    : undefined;
-
-  const saveAs = async (event: FormEvent) => {
-    event.preventDefault();
-    const normalizedName = name.trim();
-    if (!normalizedName || saving) return;
-
-    setSaving(true);
-    try {
-      const saved = await storage.saveNamed({
-        document: currentDocument,
-        id: existing?.id,
-        name: normalizedName,
-      });
-      onSaved(saved);
-      setName("");
-      await refresh();
-      toast.success(existing ? `Updated “${saved.name}”.` : `Saved “${saved.name}”.`);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "The plan could not be saved.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateCurrent = async () => {
-    if (!activeSave || saving) return;
-    setSaving(true);
-    try {
-      const saved = await storage.saveNamed({
-        document: currentDocument,
-        id: activeSave.id,
-      });
-      onSaved(saved);
-      await refresh();
-      toast.success(`Updated “${saved.name}”.`);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "The plan could not be updated.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const deleteSave = async () => {
     if (!deleting) return;
@@ -143,92 +97,15 @@ export function SavedPlansDialog({
     <>
       <Dialog onOpenChange={onOpenChange} open={open}>
         <DialogContent
-          className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl"
+          className="sm:max-w-xl"
           overlayClassName="bg-transparent supports-backdrop-filter:backdrop-blur-none"
         >
           <DialogHeader>
-            <DialogTitle>Saved plans</DialogTitle>
+            <DialogTitle>Manage plans</DialogTitle>
             <DialogDescription>
-              Named snapshots stay in this browser. Most recently updated plans
-              appear first.
+              Open or delete browser-local plans, sorted by most recent update.
             </DialogDescription>
           </DialogHeader>
-
-          <section
-            aria-label="Current saved plan"
-            className="flex items-center gap-3 rounded-lg border bg-muted/45 p-3"
-          >
-            {activeSave ? (
-              <>
-                <CheckCircle2
-                  aria-hidden="true"
-                  className="size-5 shrink-0 text-primary"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[0.625rem] font-medium uppercase tracking-wide text-muted-foreground">
-                    Current saved plan
-                  </div>
-                  <div className="truncate font-medium">{activeSave.name}</div>
-                  <div className="text-[0.625rem] text-muted-foreground">
-                    Update overwrites this saved snapshot.
-                  </div>
-                </div>
-                <Button
-                  disabled={saving}
-                  onClick={() => void updateCurrent()}
-                  size="sm"
-                  type="button"
-                >
-                  <Save aria-hidden="true" />
-                  Update
-                  <span className="hidden text-[0.625rem] opacity-70 sm:inline">
-                    Ctrl/Cmd+S
-                  </span>
-                </Button>
-              </>
-            ) : (
-              <>
-                <Database
-                  aria-hidden="true"
-                  className="size-5 shrink-0 text-muted-foreground"
-                />
-                <div>
-                  <div className="font-medium">Unsaved plan</div>
-                  <div className="text-[0.625rem] text-muted-foreground">
-                    Create a named save below, or load an existing one.
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-
-          <form className="space-y-1.5" onSubmit={(event) => void saveAs(event)}>
-            <div className="flex gap-2">
-              <label className="sr-only" htmlFor="saved-plan-name">
-                Plan name
-              </label>
-              <Input
-                autoComplete="off"
-                id="saved-plan-name"
-                maxLength={80}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Name this plan"
-                value={name}
-              />
-              <Button
-                disabled={name.trim().length === 0 || saving}
-                type="submit"
-                variant={existing ? "destructive" : "default"}
-              >
-                {existing ? "Overwrite" : "Save as new"}
-              </Button>
-            </div>
-            <p className="min-h-4 text-[0.625rem] text-muted-foreground">
-              {existing
-                ? `This replaces the existing “${existing.name}” snapshot.`
-                : "A new name creates a separate saved snapshot."}
-            </p>
-          </form>
 
           <ScrollArea className="h-72 min-h-72 max-h-72 rounded-lg border">
             {loading ? (
@@ -238,7 +115,7 @@ export function SavedPlansDialog({
             ) : saves.length === 0 ? (
               <div className="grid h-72 place-items-center gap-1 text-center text-muted-foreground">
                 <Database aria-hidden="true" className="size-5" />
-                <span>No named plans yet</span>
+                <span>No saved plans yet</span>
               </div>
             ) : (
               <ul className="divide-y divide-border pr-2">
@@ -283,18 +160,32 @@ export function SavedPlansDialog({
                           onOpenChange(false);
                         }}
                         size="sm"
-                        variant="outline"
+                        variant={current ? "ghost" : "default"}
                       >
-                        {current ? "Loaded" : "Load"}
+                        {current ? "Current" : "Open"}
                       </Button>
-                      <Button
-                        aria-label={`Delete ${save.name}`}
-                        onClick={() => setDeleting(save)}
-                        size="icon-sm"
-                        variant="ghost"
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              aria-label={`Manage ${save.name}`}
+                              size="icon-sm"
+                              variant="ghost"
+                            />
+                          }
+                        >
+                          <MoreHorizontal aria-hidden="true" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" sideOffset={4}>
+                          <DropdownMenuItem
+                            onClick={() => setDeleting(save)}
+                            variant="destructive"
+                          >
+                            <Trash2 aria-hidden="true" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </li>
                   );
                 })}
@@ -314,8 +205,8 @@ export function SavedPlansDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{deleting?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the named snapshot from this browser. It does not
-              change the active canvas.
+              This removes the saved plan from this browser. It does not change
+              the active canvas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

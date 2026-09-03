@@ -44,9 +44,10 @@ import { CanvasContextMenu } from "@/components/canvas-context-menu";
 import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
+import { ManagePlansDialog } from "@/components/manage-plans-dialog";
 import { NodePicker } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
-import { SavedPlansDialog } from "@/components/saved-plans-dialog";
+import { SavePlanDialog } from "@/components/save-plan-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -139,7 +140,8 @@ function CanvasWorkspace({
   const [zoom, setZoom] = useState(1);
   const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
-  const [savedPlansOpen, setSavedPlansOpen] = useState(false);
+  const [managePlansOpen, setManagePlansOpen] = useState(false);
+  const [savePlanOpen, setSavePlanOpen] = useState(false);
   const [activeSave, setActiveSave] =
     useState<SavedCanvasDocument | null>(initialActiveSave);
   const activeSaveRef = useRef<SavedCanvasDocument | null>(initialActiveSave);
@@ -196,12 +198,17 @@ function CanvasWorkspace({
   };
   const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
 
+  const openSavePlan = useCallback(() => {
+    setPendingNode(null);
+    setResetCanvasOpen(false);
+    setManagePlansOpen(false);
+    setSavePlanOpen(true);
+  }, []);
+
   const saveCurrentPlan = useCallback(async () => {
     const current = activeSaveRef.current;
     if (!current) {
-      setPendingNode(null);
-      setResetCanvasOpen(false);
-      setSavedPlansOpen(true);
+      openSavePlan();
       return;
     }
 
@@ -219,7 +226,7 @@ function CanvasWorkspace({
           : "The current plan could not be updated.",
       );
     }
-  }, [editor, selectActiveSave, storage]);
+  }, [editor, openSavePlan, selectActiveSave, storage]);
 
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
@@ -227,12 +234,16 @@ function CanvasWorkspace({
         return;
       }
       event.preventDefault();
-      if (event.repeat || savedPlansOpen) return;
-      void saveCurrentPlan();
+      if (event.repeat || savePlanOpen || managePlansOpen) return;
+      if (event.shiftKey) {
+        openSavePlan();
+      } else {
+        void saveCurrentPlan();
+      }
     };
     window.addEventListener("keydown", handleSaveShortcut);
     return () => window.removeEventListener("keydown", handleSaveShortcut);
-  }, [saveCurrentPlan, savedPlansOpen]);
+  }, [managePlansOpen, openSavePlan, saveCurrentPlan, savePlanOpen]);
 
   const addPendingNode = () => {
     if (!pendingNode) return;
@@ -357,8 +368,9 @@ function CanvasWorkspace({
             onFitAll={() => canvasRef.current?.fitContent()}
             onFitSelection={() => canvasRef.current?.fitSelection()}
             onImport={() => importInputRef.current?.click()}
-            onOpenSavedPlans={() => setSavedPlansOpen(true)}
+            onManagePlans={() => setManagePlansOpen(true)}
             onSave={() => void saveCurrentPlan()}
+            onSaveAs={openSavePlan}
             onResetCanvas={() => setResetCanvasOpen(true)}
             onResetView={() => canvasRef.current?.resetView()}
             onShowPerformanceChange={handleShowPerformanceChange}
@@ -375,7 +387,7 @@ function CanvasWorkspace({
           <CanvasEmptyState
             onAddNode={requestNodeAtCenter}
             onImport={() => importInputRef.current?.click()}
-            onOpenSavedPlans={() => setSavedPlansOpen(true)}
+            onManagePlans={() => setManagePlansOpen(true)}
           />
         )}
 
@@ -418,9 +430,8 @@ function CanvasWorkspace({
         onSelect={addPendingNode}
         open={pendingNode !== null}
       />
-      <SavedPlansDialog
+      <ManagePlansDialog
         activeSave={activeSave}
-        currentDocument={editor.getState().document}
         onDelete={(save) => {
           if (save.id !== activeSaveRef.current?.id) return;
           selectActiveSave(null);
@@ -433,9 +444,16 @@ function CanvasWorkspace({
           }
         }}
         onLoad={loadDocument}
-        onOpenChange={setSavedPlansOpen}
+        onOpenChange={setManagePlansOpen}
+        open={managePlansOpen}
+        storage={storage}
+      />
+      <SavePlanDialog
+        activeSave={activeSave}
+        currentDocument={editor.getState().document}
+        onOpenChange={setSavePlanOpen}
         onSaved={selectActiveSave}
-        open={savedPlansOpen}
+        open={savePlanOpen}
         storage={storage}
       />
       <AlertDialog onOpenChange={setResetCanvasOpen} open={resetCanvasOpen}>

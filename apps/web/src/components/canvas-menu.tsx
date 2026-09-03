@@ -1,8 +1,8 @@
 import {
   CopyPlus,
-  Database,
   Download,
   FileX2,
+  FolderOpen,
   Focus,
   Gauge,
   Magnet,
@@ -13,6 +13,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  SaveAll,
   Sun,
   Trash2,
   Upload,
@@ -48,9 +49,10 @@ type CanvasMenuProps = {
   onFitAll: () => void;
   onFitSelection: () => void;
   onImport: () => void;
-  onOpenSavedPlans: () => void;
+  onManagePlans: () => void;
   onResetCanvas: () => void;
   onSave: () => void;
+  onSaveAs: () => void;
   onShowPerformanceChange: (enabled: boolean) => void;
   onResetView: () => void;
   onSnapToGridChange: (enabled: boolean) => void;
@@ -72,9 +74,10 @@ export function CanvasMenu({
   onFitAll,
   onFitSelection,
   onImport,
-  onOpenSavedPlans,
+  onManagePlans,
   onResetCanvas,
   onSave,
+  onSaveAs,
   onShowPerformanceChange,
   onResetView,
   onSnapToGridChange,
@@ -157,12 +160,17 @@ export function CanvasMenu({
           </DropdownMenuLabel>
           <DropdownMenuItem onClick={onSave}>
             <Save aria-hidden="true" />
-            {activeSaveName ? "Save current plan" : "Save plan as…"}
+            Save
             <DropdownMenuShortcut>⌘/Ctrl S</DropdownMenuShortcut>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onOpenSavedPlans}>
-            <Database aria-hidden="true" />
-            Saved plans
+          <DropdownMenuItem onClick={onSaveAs}>
+            <SaveAll aria-hidden="true" />
+            Save as…
+            <DropdownMenuShortcut>⌘/Ctrl ⇧S</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onManagePlans}>
+            <FolderOpen aria-hidden="true" />
+            Manage plans…
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onImport}>
             <Upload aria-hidden="true" />
