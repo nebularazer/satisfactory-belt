@@ -23,6 +23,7 @@ import {
 
 const ZOOM_STEP = 1.2;
 const DRAG_THRESHOLD = 4;
+const MAX_TEXT_RESOLUTION = 4;
 
 export type InfiniteCanvasHandle = {
   getViewportCenter: () => Point;
@@ -94,12 +95,22 @@ function drawGrid(
 
   for (let x = offsetX; x <= width; x += spacing) {
     for (let y = offsetY; y <= height; y += spacing) {
-      graphics.circle(x, y, 1);
+      graphics.circle(x, y, 1.25);
     }
   }
 
   const dark = document.documentElement.classList.contains("dark");
-  graphics.fill({ color: dark ? 0xa1a1aa : 0x9ca3af, alpha: dark ? 0.4 : 0.34 });
+  graphics.fill({
+    color: dark ? 0xd4d4d8 : 0x71717a,
+    alpha: dark ? 0.34 : 0.4,
+  });
+}
+
+function textResolutionForZoom(zoom: number, rendererResolution: number) {
+  return Math.min(
+    MAX_TEXT_RESOLUTION,
+    Math.max(rendererResolution, Math.ceil(zoom * rendererResolution)),
+  );
 }
 
 function drawScene(
@@ -196,9 +207,23 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     const spacePressedRef = useRef(false);
     const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
 
+    const updateTextResolution = () => {
+      const app = appRef.current;
+      if (!app) return;
+
+      const resolution = textResolutionForZoom(
+        viewportRef.current.zoom,
+        app.renderer.resolution,
+      );
+      for (const { label } of nodeDisplaysRef.current.values()) {
+        if (label.resolution !== resolution) label.resolution = resolution;
+      }
+    };
+
     const redraw = () => {
       const scene = sceneRef.current;
       if (scene) drawScene(scene, editor.getState(), nodeDisplaysRef.current);
+      updateTextResolution();
     };
 
     const renderViewport = (viewport: Viewport) => {
@@ -212,6 +237,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         world.position.set(viewport.x, viewport.y);
         world.scale.set(viewport.zoom);
         drawGrid(grid, viewport, app.screen.width, app.screen.height);
+        updateTextResolution();
       }
 
       onViewportChange(viewport);
