@@ -27,6 +27,7 @@ import {
   type CanvasPerformanceMetrics,
 } from "./performance";
 import { createRenderScheduler } from "./render-scheduler";
+import { visibleCanvasNodes } from "./visibility";
 import {
   panViewport,
   screenToWorld,
@@ -36,7 +37,7 @@ import {
   type Viewport,
 } from "./viewport";
 
-const MAX_TEXT_RESOLUTION = 4;
+const MAX_POOLED_NODE_DISPLAYS = 256;
 
 export type InfiniteCanvasHandle = {
   getViewportCenter: () => Point;
@@ -131,10 +132,7 @@ function updateGrid(
 }
 
 function textResolutionForZoom(zoom: number, rendererResolution: number) {
-  return Math.min(
-    MAX_TEXT_RESOLUTION,
-    Math.max(rendererResolution, Math.ceil(zoom * rendererResolution)),
-  );
+  return Math.max(rendererResolution, Math.ceil(zoom * rendererResolution));
 }
 
 function updateNodeVisual(
@@ -175,43 +173,63 @@ function updateNodeVisual(
   }
 }
 
+function createNodeDisplay(node: CanvasNode): NodeDisplay {
+  const container = new Container();
+  const card = new Graphics();
+  const label = new Text({ text: node.label });
+  container.eventMode = "none";
+  label.anchor.set(0.5);
+  container.addChild(card, label);
+
+  return {
+    baseX: node.x,
+    baseY: node.y,
+    card,
+    cardVisualKey: "",
+    container,
+    label,
+    labelVisualKey: "",
+    node,
+  };
+}
+
+function recycleNodeDisplay(
+  scene: Container,
+  display: NodeDisplay,
+  pool: NodeDisplay[],
+) {
+  scene.removeChild(display.container);
+  if (pool.length < MAX_POOLED_NODE_DISPLAYS) {
+    pool.push(display);
+  } else {
+    display.container.destroy({ children: true });
+  }
+}
+
 function syncDocument(
   scene: Container,
   state: CanvasEditorState,
   displays: Map<string, NodeDisplay>,
+  pool: NodeDisplay[],
+  visibleNodes: readonly CanvasNode[],
   textResolution: number,
 ) {
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = new Set(state.selectedIds);
-  const liveIds = new Set(state.document.nodes.map((node) => node.id));
+  const visibleIds = new Set(visibleNodes.map((node) => node.id));
 
   for (const [id, display] of displays) {
-    if (liveIds.has(id)) continue;
-    scene.removeChild(display.container);
-    display.container.destroy({ children: true });
+    if (visibleIds.has(id)) continue;
+    recycleNodeDisplay(scene, display, pool);
     displays.delete(id);
   }
 
-  for (const [index, node] of state.document.nodes.entries()) {
+  for (const [index, node] of visibleNodes.entries()) {
     const selected = selectedIds.has(node.id);
     let display = displays.get(node.id);
 
     if (!display) {
-      const container = new Container();
-      const card = new Graphics();
-      const label = new Text({ text: node.label });
-      label.anchor.set(0.5);
-      container.addChild(card, label);
-      display = {
-        baseX: node.x,
-        baseY: node.y,
-        card,
-        cardVisualKey: "",
-        container,
-        label,
-        labelVisualKey: "",
-        node,
-      };
+      display = pool.pop() ?? createNodeDisplay(node);
       displays.set(node.id, display);
     }
 
@@ -233,17 +251,12 @@ function syncDocument(
 }
 
 function syncEditorChange(
-  scene: Container,
   state: CanvasEditorState,
   displays: Map<string, NodeDisplay>,
   change: CanvasEditorChange,
   textResolution: number,
 ) {
-  if (change.kind === "settings") return false;
-  if (change.kind === "document") {
-    syncDocument(scene, state, displays, textResolution);
-    return true;
-  }
+  if (change.kind === "document" || change.kind === "settings") return false;
 
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = change.kind === "selection"
@@ -304,6 +317,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     const gridRef = useRef<GridDisplay | null>(null);
     const sceneRef = useRef<Container | null>(null);
     const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
+    const nodeDisplayPoolRef = useRef<NodeDisplay[]>([]);
     const worldRef = useRef<Container | null>(null);
     const marqueeRef = useRef<Graphics | null>(null);
     const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
@@ -320,33 +334,20 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
     onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
     performanceMetricsEnabledRef.current = performanceMetricsEnabled;
 
-    const updateTextResolution = () => {
+    const syncVisibleScene = () => {
       const app = appRef.current;
-      if (!app) return;
-
-      const resolution = textResolutionForZoom(
-        viewportRef.current.zoom,
-        app.renderer.resolution,
-      );
-      if (textResolutionRef.current === resolution) return;
-
-      textResolutionRef.current = resolution;
-      for (const { label } of nodeDisplaysRef.current.values()) {
-        if (label.resolution !== resolution) label.resolution = resolution;
-      }
-    };
-
-    const redraw = () => {
       const scene = sceneRef.current;
-      if (scene) {
-        syncDocument(
-          scene,
-          editor.getState(),
-          nodeDisplaysRef.current,
-          textResolutionRef.current,
-        );
-        renderSchedulerRef.current?.request();
-      }
+      if (!app || !scene) return;
+
+      const state = editor.getState();
+      syncDocument(
+        scene,
+        state,
+        nodeDisplaysRef.current,
+        nodeDisplayPoolRef.current,
+        visibleCanvasNodes(state, viewportRef.current, app.screen),
+        textResolutionRef.current,
+      );
     };
 
     const renderViewport = (viewport: Viewport) => {
@@ -358,10 +359,22 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
       const world = worldRef.current;
 
       if (app && grid && world) {
+        const updateStartedAt = performance.now();
         world.position.set(viewport.x, viewport.y);
         world.scale.set(viewport.zoom);
         updateGrid(grid, viewport, app.screen.width, app.screen.height);
-        if (previousZoom !== viewport.zoom) updateTextResolution();
+        if (previousZoom !== viewport.zoom) {
+          textResolutionRef.current = textResolutionForZoom(
+            viewport.zoom,
+            app.renderer.resolution,
+          );
+        }
+        syncVisibleScene();
+        if (performanceMetricsEnabledRef.current) {
+          performanceSamplerRef.current?.recordUpdate(
+            performance.now() - updateStartedAt,
+          );
+        }
         renderSchedulerRef.current?.request();
       }
 
@@ -480,7 +493,6 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
             app.renderer.resolution,
           );
           renderViewport(initialViewport);
-          redraw();
           let canvasSize = {
             height: app.screen.height,
             width: app.screen.width,
@@ -535,12 +547,7 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
               app.screen.width,
               app.screen.height,
             );
-            syncDocument(
-              scene,
-              editor.getState(),
-              nodeDisplaysRef.current,
-              textResolutionRef.current,
-            );
+            syncVisibleScene();
             if (performanceMetricsEnabledRef.current) {
               performanceSampler.recordUpdate(
                 performance.now() - updateStartedAt,
@@ -555,13 +562,18 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
 
           unsubscribeEditor = editor.subscribe((change) => {
             const updateStartedAt = performance.now();
-            const needsRender = syncEditorChange(
-              scene,
-              editor.getState(),
-              nodeDisplaysRef.current,
-              change,
-              textResolutionRef.current,
-            );
+            let needsRender: boolean;
+            if (change.kind === "document") {
+              syncVisibleScene();
+              needsRender = true;
+            } else {
+              needsRender = syncEditorChange(
+                editor.getState(),
+                nodeDisplaysRef.current,
+                change,
+                textResolutionRef.current,
+              );
+            }
             if (!needsRender) return;
 
             if (performanceMetricsEnabledRef.current) {
@@ -588,6 +600,10 @@ export const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasPro
         worldRef.current = null;
         marqueeRef.current = null;
         nodeDisplaysRef.current.clear();
+        for (const display of nodeDisplayPoolRef.current) {
+          display.container.destroy({ children: true });
+        }
+        nodeDisplayPoolRef.current = [];
         textResolutionRef.current = 1;
 
         if (appRef.current === app) {

@@ -35,7 +35,10 @@ changing the visual scale of the canvas.
 
 Rendering is scheduled only when canvas state changes. Node drags update the selected
 Pixi objects transiently and commit the document once when the drag ends, while the
-dot grid is rendered as a repeating texture.
+dot grid is rendered as a repeating texture. Only nodes inside the viewport and a
+small overscan area are mounted in the Pixi scene; detached displays are recycled
+while panning. Adaptive text resolution therefore keeps labels sharp without
+regenerating textures for off-screen nodes.
 
 In development, append `?nodes=<count>` to create a deterministic load fixture. For
 example, `?nodes=1000` starts the canvas with 1,000 nodes; counts are capped at 10,000.
