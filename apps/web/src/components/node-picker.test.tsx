@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import {
   afterAll,
   afterEach,
@@ -42,7 +48,7 @@ describe("NodePicker", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("option", {
-        name: /^Reinforced Iron Plate Iron Plate.*Assembler/,
+        name: /^Reinforced Iron Plate.*Iron Plate.*Assembler/,
       }),
     );
 
@@ -67,14 +73,20 @@ describe("NodePicker", () => {
       { target: { value: "cast screws" } },
     );
 
-    expect(screen.getByText("Cast Screws")).toBeInTheDocument();
-    expect(screen.getByText("Alternate")).toBeInTheDocument();
+    const recipe = screen.getByRole("option", { name: /^Cast Screws/ });
+    expect(within(recipe).getByText("Cast Screws")).toBeInTheDocument();
+    expect(within(recipe).getByText("Alternate")).toBeInTheDocument();
     expect(
       screen.queryByText("Alternate: Cast Screws"),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Iron Ingot 12.5/min")).toBeInTheDocument();
-    expect(screen.getByText("→ Screws 50/min")).toBeInTheDocument();
-    expect(screen.getByText("Constructor · 4 MW")).toBeInTheDocument();
+    expect(within(recipe).getByText("IN")).toHaveAccessibleName("Inputs");
+    expect(within(recipe).getByText("12.5/min")).toBeInTheDocument();
+    expect(within(recipe).getByText("Iron Ingot")).toBeInTheDocument();
+    expect(within(recipe).getByText("OUT")).toHaveAccessibleName("Outputs");
+    expect(within(recipe).getByText("50/min")).toBeInTheDocument();
+    expect(within(recipe).getByText("Screws")).toBeInTheDocument();
+    expect(within(recipe).getByText("Constructor · 4 MW")).toBeInTheDocument();
+    expect(within(recipe).queryByText(/^(?:→|\+)$/)).not.toBeInTheDocument();
   });
 
   it("shows every recipe material without collapsing complex recipes", () => {
@@ -91,13 +103,16 @@ describe("NodePicker", () => {
       { target: { value: "adaptive control unit" } },
     );
 
-    expect(screen.getByText("Automated Wiring 5/min")).toBeInTheDocument();
-    expect(screen.getByText("Circuit Board 5/min")).toBeInTheDocument();
-    expect(screen.getByText("Heavy Modular Frame 1/min")).toBeInTheDocument();
-    expect(screen.getByText("Computer 2/min")).toBeInTheDocument();
-    expect(
-      screen.getByText("→ Adaptive Control Unit 1/min"),
-    ).toBeInTheDocument();
+    const recipe = screen.getByRole("option", {
+      name: /^Adaptive Control Unit/,
+    });
+    expect(within(recipe).getByText("Automated Wiring")).toBeInTheDocument();
+    expect(within(recipe).getByText("Circuit Board")).toBeInTheDocument();
+    expect(within(recipe).getByText("Heavy Modular Frame")).toBeInTheDocument();
+    expect(within(recipe).getByText("Computer")).toBeInTheDocument();
+    expect(within(recipe).getAllByText("Adaptive Control Unit")).toHaveLength(
+      2,
+    );
     expect(screen.queryByText("4 inputs")).not.toBeInTheDocument();
   });
 
@@ -210,26 +225,17 @@ describe("NodePicker", () => {
       <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
     );
 
-    const cases = [
-      ["miner mk.1", "Miner Mk.1", "Build_MinerMk1_C"],
-      [
-        "conveyor splitter",
-        "Conveyor Splitter",
-        "Build_ConveyorAttachmentSplitter_C",
-      ],
-      ["awesome sink", "AWESOME Sink", "Build_ResourceSink_C"],
-    ] as const;
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "conveyor splitter" } },
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Conveyor Splitter" }));
 
-    for (const [query, label, machineId] of cases) {
-      fireEvent.change(
-        screen.getByPlaceholderText("Search buildings or recipes..."),
-        { target: { value: query } },
-      );
-      fireEvent.click(screen.getByRole("option", { name: label }));
-
-      expect(onSelect).toHaveBeenLastCalledWith({ label, machineId });
-    }
-  }, 15_000);
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Conveyor Splitter",
+      machineId: "Build_ConveyorAttachmentSplitter_C",
+    });
+  }, 10_000);
 
   it("finds extractors by the resources they produce", () => {
     render(

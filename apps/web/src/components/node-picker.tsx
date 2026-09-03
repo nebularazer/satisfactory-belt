@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import {
   LOGISTICS_BUILDABLES,
@@ -124,17 +124,22 @@ function recipeSearchScore(
     : 0;
 }
 
-function formatMaterialRate(material: ProductionMaterial) {
+function formatMaterial(material: ProductionMaterial) {
   const item = productionItem(material.itemId);
   if (!item) return null;
   const unit = item.form === "solid" ? "/min" : " m³/min";
-  return `${item.name} ${rateFormatter.format(material.ratePerMinute)}${unit}`;
+  return {
+    name: item.name,
+    rate: `${rateFormatter.format(material.ratePerMinute)}${unit}`,
+  };
 }
 
 function formatMaterials(materials: readonly ProductionMaterial[]) {
   return materials
-    .map(formatMaterialRate)
-    .filter((material): material is string => Boolean(material));
+    .map(formatMaterial)
+    .filter((material): material is NonNullable<typeof material> =>
+      Boolean(material),
+    );
 }
 
 function formatPower(recipe: ProductionRecipe, machine: ProductionMachine) {
@@ -216,15 +221,36 @@ function RecipeRow({
               </span>
             )}
           </div>
-          <div className="mt-0.5 text-[0.625rem] leading-relaxed text-muted-foreground">
-            {inputMaterials.map((material) => (
-              <div className="line-clamp-1" key={`input:${material}`}>
-                {material}
+          <div className="mt-0.5 grid grid-cols-[1.5rem_max-content_minmax(0,1fr)] gap-x-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+            {inputMaterials.map((material, index) => (
+              <div className="contents" key={`input:${material.name}:${index}`}>
+                <span
+                  aria-label={index === 0 ? "Inputs" : undefined}
+                  className="text-[0.5rem] font-medium tracking-wide text-muted-foreground/70"
+                >
+                  {index === 0 ? "IN" : ""}
+                </span>
+                <span className="tabular-nums">{material.rate}</span>
+                <span className="truncate" title={material.name}>
+                  {material.name}
+                </span>
               </div>
             ))}
             {outputMaterials.map((material, index) => (
-              <div className="line-clamp-1" key={`output:${material}`}>
-                {index === 0 ? "→" : "+"} {material}
+              <div
+                className="contents"
+                key={`output:${material.name}:${index}`}
+              >
+                <span
+                  aria-label={index === 0 ? "Outputs" : undefined}
+                  className="text-[0.5rem] font-medium tracking-wide text-muted-foreground/70"
+                >
+                  {index === 0 ? "OUT" : ""}
+                </span>
+                <span className="tabular-nums">{material.rate}</span>
+                <span className="truncate" title={material.name}>
+                  {material.name}
+                </span>
               </div>
             ))}
           </div>
@@ -244,7 +270,7 @@ function RecipeRow({
           title={routeLabel}
           type="button"
         >
-          <ListTree aria-hidden="true" className="size-4" />
+          <ArrowRight aria-hidden="true" className="size-4" />
         </button>
       ) : (
         <span aria-hidden="true" className="size-11 shrink-0" />
