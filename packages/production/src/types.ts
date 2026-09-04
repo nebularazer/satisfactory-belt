@@ -1,4 +1,14 @@
+export type BuildableCategory =
+  | "architecture"
+  | "logistics"
+  | "organization"
+  | "power"
+  | "production"
+  | "special"
+  | "transport";
+
 export type Buildable = Readonly<{
+  category: BuildableCategory;
   id: string;
   name: string;
   searchTerms?: readonly string[];

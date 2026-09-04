@@ -60,6 +60,10 @@ export function findBuildable(buildableId: string) {
   return buildablesById.get(buildableId);
 }
 
+export function listBuildables() {
+  return BUILDABLES;
+}
+
 export function findProductionMachine(machineId: string) {
   return machinesById.get(machineId);
 }

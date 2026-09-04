@@ -13,7 +13,6 @@ import {
   type Range,
 } from "@tanstack/react-virtual";
 import {
-  LOGISTICS_BUILDABLES,
   findBuildable,
   findDescriptor,
   findProductionMachine,
@@ -286,7 +285,7 @@ function extractorMatchReason(extractor: ResourceExtractor, query: string) {
 }
 
 function standaloneBuildableMatchReason(buildable: Buildable, query: string) {
-  if (LOGISTICS_BUILDABLES.some(({ id }) => id === buildable.id)) {
+  if (buildable.category === "logistics") {
     return buildableMatchReason(buildable, query, "Logistics", [
       "logistics",
       "conveyor",

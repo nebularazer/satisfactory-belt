@@ -1,22 +1,14 @@
 export {
-  DESCRIPTORS,
-  RECIPES,
   findBuildable,
   findDescriptor,
   findProductionMachine,
   findRecipe,
   findResourceExtractor,
+  listBuildables,
   recipesForMachine,
   recipesProducing,
   resourcesForExtractor,
 } from "./catalog";
-export {
-  BUILDABLES,
-  LOGISTICS_BUILDABLES,
-  PRODUCTION_MACHINES,
-  RESOURCE_EXTRACTORS,
-  SPECIAL_BUILDABLES,
-} from "./data/buildables";
 export {
   recipeCountForMachine,
   searchExtractorResources,
@@ -28,6 +20,7 @@ export {
 } from "./search";
 export type {
   Buildable,
+  BuildableCategory,
   Descriptor,
   ProductionMachine,
   ProductionMaterial,
