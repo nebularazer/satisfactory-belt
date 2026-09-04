@@ -7,7 +7,10 @@ const sourcePath = path.join(
   repositoryRoot,
   ".dev/assets/data/game-docs.en-US.json",
 );
-const outputDirectory = path.join(repositoryRoot, "apps/web/src/game");
+const outputDirectory = path.join(
+  repositoryRoot,
+  "packages/production/src/data",
+);
 const sourceItemImageDirectory = path.join(
   repositoryRoot,
   ".dev/assets/game/items",

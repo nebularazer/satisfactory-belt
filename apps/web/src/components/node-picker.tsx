@@ -12,37 +12,41 @@ import {
   useVirtualizer,
   type Range,
 } from "@tanstack/react-virtual";
-import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
-
-import { CommandDialog } from "@/components/ui/command";
-import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
 import {
   LOGISTICS_BUILDABLES,
-  catalogBuildable,
-  productionItem,
-  productionMachine,
-  productionRecipe,
-  recipesProducing,
-  resourceExtractor,
-  resourcesForExtractor,
-  type CatalogBuildable,
-  type NodePickerSelection,
-  type ProductionItem,
-  type ProductionMachine,
-  type ProductionMaterial,
-  type ProductionRecipe,
-  type ResourceExtractor,
-} from "@/game/production-catalog";
-import {
+  findBuildable,
+  findDescriptor,
+  findProductionMachine,
+  findRecipe,
+  findResourceExtractor,
   recipeCountForMachine,
+  recipesProducing,
+  resourcesForExtractor,
   searchExtractorResources,
   searchExtractors,
   searchLogistics,
   searchMachines,
   searchRecipes,
   searchSpecialBuildables,
-} from "@/game/production-search";
+  type Buildable,
+  type Descriptor,
+  type ProductionMachine,
+  type ProductionMaterial,
+  type Recipe,
+  type ResourceExtractor,
+} from "@satisfactory-belt/production";
+import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
+
+import { CommandDialog } from "@/components/ui/command";
+import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
+import { buildableImageUrl, descriptorImageUrl } from "@/game/catalog-images";
 import { cn } from "@/lib/utils";
+
+export type NodePickerSelection = Readonly<{
+  buildableId: string;
+  label: string;
+  recipeId?: string;
+}>;
 
 type NodePickerProps = {
   onOpenChange: (open: boolean) => void;
@@ -63,14 +67,14 @@ type PickerHistoryEntry = {
 };
 
 type RecentPickerOption = {
-  buildable: CatalogBuildable;
+  buildable: Buildable;
   key: string;
   selection: NodePickerSelection;
   type: "recent";
 };
 
 type BuildablePickerOption = {
-  buildable: CatalogBuildable;
+  buildable: Buildable;
   key: string;
   type: "buildable";
 };
@@ -82,14 +86,14 @@ type PickerOption =
   | {
       extractor: ResourceExtractor;
       key: string;
-      resource: ProductionItem;
+      resource: Descriptor;
       type: "extractor-resource";
     }
   | BuildablePickerOption
   | {
       key: string;
       machine: ProductionMachine;
-      recipe: ProductionRecipe;
+      recipe: Recipe;
       type: "recipe";
     };
 
@@ -232,7 +236,7 @@ function MatchReason({ query, reason }: { query: string; reason?: string }) {
 }
 
 function buildableMatchReason(
-  buildable: CatalogBuildable,
+  buildable: Buildable,
   query: string,
   categoryLabel: string,
   categoryKeywords: readonly string[],
@@ -281,10 +285,7 @@ function extractorMatchReason(extractor: ResourceExtractor, query: string) {
   ]);
 }
 
-function standaloneBuildableMatchReason(
-  buildable: CatalogBuildable,
-  query: string,
-) {
+function standaloneBuildableMatchReason(buildable: Buildable, query: string) {
   if (LOGISTICS_BUILDABLES.some(({ id }) => id === buildable.id)) {
     return buildableMatchReason(buildable, query, "Logistics", [
       "logistics",
@@ -296,7 +297,7 @@ function standaloneBuildableMatchReason(
 }
 
 function recipeMatchReason(
-  recipe: ProductionRecipe,
+  recipe: Recipe,
   machine: ProductionMachine,
   query: string,
 ) {
@@ -327,7 +328,7 @@ function recipeMatchReason(
 }
 
 function formatMaterial(material: ProductionMaterial) {
-  const item = productionItem(material.itemId);
+  const item = findDescriptor(material.itemId);
   if (!item) return null;
   const unit = item.form === "solid" ? "/min" : " m³/min";
   return {
@@ -344,7 +345,7 @@ function formatMaterials(materials: readonly ProductionMaterial[]) {
     );
 }
 
-function formatPower(recipe: ProductionRecipe, machine: ProductionMachine) {
+function formatPower(recipe: Recipe, machine: ProductionMachine) {
   if (!recipe.power) return `${rateFormatter.format(machine.basePowerMw)} MW`;
   if (recipe.power.minimumMw === recipe.power.maximumMw) {
     return `${rateFormatter.format(recipe.power.minimumMw)} MW`;
@@ -352,12 +353,12 @@ function formatPower(recipe: ProductionRecipe, machine: ProductionMachine) {
   return `${rateFormatter.format(recipe.power.minimumMw)}–${rateFormatter.format(recipe.power.maximumMw)} MW`;
 }
 
-function routeOutput(recipe: ProductionRecipe, query: string) {
+function routeOutput(recipe: Recipe, query: string) {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   return (
     (normalizedQuery
       ? recipe.outputs.find(({ itemId }) =>
-          productionItem(itemId)
+          findDescriptor(itemId)
             ?.name.toLocaleLowerCase()
             .includes(normalizedQuery),
         )
@@ -445,7 +446,7 @@ type RecipeRowProps = {
   onSelect: () => void;
   position: number;
   query: string;
-  recipe: ProductionRecipe;
+  recipe: Recipe;
   setSize: number;
   showStandardBadge?: boolean;
 };
@@ -465,7 +466,7 @@ function RecipeRow({
 }: RecipeRowProps) {
   const output = routeOutput(recipe, query);
   const routes = output ? recipesProducing(output.itemId) : [];
-  const outputItem = output ? productionItem(output.itemId) : undefined;
+  const outputItem = output ? findDescriptor(output.itemId) : undefined;
   const inputMaterials = formatMaterials(recipe.inputs);
   const outputMaterials = formatMaterials(recipe.outputs);
   const materialSearchTerms = normalizedSearchTerms(query);
@@ -505,7 +506,7 @@ function RecipeRow({
           className="mt-0.5 size-14 shrink-0 object-contain"
           decoding="async"
           loading="lazy"
-          src={machine.imageUrl}
+          src={buildableImageUrl(machine.id)}
         />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -617,13 +618,15 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const listId = useId();
 
   const selectedMachine =
-    scope.type === "machine" ? productionMachine(scope.machineId) : undefined;
+    scope.type === "machine"
+      ? findProductionMachine(scope.machineId)
+      : undefined;
   const selectedExtractor =
     scope.type === "extractor"
-      ? resourceExtractor(scope.extractorId)
+      ? findResourceExtractor(scope.extractorId)
       : undefined;
   const routeItem =
-    scope.type === "routes" ? productionItem(scope.itemId) : undefined;
+    scope.type === "routes" ? findDescriptor(scope.itemId) : undefined;
   const rootScope = scope.type === "root";
   const rootQueryActive = rootScope && query.trim().length > 0;
   const matchingRecipes = useMemo(() => {
@@ -674,10 +677,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     () =>
       rootScope && !rootQueryActive
         ? recentSelections.flatMap((selection) => {
-            const buildable = catalogBuildable(selection.buildableId);
+            const buildable = findBuildable(selection.buildableId);
             if (
               !buildable ||
-              (selection.recipeId && !productionRecipe(selection.recipeId))
+              (selection.recipeId && !findRecipe(selection.recipeId))
             ) {
               return [];
             }
@@ -756,7 +759,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     const addBuildables = (
       key: string,
       label: string,
-      buildables: readonly CatalogBuildable[],
+      buildables: readonly Buildable[],
     ) => {
       if (buildables.length === 0) return;
       addHeading(key, label);
@@ -790,7 +793,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       addHeading("recipes", "Recipes");
       matchingRecipes.forEach((recipe) => {
         const machine =
-          selectedMachine ?? productionMachine(recipe.machineIds[0]);
+          selectedMachine ?? findProductionMachine(recipe.machineIds[0]);
         if (!machine) return;
         nextRows.push({
           key: `recipe:${machine.id}:${recipe.id}`,
@@ -915,7 +918,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     setOpen(false);
   };
 
-  const selectRecipe = (recipe: ProductionRecipe, machineId: string) => {
+  const selectRecipe = (recipe: Recipe, machineId: string) => {
     submitSelection({
       buildableId: machineId,
       label: recipe.name,
@@ -923,13 +926,13 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     });
   };
 
-  const selectBuildable = (buildable: CatalogBuildable) => {
+  const selectBuildable = (buildable: Buildable) => {
     submitSelection({ buildableId: buildable.id, label: buildable.name });
   };
 
   const selectExtractorResource = (
     extractor: ResourceExtractor,
-    resource: ProductionItem,
+    resource: Descriptor,
   ) => {
     submitSelection({ buildableId: extractor.id, label: resource.name });
   };
@@ -1013,10 +1016,13 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       : routeItem
         ? `${routeItem.name} Recipes`
         : undefined;
-  const headingImage =
-    selectedMachine?.imageUrl ??
-    selectedExtractor?.imageUrl ??
-    routeItem?.imageUrl;
+  const headingImage = selectedMachine
+    ? buildableImageUrl(selectedMachine.id)
+    : selectedExtractor
+      ? buildableImageUrl(selectedExtractor.id)
+      : routeItem
+        ? descriptorImageUrl(routeItem.id)
+        : undefined;
 
   return (
     <CommandDialog
@@ -1151,7 +1157,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             <PickerTile
                               active={option.key === activeKey}
                               domId={optionDomId(listId, option.key)}
-                              imageUrl={tileBuildable.imageUrl}
+                              imageUrl={
+                                buildableImageUrl(tileBuildable.id) ?? ""
+                              }
                               key={option.key}
                               label={tileLabel}
                               onActivate={() => setActiveKey(option.key)}
@@ -1183,7 +1191,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           className="size-14 object-contain"
                           decoding="async"
                           loading="lazy"
-                          src={row.machine.imageUrl}
+                          src={buildableImageUrl(row.machine.id)}
                         />
                         <div className="min-w-0">
                           <div className="font-medium">
@@ -1227,7 +1235,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           className="size-14 object-contain"
                           decoding="async"
                           loading="lazy"
-                          src={row.extractor.imageUrl}
+                          src={buildableImageUrl(row.extractor.id)}
                         />
                         <div className="min-w-0">
                           <div className="font-medium">
@@ -1266,7 +1274,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           className="size-14 object-contain"
                           decoding="async"
                           loading="lazy"
-                          src={row.extractor.imageUrl}
+                          src={buildableImageUrl(row.extractor.id)}
                         />
                         <div className="font-medium">
                           <HighlightedText
@@ -1293,7 +1301,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           className="size-14 object-contain"
                           decoding="async"
                           loading="lazy"
-                          src={row.buildable.imageUrl}
+                          src={buildableImageUrl(row.buildable.id)}
                         />
                         <div className="min-w-0">
                           <div className="font-medium">

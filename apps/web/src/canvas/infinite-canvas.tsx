@@ -12,8 +12,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 import {
   CATALOG_BUILDABLE_IMAGE_URLS,
-  catalogBuildable,
-} from "@/game/buildable-catalog";
+  buildableImageUrl,
+} from "@/game/catalog-images";
 
 import {
   SNAP_INTERVAL,
@@ -192,10 +192,9 @@ function updateNodeVisual(
     display.labelVisualKey = labelVisualKey;
   }
 
-  const buildable = node.buildableId
-    ? catalogBuildable(node.buildableId)
-    : undefined;
-  const imageVisualKey = buildable?.imageUrl ?? "";
+  const imageVisualKey = node.buildableId
+    ? (buildableImageUrl(node.buildableId) ?? "")
+    : "";
   if (display.imageVisualKey !== imageVisualKey) {
     const texture = imageVisualKey
       ? Assets.get<Texture>(imageVisualKey)

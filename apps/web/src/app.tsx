@@ -46,9 +46,9 @@ import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
+import type { NodePickerSelection } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
-import type { NodePickerSelection } from "@/game/catalog-types";
 import {
   AlertDialog,
   AlertDialogAction,
