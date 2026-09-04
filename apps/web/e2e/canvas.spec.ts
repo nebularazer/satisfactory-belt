@@ -14,6 +14,9 @@ test("edits and restores a canvas in a real browser", async ({ page }) => {
   const nodePicker = page.getByRole("dialog", { name: "Add node" });
   await expect(nodePicker).toBeVisible();
   await page
+    .getByPlaceholder("Search buildings or recipes...")
+    .fill("iron plate");
+  await page
     .getByRole("option", { name: /^Iron Plate.*Iron Ingot.*Constructor/ })
     .click();
   await expect(nodePicker).toBeHidden();

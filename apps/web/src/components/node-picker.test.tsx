@@ -44,7 +44,9 @@ describe("NodePicker", () => {
       />,
     );
 
-    expect(screen.getByText("Machines")).toBeInTheDocument();
+    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.queryByText("Machines")).not.toBeInTheDocument();
+    expect(screen.queryByText("Resource extraction")).not.toBeInTheDocument();
     expect(screen.queryByText("Recipes")).not.toBeInTheDocument();
     expect(
       screen.getByRole("listbox", { name: "Buildings and recipes" }),
@@ -78,6 +80,29 @@ describe("NodePicker", () => {
       machineId: "Build_AssemblerMk1_C",
       recipeId: "Recipe_IronPlateReinforced_C",
     });
+  });
+
+  it("groups production machines and resource extractors under Production", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "production" } },
+    );
+
+    expect(screen.getByLabelText("Production")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Constructor 48 recipes/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /^Miner Mk\.1.*10 recipes/ }),
+    ).toBeInTheDocument();
   });
 
   it("shows normalized alternate recipes with production details", () => {

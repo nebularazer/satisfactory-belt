@@ -272,7 +272,8 @@ function extractorMatchReason(extractor: ResourceExtractor, query: string) {
   );
   if (matchingSearchTerm) return `Matches resource: ${matchingSearchTerm}`;
 
-  return buildableMatchReason(extractor, query, "Resource extraction", [
+  return buildableMatchReason(extractor, query, "Production", [
+    "production",
     "resource",
     "extraction",
     "extractor",
@@ -728,8 +729,11 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       });
     }
 
+    if (matchingMachines.length > 0 || matchingExtractors.length > 0) {
+      addHeading("production", "Production");
+    }
+
     if (matchingMachines.length > 0) {
-      addHeading("machines", "Machines");
       matchingMachines.forEach((machine) =>
         nextRows.push({
           key: `machine:${machine.id}`,
@@ -740,7 +744,6 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     }
 
     if (matchingExtractors.length > 0) {
-      addHeading("extractors", "Resource extraction");
       matchingExtractors.forEach((extractor) =>
         nextRows.push({
           extractor,
@@ -1200,8 +1203,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             reason={buildableMatchReason(
                               row.machine,
                               query,
-                              "Machines",
-                              ["machine"],
+                              "Production",
+                              ["production", "machine"],
                             )}
                           />
                         </div>

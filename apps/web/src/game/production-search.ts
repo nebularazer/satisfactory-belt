@@ -57,9 +57,11 @@ function createBuildableDocuments<T extends CatalogBuildable>(
 }
 
 const machineDocuments = createBuildableDocuments(PRODUCTION_MACHINES, [
+  "production",
   "machine",
 ]);
 const extractorDocuments = createBuildableDocuments(RESOURCE_EXTRACTORS, [
+  "production",
   "resource",
   "extraction",
   "extractor",
