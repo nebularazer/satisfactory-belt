@@ -1,4 +1,4 @@
-import type { CanvasDocument, CanvasNode } from "./document";
+import { canvasNodeId, type CanvasDocument, type CanvasNode } from "./document";
 import type { Point, Rectangle } from "./geometry";
 
 const CELL_SIZE = 512;
@@ -61,19 +61,22 @@ export function createCanvasSpatialIndex(initialDocument: CanvasDocument) {
   };
 
   const add = (node: CanvasNode) => {
-    remove(node.id);
+    const id = canvasNodeId(node);
+    remove(id);
     const cells = cellsFor(node);
-    entries.set(node.id, { cells, node });
+    entries.set(id, { cells, node });
     for (const cell of cells) {
       const bucket = buckets.get(cell) ?? new Set<string>();
-      bucket.add(node.id);
+      bucket.add(id);
       buckets.set(cell, bucket);
     }
   };
 
   const reindexOrder = (document: CanvasDocument) => {
     order.clear();
-    document.nodes.forEach((node, index) => order.set(node.id, index));
+    document.nodes.forEach((node, index) =>
+      order.set(canvasNodeId(node), index),
+    );
   };
 
   const replace = (document: CanvasDocument) => {
@@ -91,7 +94,7 @@ export function createCanvasSpatialIndex(initialDocument: CanvasDocument) {
       before: readonly CanvasNode[],
       after: readonly CanvasNode[],
     ) {
-      for (const node of before) remove(node.id);
+      for (const node of before) remove(canvasNodeId(node));
       for (const node of after) add(node);
       reindexOrder(document);
     },
@@ -152,7 +155,8 @@ export function createCanvasSpatialIndex(initialDocument: CanvasDocument) {
         )
         .sort(
           (left, right) =>
-            (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0),
+            (order.get(canvasNodeId(left)) ?? 0) -
+            (order.get(canvasNodeId(right)) ?? 0),
         );
     },
     replace,

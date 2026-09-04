@@ -1,3 +1,4 @@
+import { canvasNodeId } from "./document";
 import { SNAP_INTERVAL, type CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
 import { screenToWorld, ZOOM_STEP, type Viewport } from "./viewport";
@@ -193,7 +194,7 @@ export function attachCanvasInteractions(
       interaction = {
         baseIds: editor.getState().selectedIds,
         dragging: false,
-        hitId: hit?.id,
+        hitId: hit ? canvasNodeId(hit) : undefined,
         kind: "select",
         pointerId: event.pointerId,
         startScreen: screen,
@@ -203,12 +204,13 @@ export function attachCanvasInteractions(
     }
 
     if (hit) {
-      const hitIsSelected = editor.getState().selectedIds.includes(hit.id);
+      const hitId = canvasNodeId(hit);
+      const hitIsSelected = editor.getState().selectedIds.includes(hitId);
       if (!hitIsSelected) {
         editor.dispatch({
           type: "selection.node",
           additive: false,
-          id: hit.id,
+          id: hitId,
         });
       }
 
@@ -216,7 +218,7 @@ export function attachCanvasInteractions(
       interaction = {
         kind: "move",
         moved: false,
-        nodeId: hit.id,
+        nodeId: hitId,
         pointerId: event.pointerId,
         startScreen: screen,
         startWorld: worldPoint,

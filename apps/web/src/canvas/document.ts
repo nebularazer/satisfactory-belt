@@ -1,15 +1,19 @@
-export const CANVAS_DOCUMENT_VERSION = 1;
+import type { NodeConfiguration } from "@satisfactory-belt/production";
+
+export const CANVAS_DOCUMENT_VERSION = 3;
 
 export type CanvasNode = Readonly<{
-  buildableId?: string;
+  configuration: NodeConfiguration;
   height: number;
-  id: string;
   label: string;
-  recipeId?: string;
   width: number;
   x: number;
   y: number;
 }>;
+
+export function canvasNodeId(node: CanvasNode) {
+  return node.configuration.id;
+}
 
 export type CanvasDocument = Readonly<{
   nodes: readonly CanvasNode[];

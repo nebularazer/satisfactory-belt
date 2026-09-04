@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { canvasNodeId } from "./document";
 import { createCanvasEditor, HISTORY_LIMIT, SNAP_INTERVAL } from "./editor";
+import { TEST_NODE_TEMPLATE, testCanvasNode } from "./test-fixtures";
 
 function createEditor() {
   let id = 0;
@@ -13,27 +15,49 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       at: { x: 100, y: 100 },
-      buildableId: "Build_ConstructorMk1_C",
       label: "Iron Plate",
-      recipeId: "Recipe_IronPlate_C",
+      node: {
+        buildableId: "Build_ConstructorMk1_C",
+        kind: "process",
+        processId: "Recipe_IronPlate_C",
+      },
     });
 
     expect(editor.getState().document.nodes[0]).toMatchObject({
-      buildableId: "Build_ConstructorMk1_C",
+      configuration: {
+        buildableId: "Build_ConstructorMk1_C",
+        kind: "process",
+        processId: "Recipe_IronPlate_C",
+      },
       label: "Iron Plate",
-      recipeId: "Recipe_IronPlate_C",
     });
   });
 
   it("creates snapped nodes and selects by point and marquee", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
-    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
 
     const [first, second] = editor.getState().document.nodes;
-    expect(first).toMatchObject({ id: "node-1", x: 0, y: 64 });
-    expect(second).toMatchObject({ id: "node-2", x: 320, y: 256 });
-    expect(editor.hitTest({ x: 20, y: 80 })?.id).toBe("node-1");
+    expect(first).toMatchObject({
+      configuration: { id: "node-1" },
+      x: 0,
+      y: 64,
+    });
+    expect(second).toMatchObject({
+      configuration: { id: "node-2" },
+      x: 320,
+      y: 256,
+    });
+    expect(canvasNodeId(editor.hitTest({ x: 20, y: 80 })!)).toBe("node-1");
 
     editor.dispatch({
       type: "selection.marquee",
@@ -45,8 +69,16 @@ describe("canvas editor", () => {
 
   it("toggles nodes in an additive selection", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
-    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
 
     editor.dispatch({ type: "selection.node", additive: false, id: "node-1" });
     editor.dispatch({ type: "selection.node", additive: true, id: "node-2" });
@@ -58,7 +90,11 @@ describe("canvas editor", () => {
 
   it("keeps unknown node ids out of the selection", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
 
     editor.dispatch({ type: "selection.node", additive: false, id: "missing" });
     expect(editor.getState().selectedIds).toEqual(["node-1"]);
@@ -74,7 +110,11 @@ describe("canvas editor", () => {
 
   it("moves a selection as one undoable operation", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({
       type: "selection.move.update",
@@ -91,7 +131,11 @@ describe("canvas editor", () => {
 
   it("keeps pointer movement transient until the move is committed", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     const document = editor.getState().document;
     const changes: Array<{ kind: string }> = [];
     editor.subscribe((change) => changes.push(change));
@@ -113,8 +157,16 @@ describe("canvas editor", () => {
 
   it("moves every node in a multi-selection", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
-    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
     editor.dispatch({
       type: "selection.marquee",
       baseIds: [],
@@ -139,7 +191,11 @@ describe("canvas editor", () => {
       idFactory: () => `node-${++id}`,
       snapToGrid: false,
     });
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({
       type: "selection.move.update",
@@ -152,7 +208,11 @@ describe("canvas editor", () => {
 
   it("copies, pastes, duplicates, deletes, and restores selections", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     editor.dispatch({ type: "selection.copy" });
     editor.dispatch({ type: "selection.paste" });
     editor.dispatch({ type: "selection.duplicate" });
@@ -170,7 +230,11 @@ describe("canvas editor", () => {
 
   it("nudges selected nodes as an undoable operation", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     editor.dispatch({ type: "selection.nudge", delta: { x: 32, y: -32 } });
 
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
@@ -180,8 +244,16 @@ describe("canvas editor", () => {
 
   it("calculates all-node and selection bounds", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
-    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
 
     expect(editor.getBounds("all")).toEqual({
       height: 288,
@@ -199,31 +271,39 @@ describe("canvas editor", () => {
 
   it("replaces a document and clears history", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     editor.dispatch({
       type: "document.replace",
       document: {
         nodes: [
           {
+            ...testCanvasNode("imported", 1_000, 1_000),
             height: 50,
-            id: "imported",
             label: "Imported",
             width: 50,
-            x: 1_000,
-            y: 1_000,
           },
         ],
-        version: 1,
+        version: 3,
       },
     });
 
     expect(editor.getState().canUndo).toBe(false);
-    expect(editor.hitTest({ x: 1_025, y: 1_025 })?.id).toBe("imported");
+    expect(canvasNodeId(editor.hitTest({ x: 1_025, y: 1_025 })!)).toBe(
+      "imported",
+    );
   });
 
   it("resets the document and all transient editing state", () => {
     const editor = createEditor();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     editor.dispatch({ type: "selection.copy" });
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({ type: "selection.move.update", delta: { x: 20, y: 20 } });
@@ -233,7 +313,7 @@ describe("canvas editor", () => {
     expect(editor.getState()).toMatchObject({
       canRedo: false,
       canUndo: false,
-      document: { nodes: [], version: 1 },
+      document: { nodes: [], version: 3 },
       moveDelta: null,
       selectedIds: [],
     });
@@ -245,7 +325,11 @@ describe("canvas editor", () => {
   it("bounds operation history", () => {
     const editor = createEditor();
     for (let index = 0; index <= HISTORY_LIMIT; index += 1) {
-      editor.dispatch({ type: "node.create", at: { x: index * 200, y: 100 } });
+      editor.dispatch({
+        type: "node.create",
+        node: TEST_NODE_TEMPLATE,
+        at: { x: index * 200, y: 100 },
+      });
     }
     for (let index = 0; index <= HISTORY_LIMIT; index += 1) {
       editor.dispatch({ type: "history.undo" });

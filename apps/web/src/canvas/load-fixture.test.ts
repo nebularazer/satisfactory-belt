@@ -14,7 +14,7 @@ describe("canvas load fixture", () => {
     expect(first).toEqual(second);
     expect(first.nodes).toHaveLength(100);
     expect(first.nodes[0]).toMatchObject({
-      id: "fixture-node-1",
+      configuration: { id: "fixture-node-1" },
       label: "Node 1",
     });
   });

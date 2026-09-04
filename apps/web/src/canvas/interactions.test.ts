@@ -7,6 +7,7 @@ import {
 } from "./interactions";
 import { panViewport, zoomViewportAt, type Viewport } from "./viewport";
 import type { Point } from "./geometry";
+import { TEST_NODE_TEMPLATE } from "./test-fixtures";
 
 type PointerOptions = MouseEventInit & {
   pointerId?: number;
@@ -144,8 +145,16 @@ function createHarness(
 describe("canvas interactions", () => {
   it("selects with primary click and toggles with Ctrl/Cmd-click", () => {
     const { editor, pointer } = createHarness();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
-    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
     editor.dispatch({ type: "selection.clear" });
 
     pointer("pointerdown", 20, 80);
@@ -163,7 +172,11 @@ describe("canvas interactions", () => {
 
   it("pans on an empty-space drag and clears selection on an empty click", () => {
     const { editor, pointer, viewport } = createHarness();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
 
     pointer("pointerdown", 500, 500);
     pointer("pointermove", 550, 530);
@@ -179,7 +192,11 @@ describe("canvas interactions", () => {
 
   it("does not turn small pointer movement into a drag", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     const original = editor.getState().document.nodes[0];
 
     pointer("pointerdown", 30, 70);
@@ -198,7 +215,11 @@ describe("canvas interactions", () => {
       snapToGrid: false,
       viewport: { x: 100, y: 50, zoom: 2 },
     });
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
 
     pointer("pointerdown", 160, 190);
     pointer("pointermove", 200, 250);
@@ -211,7 +232,11 @@ describe("canvas interactions", () => {
     const { editor, pointer } = createHarness({
       viewport: { x: 100, y: 50, zoom: 2 },
     });
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
 
     pointer("pointerdown", 140, 210);
     pointer("pointermove", 230, 230);
@@ -224,8 +249,16 @@ describe("canvas interactions", () => {
     const { editor, marquees, pointer } = createHarness({
       viewport: { x: 100, y: 50, zoom: 2 },
     });
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
-    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
     editor.dispatch({ type: "selection.clear" });
 
     pointer("pointerdown", 80, 150, { ctrlKey: true });
@@ -241,8 +274,16 @@ describe("canvas interactions", () => {
 
   it("adds a Ctrl/Cmd marquee to the existing selection", () => {
     const { editor, pointer } = createHarness();
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
-    editor.dispatch({ type: "node.create", at: { x: 400, y: 300 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
     editor.dispatch({ type: "selection.node", additive: false, id: "node-2" });
 
     pointer("pointerdown", 0, 50, { ctrlKey: true });
@@ -280,7 +321,11 @@ describe("canvas interactions", () => {
 
   it("cancels an active move with Escape", () => {
     const { editor, key, pointer } = createHarness({ snapToGrid: false });
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     const original = editor.getState().document.nodes[0];
 
     pointer("pointerdown", 30, 70);
@@ -322,7 +367,11 @@ describe("canvas interactions", () => {
     key("2");
     expect(fits).toEqual(["all", "selection"]);
 
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     key("ArrowRight");
     expect(editor.getState().document.nodes[0]?.x).toBe(32);
   });

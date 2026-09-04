@@ -24,7 +24,7 @@ import {
   type SavedCanvasDocument,
 } from "@/canvas/document-storage";
 import { createCanvasEditor } from "@/canvas/editor";
-import type { CanvasDocument } from "@/canvas/document";
+import { canvasNodeId, type CanvasDocument } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
 import {
   createCanvasLoadFixture,
@@ -46,9 +46,9 @@ import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
+import type { NodePickerSelection } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
-import type { NodePickerSelection } from "@/game/catalog-types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -284,9 +284,8 @@ function CanvasWorkspace({
     editor.dispatch({
       type: "node.create",
       at: pendingNode.at,
-      buildableId: selection.buildableId,
       label: selection.label,
-      recipeId: selection.recipeId,
+      node: selection.node,
     });
     setPendingNode(null);
   };
@@ -304,8 +303,9 @@ function CanvasWorkspace({
       requestNodeAt(at);
       return false;
     }
-    if (!editor.getState().selectedIds.includes(hit.id)) {
-      editor.dispatch({ type: "selection.node", additive: false, id: hit.id });
+    const hitId = canvasNodeId(hit);
+    if (!editor.getState().selectedIds.includes(hitId)) {
+      editor.dispatch({ type: "selection.node", additive: false, id: hitId });
     }
     return true;
   };

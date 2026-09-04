@@ -7,7 +7,10 @@ const sourcePath = path.join(
   repositoryRoot,
   ".dev/assets/data/game-docs.en-US.json",
 );
-const outputDirectory = path.join(repositoryRoot, "apps/web/src/game");
+const outputDirectory = path.join(
+  repositoryRoot,
+  "packages/production/src/data",
+);
 const sourceItemImageDirectory = path.join(
   repositoryRoot,
   ".dev/assets/game/items",
@@ -153,16 +156,23 @@ recipes.sort(
 );
 
 const items = [...itemsById.entries()]
-  .map(([id, item]) => ({
-    form:
+  .map(([id, item]) => {
+    const form =
       item.mForm === "RF_LIQUID"
         ? "liquid"
         : item.mForm === "RF_GAS"
           ? "gas"
-          : "solid",
-    id,
-    name: item.mDisplayName,
-  }))
+          : "solid";
+    const energyMj = Number(item.mEnergyValue) * (form === "solid" ? 1 : 1_000);
+    const sinkPoints = Number(item.mResourceSinkPoints);
+    return {
+      ...(energyMj > 0 ? { energyMj: round(energyMj) } : {}),
+      form,
+      id,
+      name: item.mDisplayName,
+      ...(sinkPoints > 0 ? { sinkPoints } : {}),
+    };
+  })
   .sort((left, right) => left.name.localeCompare(right.name));
 
 async function writeFormattedJson(fileName, value) {

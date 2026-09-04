@@ -8,16 +8,10 @@ import {
   type CanvasDocumentStorage,
 } from "./document-storage";
 import { createCanvasEditor } from "./editor";
+import { TEST_NODE_TEMPLATE, testCanvasNode } from "./test-fixtures";
 
 const documentWith = (...ids: readonly string[]): CanvasDocument => ({
-  nodes: ids.map((id, index) => ({
-    height: 96,
-    id,
-    label: id,
-    width: 176,
-    x: index * 32,
-    y: index * 32,
-  })),
+  nodes: ids.map((id, index) => testCanvasNode(id, index * 32, index * 32)),
   version: CANVAS_DOCUMENT_VERSION,
 });
 
@@ -86,8 +80,16 @@ describe("canvas autosave", () => {
     };
     const detach = attachCanvasAutosave(editor, storage, () => "active-id");
 
-    editor.dispatch({ type: "node.create", at: { x: 0, y: 0 } });
-    editor.dispatch({ type: "node.create", at: { x: 100, y: 100 } });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 0, y: 0 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
     await vi.advanceTimersByTimeAsync(300);
 
     expect(saveWorkspace).toHaveBeenCalledOnce();

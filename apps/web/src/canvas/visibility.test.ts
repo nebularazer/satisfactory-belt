@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import type { CanvasNode } from "./document";
+import {
+  CANVAS_DOCUMENT_VERSION,
+  canvasNodeId,
+  type CanvasNode,
+} from "./document";
 import type { CanvasEditorState } from "./editor";
 import { createCanvasLoadFixture } from "./load-fixture";
 import { createCanvasSpatialIndex } from "./spatial-index";
 import { visibleCanvasNodes } from "./visibility";
+import { testCanvasNode } from "./test-fixtures";
 
-const node = (id: string, x: number, y: number): CanvasNode => ({
-  height: 50,
-  id,
-  label: id,
-  width: 50,
-  x,
-  y,
-});
+const node = (id: string, x: number, y: number): CanvasNode =>
+  testCanvasNode(id, x, y, { height: 50, width: 50 });
 
 function state(
   nodes: readonly CanvasNode[],
@@ -22,7 +21,7 @@ function state(
   return {
     canRedo: false,
     canUndo: false,
-    document: { nodes, version: 1 },
+    document: { nodes, version: CANVAS_DOCUMENT_VERSION },
     moveDelta: null,
     selectedIds: [],
     snapToGrid: true,
@@ -54,7 +53,7 @@ describe("canvas visibility", () => {
         state(nodes),
         { x: 0, y: 0, zoom: 1 },
         { height: 100, width: 100 },
-      ).map(({ id }) => id),
+      ).map(canvasNodeId),
     ).toEqual(["visible", "overscan"]);
   });
 
@@ -66,7 +65,7 @@ describe("canvas visibility", () => {
         state(nodes),
         { x: -2_000, y: -2_000, zoom: 2 },
         { height: 100, width: 100 },
-      ).map(({ id }) => id),
+      ).map(canvasNodeId),
     ).toEqual(["panned-to"]);
   });
 
@@ -77,11 +76,11 @@ describe("canvas visibility", () => {
       visible(
         state([moving], {
           moveDelta: { x: -1_000, y: -1_000 },
-          selectedIds: [moving.id],
+          selectedIds: [canvasNodeId(moving)],
         }),
         { x: 0, y: 0, zoom: 1 },
         { height: 100, width: 100 },
-      ).map(({ id }) => id),
+      ).map(canvasNodeId),
     ).toEqual(["moving"]);
   });
 

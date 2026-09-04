@@ -9,17 +9,27 @@ import {
 const document = {
   nodes: [
     {
-      buildableId: "Build_ConstructorMk1_C",
+      configuration: {
+        buildableId: "Build_ConstructorMk1_C",
+        id: "node-1",
+        instances: [
+          {
+            clockSpeedPercent: 100,
+            id: "node-1:instance-1",
+            somersloopCount: 0,
+          },
+        ],
+        kind: "process" as const,
+        processId: "Recipe_IronPlate_C",
+      },
       height: 96,
-      id: "node-1",
       label: "Node 1",
-      recipeId: "Recipe_IronPlate_C",
       width: 176,
       x: 0,
       y: 32,
     },
   ],
-  version: 1 as const,
+  version: 3 as const,
 };
 
 describe("canvas document format", () => {
@@ -30,19 +40,28 @@ describe("canvas document format", () => {
   });
 
   it("rejects unknown versions without attempting migration", () => {
-    expect(() => validateCanvasDocument({ ...document, version: 2 })).toThrow(
-      "Unsupported document version: 2.",
+    expect(() => validateCanvasDocument({ ...document, version: 4 })).toThrow(
+      "Unsupported document version: 4.",
+    );
+    expect(() => validateCanvasDocument({ ...document, version: 1 })).toThrow(
+      "Unsupported document version: 1.",
     );
   });
 
   it("rejects malformed and duplicate nodes", () => {
-    expect(() => validateCanvasDocument({ nodes: [{}], version: 1 })).toThrow(
-      "invalid id",
+    expect(() => validateCanvasDocument({ nodes: [{}], version: 3 })).toThrow(
+      "invalid label",
     );
     expect(() =>
       validateCanvasDocument({
+        nodes: [{ ...document.nodes[0], configuration: null }],
+        version: 3,
+      }),
+    ).toThrow("Node configuration must be an object");
+    expect(() =>
+      validateCanvasDocument({
         nodes: [document.nodes[0], document.nodes[0]],
-        version: 1,
+        version: 3,
       }),
     ).toThrow("Node ids must be unique.");
   });

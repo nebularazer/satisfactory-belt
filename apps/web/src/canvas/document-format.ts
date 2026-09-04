@@ -1,5 +1,8 @@
+import { parseNodeConfiguration } from "@satisfactory-belt/production";
+
 import {
   CANVAS_DOCUMENT_VERSION,
+  canvasNodeId,
   type CanvasDocument,
   type CanvasNode,
 } from "./document";
@@ -14,9 +17,6 @@ function validNumber(value: unknown): value is number {
 
 function parseNode(value: unknown, index: number): CanvasNode {
   if (!isRecord(value)) throw new Error(`Node ${index + 1} is not an object.`);
-  if (typeof value.id !== "string" || value.id.length === 0) {
-    throw new Error(`Node ${index + 1} has an invalid id.`);
-  }
   if (typeof value.label !== "string") {
     throw new Error(`Node ${index + 1} has an invalid label.`);
   }
@@ -33,13 +33,9 @@ function parseNode(value: unknown, index: number): CanvasNode {
   }
 
   return {
-    ...(typeof value.buildableId === "string"
-      ? { buildableId: value.buildableId }
-      : {}),
+    configuration: parseNodeConfiguration(value.configuration),
     height: value.height,
-    id: value.id,
     label: value.label,
-    ...(typeof value.recipeId === "string" ? { recipeId: value.recipeId } : {}),
     width: value.width,
     x: value.x,
     y: value.y,
@@ -57,7 +53,7 @@ export function validateCanvasDocument(value: unknown): CanvasDocument {
   }
 
   const nodes = value.nodes.map(parseNode);
-  const ids = new Set(nodes.map((node) => node.id));
+  const ids = new Set(nodes.map(canvasNodeId));
   if (ids.size !== nodes.length) throw new Error("Node ids must be unique.");
 
   return { nodes, version: CANVAS_DOCUMENT_VERSION };

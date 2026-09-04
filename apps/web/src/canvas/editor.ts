@@ -1,5 +1,8 @@
+import { createNode, type NodeTemplate } from "@satisfactory-belt/production";
+
 import {
   EMPTY_CANVAS_DOCUMENT,
+  canvasNodeId,
   type CanvasDocument,
   type CanvasNode,
 } from "./document";
@@ -36,9 +39,8 @@ export type CanvasEditorAction =
   | {
       type: "node.create";
       at: Point;
-      buildableId?: string;
       label?: string;
-      recipeId?: string;
+      node: NodeTemplate;
     }
   | { type: "selection.clear" }
   | { type: "selection.delete" }
@@ -103,10 +105,12 @@ function applyPatch(
   target: readonly IndexedNode[],
 ): CanvasDocument {
   const affectedIds = new Set([
-    ...source.map(({ node }) => node.id),
-    ...target.map(({ node }) => node.id),
+    ...source.map(({ node }) => canvasNodeId(node)),
+    ...target.map(({ node }) => canvasNodeId(node)),
   ]);
-  const nodes = document.nodes.filter((node) => !affectedIds.has(node.id));
+  const nodes = document.nodes.filter(
+    (node) => !affectedIds.has(canvasNodeId(node)),
+  );
 
   for (const { index, node } of [...target].sort((a, b) => a.index - b.index)) {
     nodes.splice(Math.max(0, Math.min(index, nodes.length)), 0, node);
@@ -184,13 +188,16 @@ export function createCanvasEditor(
 
   const duplicateNodes = (nodes: readonly CanvasNode[]) => {
     const offset = SNAP_INTERVAL;
-    return nodes.map((node) => ({
-      ...node,
-      id: idFactory(),
-      label: `${node.label} copy`,
-      x: node.x + offset,
-      y: node.y + offset,
-    }));
+    return nodes.map((node) => {
+      const id = idFactory();
+      return {
+        ...node,
+        configuration: { ...node.configuration, id },
+        label: `${node.label} copy`,
+        x: node.x + offset,
+        y: node.y + offset,
+      };
+    });
   };
 
   const dispatch = (action: CanvasEditorAction) => {
@@ -229,20 +236,22 @@ export function createCanvasEditor(
 
       case "node.create": {
         nodeSequence += 1;
+        const id = idFactory();
         const x = action.at.x - NODE_WIDTH / 2;
         const y = action.at.y - NODE_HEIGHT / 2;
         const node: CanvasNode = {
-          ...(action.buildableId ? { buildableId: action.buildableId } : {}),
+          configuration: createNode({
+            ...action.node,
+            id,
+          }).configuration,
           height: NODE_HEIGHT,
-          id: idFactory(),
           label: action.label ?? `Node ${nodeSequence}`,
-          ...(action.recipeId ? { recipeId: action.recipeId } : {}),
           width: NODE_WIDTH,
           x: state.snapToGrid ? snap(x) : x,
           y: state.snapToGrid ? snap(y) : y,
         };
         const index = state.document.nodes.length;
-        const selectedIds = [node.id];
+        const selectedIds = [canvasNodeId(node)];
         commit(
           { ...state.document, nodes: [...state.document.nodes, node] },
           selectedIds,
@@ -288,7 +297,7 @@ export function createCanvasEditor(
         const baseIds = action.baseIds.filter((id) => spatialIndex.get(id));
         const matchingIds = spatialIndex
           .query(action.rectangle)
-          .map((node) => node.id);
+          .map(canvasNodeId);
         const selectedIds = [...new Set([...baseIds, ...matchingIds])];
         publish(
           { selectedIds },
@@ -308,7 +317,7 @@ export function createCanvasEditor(
           {
             ...state.document,
             nodes: state.document.nodes.filter(
-              (node) => !selected.has(node.id),
+              (node) => !selected.has(canvasNodeId(node)),
             ),
           },
           [],
@@ -330,7 +339,7 @@ export function createCanvasEditor(
         if (clipboard.length === 0) return;
         const pasted = duplicateNodes(clipboard);
         const startIndex = state.document.nodes.length;
-        const selectedIds = pasted.map((node) => node.id);
+        const selectedIds = pasted.map(canvasNodeId);
         commit(
           { ...state.document, nodes: [...state.document.nodes, ...pasted] },
           selectedIds,
@@ -353,7 +362,7 @@ export function createCanvasEditor(
         if (selected.length === 0) return;
         const duplicates = duplicateNodes(selected);
         const startIndex = state.document.nodes.length;
-        const selectedIds = duplicates.map((node) => node.id);
+        const selectedIds = duplicates.map(canvasNodeId);
         commit(
           {
             ...state.document,
