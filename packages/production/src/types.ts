@@ -448,6 +448,11 @@ export type NodeConfiguration =
 export type NodeTemplate<T extends NodeRequest = NodeRequest> =
   T extends NodeRequest ? Omit<T, "id"> : never;
 
+export type NodeChoice = Readonly<{
+  label: string;
+  template: NodeTemplate;
+}>;
+
 export type RouterNode = Readonly<{
   configuration: RouterNodeConfiguration;
   kind: "router";

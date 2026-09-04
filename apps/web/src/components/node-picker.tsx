@@ -14,16 +14,13 @@ import {
 } from "@tanstack/react-virtual";
 import {
   createNode,
-  findBuffer,
   findBuildable,
   findDescriptor,
-  findPowerGenerator,
+  findProductionProcess,
   findProductionMachine,
   findResourceExtractor,
   findResourceWellPressurizer,
-  findRouter,
-  findTransport,
-  productionProcessesForBuildable,
+  nodeChoicesForBuildable,
   recipeCountForMachine,
   recipesProducing,
   searchBuffers,
@@ -340,26 +337,12 @@ function standaloneBuildableMatchReason(buildable: Buildable, query: string) {
   return buildableMatchReason(buildable, query, label, keywords);
 }
 
-function configurationsForBuildable(
+function selectionsForBuildable(
   buildable: Buildable,
 ): readonly NodePickerSelection[] {
-  const generator = findPowerGenerator(buildable.id);
-  if (generator) {
-    return productionProcessesForBuildable(generator.id).map((process) => ({
-      label: process.name,
-      node: {
-        buildableId: generator.id,
-        kind: "process" as const,
-        processId: process.id,
-      },
-    }));
-  }
-
-  const transport = findTransport(buildable.id);
-  if (!transport) return [];
-  return (["load", "unload"] as const).map((mode) => ({
-    label: `${transport.name} (${mode === "load" ? "Load" : "Unload"})`,
-    node: { buildableId: transport.id, kind: "transport", mode },
+  return nodeChoicesForBuildable(buildable.id).map(({ label, template }) => ({
+    label,
+    node: template,
   }));
 }
 
@@ -792,7 +775,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const matchingConfigurations = useMemo(() => {
     if (!open || !selectedConfigurableBuildable) return [];
     const terms = normalizedSearchTerms(query);
-    return configurationsForBuildable(selectedConfigurableBuildable).filter(
+    return selectionsForBuildable(selectedConfigurableBuildable).filter(
       (selection) => includesSearchTerms(selection.label, terms),
     );
   }, [open, query, selectedConfigurableBuildable]);
@@ -1058,62 +1041,33 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   };
 
   const selectRecipe = (recipe: Recipe, machineId: string) => {
-    submitSelection({
-      label: recipe.name,
-      node: {
-        buildableId: machineId,
-        kind: "process",
-        processId: recipe.id,
-      },
-    });
+    const machine = findBuildable(machineId);
+    const selection = machine
+      ? selectionsForBuildable(machine).find(
+          ({ node }) => node.kind === "process" && node.processId === recipe.id,
+        )
+      : undefined;
+    if (selection) submitSelection(selection);
   };
 
   const selectBuildable = (buildable: Buildable) => {
-    if (findRouter(buildable.id)) {
-      submitSelection({
-        label: buildable.name,
-        node: { buildableId: buildable.id, kind: "router" },
-      });
-      return;
-    }
-    if (findBuffer(buildable.id)) {
-      submitSelection({
-        label: buildable.name,
-        node: { buildableId: buildable.id, kind: "buffer" },
-      });
-      return;
-    }
-    const process = productionProcessesForBuildable(buildable.id)[0];
-    if (!process) return;
-    submitSelection({
-      label: buildable.name,
-      node: {
-        buildableId: buildable.id,
-        kind: "process",
-        processId: process.id,
-      },
-    });
+    const selections = selectionsForBuildable(buildable);
+    if (selections.length === 1) submitSelection(selections[0]);
   };
 
   const selectExtractorResource = (
     extractor: ResourceSource,
     resource: Descriptor,
   ) => {
-    const process = productionProcessesForBuildable(extractor.id).find(
-      (candidate) =>
-        (candidate.kind === "extraction" ||
-          candidate.kind === "resource-well") &&
-        candidate.outputItemIds.includes(resource.id),
-    );
-    if (!process) return;
-    submitSelection({
-      label: resource.name,
-      node: {
-        buildableId: extractor.id,
-        kind: "process",
-        processId: process.id,
-      },
+    const selection = selectionsForBuildable(extractor).find(({ node }) => {
+      if (node.kind !== "process") return false;
+      const process = findProductionProcess(node.processId);
+      return (
+        (process?.kind === "extraction" || process?.kind === "resource-well") &&
+        process.outputItemIds.includes(resource.id)
+      );
     });
+    if (selection) submitSelection(selection);
   };
 
   const enterScope = (nextScope: PickerScope) => {

@@ -38,6 +38,7 @@ export {
   NodeConfigurationError,
   parseNodeConfiguration,
 } from "./node";
+export { nodeChoicesForBuildable } from "./node-choice";
 export type {
   BufferBuildable,
   BufferNode,
@@ -53,6 +54,7 @@ export type {
   MaterialRate,
   NodeProfile,
   Node,
+  NodeChoice,
   NodeConfiguration,
   NodeRequest,
   NodeTemplate,
