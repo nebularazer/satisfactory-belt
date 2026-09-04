@@ -6,3 +6,4 @@ dist/
 coverage/
 test-results/
 *.tsbuildinfo
+/AGENTS.override.md
