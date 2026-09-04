@@ -1,10 +1,13 @@
 export {
+  findBuffer,
   findBuildable,
   findDescriptor,
   findPowerGenerator,
   findProductionMachine,
   findRecipe,
   findResourceExtractor,
+  findRouter,
+  findTransport,
   listBuildables,
   recipesForMachine,
   recipesProducing,
@@ -28,13 +31,22 @@ export {
   createProcessNode,
   ProcessNodeConfigurationError,
 } from "./process-node";
+export {
+  createMaterialNode,
+  MaterialNodeConfigurationError,
+} from "./material-node";
 export type {
+  BufferBuildable,
+  BufferNode,
   Buildable,
   BuildableCategory,
   Descriptor,
+  MaterialNode,
+  MaterialNodeRequest,
   MaterialPort,
   MaterialRate,
   NodeProfile,
+  Node,
   PowerProfile,
   ProcessNode,
   ProcessNodeConfiguration,
@@ -46,4 +58,8 @@ export type {
   Recipe,
   ResourceExtractor,
   ResourcePurity,
+  RouterBuildable,
+  RouterNode,
+  TransportBuildable,
+  TransportNode,
 } from "./types";

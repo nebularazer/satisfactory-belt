@@ -72,12 +72,14 @@ describe("Process Nodes", () => {
           forms: ["solid"],
           id: "input:Desc_IronIngot_C",
           itemId: "Desc_IronIngot_C",
+          medium: "conveyor",
         },
         {
           direction: "output",
           forms: ["solid"],
           id: "output:Desc_IronPlate_C",
           itemId: "Desc_IronPlate_C",
+          medium: "conveyor",
         },
       ],
       profile: {

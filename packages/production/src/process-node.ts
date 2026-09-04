@@ -107,6 +107,7 @@ function materialPort(
     forms: [descriptor.form],
     id: `${direction}:${itemId}`,
     itemId,
+    medium: descriptor.form === "solid" ? "conveyor" : "pipeline",
   };
 }
 

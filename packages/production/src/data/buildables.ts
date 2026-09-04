@@ -1,4 +1,12 @@
-import type { Buildable, ProductionMachine, ResourceExtractor } from "../types";
+import type {
+  BufferBuildable,
+  Buildable,
+  MaterialPort,
+  ProductionMachine,
+  ResourceExtractor,
+  RouterBuildable,
+  TransportBuildable,
+} from "../types";
 import { POWER_GENERATORS } from "./power-generators";
 
 export { POWER_GENERATORS } from "./power-generators";
@@ -218,41 +226,202 @@ const PRODUCTION_SUPPORT_BUILDABLES: readonly Buildable[] = [
   },
 ];
 
-export const LOGISTICS_BUILDABLES: readonly Buildable[] = [
+function directedPorts(
+  medium: "conveyor" | "pipeline",
+  forms: MaterialPort["forms"],
+  inputCount: number,
+  outputCount: number,
+): readonly MaterialPort[] {
+  return [
+    ...Array.from({ length: inputCount }, (_, index) => ({
+      direction: "input" as const,
+      forms,
+      id: `input:${index + 1}`,
+      medium,
+    })),
+    ...Array.from({ length: outputCount }, (_, index) => ({
+      direction: "output" as const,
+      forms,
+      id: `output:${index + 1}`,
+      medium,
+    })),
+  ];
+}
+
+function pipelineJunctionPorts(count: number): readonly MaterialPort[] {
+  return Array.from({ length: count }, (_, index) => ({
+    direction: "bidirectional",
+    forms: ["liquid", "gas"],
+    id: `port:${index + 1}`,
+    medium: "pipeline",
+  }));
+}
+
+const SPLITTER_PORTS = directedPorts("conveyor", ["solid"], 1, 3);
+const MERGER_PORTS = directedPorts("conveyor", ["solid"], 3, 1);
+
+export const LOGISTICS_BUILDABLES: readonly RouterBuildable[] = [
   {
     category: "logistics",
     id: "Build_ConveyorAttachmentMerger_C",
     name: "Conveyor Merger",
+    nodeKind: "router",
+    ports: MERGER_PORTS,
   },
   {
     category: "logistics",
     id: "Build_ConveyorAttachmentSplitter_C",
     name: "Conveyor Splitter",
+    nodeKind: "router",
+    ports: SPLITTER_PORTS,
   },
   {
     category: "logistics",
     id: "Build_PipelineJunction_Cross_C",
     name: "Pipeline Junction",
+    nodeKind: "router",
+    ports: pipelineJunctionPorts(4),
   },
   {
     category: "logistics",
     id: "Build_PipelineJunction_T_C",
     name: "Pipeline T-Junction",
+    nodeKind: "router",
+    ports: pipelineJunctionPorts(3),
   },
   {
     category: "logistics",
     id: "Build_ConveyorAttachmentSplitterProgrammable_C",
     name: "Programmable Splitter",
+    nodeKind: "router",
+    ports: SPLITTER_PORTS,
   },
   {
     category: "logistics",
     id: "Build_ConveyorAttachmentMergerPriority_C",
     name: "Priority Merger",
+    nodeKind: "router",
+    ports: MERGER_PORTS,
   },
   {
     category: "logistics",
     id: "Build_ConveyorAttachmentSplitterSmart_C",
     name: "Smart Splitter",
+    nodeKind: "router",
+    ports: SPLITTER_PORTS,
+  },
+];
+
+export const BUFFER_BUILDABLES: readonly BufferBuildable[] = [
+  {
+    capacity: { slots: 24, type: "inventory" },
+    category: "organization",
+    id: "Build_StorageContainerMk1_C",
+    name: "Storage Container",
+    nodeKind: "buffer",
+    ports: directedPorts("conveyor", ["solid"], 1, 1),
+  },
+  {
+    capacity: { slots: 48, type: "inventory" },
+    category: "organization",
+    id: "Build_StorageContainerMk2_C",
+    name: "Industrial Storage Container",
+    nodeKind: "buffer",
+    ports: directedPorts("conveyor", ["solid"], 2, 2),
+  },
+  {
+    capacity: { cubicMetres: 400, type: "fluid" },
+    category: "organization",
+    id: "Build_PipeStorageTank_C",
+    name: "Fluid Buffer",
+    nodeKind: "buffer",
+    ports: pipelineJunctionPorts(2),
+  },
+  {
+    capacity: { cubicMetres: 2400, type: "fluid" },
+    category: "organization",
+    id: "Build_IndustrialTank_C",
+    name: "Industrial Fluid Buffer",
+    nodeKind: "buffer",
+    ports: pipelineJunctionPorts(2),
+  },
+];
+
+export const TRANSPORT_BUILDABLES: readonly TransportBuildable[] = [
+  {
+    basePowerMw: 20,
+    cargo: {
+      forms: ["solid"],
+      localInputCount: 2,
+      localMedium: "conveyor",
+      localOutputCount: 2,
+      remoteMedium: "vehicle",
+    },
+    category: "transport",
+    fuelPort: true,
+    id: "Build_TruckStation_C",
+    name: "Truck Station",
+    nodeKind: "transport",
+  },
+  {
+    basePowerMw: 20,
+    cargo: {
+      forms: ["liquid", "gas"],
+      localInputCount: 2,
+      localMedium: "pipeline",
+      localOutputCount: 2,
+      remoteMedium: "vehicle",
+    },
+    category: "transport",
+    fuelPort: true,
+    id: "Build_FluidTruckStation_C",
+    name: "Fluid Truck Station",
+    nodeKind: "transport",
+  },
+  {
+    basePowerMw: 50,
+    cargo: {
+      forms: ["solid"],
+      localInputCount: 2,
+      localMedium: "conveyor",
+      localOutputCount: 2,
+      remoteMedium: "rail",
+    },
+    category: "transport",
+    fuelPort: false,
+    id: "Build_TrainDockingStation_C",
+    name: "Freight Platform",
+    nodeKind: "transport",
+  },
+  {
+    basePowerMw: 50,
+    cargo: {
+      forms: ["liquid", "gas"],
+      localInputCount: 2,
+      localMedium: "pipeline",
+      localOutputCount: 2,
+      remoteMedium: "rail",
+    },
+    category: "transport",
+    fuelPort: false,
+    id: "Build_TrainDockingStationLiquid_C",
+    name: "Fluid Freight Platform",
+    nodeKind: "transport",
+  },
+  {
+    basePowerMw: 100,
+    cargo: {
+      forms: ["solid"],
+      localInputCount: 1,
+      localMedium: "conveyor",
+      localOutputCount: 1,
+      remoteMedium: "drone",
+    },
+    category: "transport",
+    fuelPort: true,
+    id: "Build_DroneStation_C",
+    name: "Drone Port",
+    nodeKind: "transport",
   },
 ];
 
@@ -270,5 +439,7 @@ export const BUILDABLES: readonly Buildable[] = [
   ...POWER_GENERATORS,
   ...PRODUCTION_SUPPORT_BUILDABLES,
   ...LOGISTICS_BUILDABLES,
+  ...BUFFER_BUILDABLES,
+  ...TRANSPORT_BUILDABLES,
   ...SPECIAL_BUILDABLES,
 ];

@@ -243,7 +243,38 @@ export type MaterialPort = Readonly<{
   forms: readonly Descriptor["form"][];
   id: string;
   itemId?: string;
+  medium: "conveyor" | "drone" | "pipeline" | "rail" | "vehicle";
+  purpose?: "fuel";
 }>;
+
+export type RouterBuildable = Buildable &
+  Readonly<{
+    nodeKind: "router";
+    ports: readonly MaterialPort[];
+  }>;
+
+export type BufferBuildable = Buildable &
+  Readonly<{
+    capacity:
+      | Readonly<{ slots: number; type: "inventory" }>
+      | Readonly<{ cubicMetres: number; type: "fluid" }>;
+    nodeKind: "buffer";
+    ports: readonly MaterialPort[];
+  }>;
+
+export type TransportBuildable = Buildable &
+  Readonly<{
+    basePowerMw: number;
+    cargo: Readonly<{
+      forms: readonly Descriptor["form"][];
+      localInputCount: number;
+      localMedium: "conveyor" | "pipeline";
+      localOutputCount: number;
+      remoteMedium: "drone" | "rail" | "vehicle";
+    }>;
+    fuelPort: boolean;
+    nodeKind: "transport";
+  }>;
 
 export type PowerRange = Readonly<{
   maximumMw: number;
@@ -259,6 +290,70 @@ export type NodeProfile = Readonly<{
   inputs: readonly MaterialRate[];
   outputs: readonly MaterialRate[];
   power: PowerProfile;
+}>;
+
+export type MaterialNodeRequest =
+  | Readonly<{
+      buildableId: string;
+      id: string;
+      itemId?: string;
+      kind: "buffer";
+    }>
+  | Readonly<{
+      buildableId: string;
+      id: string;
+      itemId?: string;
+      kind: "router";
+    }>
+  | Readonly<{
+      buildableId: string;
+      id: string;
+      itemId?: string;
+      kind: "transport";
+      mode: "load" | "unload";
+    }>;
+
+export type RouterNodeConfiguration = Readonly<{
+  buildableId: string;
+  id: string;
+  itemId?: string;
+  kind: "router";
+}>;
+
+export type BufferNodeConfiguration = Readonly<{
+  buildableId: string;
+  id: string;
+  itemId?: string;
+  kind: "buffer";
+}>;
+
+export type TransportNodeConfiguration = Readonly<{
+  buildableId: string;
+  id: string;
+  itemId?: string;
+  kind: "transport";
+  mode: "load" | "unload";
+}>;
+
+export type RouterNode = Readonly<{
+  configuration: RouterNodeConfiguration;
+  kind: "router";
+  ports: readonly MaterialPort[];
+  profile: NodeProfile;
+}>;
+
+export type BufferNode = Readonly<{
+  configuration: BufferNodeConfiguration;
+  kind: "buffer";
+  ports: readonly MaterialPort[];
+  profile: NodeProfile;
+}>;
+
+export type TransportNode = Readonly<{
+  configuration: TransportNodeConfiguration;
+  kind: "transport";
+  ports: readonly MaterialPort[];
+  profile: NodeProfile;
 }>;
 
 export type RecipeProcessNode = Readonly<{
@@ -286,3 +381,7 @@ export type ProcessNode =
   | ExtractionProcessNode
   | PowerGenerationProcessNode
   | RecipeProcessNode;
+
+export type MaterialNode = BufferNode | RouterNode | TransportNode;
+
+export type Node = MaterialNode | ProcessNode;

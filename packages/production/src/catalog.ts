@@ -1,8 +1,11 @@
 import {
+  BUFFER_BUILDABLES,
   BUILDABLES,
+  LOGISTICS_BUILDABLES,
   POWER_GENERATORS,
   PRODUCTION_MACHINES,
   RESOURCE_EXTRACTORS,
+  TRANSPORT_BUILDABLES,
 } from "./data/buildables";
 import descriptorData from "./data/items.json";
 import recipeData from "./data/recipes.json";
@@ -22,6 +25,15 @@ const extractorsById = new Map(
 );
 const powerGeneratorsById = new Map(
   POWER_GENERATORS.map((generator) => [generator.id, generator]),
+);
+const routersById = new Map(
+  LOGISTICS_BUILDABLES.map((router) => [router.id, router]),
+);
+const buffersById = new Map(
+  BUFFER_BUILDABLES.map((buffer) => [buffer.id, buffer]),
+);
+const transportsById = new Map(
+  TRANSPORT_BUILDABLES.map((transport) => [transport.id, transport]),
 );
 const descriptorsById = new Map(
   DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor]),
@@ -78,6 +90,18 @@ export function findResourceExtractor(extractorId: string) {
 
 export function findPowerGenerator(generatorId: string) {
   return powerGeneratorsById.get(generatorId);
+}
+
+export function findRouter(routerId: string) {
+  return routersById.get(routerId);
+}
+
+export function findBuffer(bufferId: string) {
+  return buffersById.get(bufferId);
+}
+
+export function findTransport(transportId: string) {
+  return transportsById.get(transportId);
 }
 
 export function resourcesForExtractor(extractorId: string) {
