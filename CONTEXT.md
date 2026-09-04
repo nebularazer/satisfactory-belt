@@ -42,10 +42,15 @@ installing Somersloops, affecting its product rates and Power Profile without
 increasing its ingredient rates.
 _Avoid_: Sloop boost, output clock speed
 
+**Resource Purity**:
+The Impure, Normal, or Pure grade of a resource node or well satellite, which
+scales the material rate of its assigned extractor.
+_Avoid_: Resource quality, extractor efficiency
+
 **Machine Allocation**:
 A whole-number set of Production Machine instances and their individual Clock
-Speeds and Production Amplification settings assigned to a Production Process
-to satisfy a target throughput.
+Speeds, Production Amplification settings, and Resource Purities where
+applicable, assigned to a Production Process to satisfy a target throughput.
 _Avoid_: Machine count, fractional machine count
 
 **Descriptor**:
