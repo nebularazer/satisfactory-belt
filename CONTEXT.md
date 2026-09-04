@@ -57,6 +57,12 @@ The Impure, Normal, or Pure grade of a resource node or well satellite, which
 scales the material rate of its assigned extractor.
 _Avoid_: Resource quality, extractor efficiency
 
+**Resource Well**:
+A coordinated extraction capability consisting of one Resource Well
+Pressurizer and one or more Resource Well Extractors on its satellites. The
+Pressurizer's Clock Speed scales the well's extraction rates and Power Profile.
+_Avoid_: Independent Resource Well Extractor, fluid node
+
 **Machine Allocation**:
 A whole-number set of Production Machine instances and their individual Clock
 Speeds, Production Amplification settings, and Resource Purities where
