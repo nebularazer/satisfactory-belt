@@ -26,11 +26,15 @@ import {
   productionMachine,
   recipesForMachine,
   recipesProducing,
+  resourceExtractor,
+  resourcesForExtractor,
   type CatalogBuildable,
   type NodePickerSelection,
+  type ProductionItem,
   type ProductionMachine,
   type ProductionMaterial,
   type ProductionRecipe,
+  type ResourceExtractor,
 } from "@/game/production-catalog";
 
 type NodePickerProps = {
@@ -42,6 +46,7 @@ type NodePickerProps = {
 type PickerScope =
   | { type: "root" }
   | { machineId: string; type: "machine" }
+  | { extractorId: string; type: "extractor" }
   | { itemId: string; type: "routes" };
 
 type PickerHistoryEntry = {
@@ -53,6 +58,13 @@ type PickerHistoryEntry = {
 type PickerRow =
   | { key: string; label: string; type: "heading" }
   | { key: string; machine: ProductionMachine; type: "machine" }
+  | { extractor: ResourceExtractor; key: string; type: "extractor" }
+  | {
+      extractor: ResourceExtractor;
+      key: string;
+      resource: ProductionItem;
+      type: "extractor-resource";
+    }
   | { buildable: CatalogBuildable; key: string; type: "buildable" }
   | {
       key: string;
@@ -81,11 +93,11 @@ function filterProductionCatalog(
     : 0;
 }
 
-function matchingBuildables(
-  buildables: readonly CatalogBuildable[],
+function matchingBuildables<T extends CatalogBuildable>(
+  buildables: readonly T[],
   query: string,
   categoryKeywords: string[],
-) {
+): T[] {
   return buildables
     .filter(
       (buildable) =>
@@ -331,13 +343,20 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
 
   const selectedMachine =
     scope.type === "machine" ? productionMachine(scope.machineId) : undefined;
+  const selectedExtractor =
+    scope.type === "extractor"
+      ? resourceExtractor(scope.extractorId)
+      : undefined;
   const routeItem =
     scope.type === "routes" ? productionItem(scope.itemId) : undefined;
-  const visibleRecipes = selectedMachine
-    ? recipesForMachine(selectedMachine.id)
-    : routeItem
-      ? recipesProducing(routeItem.id)
-      : PRODUCTION_RECIPES;
+  const visibleRecipes =
+    scope.type === "extractor"
+      ? []
+      : selectedMachine
+        ? recipesForMachine(selectedMachine.id)
+        : routeItem
+          ? recipesProducing(routeItem.id)
+          : PRODUCTION_RECIPES;
   const matchingRecipes = visibleRecipes
     .map((recipe, index) => ({
       index,
@@ -383,6 +402,15 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     scope.type === "root"
       ? matchingBuildables(SPECIAL_BUILDABLES, query, ["special", "sink"])
       : [];
+  const matchingExtractorResources = selectedExtractor
+    ? resourcesForExtractor(selectedExtractor.id).filter(
+        (resource) =>
+          filterProductionCatalog(resource.name, query, [
+            resource.id,
+            selectedExtractor.name,
+          ]) > 0,
+      )
+    : [];
 
   const rows = useMemo(() => {
     const nextRows: PickerRow[] = [];
@@ -396,6 +424,17 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
           key: `machine:${machine.id}`,
           machine,
           type: "machine",
+        }),
+      );
+    }
+
+    if (matchingExtractors.length > 0) {
+      addHeading("extractors", "Resource extraction");
+      matchingExtractors.forEach((extractor) =>
+        nextRows.push({
+          extractor,
+          key: `extractor:${extractor.id}`,
+          type: "extractor",
         }),
       );
     }
@@ -416,9 +455,20 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       );
     };
 
-    addBuildables("extractors", "Resource extraction", matchingExtractors);
     addBuildables("logistics", "Logistics", matchingLogistics);
     addBuildables("special", "Special", matchingSpecial);
+
+    if (selectedExtractor && matchingExtractorResources.length > 0) {
+      addHeading("extractor-recipes", "Recipes");
+      matchingExtractorResources.forEach((resource) =>
+        nextRows.push({
+          extractor: selectedExtractor,
+          key: `extractor-resource:${selectedExtractor.id}:${resource.id}`,
+          resource,
+          type: "extractor-resource",
+        }),
+      );
+    }
 
     if (matchingRecipes.length > 0) {
       addHeading("recipes", "Recipes");
@@ -442,6 +492,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     matchingMachines,
     matchingRecipes,
     matchingSpecial,
+    matchingExtractorResources,
+    selectedExtractor,
     selectedMachine,
   ]);
 
@@ -536,6 +588,14 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     setOpen(false);
   };
 
+  const selectExtractorResource = (
+    extractor: ResourceExtractor,
+    resource: ProductionItem,
+  ) => {
+    onSelect({ label: resource.name, machineId: extractor.id });
+    setOpen(false);
+  };
+
   const enterScope = (nextScope: PickerScope) => {
     historyRef.current.push({
       query,
@@ -560,6 +620,17 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const selectRow = (row: PickerRow) => {
     if (row.type === "machine") {
       enterScope({ machineId: row.machine.id, type: "machine" });
+    } else if (row.type === "extractor") {
+      const resources = resourcesForExtractor(row.extractor.id);
+      if (resources.length > 1) {
+        enterScope({ extractorId: row.extractor.id, type: "extractor" });
+      } else if (resources[0]) {
+        selectExtractorResource(row.extractor, resources[0]);
+      } else {
+        selectBuildable(row.extractor);
+      }
+    } else if (row.type === "extractor-resource") {
+      selectExtractorResource(row.extractor, row.resource);
     } else if (row.type === "buildable") {
       selectBuildable(row.buildable);
     } else if (row.type === "recipe") {
@@ -604,9 +675,12 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
 
   const heading = selectedMachine
     ? selectedMachine.name
-    : routeItem
-      ? `${routeItem.name} Recipes`
-      : undefined;
+    : selectedExtractor
+      ? selectedExtractor.name
+      : routeItem
+        ? `${routeItem.name} Recipes`
+        : undefined;
+  const headingImage = selectedMachine?.imageUrl ?? selectedExtractor?.imageUrl;
 
   return (
     <CommandDialog
@@ -617,9 +691,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       open={open}
       title="Add node"
     >
-      <div className="flex size-full min-h-0 flex-col overflow-hidden rounded-xl bg-popover p-1 text-popover-foreground">
+      <div className="flex size-full min-h-0 flex-col gap-3 overflow-hidden rounded-xl bg-popover p-1 text-popover-foreground">
         {heading && (
-          <div className="flex items-center gap-2 px-2 pt-2">
+          <div className="flex min-h-14 items-center gap-3 px-2 pt-2">
             <button
               aria-label="Back to previous recipe results"
               className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
@@ -628,18 +702,18 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             >
               <ArrowLeft aria-hidden="true" className="size-4" />
             </button>
-            {selectedMachine && (
+            {headingImage && (
               <img
                 alt=""
                 aria-hidden="true"
-                className="size-9 object-contain"
+                className="size-14 object-contain"
                 decoding="async"
-                src={selectedMachine.imageUrl}
+                src={headingImage}
               />
             )}
             <div className="min-w-0">
-              <div className="truncate text-xs font-medium">{heading}</div>
-              <div className="text-[0.625rem] text-muted-foreground">
+              <div className="truncate text-base font-medium">{heading}</div>
+              <div className="text-xs text-muted-foreground">
                 Select a recipe
               </div>
             </div>
@@ -666,9 +740,11 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
               placeholder={
                 selectedMachine
                   ? `Search ${selectedMachine.name} recipes...`
-                  : routeItem
-                    ? `Search ${routeItem.name} recipes...`
-                    : "Search buildings or recipes..."
+                  : selectedExtractor
+                    ? `Search ${selectedExtractor.name} recipes...`
+                    : routeItem
+                      ? `Search ${routeItem.name} recipes...`
+                      : "Search buildings or recipes..."
               }
               role="combobox"
               value={query}
@@ -745,6 +821,60 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                               : "recipes"}
                           </div>
                         </div>
+                      </div>
+                    ) : row.type === "extractor" ? (
+                      <div
+                        aria-posinset={position}
+                        aria-selected={active}
+                        aria-setsize={selectableIndices.length}
+                        className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
+                        data-active={active}
+                        id={domId}
+                        onClick={() => selectRow(row)}
+                        onMouseEnter={() => setActiveKey(row.key)}
+                        role="option"
+                      >
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className="size-14 object-contain"
+                          decoding="async"
+                          loading="lazy"
+                          src={row.extractor.imageUrl}
+                        />
+                        <div className="min-w-0">
+                          <div className="font-medium">
+                            {row.extractor.name}
+                          </div>
+                          <div className="text-[0.625rem] text-muted-foreground">
+                            {row.extractor.resourceItemIds.length}{" "}
+                            {row.extractor.resourceItemIds.length === 1
+                              ? "recipe"
+                              : "recipes"}
+                          </div>
+                        </div>
+                      </div>
+                    ) : row.type === "extractor-resource" ? (
+                      <div
+                        aria-posinset={position}
+                        aria-selected={active}
+                        aria-setsize={selectableIndices.length}
+                        className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
+                        data-active={active}
+                        id={domId}
+                        onClick={() => selectRow(row)}
+                        onMouseEnter={() => setActiveKey(row.key)}
+                        role="option"
+                      >
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className="size-14 object-contain"
+                          decoding="async"
+                          loading="lazy"
+                          src={row.extractor.imageUrl}
+                        />
+                        <div className="font-medium">{row.resource.name}</div>
                       </div>
                     ) : row.type === "buildable" ? (
                       <div

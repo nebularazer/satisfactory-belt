@@ -40,6 +40,11 @@ export type ProductionMachine = CatalogBuildable &
     basePowerMw: number;
   }>;
 
+export type ResourceExtractor = CatalogBuildable &
+  Readonly<{
+    resourceItemIds: readonly string[];
+  }>;
+
 export type ProductionItem = Readonly<{
   form: "gas" | "liquid" | "solid";
   id: string;
@@ -154,49 +159,74 @@ const MINER_RESOURCE_SEARCH_TERMS = [
   "uranium ore",
 ];
 
-const RESOURCE_WELL_SEARCH_TERMS = ["crude oil", "nitrogen gas", "water"];
+const MINER_RESOURCE_ITEM_IDS = [
+  "Desc_OreBauxite_C",
+  "Desc_OreGold_C",
+  "Desc_Coal_C",
+  "Desc_OreCopper_C",
+  "Desc_OreIron_C",
+  "Desc_Stone_C",
+  "Desc_RawQuartz_C",
+  "Desc_SAM_C",
+  "Desc_Sulfur_C",
+  "Desc_OreUranium_C",
+];
 
-export const RESOURCE_EXTRACTORS: readonly CatalogBuildable[] = [
+const RESOURCE_WELL_SEARCH_TERMS = ["crude oil", "nitrogen gas", "water"];
+const RESOURCE_WELL_ITEM_IDS = [
+  "Desc_LiquidOil_C",
+  "Desc_NitrogenGas_C",
+  "Desc_Water_C",
+];
+
+export const RESOURCE_EXTRACTORS: readonly ResourceExtractor[] = [
   {
     id: "Build_MinerMk1_C",
     imageUrl: minerMk1Image,
     name: "Miner Mk.1",
+    resourceItemIds: MINER_RESOURCE_ITEM_IDS,
     searchTerms: MINER_RESOURCE_SEARCH_TERMS,
   },
   {
     id: "Build_MinerMk2_C",
     imageUrl: minerMk2Image,
     name: "Miner Mk.2",
+    resourceItemIds: MINER_RESOURCE_ITEM_IDS,
     searchTerms: MINER_RESOURCE_SEARCH_TERMS,
   },
   {
     id: "Build_MinerMk3_C",
     imageUrl: minerMk3Image,
     name: "Miner Mk.3",
+    resourceItemIds: MINER_RESOURCE_ITEM_IDS,
     searchTerms: MINER_RESOURCE_SEARCH_TERMS,
   },
   {
     id: "Build_OilPump_C",
     imageUrl: oilExtractorImage,
     name: "Oil Extractor",
+    resourceItemIds: ["Desc_LiquidOil_C"],
     searchTerms: ["crude oil"],
   },
   {
     id: "Build_FrackingExtractor_C",
     imageUrl: resourceWellExtractorImage,
     name: "Resource Well Extractor",
+    resourceItemIds: RESOURCE_WELL_ITEM_IDS,
     searchTerms: RESOURCE_WELL_SEARCH_TERMS,
   },
   {
     id: "Build_FrackingSmasher_C",
     imageUrl: resourceWellPressurizerImage,
     name: "Resource Well Pressurizer",
+    resourceItemIds: RESOURCE_WELL_ITEM_IDS,
     searchTerms: RESOURCE_WELL_SEARCH_TERMS,
   },
   {
     id: "Build_WaterPump_C",
     imageUrl: waterExtractorImage,
     name: "Water Extractor",
+    resourceItemIds: ["Desc_Water_C"],
     searchTerms: ["water"],
   },
 ];
@@ -260,6 +290,9 @@ export const PRODUCTION_RECIPES = recipeData as readonly ProductionRecipe[];
 const machinesById = new Map(
   PRODUCTION_MACHINES.map((machine) => [machine.id, machine]),
 );
+const extractorsById = new Map(
+  RESOURCE_EXTRACTORS.map((extractor) => [extractor.id, extractor]),
+);
 const buildablesById = new Map(
   CATALOG_BUILDABLES.map((buildable) => [buildable.id, buildable]),
 );
@@ -307,6 +340,19 @@ export function catalogBuildable(buildableId: string) {
 
 export function productionMachine(machineId: string) {
   return machinesById.get(machineId);
+}
+
+export function resourceExtractor(extractorId: string) {
+  return extractorsById.get(extractorId);
+}
+
+export function resourcesForExtractor(extractorId: string) {
+  return (
+    extractorsById.get(extractorId)?.resourceItemIds.flatMap((itemId) => {
+      const item = itemsById.get(itemId);
+      return item ? [item] : [];
+    }) ?? []
+  );
 }
 
 export function productionItem(itemId: string) {

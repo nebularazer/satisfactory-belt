@@ -292,8 +292,65 @@ describe("NodePicker", () => {
       );
 
       for (const name of extractorNames) {
-        expect(screen.getByRole("option", { name })).toBeInTheDocument();
+        expect(
+          screen
+            .getAllByRole("option")
+            .some((option) => option.textContent?.startsWith(name)),
+        ).toBe(true);
       }
     }
   }, 15_000);
+
+  it("opens multi-resource extractor recipes and selects a resource", () => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    const search = screen.getByPlaceholderText(
+      "Search buildings or recipes...",
+    );
+    fireEvent.change(search, { target: { value: "miner mk.1" } });
+    fireEvent.click(
+      screen.getByRole("option", { name: /^Miner Mk\.1.*10 recipes$/ }),
+    );
+
+    expect(
+      screen.getByPlaceholderText("Search Miner Mk.1 recipes..."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Miner Mk.1")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Bauxite" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Copper Ore" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Iron Ore" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("option", { name: "Iron Ore" }));
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Iron Ore",
+      machineId: "Build_MinerMk1_C",
+    });
+  });
+
+  it("places a single-resource extractor directly", () => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "water extractor" } },
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: /^Water Extractor.*1 recipe$/ }),
+    );
+
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Water",
+      machineId: "Build_WaterPump_C",
+    });
+  });
 });
