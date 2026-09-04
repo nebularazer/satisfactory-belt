@@ -36,9 +36,16 @@ The configured operating rate of a Production Machine relative to its nominal
 rate, affecting its material rates and Power Profile.
 _Avoid_: Utilization, machine-equivalent
 
+**Production Amplification**:
+The output multiplier configured on a compatible Production Machine by
+installing Somersloops, affecting its product rates and Power Profile without
+increasing its ingredient rates.
+_Avoid_: Sloop boost, output clock speed
+
 **Machine Allocation**:
 A whole-number set of Production Machine instances and their individual Clock
-Speeds assigned to a Production Process to satisfy a target throughput.
+Speeds and Production Amplification settings assigned to a Production Process
+to satisfy a target throughput.
 _Avoid_: Machine count, fractional machine count
 
 **Descriptor**:
