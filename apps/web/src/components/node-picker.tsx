@@ -195,7 +195,7 @@ function RecipeRow({
   return (
     <div className="flex items-stretch rounded-md has-[>[data-selected=true]]:bg-muted">
       <CommandItem
-        className="min-w-0 flex-1 items-start px-2.5 py-2 data-selected:bg-transparent"
+        className="min-w-0 flex-1 items-start gap-3 px-2.5 py-2 data-selected:bg-transparent"
         keywords={[
           machine.name,
           machine.id,
@@ -209,7 +209,7 @@ function RecipeRow({
         <img
           alt=""
           aria-hidden="true"
-          className="mt-0.5 size-12 shrink-0 object-contain brightness-125 saturate-110"
+          className="mt-0.5 size-14 shrink-0 object-contain"
           src={machine.imageUrl}
         />
         <div className="min-w-0 flex-1">
@@ -297,7 +297,7 @@ function BuildableGroup({
       {buildables.map((buildable) => (
         <CommandItem
           key={buildable.id}
-          className="min-h-11"
+          className="min-h-11 gap-3"
           keywords={[buildable.id]}
           onSelect={() => onSelect(buildable)}
           value={`buildable ${buildable.name}`}
@@ -305,7 +305,7 @@ function BuildableGroup({
           <img
             alt=""
             aria-hidden="true"
-            className="size-11 object-contain brightness-125 saturate-110"
+            className="size-14 object-contain"
             src={buildable.imageUrl}
           />
           <div className="font-medium">{buildable.name}</div>
@@ -458,7 +458,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
               <img
                 alt=""
                 aria-hidden="true"
-                className="size-9 object-contain brightness-125 saturate-110"
+                className="size-9 object-contain"
                 src={selectedMachine.imageUrl}
               />
             )}
@@ -495,7 +495,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                 return (
                   <CommandItem
                     key={machine.id}
-                    className="min-h-11"
+                    className="min-h-11 gap-3"
                     keywords={[machine.id]}
                     onSelect={() =>
                       enterScope({ machineId: machine.id, type: "machine" })
@@ -505,7 +505,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                     <img
                       alt=""
                       aria-hidden="true"
-                      className="size-11 object-contain brightness-125 saturate-110"
+                      className="size-14 object-contain"
                       src={machine.imageUrl}
                     />
                     <div className="min-w-0">
