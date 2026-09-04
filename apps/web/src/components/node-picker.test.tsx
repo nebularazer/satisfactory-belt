@@ -402,6 +402,7 @@ describe("NodePicker", () => {
       "grid",
       "grid-cols-3",
       "sm:grid-cols-5",
+      "pb-4",
     );
     expect(
       Array.from(splitter.parentElement?.children ?? [])

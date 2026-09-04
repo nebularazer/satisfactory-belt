@@ -1127,9 +1127,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                     ) : row.type === "grid" ? (
                       <div
                         className={cn(
-                          "grid gap-1.5",
+                          "grid gap-1.5 pb-4",
                           row.layout === "recent"
-                            ? "no-scrollbar grid-flow-col auto-cols-[6.5rem] justify-start overflow-x-auto pb-1 sm:auto-cols-[7.5rem]"
+                            ? "no-scrollbar grid-flow-col auto-cols-[6.5rem] justify-start overflow-x-auto sm:auto-cols-[7.5rem]"
                             : "grid-cols-3 sm:grid-cols-5",
                         )}
                       >
