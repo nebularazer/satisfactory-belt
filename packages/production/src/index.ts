@@ -17,12 +17,16 @@ export {
 } from "./catalog";
 export {
   recipeCountForMachine,
+  searchBuffers,
   searchExtractorResources,
   searchExtractors,
   searchLogistics,
   searchMachines,
+  searchPowerGenerators,
   searchRecipes,
+  searchResourceWellPressurizers,
   searchSpecialBuildables,
+  searchTransports,
 } from "./search";
 export {
   findProductionProcess,

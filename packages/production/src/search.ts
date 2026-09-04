@@ -1,8 +1,12 @@
 import {
+  BUFFER_BUILDABLES,
   LOGISTICS_BUILDABLES,
+  POWER_GENERATORS,
   PRODUCTION_MACHINES,
   RESOURCE_EXTRACTORS,
+  RESOURCE_WELL_PRESSURIZERS,
   SPECIAL_BUILDABLES,
+  TRANSPORT_BUILDABLES,
 } from "./data/buildables";
 import { RECIPES, findDescriptor, resourcesForExtractor } from "./catalog";
 import type { Buildable, Descriptor, Recipe } from "./types";
@@ -59,10 +63,30 @@ const extractorDocuments = createBuildableDocuments(RESOURCE_EXTRACTORS, [
   "extractor",
   "miner",
 ]);
+const powerGeneratorDocuments = createBuildableDocuments(POWER_GENERATORS, [
+  "power",
+  "generation",
+  "generator",
+]);
+const resourceWellDocuments = createBuildableDocuments(
+  RESOURCE_WELL_PRESSURIZERS,
+  ["production", "resource", "extraction", "well", "pressurizer"],
+);
 const logisticsDocuments = createBuildableDocuments(LOGISTICS_BUILDABLES, [
   "logistics",
   "conveyor",
   "pipeline",
+]);
+const bufferDocuments = createBuildableDocuments(BUFFER_BUILDABLES, [
+  "organization",
+  "storage",
+  "buffer",
+]);
+const transportDocuments = createBuildableDocuments(TRANSPORT_BUILDABLES, [
+  "transport",
+  "station",
+  "platform",
+  "port",
 ]);
 const specialDocuments = createBuildableDocuments(SPECIAL_BUILDABLES, [
   "special",
@@ -190,8 +214,24 @@ export function searchExtractors(query: string) {
   return searchDocuments(extractorDocuments, query);
 }
 
+export function searchPowerGenerators(query: string) {
+  return searchDocuments(powerGeneratorDocuments, query);
+}
+
+export function searchResourceWellPressurizers(query: string) {
+  return searchDocuments(resourceWellDocuments, query);
+}
+
 export function searchLogistics(query: string) {
   return searchDocuments(logisticsDocuments, query);
+}
+
+export function searchBuffers(query: string) {
+  return searchDocuments(bufferDocuments, query);
+}
+
+export function searchTransports(query: string) {
+  return searchDocuments(transportDocuments, query);
 }
 
 export function searchSpecialBuildables(query: string) {

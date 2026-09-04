@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  searchBuffers,
   searchExtractorResources,
   searchExtractors,
   searchLogistics,
   searchMachines,
+  searchPowerGenerators,
   searchRecipes,
+  searchResourceWellPressurizers,
   searchSpecialBuildables,
+  searchTransports,
 } from "./index";
 
 describe("production search", () => {
@@ -26,6 +30,20 @@ describe("production search", () => {
     expect(searchSpecialBuildables("sink").map(({ name }) => name)).toEqual([
       "AWESOME Sink",
     ]);
+    expect(searchPowerGenerators("nuclear").map(({ name }) => name)).toEqual([
+      "Nuclear Power Plant",
+    ]);
+    expect(searchBuffers("fluid").map(({ name }) => name)).toEqual([
+      "Fluid Buffer",
+      "Industrial Fluid Buffer",
+    ]);
+    expect(searchTransports("freight").map(({ name }) => name)).toEqual([
+      "Fluid Freight Platform",
+      "Freight Platform",
+    ]);
+    expect(
+      searchResourceWellPressurizers("nitrogen").map(({ name }) => name),
+    ).toEqual(["Resource Well Pressurizer"]);
   });
 
   it("ranks a Recipe name above material-only matches", () => {
