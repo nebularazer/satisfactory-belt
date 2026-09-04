@@ -62,14 +62,21 @@ type PickerHistoryEntry = {
   scrollTop: number;
 };
 
-type PickerRow =
-  | { key: string; label: string; type: "heading" }
-  | {
-      buildable: CatalogBuildable;
-      key: string;
-      selection: NodePickerSelection;
-      type: "recent";
-    }
+type RecentPickerOption = {
+  buildable: CatalogBuildable;
+  key: string;
+  selection: NodePickerSelection;
+  type: "recent";
+};
+
+type BuildablePickerOption = {
+  buildable: CatalogBuildable;
+  key: string;
+  type: "buildable";
+};
+
+type PickerOption =
+  | RecentPickerOption
   | { key: string; machine: ProductionMachine; type: "machine" }
   | { extractor: ResourceExtractor; key: string; type: "extractor" }
   | {
@@ -78,7 +85,7 @@ type PickerRow =
       resource: ProductionItem;
       type: "extractor-resource";
     }
-  | { buildable: CatalogBuildable; key: string; type: "buildable" }
+  | BuildablePickerOption
   | {
       key: string;
       machine: ProductionMachine;
@@ -86,12 +93,35 @@ type PickerRow =
       type: "recipe";
     };
 
+type PickerListOption = Exclude<PickerOption, RecentPickerOption>;
+
+type PickerRow =
+  | { key: string; label: string; type: "heading" }
+  | {
+      key: string;
+      layout: "logistics" | "recent";
+      options: readonly (BuildablePickerOption | RecentPickerOption)[];
+      type: "grid";
+    }
+  | PickerListOption;
+
 const rateFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
 const RECENT_SELECTIONS_KEY = "satisfactory-belt-recent-node-selections";
 const RECENT_SELECTION_LIMIT = 5;
+const LOGISTICS_QUICK_ADD_ORDER = new Map(
+  [
+    "Build_ConveyorAttachmentSplitter_C",
+    "Build_ConveyorAttachmentMerger_C",
+    "Build_PipelineJunction_Cross_C",
+    "Build_ConveyorAttachmentSplitterSmart_C",
+    "Build_ConveyorAttachmentMergerPriority_C",
+    "Build_ConveyorAttachmentSplitterProgrammable_C",
+    "Build_PipelineJunction_T_C",
+  ].map((id, index) => [id, index]),
+);
 
 function isNodePickerSelection(value: unknown): value is NodePickerSelection {
   if (!value || typeof value !== "object") return false;
@@ -338,14 +368,71 @@ function optionDomId(listId: string, rowKey: string) {
   return `${listId}-${rowKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
-function isSelectableRow(row: PickerRow) {
-  return row.type !== "heading";
+function optionsForRow(row: PickerRow): readonly PickerOption[] {
+  if (row.type === "heading") return [];
+  return row.type === "grid" ? row.options : [row];
 }
 
 function estimatedRowHeight(row: PickerRow) {
   if (row.type === "heading") return 30;
+  if (row.type === "grid") return row.layout === "recent" ? 100 : 200;
   if (row.type !== "recipe") return 68;
   return 58 + (row.recipe.inputs.length + row.recipe.outputs.length) * 18;
+}
+
+type PickerTileProps = {
+  active: boolean;
+  domId: string;
+  imageUrl: string;
+  label: string;
+  onActivate: () => void;
+  onSelect: () => void;
+  position: number;
+  setSize: number;
+  subtitle?: string;
+};
+
+function PickerTile({
+  active,
+  domId,
+  imageUrl,
+  label,
+  onActivate,
+  onSelect,
+  position,
+  setSize,
+  subtitle,
+}: PickerTileProps) {
+  return (
+    <div
+      aria-posinset={position}
+      aria-selected={active}
+      aria-setsize={setSize}
+      className="flex min-h-24 min-w-0 cursor-default flex-col items-center justify-start gap-1 rounded-lg px-2 py-2 text-center data-[active=true]:bg-muted"
+      data-active={active}
+      id={domId}
+      onClick={onSelect}
+      onMouseEnter={onActivate}
+      role="option"
+    >
+      <img
+        alt=""
+        aria-hidden="true"
+        className="size-14 shrink-0 object-contain"
+        decoding="async"
+        loading="lazy"
+        src={imageUrl}
+      />
+      <div className="line-clamp-2 text-[0.6875rem] leading-tight font-medium">
+        {label}
+      </div>
+      {subtitle && (
+        <div className="line-clamp-1 text-[0.5625rem] leading-tight text-muted-foreground">
+          {subtitle}
+        </div>
+      )}
+    </div>
+  );
 }
 
 type RecipeRowProps = {
@@ -613,7 +700,32 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
 
     if (recentRows.length > 0) {
       addHeading("recent", "Recently used");
-      nextRows.push(...recentRows);
+      nextRows.push({
+        key: "grid:recent",
+        layout: "recent",
+        options: recentRows,
+        type: "grid",
+      });
+    }
+
+    if (!rootQueryActive && matchingLogistics.length > 0) {
+      addHeading("logistics", "Logistics");
+      nextRows.push({
+        key: "grid:logistics",
+        layout: "logistics",
+        options: matchingLogistics
+          .toSorted(
+            (left, right) =>
+              (LOGISTICS_QUICK_ADD_ORDER.get(left.id) ?? Number.MAX_VALUE) -
+              (LOGISTICS_QUICK_ADD_ORDER.get(right.id) ?? Number.MAX_VALUE),
+          )
+          .map((buildable) => ({
+            buildable,
+            key: `buildable:${buildable.id}`,
+            type: "buildable" as const,
+          })),
+        type: "grid",
+      });
     }
 
     if (matchingMachines.length > 0) {
@@ -654,7 +766,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       );
     };
 
-    addBuildables("logistics", "Logistics", matchingLogistics);
+    if (rootQueryActive) {
+      addBuildables("logistics", "Logistics", matchingLogistics);
+    }
     addBuildables("special", "Special", matchingSpecial);
 
     if (selectedExtractor && matchingExtractorResources.length > 0) {
@@ -697,26 +811,32 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     selectedMachine,
   ]);
 
-  const selectableIndices = useMemo(
-    () => rows.flatMap((row, index) => (isSelectableRow(row) ? [index] : [])),
+  const selectableEntries = useMemo(
+    () =>
+      rows.flatMap((row, rowIndex) =>
+        optionsForRow(row).map((option) => ({ option, rowIndex })),
+      ),
     [rows],
   );
-  const selectablePositionByIndex = useMemo(
+  const selectablePositionByKey = useMemo(
     () =>
       new Map(
-        selectableIndices.map((rowIndex, index) => [rowIndex, index + 1]),
+        selectableEntries.map(({ option }, index) => [option.key, index + 1]),
       ),
-    [selectableIndices],
+    [selectableEntries],
   );
-  const selectedIndex = rows.findIndex((row) => row.key === activeKey);
-  const activeIndex =
-    selectedIndex >= 0 ? selectedIndex : (selectableIndices[0] ?? -1);
-  const activeRow = rows[activeIndex];
+  const selectedOptionIndex = selectableEntries.findIndex(
+    ({ option }) => option.key === activeKey,
+  );
+  const activeOptionIndex = selectedOptionIndex >= 0 ? selectedOptionIndex : 0;
+  const activeEntry = selectableEntries[activeOptionIndex];
+  const activeOption = activeEntry?.option;
+  const activeRowIndex = activeEntry?.rowIndex ?? -1;
 
   const rangeExtractor = (range: Range) => {
     const indices = defaultRangeExtractor(range);
-    if (activeIndex < 0 || indices.includes(activeIndex)) return indices;
-    return [...indices, activeIndex].toSorted((left, right) => left - right);
+    if (activeRowIndex < 0 || indices.includes(activeRowIndex)) return indices;
+    return [...indices, activeRowIndex].toSorted((left, right) => left - right);
   };
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -750,12 +870,12 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     window.matchMedia?.("(min-width: 640px) and (pointer: fine)").matches;
 
   useEffect(() => {
-    if (activeIndex < 0) {
+    if (!activeOption) {
       setActiveKey(null);
       return;
     }
-    if (selectedIndex < 0) setActiveKey(rows[activeIndex].key);
-  }, [activeIndex, rows, selectedIndex]);
+    if (selectedOptionIndex < 0) setActiveKey(activeOption.key);
+  }, [activeOption, selectedOptionIndex]);
 
   useEffect(() => {
     if (restoreScrollTopRef.current === null) return;
@@ -832,47 +952,44 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     setScope(previous.scope);
   };
 
-  const selectRow = (row: PickerRow) => {
-    if (row.type === "recent") {
-      submitSelection(row.selection);
-    } else if (row.type === "machine") {
-      enterScope({ machineId: row.machine.id, type: "machine" });
-    } else if (row.type === "extractor") {
-      const resources = resourcesForExtractor(row.extractor.id);
+  const selectOption = (option: PickerOption) => {
+    if (option.type === "recent") {
+      submitSelection(option.selection);
+    } else if (option.type === "machine") {
+      enterScope({ machineId: option.machine.id, type: "machine" });
+    } else if (option.type === "extractor") {
+      const resources = resourcesForExtractor(option.extractor.id);
       if (resources.length > 1) {
-        enterScope({ extractorId: row.extractor.id, type: "extractor" });
+        enterScope({ extractorId: option.extractor.id, type: "extractor" });
       } else if (resources[0]) {
-        selectExtractorResource(row.extractor, resources[0]);
+        selectExtractorResource(option.extractor, resources[0]);
       } else {
-        selectBuildable(row.extractor);
+        selectBuildable(option.extractor);
       }
-    } else if (row.type === "extractor-resource") {
-      selectExtractorResource(row.extractor, row.resource);
-    } else if (row.type === "buildable") {
-      selectBuildable(row.buildable);
-    } else if (row.type === "recipe") {
-      selectRecipe(row.recipe, row.machine.id);
+    } else if (option.type === "extractor-resource") {
+      selectExtractorResource(option.extractor, option.resource);
+    } else if (option.type === "buildable") {
+      selectBuildable(option.buildable);
+    } else if (option.type === "recipe") {
+      selectRecipe(option.recipe, option.machine.id);
     }
   };
 
-  const activateIndex = (index: number) => {
-    const row = rows[index];
-    if (!row || !isSelectableRow(row)) return;
-    setActiveKey(row.key);
-    rowVirtualizer.scrollToIndex(index, { align: "auto" });
+  const activateOption = (index: number) => {
+    const entry = selectableEntries[index];
+    if (!entry) return;
+    setActiveKey(entry.option.key);
+    rowVirtualizer.scrollToIndex(entry.rowIndex, { align: "auto" });
   };
 
   const moveActive = (direction: -1 | 1) => {
-    if (selectableIndices.length === 0) return;
-    const position = selectableIndices.indexOf(activeIndex);
-    const nextPosition =
-      position < 0
-        ? 0
-        : Math.min(
-            selectableIndices.length - 1,
-            Math.max(0, position + direction),
-          );
-    activateIndex(selectableIndices[nextPosition]);
+    if (selectableEntries.length === 0) return;
+    activateOption(
+      Math.min(
+        selectableEntries.length - 1,
+        Math.max(0, activeOptionIndex + direction),
+      ),
+    );
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -880,13 +997,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       moveActive(event.key === "ArrowDown" ? 1 : -1);
-    } else if (
-      event.key === "Enter" &&
-      activeRow &&
-      isSelectableRow(activeRow)
-    ) {
+    } else if (event.key === "Enter" && activeOption) {
       event.preventDefault();
-      selectRow(activeRow);
+      selectOption(activeOption);
     }
   };
 
@@ -943,7 +1056,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
           <InputGroup className="h-8! bg-input/20 dark:bg-input/30">
             <input
               aria-activedescendant={
-                activeRow ? optionDomId(listId, activeRow.key) : undefined
+                activeOption ? optionDomId(listId, activeOption.key) : undefined
               }
               aria-autocomplete="list"
               aria-controls={listId}
@@ -992,10 +1105,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const row = rows[virtualRow.index];
-                const active = virtualRow.index === activeIndex;
+                const active = row.key === activeKey;
                 const domId = optionDomId(listId, row.key);
-                const position =
-                  selectablePositionByIndex.get(virtualRow.index) ?? 0;
+                const position = selectablePositionByKey.get(row.key) ?? 0;
                 return (
                   <div
                     className="absolute top-0 left-0 w-full px-1"
@@ -1012,46 +1124,53 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                       >
                         <HighlightedText query={query} text={row.label} />
                       </div>
-                    ) : row.type === "recent" ? (
+                    ) : row.type === "grid" ? (
                       <div
-                        aria-posinset={position}
-                        aria-selected={active}
-                        aria-setsize={selectableIndices.length}
-                        className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
-                        data-active={active}
-                        id={domId}
-                        onClick={() => selectRow(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
-                        role="option"
+                        className={cn(
+                          "grid gap-1.5",
+                          row.layout === "recent"
+                            ? "no-scrollbar grid-flow-col auto-cols-[6.5rem] justify-start overflow-x-auto pb-1 sm:auto-cols-[7.5rem]"
+                            : "grid-cols-3 sm:grid-cols-5",
+                        )}
                       >
-                        <img
-                          alt=""
-                          aria-hidden="true"
-                          className="size-14 object-contain"
-                          decoding="async"
-                          loading="lazy"
-                          src={row.buildable.imageUrl}
-                        />
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">
-                            {row.selection.label}
-                          </div>
-                          {row.selection.label !== row.buildable.name && (
-                            <div className="truncate text-[0.625rem] text-muted-foreground">
-                              {row.buildable.name}
-                            </div>
-                          )}
-                        </div>
+                        {row.options.map((option) => {
+                          const tileBuildable = option.buildable;
+                          const tileLabel =
+                            option.type === "recent"
+                              ? option.selection.label
+                              : option.buildable.name;
+                          const tileSubtitle =
+                            option.type === "recent" &&
+                            option.selection.label !== option.buildable.name
+                              ? option.buildable.name
+                              : undefined;
+                          return (
+                            <PickerTile
+                              active={option.key === activeKey}
+                              domId={optionDomId(listId, option.key)}
+                              imageUrl={tileBuildable.imageUrl}
+                              key={option.key}
+                              label={tileLabel}
+                              onActivate={() => setActiveKey(option.key)}
+                              onSelect={() => selectOption(option)}
+                              position={
+                                selectablePositionByKey.get(option.key) ?? 0
+                              }
+                              setSize={selectableEntries.length}
+                              subtitle={tileSubtitle}
+                            />
+                          );
+                        })}
                       </div>
                     ) : row.type === "machine" ? (
                       <div
                         aria-posinset={position}
                         aria-selected={active}
-                        aria-setsize={selectableIndices.length}
+                        aria-setsize={selectableEntries.length}
                         className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
                         data-active={active}
                         id={domId}
-                        onClick={() => selectRow(row)}
+                        onClick={() => selectOption(row)}
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
@@ -1091,11 +1210,11 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                       <div
                         aria-posinset={position}
                         aria-selected={active}
-                        aria-setsize={selectableIndices.length}
+                        aria-setsize={selectableEntries.length}
                         className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
                         data-active={active}
                         id={domId}
-                        onClick={() => selectRow(row)}
+                        onClick={() => selectOption(row)}
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
@@ -1130,11 +1249,11 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                       <div
                         aria-posinset={position}
                         aria-selected={active}
-                        aria-setsize={selectableIndices.length}
+                        aria-setsize={selectableEntries.length}
                         className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
                         data-active={active}
                         id={domId}
-                        onClick={() => selectRow(row)}
+                        onClick={() => selectOption(row)}
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
@@ -1157,11 +1276,11 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                       <div
                         aria-posinset={position}
                         aria-selected={active}
-                        aria-setsize={selectableIndices.length}
+                        aria-setsize={selectableEntries.length}
                         className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
                         data-active={active}
                         id={domId}
-                        onClick={() => selectRow(row)}
+                        onClick={() => selectOption(row)}
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
@@ -1200,11 +1319,11 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             ? undefined
                             : (itemId) => enterScope({ itemId, type: "routes" })
                         }
-                        onSelect={() => selectRow(row)}
+                        onSelect={() => selectOption(row)}
                         position={position}
                         query={query}
                         recipe={row.recipe}
-                        setSize={selectableIndices.length}
+                        setSize={selectableEntries.length}
                         showStandardBadge={scope.type === "routes"}
                       />
                     )}

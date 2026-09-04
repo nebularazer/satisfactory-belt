@@ -182,9 +182,14 @@ describe("NodePicker", () => {
     );
 
     expect(screen.getByText("Recently used")).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: /Cast Screws Constructor/ }),
-    ).toBeInTheDocument();
+    const recentOption = screen.getByRole("option", {
+      name: /Cast Screws Constructor/,
+    });
+    expect(recentOption).toBeInTheDocument();
+    expect(recentOption.parentElement).toHaveClass(
+      "grid-flow-col",
+      "overflow-x-auto",
+    );
   });
 
   it("explains matches found through extractor resource metadata", () => {
@@ -324,22 +329,27 @@ describe("NodePicker", () => {
       />,
     );
 
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "machine" } },
+    );
+
     const machineNames = screen
       .getAllByRole("option")
       .slice(0, 11)
-      .map((option) => option.textContent);
+      .map((option) => option.querySelector(".font-medium")?.textContent);
     expect(machineNames).toEqual([
-      "Assembler66 recipes",
-      "Blender17 recipes",
-      "Constructor48 recipes",
-      "Converter25 recipes",
-      "Foundry16 recipes",
-      "Manufacturer37 recipes",
-      "Packager24 recipes",
-      "Particle Accelerator12 recipes",
-      "Quantum Encoder6 recipes",
-      "Refinery34 recipes",
-      "Smelter6 recipes",
+      "Assembler",
+      "Blender",
+      "Constructor",
+      "Converter",
+      "Foundry",
+      "Manufacturer",
+      "Packager",
+      "Particle Accelerator",
+      "Quantum Encoder",
+      "Refinery",
+      "Smelter",
     ]);
   });
 
@@ -355,6 +365,7 @@ describe("NodePicker", () => {
     const search = screen.getByPlaceholderText(
       "Search buildings or recipes...",
     );
+    fireEvent.change(search, { target: { value: "machine" } });
     expect(search).toHaveAttribute(
       "aria-activedescendant",
       expect.stringContaining("machine-Build_AssemblerMk1_C"),
@@ -372,6 +383,54 @@ describe("NodePicker", () => {
     expect(
       screen.getByPlaceholderText("Search Constructor recipes..."),
     ).toBeInTheDocument();
+  });
+
+  it("shows logistics as a quick-add grid", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    const splitter = screen.getByRole("option", {
+      name: "Conveyor Splitter",
+    });
+    expect(screen.getByText("Logistics")).toBeInTheDocument();
+    expect(splitter.parentElement).toHaveClass(
+      "grid",
+      "grid-cols-3",
+      "sm:grid-cols-5",
+    );
+    expect(
+      Array.from(splitter.parentElement?.children ?? [])
+        .slice(0, 2)
+        .map((option) => option.textContent),
+    ).toEqual(["Conveyor Splitter", "Conveyor Merger"]);
+  });
+
+  it("navigates quick-add tiles with the keyboard", () => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    const search = screen.getByPlaceholderText(
+      "Search buildings or recipes...",
+    );
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      expect.stringContaining("Build_ConveyorAttachmentSplitter_C"),
+    );
+
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    fireEvent.keyDown(search, { key: "Enter" });
+
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Conveyor Merger",
+      machineId: "Build_ConveyorAttachmentMerger_C",
+    });
   });
 
   it("places infrastructure buildables directly", () => {
