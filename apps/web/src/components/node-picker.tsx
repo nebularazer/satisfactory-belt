@@ -127,8 +127,8 @@ function isNodePickerSelection(value: unknown): value is NodePickerSelection {
   if (!value || typeof value !== "object") return false;
   const selection = value as Record<string, unknown>;
   return (
+    typeof selection.buildableId === "string" &&
     typeof selection.label === "string" &&
-    typeof selection.machineId === "string" &&
     (selection.recipeId === undefined || typeof selection.recipeId === "string")
   );
 }
@@ -149,7 +149,7 @@ function readRecentSelections() {
 }
 
 function selectionKey(selection: NodePickerSelection) {
-  return `${selection.machineId}:${selection.recipeId ?? ""}:${selection.label}`;
+  return `${selection.buildableId}:${selection.recipeId ?? ""}:${selection.label}`;
 }
 
 function withRecentSelection(
@@ -674,7 +674,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     () =>
       rootScope && !rootQueryActive
         ? recentSelections.flatMap((selection) => {
-            const buildable = catalogBuildable(selection.machineId);
+            const buildable = catalogBuildable(selection.buildableId);
             if (
               !buildable ||
               (selection.recipeId && !productionRecipe(selection.recipeId))
@@ -917,21 +917,21 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
 
   const selectRecipe = (recipe: ProductionRecipe, machineId: string) => {
     submitSelection({
+      buildableId: machineId,
       label: recipe.name,
-      machineId,
       recipeId: recipe.id,
     });
   };
 
   const selectBuildable = (buildable: CatalogBuildable) => {
-    submitSelection({ label: buildable.name, machineId: buildable.id });
+    submitSelection({ buildableId: buildable.id, label: buildable.name });
   };
 
   const selectExtractorResource = (
     extractor: ResourceExtractor,
     resource: ProductionItem,
   ) => {
-    submitSelection({ label: resource.name, machineId: extractor.id });
+    submitSelection({ buildableId: extractor.id, label: resource.name });
   };
 
   const enterScope = (nextScope: PickerScope) => {

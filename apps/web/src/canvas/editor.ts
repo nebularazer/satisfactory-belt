@@ -36,8 +36,8 @@ export type CanvasEditorAction =
   | {
       type: "node.create";
       at: Point;
+      buildableId?: string;
       label?: string;
-      machineId?: string;
       recipeId?: string;
     }
   | { type: "selection.clear" }
@@ -232,10 +232,10 @@ export function createCanvasEditor(
         const x = action.at.x - NODE_WIDTH / 2;
         const y = action.at.y - NODE_HEIGHT / 2;
         const node: CanvasNode = {
+          ...(action.buildableId ? { buildableId: action.buildableId } : {}),
           height: NODE_HEIGHT,
           id: idFactory(),
           label: action.label ?? `Node ${nodeSequence}`,
-          ...(action.machineId ? { machineId: action.machineId } : {}),
           ...(action.recipeId ? { recipeId: action.recipeId } : {}),
           width: NODE_WIDTH,
           x: state.snapToGrid ? snap(x) : x,

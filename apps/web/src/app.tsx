@@ -284,8 +284,8 @@ function CanvasWorkspace({
     editor.dispatch({
       type: "node.create",
       at: pendingNode.at,
+      buildableId: selection.buildableId,
       label: selection.label,
-      machineId: selection.machineId,
       recipeId: selection.recipeId,
     });
     setPendingNode(null);

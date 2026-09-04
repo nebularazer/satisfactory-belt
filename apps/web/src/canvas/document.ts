@@ -1,10 +1,10 @@
 export const CANVAS_DOCUMENT_VERSION = 1;
 
 export type CanvasNode = Readonly<{
+  buildableId?: string;
   height: number;
   id: string;
   label: string;
-  machineId?: string;
   recipeId?: string;
   width: number;
   x: number;

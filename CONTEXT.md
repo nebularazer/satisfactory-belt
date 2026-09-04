@@ -7,7 +7,7 @@ its generated catalog.
 
 **Recipe**:
 An authored Satisfactory recipe with declared ingredients, products, duration,
-and eligible producers.
+and eligible Production Machines.
 _Avoid_: Process, formula
 
 **Production Process**:

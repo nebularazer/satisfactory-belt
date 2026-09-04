@@ -77,7 +77,7 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Reinforced Iron Plate",
-      machineId: "Build_AssemblerMk1_C",
+      buildableId: "Build_AssemblerMk1_C",
       recipeId: "Recipe_IronPlateReinforced_C",
     });
   });
@@ -312,7 +312,7 @@ describe("NodePicker", () => {
     );
     expect(onSelect).toHaveBeenCalledWith({
       label: "Steel Screws",
-      machineId: "Build_ConstructorMk1_C",
+      buildableId: "Build_ConstructorMk1_C",
       recipeId: "Recipe_Alternate_Screw_2_C",
     });
   });
@@ -340,7 +340,7 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Iron Plate",
-      machineId: "Build_ConstructorMk1_C",
+      buildableId: "Build_ConstructorMk1_C",
       recipeId: "Recipe_IronPlate_C",
     });
   }, 10_000);
@@ -455,7 +455,7 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Conveyor Merger",
-      machineId: "Build_ConveyorAttachmentMerger_C",
+      buildableId: "Build_ConveyorAttachmentMerger_C",
     });
   });
 
@@ -473,7 +473,7 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Conveyor Splitter",
-      machineId: "Build_ConveyorAttachmentSplitter_C",
+      buildableId: "Build_ConveyorAttachmentSplitter_C",
     });
   }, 10_000);
 
@@ -538,7 +538,7 @@ describe("NodePicker", () => {
     fireEvent.click(screen.getByRole("option", { name: "Iron Ore" }));
     expect(onSelect).toHaveBeenCalledWith({
       label: "Iron Ore",
-      machineId: "Build_MinerMk1_C",
+      buildableId: "Build_MinerMk1_C",
     });
   });
 
@@ -558,7 +558,7 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Water",
-      machineId: "Build_WaterPump_C",
+      buildableId: "Build_WaterPump_C",
     });
   });
 });

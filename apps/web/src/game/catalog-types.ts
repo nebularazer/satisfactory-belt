@@ -43,7 +43,7 @@ export type ProductionRecipe = Readonly<{
 }>;
 
 export type NodePickerSelection = Readonly<{
+  buildableId: string;
   label: string;
-  machineId: string;
   recipeId?: string;
 }>;

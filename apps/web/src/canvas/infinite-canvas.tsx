@@ -173,18 +173,18 @@ function updateNodeVisual(
     display.cardVisualKey = cardVisualKey;
   }
 
-  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}:${node.machineId ?? ""}`;
+  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}:${node.buildableId ?? ""}`;
   if (display.labelVisualKey !== labelVisualKey) {
     display.label.text = node.label;
     display.label.position.set(
       node.width / 2,
-      node.machineId ? node.height - 17 : node.height / 2,
+      node.buildableId ? node.height - 17 : node.height / 2,
     );
     display.label.style = {
       align: "center",
       fill: dark ? 0xf4f4f5 : 0x27272a,
       fontFamily: "Inter Variable, Inter, sans-serif",
-      fontSize: node.machineId ? 12 : 14,
+      fontSize: node.buildableId ? 12 : 14,
       fontWeight: "600",
       wordWrap: true,
       wordWrapWidth: node.width - 16,
@@ -192,8 +192,10 @@ function updateNodeVisual(
     display.labelVisualKey = labelVisualKey;
   }
 
-  const machine = node.machineId ? catalogBuildable(node.machineId) : undefined;
-  const imageVisualKey = machine?.imageUrl ?? "";
+  const buildable = node.buildableId
+    ? catalogBuildable(node.buildableId)
+    : undefined;
+  const imageVisualKey = buildable?.imageUrl ?? "";
   if (display.imageVisualKey !== imageVisualKey) {
     const texture = imageVisualKey
       ? Assets.get<Texture>(imageVisualKey)

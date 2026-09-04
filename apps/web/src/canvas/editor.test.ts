@@ -13,14 +13,14 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       at: { x: 100, y: 100 },
+      buildableId: "Build_ConstructorMk1_C",
       label: "Iron Plate",
-      machineId: "Build_ConstructorMk1_C",
       recipeId: "Recipe_IronPlate_C",
     });
 
     expect(editor.getState().document.nodes[0]).toMatchObject({
+      buildableId: "Build_ConstructorMk1_C",
       label: "Iron Plate",
-      machineId: "Build_ConstructorMk1_C",
       recipeId: "Recipe_IronPlate_C",
     });
   });
