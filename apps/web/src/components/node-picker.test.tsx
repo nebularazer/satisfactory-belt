@@ -202,9 +202,10 @@ describe("NodePicker", () => {
     );
 
     const machineNames = screen
-      .getByRole("group", { name: "Machines" })
-      .querySelectorAll('[role="option"]');
-    expect([...machineNames].map((option) => option.textContent)).toEqual([
+      .getAllByRole("option")
+      .slice(0, 11)
+      .map((option) => option.textContent);
+    expect(machineNames).toEqual([
       "Assembler66 recipes",
       "Blender17 recipes",
       "Constructor48 recipes",
@@ -217,6 +218,37 @@ describe("NodePicker", () => {
       "Refinery34 recipes",
       "Smelter6 recipes",
     ]);
+  });
+
+  it("navigates and selects virtualized results with the keyboard", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    const search = screen.getByPlaceholderText(
+      "Search buildings or recipes...",
+    );
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      expect.stringContaining("machine-Build_AssemblerMk1_C"),
+    );
+
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      expect.stringContaining("machine-Build_Blender_C"),
+    );
+
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    fireEvent.keyDown(search, { key: "Enter" });
+
+    expect(
+      screen.getByPlaceholderText("Search Constructor recipes..."),
+    ).toBeInTheDocument();
   });
 
   it("places infrastructure buildables directly", () => {

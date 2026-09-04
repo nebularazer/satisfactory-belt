@@ -1,6 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import {
+  defaultRangeExtractor,
+  observeElementRect,
+  useVirtualizer,
+  type Range,
+} from "@tanstack/react-virtual";
+import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
 
+import { CommandDialog } from "@/components/ui/command";
+import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
 import {
   LOGISTICS_BUILDABLES,
   PRODUCTION_MACHINES,
@@ -17,15 +32,6 @@ import {
   type ProductionMaterial,
   type ProductionRecipe,
 } from "@/game/production-catalog";
-import {
-  Command,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 
 type NodePickerProps = {
   onOpenChange: (open: boolean) => void;
@@ -43,6 +49,17 @@ type PickerHistoryEntry = {
   scope: PickerScope;
   scrollTop: number;
 };
+
+type PickerRow =
+  | { key: string; label: string; type: "heading" }
+  | { key: string; machine: ProductionMachine; type: "machine" }
+  | { buildable: CatalogBuildable; key: string; type: "buildable" }
+  | {
+      key: string;
+      machine: ProductionMachine;
+      recipe: ProductionRecipe;
+      type: "recipe";
+    };
 
 const rateFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
@@ -163,21 +180,45 @@ function routeOutput(recipe: ProductionRecipe, query: string) {
   );
 }
 
+function optionDomId(listId: string, rowKey: string) {
+  return `${listId}-${rowKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function isSelectableRow(row: PickerRow) {
+  return row.type !== "heading";
+}
+
+function estimatedRowHeight(row: PickerRow) {
+  if (row.type === "heading") return 30;
+  if (row.type !== "recipe") return 68;
+  return 58 + (row.recipe.inputs.length + row.recipe.outputs.length) * 18;
+}
+
 type RecipeRowProps = {
+  active: boolean;
+  domId: string;
   machine: ProductionMachine;
+  onActivate: () => void;
   onOpenRoutes?: (itemId: string) => void;
   onSelect: () => void;
+  position: number;
   query: string;
   recipe: ProductionRecipe;
+  setSize: number;
   showStandardBadge?: boolean;
 };
 
 function RecipeRow({
+  active,
+  domId,
   machine,
+  onActivate,
   onOpenRoutes,
   onSelect,
+  position,
   query,
   recipe,
+  setSize,
   showStandardBadge = false,
 }: RecipeRowProps) {
   const output = routeOutput(recipe, query);
@@ -185,31 +226,31 @@ function RecipeRow({
   const outputItem = output ? productionItem(output.itemId) : undefined;
   const inputMaterials = formatMaterials(recipe.inputs);
   const outputMaterials = formatMaterials(recipe.outputs);
-  const itemKeywords = [...recipe.inputs, ...recipe.outputs]
-    .map(({ itemId }) => productionItem(itemId)?.name)
-    .filter((name): name is string => Boolean(name));
   const routeLabel = outputItem
     ? `Show ${outputItem.name} recipes`
     : "Show recipes";
 
   return (
-    <div className="flex items-stretch rounded-md has-[>[data-selected=true]]:bg-muted">
-      <CommandItem
-        className="min-w-0 flex-1 items-start gap-3 px-2.5 py-2 data-selected:bg-transparent"
-        keywords={[
-          machine.name,
-          machine.id,
-          recipe.id,
-          recipe.alternate ? "alternate" : "standard",
-          ...itemKeywords,
-        ]}
-        onSelect={onSelect}
-        value={`recipe ${recipe.name} ${recipe.id}`}
+    <div
+      className="flex items-stretch rounded-md data-[active=true]:bg-muted"
+      data-active={active}
+      onMouseEnter={onActivate}
+    >
+      <div
+        aria-posinset={position}
+        aria-selected={active}
+        aria-setsize={setSize}
+        className="flex min-w-0 flex-1 cursor-default items-start gap-3 rounded-md px-2.5 py-2 text-xs/relaxed outline-hidden"
+        id={domId}
+        onClick={onSelect}
+        role="option"
       >
         <img
           alt=""
           aria-hidden="true"
           className="mt-0.5 size-14 shrink-0 object-contain"
+          decoding="async"
+          loading="lazy"
           src={machine.imageUrl}
         />
         <div className="min-w-0 flex-1">
@@ -261,7 +302,7 @@ function RecipeRow({
             {machine.name} · {formatPower(recipe, machine)}
           </div>
         </div>
-      </CommandItem>
+      </div>
       {onOpenRoutes && output && routes.length > 1 ? (
         <button
           aria-label={routeLabel}
@@ -279,48 +320,14 @@ function RecipeRow({
   );
 }
 
-type BuildableGroupProps = {
-  buildables: readonly CatalogBuildable[];
-  heading: string;
-  onSelect: (buildable: CatalogBuildable) => void;
-};
-
-function BuildableGroup({
-  buildables,
-  heading,
-  onSelect,
-}: BuildableGroupProps) {
-  if (buildables.length === 0) return null;
-
-  return (
-    <CommandGroup heading={heading}>
-      {buildables.map((buildable) => (
-        <CommandItem
-          key={buildable.id}
-          className="min-h-11 gap-3"
-          keywords={[buildable.id]}
-          onSelect={() => onSelect(buildable)}
-          value={`buildable ${buildable.name}`}
-        >
-          <img
-            alt=""
-            aria-hidden="true"
-            className="size-14 object-contain"
-            src={buildable.imageUrl}
-          />
-          <div className="font-medium">{buildable.name}</div>
-        </CommandItem>
-      ))}
-    </CommandGroup>
-  );
-}
-
 export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const [scope, setScope] = useState<PickerScope>({ type: "root" });
   const [query, setQuery] = useState("");
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<PickerHistoryEntry[]>([]);
   const restoreScrollTopRef = useRef<number | null>(null);
+  const listId = useId();
 
   const selectedMachine =
     scope.type === "machine" ? productionMachine(scope.machineId) : undefined;
@@ -376,9 +383,127 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     scope.type === "root"
       ? matchingBuildables(SPECIAL_BUILDABLES, query, ["special", "sink"])
       : [];
+
+  const rows = useMemo(() => {
+    const nextRows: PickerRow[] = [];
+    const addHeading = (key: string, label: string) =>
+      nextRows.push({ key: `heading:${key}`, label, type: "heading" });
+
+    if (matchingMachines.length > 0) {
+      addHeading("machines", "Machines");
+      matchingMachines.forEach((machine) =>
+        nextRows.push({
+          key: `machine:${machine.id}`,
+          machine,
+          type: "machine",
+        }),
+      );
+    }
+
+    const addBuildables = (
+      key: string,
+      label: string,
+      buildables: readonly CatalogBuildable[],
+    ) => {
+      if (buildables.length === 0) return;
+      addHeading(key, label);
+      buildables.forEach((buildable) =>
+        nextRows.push({
+          buildable,
+          key: `buildable:${buildable.id}`,
+          type: "buildable",
+        }),
+      );
+    };
+
+    addBuildables("extractors", "Resource extraction", matchingExtractors);
+    addBuildables("logistics", "Logistics", matchingLogistics);
+    addBuildables("special", "Special", matchingSpecial);
+
+    if (matchingRecipes.length > 0) {
+      addHeading("recipes", "Recipes");
+      matchingRecipes.forEach((recipe) => {
+        const machine =
+          selectedMachine ?? productionMachine(recipe.machineIds[0]);
+        if (!machine) return;
+        nextRows.push({
+          key: `recipe:${machine.id}:${recipe.id}`,
+          machine,
+          recipe,
+          type: "recipe",
+        });
+      });
+    }
+
+    return nextRows;
+  }, [
+    matchingExtractors,
+    matchingLogistics,
+    matchingMachines,
+    matchingRecipes,
+    matchingSpecial,
+    selectedMachine,
+  ]);
+
+  const selectableIndices = useMemo(
+    () => rows.flatMap((row, index) => (isSelectableRow(row) ? [index] : [])),
+    [rows],
+  );
+  const selectablePositionByIndex = useMemo(
+    () =>
+      new Map(
+        selectableIndices.map((rowIndex, index) => [rowIndex, index + 1]),
+      ),
+    [selectableIndices],
+  );
+  const selectedIndex = rows.findIndex((row) => row.key === activeKey);
+  const activeIndex =
+    selectedIndex >= 0 ? selectedIndex : (selectableIndices[0] ?? -1);
+  const activeRow = rows[activeIndex];
+
+  const rangeExtractor = (range: Range) => {
+    const indices = defaultRangeExtractor(range);
+    if (activeIndex < 0 || indices.includes(activeIndex)) return indices;
+    return [...indices, activeIndex].toSorted((left, right) => left - right);
+  };
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    enabled: open,
+    estimateSize: (index) => estimatedRowHeight(rows[index]),
+    gap: 4,
+    getItemKey: (index) => rows[index]?.key ?? index,
+    getScrollElement: () => listRef.current,
+    initialRect: { height: 512, width: 672 },
+    measureElement: (element) => {
+      const index = Number(element.getAttribute("data-index"));
+      return (
+        element.getBoundingClientRect().height ||
+        (rows[index] ? estimatedRowHeight(rows[index]) : 0)
+      );
+    },
+    observeElementRect: (instance, callback) =>
+      observeElementRect(instance, (rect) =>
+        callback({
+          height: rect.height || 512,
+          width: rect.width || 672,
+        }),
+      ),
+    overscan: 5,
+    rangeExtractor,
+    useFlushSync: false,
+  });
+
   const autoFocusSearch =
     typeof window !== "undefined" &&
     window.matchMedia?.("(min-width: 640px) and (pointer: fine)").matches;
+
+  useEffect(() => {
+    if (activeIndex < 0) {
+      setActiveKey(null);
+      return;
+    }
+    if (selectedIndex < 0) setActiveKey(rows[activeIndex].key);
+  }, [activeIndex, rows, selectedIndex]);
 
   useEffect(() => {
     if (restoreScrollTopRef.current === null) return;
@@ -388,12 +513,13 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       if (listRef.current) listRef.current.scrollTop = scrollTop;
     });
     return () => cancelAnimationFrame(frame);
-  }, [scope]);
+  }, [query, scope]);
 
   const setOpen = (nextOpen: boolean) => {
     if (!nextOpen) {
       historyRef.current = [];
       restoreScrollTopRef.current = null;
+      setActiveKey(null);
       setQuery("");
       setScope({ type: "root" });
     }
@@ -416,6 +542,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       scope,
       scrollTop: listRef.current?.scrollTop ?? 0,
     });
+    restoreScrollTopRef.current = 0;
+    setActiveKey(null);
     setQuery("");
     setScope(nextScope);
   };
@@ -424,8 +552,54 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     const previous = historyRef.current.pop();
     if (!previous) return;
     restoreScrollTopRef.current = previous.scrollTop;
+    setActiveKey(null);
     setQuery(previous.query);
     setScope(previous.scope);
+  };
+
+  const selectRow = (row: PickerRow) => {
+    if (row.type === "machine") {
+      enterScope({ machineId: row.machine.id, type: "machine" });
+    } else if (row.type === "buildable") {
+      selectBuildable(row.buildable);
+    } else if (row.type === "recipe") {
+      selectRecipe(row.recipe, row.machine.id);
+    }
+  };
+
+  const activateIndex = (index: number) => {
+    const row = rows[index];
+    if (!row || !isSelectableRow(row)) return;
+    setActiveKey(row.key);
+    rowVirtualizer.scrollToIndex(index, { align: "auto" });
+  };
+
+  const moveActive = (direction: -1 | 1) => {
+    if (selectableIndices.length === 0) return;
+    const position = selectableIndices.indexOf(activeIndex);
+    const nextPosition =
+      position < 0
+        ? 0
+        : Math.min(
+            selectableIndices.length - 1,
+            Math.max(0, position + direction),
+          );
+    activateIndex(selectableIndices[nextPosition]);
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      moveActive(event.key === "ArrowDown" ? 1 : -1);
+    } else if (
+      event.key === "Enter" &&
+      activeRow &&
+      isSelectableRow(activeRow)
+    ) {
+      event.preventDefault();
+      selectRow(activeRow);
+    }
   };
 
   const heading = selectedMachine
@@ -443,7 +617,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       open={open}
       title="Add node"
     >
-      <Command className="min-h-0" shouldFilter={false}>
+      <div className="flex size-full min-h-0 flex-col overflow-hidden rounded-xl bg-popover p-1 text-popover-foreground">
         {heading && (
           <div className="flex items-center gap-2 px-2 pt-2">
             <button
@@ -459,6 +633,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                 alt=""
                 aria-hidden="true"
                 className="size-9 object-contain"
+                decoding="async"
                 src={selectedMachine.imageUrl}
               />
             )}
@@ -470,100 +645,155 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             </div>
           </div>
         )}
-        <CommandInput
-          autoFocus={autoFocusSearch}
-          enterKeyHint="search"
-          onValueChange={setQuery}
-          placeholder={
-            selectedMachine
-              ? `Search ${selectedMachine.name} recipes...`
-              : routeItem
-                ? `Search ${routeItem.name} recipes...`
-                : "Search buildings or recipes..."
-          }
-          value={query}
-        />
-        <CommandList
-          className="min-h-0 flex-1 max-h-none overscroll-contain [&_[cmdk-group-items]]:space-y-1 sm:max-h-[min(32rem,calc(100dvh-12rem))]"
+        <div className="p-1 pb-0">
+          <InputGroup className="h-8! bg-input/20 dark:bg-input/30">
+            <input
+              aria-activedescendant={
+                activeRow ? optionDomId(listId, activeRow.key) : undefined
+              }
+              aria-autocomplete="list"
+              aria-controls={listId}
+              aria-expanded="true"
+              autoFocus={autoFocusSearch}
+              className="w-full text-xs/relaxed outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+              enterKeyHint="search"
+              onChange={(event) => {
+                restoreScrollTopRef.current = 0;
+                setActiveKey(null);
+                setQuery(event.target.value);
+              }}
+              onKeyDown={handleInputKeyDown}
+              placeholder={
+                selectedMachine
+                  ? `Search ${selectedMachine.name} recipes...`
+                  : routeItem
+                    ? `Search ${routeItem.name} recipes...`
+                    : "Search buildings or recipes..."
+              }
+              role="combobox"
+              value={query}
+            />
+            <InputGroupAddon>
+              <SearchIcon className="size-3.5 shrink-0 opacity-50" />
+            </InputGroupAddon>
+          </InputGroup>
+        </div>
+        <div
+          aria-label="Buildings and recipes"
+          className="no-scrollbar min-h-0 flex-1 max-h-none overscroll-contain overflow-x-hidden overflow-y-auto outline-none sm:max-h-[min(32rem,calc(100dvh-12rem))]"
+          id={listId}
           ref={listRef}
+          role="listbox"
         >
-          <CommandEmpty>No buildings or recipes found.</CommandEmpty>
-          {scope.type === "root" && matchingMachines.length > 0 && (
-            <CommandGroup heading="Machines">
-              {matchingMachines.map((machine) => {
-                const recipeCount = recipesForMachine(machine.id).length;
+          {rows.length === 0 ? (
+            <div className="py-6 text-center text-xs/relaxed">
+              No buildings or recipes found.
+            </div>
+          ) : (
+            <div
+              className="relative w-full"
+              style={{ height: rowVirtualizer.getTotalSize() }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = rows[virtualRow.index];
+                const active = virtualRow.index === activeIndex;
+                const domId = optionDomId(listId, row.key);
+                const position =
+                  selectablePositionByIndex.get(virtualRow.index) ?? 0;
                 return (
-                  <CommandItem
-                    key={machine.id}
-                    className="min-h-11 gap-3"
-                    keywords={[machine.id]}
-                    onSelect={() =>
-                      enterScope({ machineId: machine.id, type: "machine" })
-                    }
-                    value={`machine ${machine.name}`}
+                  <div
+                    className="absolute top-0 left-0 w-full px-1"
+                    data-index={virtualRow.index}
+                    key={row.key}
+                    ref={rowVirtualizer.measureElement}
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
-                    <img
-                      alt=""
-                      aria-hidden="true"
-                      className="size-14 object-contain"
-                      src={machine.imageUrl}
-                    />
-                    <div className="min-w-0">
-                      <div className="font-medium">{machine.name}</div>
-                      <div className="text-[0.625rem] text-muted-foreground">
-                        {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"}
+                    {row.type === "heading" ? (
+                      <div
+                        aria-label={row.label}
+                        className="px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
+                        role="separator"
+                      >
+                        {row.label}
                       </div>
-                    </div>
-                  </CommandItem>
+                    ) : row.type === "machine" ? (
+                      <div
+                        aria-posinset={position}
+                        aria-selected={active}
+                        aria-setsize={selectableIndices.length}
+                        className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
+                        data-active={active}
+                        id={domId}
+                        onClick={() => selectRow(row)}
+                        onMouseEnter={() => setActiveKey(row.key)}
+                        role="option"
+                      >
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className="size-14 object-contain"
+                          decoding="async"
+                          loading="lazy"
+                          src={row.machine.imageUrl}
+                        />
+                        <div className="min-w-0">
+                          <div className="font-medium">{row.machine.name}</div>
+                          <div className="text-[0.625rem] text-muted-foreground">
+                            {recipesForMachine(row.machine.id).length}{" "}
+                            {recipesForMachine(row.machine.id).length === 1
+                              ? "recipe"
+                              : "recipes"}
+                          </div>
+                        </div>
+                      </div>
+                    ) : row.type === "buildable" ? (
+                      <div
+                        aria-posinset={position}
+                        aria-selected={active}
+                        aria-setsize={selectableIndices.length}
+                        className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
+                        data-active={active}
+                        id={domId}
+                        onClick={() => selectRow(row)}
+                        onMouseEnter={() => setActiveKey(row.key)}
+                        role="option"
+                      >
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className="size-14 object-contain"
+                          decoding="async"
+                          loading="lazy"
+                          src={row.buildable.imageUrl}
+                        />
+                        <div className="font-medium">{row.buildable.name}</div>
+                      </div>
+                    ) : (
+                      <RecipeRow
+                        active={active}
+                        domId={domId}
+                        machine={row.machine}
+                        onActivate={() => setActiveKey(row.key)}
+                        onOpenRoutes={
+                          scope.type === "routes"
+                            ? undefined
+                            : (itemId) => enterScope({ itemId, type: "routes" })
+                        }
+                        onSelect={() => selectRow(row)}
+                        position={position}
+                        query={query}
+                        recipe={row.recipe}
+                        setSize={selectableIndices.length}
+                        showStandardBadge={scope.type === "routes"}
+                      />
+                    )}
+                  </div>
                 );
               })}
-            </CommandGroup>
+            </div>
           )}
-          {scope.type === "root" && (
-            <>
-              <BuildableGroup
-                buildables={matchingExtractors}
-                heading="Resource extraction"
-                onSelect={selectBuildable}
-              />
-              <BuildableGroup
-                buildables={matchingLogistics}
-                heading="Logistics"
-                onSelect={selectBuildable}
-              />
-              <BuildableGroup
-                buildables={matchingSpecial}
-                heading="Special"
-                onSelect={selectBuildable}
-              />
-            </>
-          )}
-          {matchingRecipes.length > 0 && (
-            <CommandGroup heading="Recipes">
-              {matchingRecipes.map((recipe) => {
-                const machine =
-                  selectedMachine ?? productionMachine(recipe.machineIds[0]);
-                if (!machine) return null;
-                return (
-                  <RecipeRow
-                    key={`${machine.id}:${recipe.id}`}
-                    machine={machine}
-                    onOpenRoutes={
-                      scope.type === "routes"
-                        ? undefined
-                        : (itemId) => enterScope({ itemId, type: "routes" })
-                    }
-                    onSelect={() => selectRecipe(recipe, machine.id)}
-                    query={query}
-                    recipe={recipe}
-                    showStandardBadge={scope.type === "routes"}
-                  />
-                );
-              })}
-            </CommandGroup>
-          )}
-        </CommandList>
-      </Command>
+        </div>
+      </div>
     </CommandDialog>
   );
 }
