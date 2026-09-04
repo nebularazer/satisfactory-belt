@@ -5,6 +5,7 @@ import {
   findProductionMachine,
   findRecipe,
   findResourceExtractor,
+  findResourceWellPressurizer,
 } from "./catalog";
 import { findProductionProcess } from "./production-process";
 import type {
@@ -20,6 +21,7 @@ import type {
   ProcessNodeRequest,
   RecipeProcessNode,
   ResourcePurity,
+  ResourceWellProcessNode,
 } from "./types";
 
 const RESOURCE_PURITY_MULTIPLIER: Readonly<Record<ResourcePurity, number>> = {
@@ -319,6 +321,11 @@ function createExtractionNode(
   if (!extractor) {
     invalid(`Resource Extractor ${request.buildableId} does not exist.`);
   }
+  if (extractor.resourceWell === true) {
+    invalid(
+      "Resource Well Extractors must be configured through a Resource Well Process.",
+    );
+  }
   if (!process.buildableIds.includes(extractor.id)) {
     invalid(`${extractor.name} cannot perform ${process.name}.`);
   }
@@ -547,6 +554,103 @@ function createPowerGenerationNode(
   };
 }
 
+function createResourceWellNode(
+  request: ProcessNodeRequest,
+  instances: readonly ProcessInstanceRequest[],
+): ResourceWellProcessNode {
+  const process = findProductionProcess(request.processId);
+  if (process?.kind !== "resource-well") {
+    invalid(`Resource Well Process ${request.processId} does not exist.`);
+  }
+  const pressurizer = findResourceWellPressurizer(request.buildableId);
+  if (!pressurizer) {
+    invalid(`Resource Well Pressurizer ${request.buildableId} does not exist.`);
+  }
+  if (!process.buildableIds.includes(pressurizer.id)) {
+    invalid(`${pressurizer.name} cannot perform ${process.name}.`);
+  }
+  const satelliteIds = new Set<string>();
+  const configurations = instances.map((instance) => {
+    if (instance.resourcePurity !== undefined) {
+      invalid("Resource Purity belongs to Resource Well satellites.");
+    }
+    if ((instance.somersloopCount ?? 0) !== 0) {
+      invalid("Resource Wells cannot use Somersloops.");
+    }
+    const requestedSatellites = instance.satellites ?? [
+      { id: `${instance.id}:satellite-1` },
+    ];
+    if (requestedSatellites.length === 0) {
+      invalid("A Resource Well must contain at least one satellite Extractor.");
+    }
+    const satellites = requestedSatellites.map((satellite) => {
+      requireId(satellite.id, "Resource Well satellite id");
+      if (satelliteIds.has(satellite.id)) {
+        invalid(`Resource Well satellite id ${satellite.id} is duplicated.`);
+      }
+      satelliteIds.add(satellite.id);
+      return {
+        id: satellite.id,
+        resourcePurity: satellite.resourcePurity ?? "normal",
+      };
+    });
+    return {
+      clockSpeedPercent: clockSpeedPercentFor(instance, pressurizer),
+      id: instance.id,
+      satellites,
+    };
+  });
+  const outputRate = configurations.reduce(
+    (total, { clockSpeedPercent, satellites }) =>
+      total +
+      satellites.reduce(
+        (wellTotal, { resourcePurity }) =>
+          wellTotal +
+          pressurizer.baseRatePerExtractor *
+            (clockSpeedPercent / 100) *
+            RESOURCE_PURITY_MULTIPLIER[resourcePurity],
+        0,
+      ),
+    0,
+  );
+  const consumedMw = configurations.reduce(
+    (total, { clockSpeedPercent }) =>
+      total +
+      pressurizer.basePowerMw *
+        (clockSpeedPercent / 100) **
+          pressurizer.clockSpeed.powerConsumptionExponent,
+    0,
+  );
+
+  return {
+    configuration: {
+      buildableId: pressurizer.id,
+      id: request.id,
+      instances: configurations,
+      processId: process.id,
+      processKind: "resource-well",
+    },
+    kind: "process",
+    ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
+    profile: {
+      inputs: [],
+      outputs: [
+        {
+          itemId: process.resourceItemId,
+          ratePerMinute: round(outputRate),
+        },
+      ],
+      power: {
+        consumed: {
+          maximumMw: round(consumedMw),
+          minimumMw: round(consumedMw),
+        },
+        produced: zeroPowerRange(),
+      },
+    },
+  };
+}
+
 /**
  * Validates authoritative Process Node configuration and derives its material
  * rates and Power Profile. Omitting instances creates one at 100% Clock Speed,
@@ -565,6 +669,12 @@ export function createProcessNode(request: ProcessNodeRequest): ProcessNode {
   if (process.kind !== "consumption" && request.itemId !== undefined) {
     invalid("Only Consumption Processes accept a direct material binding.");
   }
+  if (
+    process.kind !== "resource-well" &&
+    instances.some(({ satellites }) => satellites !== undefined)
+  ) {
+    invalid("Only Resource Well Processes accept satellite Extractors.");
+  }
   switch (process.kind) {
     case "consumption":
       return createConsumptionNode(request, instances);
@@ -574,5 +684,7 @@ export function createProcessNode(request: ProcessNodeRequest): ProcessNode {
       return createPowerGenerationNode(request, instances);
     case "recipe":
       return createRecipeNode(request, instances);
+    case "resource-well":
+      return createResourceWellNode(request, instances);
   }
 }

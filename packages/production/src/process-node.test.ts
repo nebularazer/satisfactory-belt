@@ -286,6 +286,46 @@ describe("Process Nodes", () => {
     });
   });
 
+  it("coordinates Resource Well Pressurizers and satellite Extractors", () => {
+    const node = createProcessNode({
+      buildableId: "Build_FrackingSmasher_C",
+      id: "oil-well",
+      instances: [
+        {
+          id: "pressurizer-1",
+          satellites: [
+            { id: "extractor-1", resourcePurity: "impure" },
+            { id: "extractor-2", resourcePurity: "normal" },
+            { id: "extractor-3", resourcePurity: "pure" },
+          ],
+        },
+      ],
+      processId: "resource-well:Desc_LiquidOil_C",
+    });
+
+    expect(node.configuration).toMatchObject({
+      buildableId: "Build_FrackingSmasher_C",
+      instances: [
+        {
+          clockSpeedPercent: 100,
+          satellites: [
+            { id: "extractor-1", resourcePurity: "impure" },
+            { id: "extractor-2", resourcePurity: "normal" },
+            { id: "extractor-3", resourcePurity: "pure" },
+          ],
+        },
+      ],
+      processKind: "resource-well",
+    });
+    expect(node.profile.outputs).toEqual([
+      { itemId: "Desc_LiquidOil_C", ratePerMinute: 210 },
+    ]);
+    expect(node.profile.power.consumed).toEqual({
+      maximumMw: 150,
+      minimumMw: 150,
+    });
+  });
+
   it("rejects incompatible machines and invalid operating settings", () => {
     expect(() =>
       createProcessNode({
@@ -321,5 +361,14 @@ describe("Process Nodes", () => {
         processId: "consumption:Build_ResourceSink_C",
       }),
     ).toThrow(/cannot consume Uranium Waste/);
+
+    expect(() =>
+      createProcessNode({
+        buildableId: "Build_FrackingSmasher_C",
+        id: "empty-well",
+        instances: [{ id: "pressurizer-1", satellites: [] }],
+        processId: "resource-well:Desc_Water_C",
+      }),
+    ).toThrow(/at least one satellite Extractor/);
   });
 });

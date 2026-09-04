@@ -2,6 +2,7 @@ import { RECIPES, findDescriptor } from "./catalog";
 import {
   POWER_GENERATORS,
   RESOURCE_EXTRACTORS,
+  RESOURCE_WELL_PRESSURIZERS,
   SPECIAL_BUILDABLES,
 } from "./data/buildables";
 import type {
@@ -10,6 +11,8 @@ import type {
   PowerGenerationProductionProcess,
   ProductionProcess,
   RecipeProductionProcess,
+  ResourceWellProductionProcess,
+  StandaloneResourceExtractor,
 } from "./types";
 
 const recipeProcesses: readonly RecipeProductionProcess[] = RECIPES.map(
@@ -25,7 +28,10 @@ const recipeProcesses: readonly RecipeProductionProcess[] = RECIPES.map(
 );
 
 const extractorsByResourceItemId = Map.groupBy(
-  RESOURCE_EXTRACTORS.flatMap((extractor) =>
+  RESOURCE_EXTRACTORS.filter(
+    (extractor): extractor is StandaloneResourceExtractor =>
+      extractor.resourceWell !== true,
+  ).flatMap((extractor) =>
     extractor.resourceItemIds.map((resourceItemId) => ({
       extractor,
       resourceItemId,
@@ -92,11 +98,26 @@ const consumptionProcesses: readonly ConsumptionProductionProcess[] =
     outputItemIds: [],
   }));
 
+const resourceWellProcesses: readonly ResourceWellProductionProcess[] =
+  RESOURCE_WELL_PRESSURIZERS.flatMap((pressurizer) =>
+    pressurizer.resourceItemIds.map((resourceItemId) => ({
+      buildableIds: [pressurizer.id] as const,
+      extractorBuildableId: pressurizer.extractorBuildableId,
+      id: `resource-well:${resourceItemId}`,
+      inputItemIds: [] as const,
+      kind: "resource-well" as const,
+      name: `${findDescriptor(resourceItemId)?.name ?? resourceItemId} Resource Well`,
+      outputItemIds: [resourceItemId] as const,
+      resourceItemId,
+    })),
+  );
+
 const productionProcesses: readonly ProductionProcess[] = [
   ...recipeProcesses,
   ...extractionProcesses,
   ...powerGenerationProcesses,
   ...consumptionProcesses,
+  ...resourceWellProcesses,
 ];
 const productionProcessesById = new Map(
   productionProcesses.map((process) => [process.id, process]),

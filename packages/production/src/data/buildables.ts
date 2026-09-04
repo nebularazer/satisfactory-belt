@@ -5,6 +5,7 @@ import type {
   MaterialPort,
   ProductionMachine,
   ResourceExtractor,
+  ResourceWellPressurizer,
   RouterBuildable,
   TransportBuildable,
 } from "../types";
@@ -195,15 +196,12 @@ export const RESOURCE_EXTRACTORS: readonly ResourceExtractor[] = [
     usesResourcePurity: true,
   },
   {
-    basePowerMw: 0,
-    baseRatePerMinute: 60,
     category: "production",
-    clockSpeed: CLOCK_SPEED,
     id: "Build_FrackingExtractor_C",
     name: "Resource Well Extractor",
     resourceItemIds: RESOURCE_WELL_ITEM_IDS,
+    resourceWell: true,
     searchTerms: RESOURCE_WELL_SEARCH_TERMS,
-    usesResourcePurity: true,
   },
   {
     basePowerMw: 20,
@@ -218,11 +216,16 @@ export const RESOURCE_EXTRACTORS: readonly ResourceExtractor[] = [
   },
 ];
 
-const PRODUCTION_SUPPORT_BUILDABLES: readonly Buildable[] = [
+export const RESOURCE_WELL_PRESSURIZERS: readonly ResourceWellPressurizer[] = [
   {
+    basePowerMw: 150,
+    baseRatePerExtractor: 60,
     category: "production",
+    clockSpeed: CLOCK_SPEED,
+    extractorBuildableId: "Build_FrackingExtractor_C",
     id: "Build_FrackingSmasher_C",
     name: "Resource Well Pressurizer",
+    resourceItemIds: RESOURCE_WELL_ITEM_IDS,
     searchTerms: RESOURCE_WELL_SEARCH_TERMS,
   },
 ];
@@ -440,7 +443,7 @@ export const BUILDABLES: readonly Buildable[] = [
   ...PRODUCTION_MACHINES,
   ...RESOURCE_EXTRACTORS,
   ...POWER_GENERATORS,
-  ...PRODUCTION_SUPPORT_BUILDABLES,
+  ...RESOURCE_WELL_PRESSURIZERS,
   ...LOGISTICS_BUILDABLES,
   ...BUFFER_BUILDABLES,
   ...TRANSPORT_BUILDABLES,

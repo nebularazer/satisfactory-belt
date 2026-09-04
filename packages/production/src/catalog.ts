@@ -5,6 +5,7 @@ import {
   POWER_GENERATORS,
   PRODUCTION_MACHINES,
   RESOURCE_EXTRACTORS,
+  RESOURCE_WELL_PRESSURIZERS,
   SPECIAL_BUILDABLES,
   TRANSPORT_BUILDABLES,
 } from "./data/buildables";
@@ -38,6 +39,12 @@ const transportsById = new Map(
 );
 const materialConsumersById = new Map(
   SPECIAL_BUILDABLES.map((consumer) => [consumer.id, consumer]),
+);
+const resourceWellPressurizersById = new Map(
+  RESOURCE_WELL_PRESSURIZERS.map((pressurizer) => [
+    pressurizer.id,
+    pressurizer,
+  ]),
 );
 const descriptorsById = new Map(
   DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor]),
@@ -110,6 +117,10 @@ export function findTransport(transportId: string) {
 
 export function findMaterialConsumer(consumerId: string) {
   return materialConsumersById.get(consumerId);
+}
+
+export function findResourceWellPressurizer(pressurizerId: string) {
+  return resourceWellPressurizersById.get(pressurizerId);
 }
 
 export function resourcesForExtractor(extractorId: string) {

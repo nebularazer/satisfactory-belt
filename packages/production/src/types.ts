@@ -37,11 +37,29 @@ export type ProductionMachine = ClockedBuildable &
     }>;
   }>;
 
-export type ResourceExtractor = ClockedBuildable &
+export type StandaloneResourceExtractor = ClockedBuildable &
   Readonly<{
     baseRatePerMinute: number;
     resourceItemIds: readonly string[];
+    resourceWell?: false;
     usesResourcePurity: boolean;
+  }>;
+
+export type ResourceWellExtractor = Buildable &
+  Readonly<{
+    resourceItemIds: readonly string[];
+    resourceWell: true;
+  }>;
+
+export type ResourceExtractor =
+  | ResourceWellExtractor
+  | StandaloneResourceExtractor;
+
+export type ResourceWellPressurizer = ClockedBuildable &
+  Readonly<{
+    baseRatePerExtractor: number;
+    extractorBuildableId: string;
+    resourceItemIds: readonly string[];
   }>;
 
 export type Descriptor = Readonly<{
@@ -163,11 +181,28 @@ export type ConsumptionProductionProcess = Readonly<{
   outputItemIds: readonly [];
 }>;
 
+export type ResourceWellProductionProcess = Readonly<{
+  buildableIds: readonly [string];
+  extractorBuildableId: string;
+  id: string;
+  inputItemIds: readonly [];
+  kind: "resource-well";
+  name: string;
+  outputItemIds: readonly [string];
+  resourceItemId: string;
+}>;
+
 export type ProductionProcess =
   | ConsumptionProductionProcess
   | ExtractionProductionProcess
   | PowerGenerationProductionProcess
+  | ResourceWellProductionProcess
   | RecipeProductionProcess;
+
+export type ResourceWellSatelliteRequest = Readonly<{
+  id: string;
+  resourcePurity?: ResourcePurity;
+}>;
 
 export type ProcessInstanceRequest = Readonly<{
   /** Percentage from 1 through 250. Defaults to 100. */
@@ -177,6 +212,8 @@ export type ProcessInstanceRequest = Readonly<{
   resourcePurity?: ResourcePurity;
   /** A whole number within the Production Machine's slot capacity. */
   somersloopCount?: number;
+  /** Valid only for a Resource Well instance. Defaults to one Normal satellite. */
+  satellites?: readonly ResourceWellSatelliteRequest[];
 }>;
 
 export type ProcessNodeRequest = Readonly<{
@@ -212,6 +249,17 @@ export type GeothermalGeneratorInstanceConfiguration = Readonly<{
 
 export type ConsumptionInstanceConfiguration = Readonly<{
   id: string;
+}>;
+
+export type ResourceWellSatelliteConfiguration = Readonly<{
+  id: string;
+  resourcePurity: ResourcePurity;
+}>;
+
+export type ResourceWellInstanceConfiguration = Readonly<{
+  clockSpeedPercent: number;
+  id: string;
+  satellites: readonly ResourceWellSatelliteConfiguration[];
 }>;
 
 export type RecipeProcessNodeConfiguration = Readonly<{
@@ -261,10 +309,19 @@ export type ConsumptionProcessNodeConfiguration = Readonly<{
   processKind: "consumption";
 }>;
 
+export type ResourceWellProcessNodeConfiguration = Readonly<{
+  buildableId: string;
+  id: string;
+  instances: readonly ResourceWellInstanceConfiguration[];
+  processId: string;
+  processKind: "resource-well";
+}>;
+
 export type ProcessNodeConfiguration =
   | ConsumptionProcessNodeConfiguration
   | ExtractionProcessNodeConfiguration
   | PowerGenerationNodeConfiguration
+  | ResourceWellProcessNodeConfiguration
   | RecipeProcessNodeConfiguration;
 
 export type MaterialRate = Readonly<{
@@ -418,10 +475,18 @@ export type ConsumptionProcessNode = Readonly<{
   profile: NodeProfile;
 }>;
 
+export type ResourceWellProcessNode = Readonly<{
+  configuration: ResourceWellProcessNodeConfiguration;
+  kind: "process";
+  ports: readonly MaterialPort[];
+  profile: NodeProfile;
+}>;
+
 export type ProcessNode =
   | ConsumptionProcessNode
   | ExtractionProcessNode
   | PowerGenerationProcessNode
+  | ResourceWellProcessNode
   | RecipeProcessNode;
 
 export type MaterialNode = BufferNode | RouterNode | TransportNode;

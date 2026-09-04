@@ -7,6 +7,7 @@ export {
   findProductionMachine,
   findRecipe,
   findResourceExtractor,
+  findResourceWellPressurizer,
   findRouter,
   findTransport,
   listBuildables,
