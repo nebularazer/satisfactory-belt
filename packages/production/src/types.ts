@@ -49,6 +49,7 @@ export type Descriptor = Readonly<{
   form: "gas" | "liquid" | "solid";
   id: string;
   name: string;
+  sinkPoints?: number;
 }>;
 
 export type ProductionMaterial = Readonly<{

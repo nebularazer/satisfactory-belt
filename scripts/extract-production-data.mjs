@@ -164,11 +164,13 @@ const items = [...itemsById.entries()]
           ? "gas"
           : "solid";
     const energyMj = Number(item.mEnergyValue) * (form === "solid" ? 1 : 1_000);
+    const sinkPoints = Number(item.mResourceSinkPoints);
     return {
       ...(energyMj > 0 ? { energyMj: round(energyMj) } : {}),
       form,
       id,
       name: item.mDisplayName,
+      ...(sinkPoints > 0 ? { sinkPoints } : {}),
     };
   })
   .sort((left, right) => left.name.localeCompare(right.name));
