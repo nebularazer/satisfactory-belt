@@ -70,6 +70,7 @@
     "name": "Ballistic Warp Drive"
   },
   {
+    "energyMj": 6000,
     "form": "solid",
     "id": "Desc_Battery_C",
     "name": "Battery"
@@ -85,6 +86,7 @@
     "name": "Biochemical Sculptor"
   },
   {
+    "energyMj": 180,
     "form": "solid",
     "id": "Desc_GenericBiomass_C",
     "name": "Biomass"
@@ -135,11 +137,13 @@
     "name": "Cluster Nobelisk"
   },
   {
+    "energyMj": 300,
     "form": "solid",
     "id": "Desc_Coal_C",
     "name": "Coal"
   },
   {
+    "energyMj": 630,
     "form": "solid",
     "id": "Desc_CompactedCoal_C",
     "name": "Compacted Coal"
@@ -185,6 +189,7 @@
     "name": "Copper Sheet"
   },
   {
+    "energyMj": 320,
     "form": "liquid",
     "id": "Desc_LiquidOil_C",
     "name": "Crude Oil"
@@ -315,11 +320,13 @@
     "name": "Ficsonium"
   },
   {
+    "energyMj": 150000,
     "form": "solid",
     "id": "Desc_FicsoniumFuelRod_C",
     "name": "Ficsonium Fuel Rod"
   },
   {
+    "energyMj": 750,
     "form": "liquid",
     "id": "Desc_LiquidFuel_C",
     "name": "Fuel"
@@ -355,6 +362,7 @@
     "name": "Heavy Modular Frame"
   },
   {
+    "energyMj": 400,
     "form": "liquid",
     "id": "Desc_HeavyOilResidue_C",
     "name": "Heavy Oil Residue"
@@ -380,6 +388,7 @@
     "name": "Iodine-Infused Filter"
   },
   {
+    "energyMj": 5000,
     "form": "gas",
     "id": "Desc_IonizedFuel_C",
     "name": "Ionized Fuel"
@@ -415,6 +424,7 @@
     "name": "Iron Rod"
   },
   {
+    "energyMj": 15,
     "form": "solid",
     "id": "Desc_Leaves_C",
     "name": "Leaves"
@@ -425,6 +435,7 @@
     "name": "Limestone"
   },
   {
+    "energyMj": 750,
     "form": "liquid",
     "id": "Desc_LiquidBiofuel_C",
     "name": "Liquid Biofuel"
@@ -450,6 +461,7 @@
     "name": "Motor"
   },
   {
+    "energyMj": 20,
     "form": "solid",
     "id": "Desc_Mycelia_C",
     "name": "Mycelia"
@@ -495,21 +507,25 @@
     "name": "Packaged Alumina Solution"
   },
   {
+    "energyMj": 750,
     "form": "solid",
     "id": "Desc_Fuel_C",
     "name": "Packaged Fuel"
   },
   {
+    "energyMj": 400,
     "form": "solid",
     "id": "Desc_PackagedOilResidue_C",
     "name": "Packaged Heavy Oil Residue"
   },
   {
+    "energyMj": 10000,
     "form": "solid",
     "id": "Desc_PackagedIonizedFuel_C",
     "name": "Packaged Ionized Fuel"
   },
   {
+    "energyMj": 750,
     "form": "solid",
     "id": "Desc_PackagedBiofuel_C",
     "name": "Packaged Liquid Biofuel"
@@ -525,11 +541,13 @@
     "name": "Packaged Nitrogen Gas"
   },
   {
+    "energyMj": 320,
     "form": "solid",
     "id": "Desc_PackagedOil_C",
     "name": "Packaged Oil"
   },
   {
+    "energyMj": 7200,
     "form": "solid",
     "id": "Desc_PackagedRocketFuel_C",
     "name": "Packaged Rocket Fuel"
@@ -540,6 +558,7 @@
     "name": "Packaged Sulfuric Acid"
   },
   {
+    "energyMj": 2000,
     "form": "solid",
     "id": "Desc_TurboFuel_C",
     "name": "Packaged Turbofuel"
@@ -550,6 +569,7 @@
     "name": "Packaged Water"
   },
   {
+    "energyMj": 180,
     "form": "solid",
     "id": "Desc_PetroleumCoke_C",
     "name": "Petroleum Coke"
@@ -560,6 +580,7 @@
     "name": "Plastic"
   },
   {
+    "energyMj": 1500000,
     "form": "solid",
     "id": "Desc_PlutoniumFuelRod_C",
     "name": "Plutonium Fuel Rod"
@@ -645,6 +666,7 @@
     "name": "Rifle Ammo"
   },
   {
+    "energyMj": 3600,
     "form": "gas",
     "id": "Desc_RocketFuel_C",
     "name": "Rocket Fuel"
@@ -705,6 +727,7 @@
     "name": "Snowball"
   },
   {
+    "energyMj": 450,
     "form": "solid",
     "id": "Desc_Biofuel_C",
     "name": "Solid Biofuel"
@@ -795,6 +818,7 @@
     "name": "Turbo Rifle Ammo"
   },
   {
+    "energyMj": 2000,
     "form": "liquid",
     "id": "Desc_LiquidTurboFuel_C",
     "name": "Turbofuel"
@@ -805,6 +829,7 @@
     "name": "Uranium"
   },
   {
+    "energyMj": 750000,
     "form": "solid",
     "id": "Desc_NuclearFuelRod_C",
     "name": "Uranium Fuel Rod"
@@ -830,6 +855,7 @@
     "name": "Wire"
   },
   {
+    "energyMj": 100,
     "form": "solid",
     "id": "Desc_Wood_C",
     "name": "Wood"

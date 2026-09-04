@@ -156,16 +156,21 @@ recipes.sort(
 );
 
 const items = [...itemsById.entries()]
-  .map(([id, item]) => ({
-    form:
+  .map(([id, item]) => {
+    const form =
       item.mForm === "RF_LIQUID"
         ? "liquid"
         : item.mForm === "RF_GAS"
           ? "gas"
-          : "solid",
-    id,
-    name: item.mDisplayName,
-  }))
+          : "solid";
+    const energyMj = Number(item.mEnergyValue) * (form === "solid" ? 1 : 1_000);
+    return {
+      ...(energyMj > 0 ? { energyMj: round(energyMj) } : {}),
+      form,
+      id,
+      name: item.mDisplayName,
+    };
+  })
   .sort((left, right) => left.name.localeCompare(right.name));
 
 async function writeFormattedJson(fileName, value) {

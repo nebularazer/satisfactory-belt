@@ -41,6 +41,7 @@ export type ResourceExtractor = ClockedBuildable &
   }>;
 
 export type Descriptor = Readonly<{
+  energyMj?: number;
   form: "gas" | "liquid" | "solid";
   id: string;
   name: string;
