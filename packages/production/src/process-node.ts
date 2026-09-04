@@ -1,4 +1,6 @@
 import {
+  findDescriptor,
+  findPowerGenerator,
   findProductionMachine,
   findRecipe,
   findResourceExtractor,
@@ -9,6 +11,7 @@ import type {
   ExtractorInstanceConfiguration,
   ExtractionProcessNode,
   MaterialRate,
+  PowerGenerationProcessNode,
   ProcessInstanceRequest,
   ProcessNode,
   ProcessNodeRequest,
@@ -88,7 +91,7 @@ function aggregateMaterialRates(materials: readonly MaterialRate[]) {
   }));
 }
 
-function emptyPowerProduction() {
+function zeroPowerRange() {
   return { maximumMw: 0, minimumMw: 0 } as const;
 }
 
@@ -193,7 +196,7 @@ function createRecipeNode(
           maximumMw: round(consumed.maximumMw),
           minimumMw: round(consumed.minimumMw),
         },
-        produced: emptyPowerProduction(),
+        produced: zeroPowerRange(),
       },
     },
   };
@@ -277,7 +280,162 @@ function createExtractionNode(
           maximumMw: round(consumedMw),
           minimumMw: round(consumedMw),
         },
-        produced: emptyPowerProduction(),
+        produced: zeroPowerRange(),
+      },
+    },
+  };
+}
+
+function createPowerGenerationNode(
+  request: ProcessNodeRequest,
+  instances: readonly ProcessInstanceRequest[],
+): PowerGenerationProcessNode {
+  const process = findProductionProcess(request.processId);
+  if (process?.kind !== "power-generation") {
+    invalid(
+      `Power Generation Production Process ${request.processId} does not exist.`,
+    );
+  }
+  const generator = findPowerGenerator(request.buildableId);
+  if (!generator) {
+    invalid(`Power Generator ${request.buildableId} does not exist.`);
+  }
+  if (!process.buildableIds.includes(generator.id)) {
+    invalid(`${generator.name} cannot perform ${process.name}.`);
+  }
+
+  if (process.generationKind === "geothermal") {
+    if (generator.generatorKind !== "geothermal") {
+      invalid(`${generator.name} is not a Geothermal Generator.`);
+    }
+    const configurations = instances.map((instance) => {
+      if (instance.clockSpeedPercent !== undefined) {
+        invalid("Geothermal Generators cannot change Clock Speed.");
+      }
+      if ((instance.somersloopCount ?? 0) !== 0) {
+        invalid("Power Generators cannot use Somersloops.");
+      }
+      return {
+        id: instance.id,
+        resourcePurity: instance.resourcePurity ?? "normal",
+      };
+    });
+    const produced = configurations.reduce(
+      (total, { resourcePurity }) => {
+        const power = generator.powerProductionByPurity[resourcePurity];
+        return {
+          maximumMw: total.maximumMw + power.maximumMw,
+          minimumMw: total.minimumMw + power.minimumMw,
+        };
+      },
+      { maximumMw: 0, minimumMw: 0 },
+    );
+
+    return {
+      configuration: {
+        buildableId: generator.id,
+        generationKind: "geothermal",
+        id: request.id,
+        instances: configurations,
+        processId: process.id,
+        processKind: "power-generation",
+      },
+      kind: "process",
+      profile: {
+        inputs: [],
+        outputs: [],
+        power: {
+          consumed: zeroPowerRange(),
+          produced: {
+            maximumMw: round(produced.maximumMw),
+            minimumMw: round(produced.minimumMw),
+          },
+        },
+      },
+    };
+  }
+
+  if (generator.generatorKind !== "fuel") {
+    invalid(`${generator.name} is not a fuel-burning Power Generator.`);
+  }
+  const fuel = generator.fuels.find(
+    ({ itemId }) => itemId === process.fuelItemId,
+  );
+  if (!fuel) invalid(`${generator.name} cannot burn ${process.fuelItemId}.`);
+  const fuelDescriptor = findDescriptor(fuel.itemId);
+  if (!fuelDescriptor?.energyMj) {
+    invalid(`Fuel ${fuel.itemId} does not define a positive energy value.`);
+  }
+  const configurations = instances.map((instance) => {
+    if (instance.resourcePurity !== undefined) {
+      invalid("Fuel-burning Power Generators cannot have a Resource Purity.");
+    }
+    if ((instance.somersloopCount ?? 0) !== 0) {
+      invalid("Power Generators cannot use Somersloops.");
+    }
+    const clockSpeedPercent = instance.clockSpeedPercent ?? 100;
+    if (
+      !Number.isFinite(clockSpeedPercent) ||
+      clockSpeedPercent < generator.clockSpeed.minimumPercent ||
+      clockSpeedPercent > generator.clockSpeed.maximumPercent
+    ) {
+      invalid(
+        `${generator.name} Clock Speed must be between ${generator.clockSpeed.minimumPercent}% and ${generator.clockSpeed.maximumPercent}%.`,
+      );
+    }
+    return { clockSpeedPercent, id: instance.id };
+  });
+  const operatingRate = configurations.reduce(
+    (total, { clockSpeedPercent }) => total + clockSpeedPercent / 100,
+    0,
+  );
+  const nominalFuelRate =
+    (generator.powerProductionMw * 60) / fuelDescriptor.energyMj;
+  const inputs = [
+    { itemId: fuel.itemId, ratePerMinute: nominalFuelRate * operatingRate },
+    ...(fuel.supplemental
+      ? [
+          {
+            itemId: fuel.supplemental.itemId,
+            ratePerMinute: fuel.supplemental.ratePerMinute * operatingRate,
+          },
+        ]
+      : []),
+  ].map(({ itemId, ratePerMinute }) => ({
+    itemId,
+    ratePerMinute: round(ratePerMinute),
+  }));
+  const outputs = fuel.byproduct
+    ? [
+        {
+          itemId: fuel.byproduct.itemId,
+          ratePerMinute: round(
+            nominalFuelRate * fuel.byproduct.amountPerFuel * operatingRate,
+          ),
+        },
+      ]
+    : [];
+  const producedMw = generator.powerProductionMw * operatingRate;
+
+  return {
+    configuration: {
+      buildableId: generator.id,
+      generationKind: "fuel",
+      id: request.id,
+      instances: configurations,
+      processId: process.id,
+      processKind: "power-generation",
+    },
+    kind: "process",
+    profile: {
+      inputs,
+      outputs,
+      power: {
+        consumed: zeroPowerRange(),
+        produced: {
+          maximumMw: round(producedMw),
+          minimumMw: round(producedMw),
+        },
       },
     },
   };
@@ -298,7 +456,12 @@ export function createProcessNode(request: ProcessNodeRequest): ProcessNode {
     invalid(`Production Process ${request.processId} does not exist.`);
   }
   const instances = requestedInstances(request);
-  return process.kind === "recipe"
-    ? createRecipeNode(request, instances)
-    : createExtractionNode(request, instances);
+  switch (process.kind) {
+    case "extraction":
+      return createExtractionNode(request, instances);
+    case "power-generation":
+      return createPowerGenerationNode(request, instances);
+    case "recipe":
+      return createRecipeNode(request, instances);
+  }
 }

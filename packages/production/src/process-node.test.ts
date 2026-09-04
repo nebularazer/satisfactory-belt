@@ -183,6 +183,68 @@ describe("Process Nodes", () => {
     expect(node.profile.power.consumed.minimumMw).toBeCloseTo(50.366259, 6);
   });
 
+  it("derives fuel, supplemental input, and power generation linearly", () => {
+    const node = createProcessNode({
+      buildableId: "Build_GeneratorCoal_C",
+      id: "coal-power",
+      instances: [
+        { clockSpeedPercent: 100, id: "generator-1" },
+        { clockSpeedPercent: 50, id: "generator-2" },
+      ],
+      processId: "power-generation:Build_GeneratorCoal_C:Desc_Coal_C",
+    });
+
+    expect(node.profile.inputs).toEqual([
+      { itemId: "Desc_Coal_C", ratePerMinute: 22.5 },
+      { itemId: "Desc_Water_C", ratePerMinute: 67.5 },
+    ]);
+    expect(node.profile.outputs).toEqual([]);
+    expect(node.profile.power).toEqual({
+      consumed: { maximumMw: 0, minimumMw: 0 },
+      produced: { maximumMw: 112.5, minimumMw: 112.5 },
+    });
+  });
+
+  it("derives nuclear waste from the selected fuel", () => {
+    const node = createProcessNode({
+      buildableId: "Build_GeneratorNuclear_C",
+      id: "uranium-power",
+      processId:
+        "power-generation:Build_GeneratorNuclear_C:Desc_NuclearFuelRod_C",
+    });
+
+    expect(node.profile.inputs).toEqual([
+      { itemId: "Desc_NuclearFuelRod_C", ratePerMinute: 0.2 },
+      { itemId: "Desc_Water_C", ratePerMinute: 240 },
+    ]);
+    expect(node.profile.outputs).toEqual([
+      { itemId: "Desc_NuclearWaste_C", ratePerMinute: 10 },
+    ]);
+    expect(node.profile.power.produced).toEqual({
+      maximumMw: 2500,
+      minimumMw: 2500,
+    });
+  });
+
+  it("represents Geothermal Generator fluctuation by Geyser purity", () => {
+    const node = createProcessNode({
+      buildableId: "Build_GeneratorGeoThermal_C",
+      id: "geothermal-power",
+      instances: [
+        { id: "geothermal-1", resourcePurity: "impure" },
+        { id: "geothermal-2", resourcePurity: "pure" },
+      ],
+      processId: "power-generation:Build_GeneratorGeoThermal_C",
+    });
+
+    expect(node.profile.inputs).toEqual([]);
+    expect(node.profile.outputs).toEqual([]);
+    expect(node.profile.power.produced).toEqual({
+      maximumMw: 750,
+      minimumMw: 250,
+    });
+  });
+
   it("rejects incompatible machines and invalid operating settings", () => {
     expect(() =>
       createProcessNode({
@@ -200,5 +262,14 @@ describe("Process Nodes", () => {
         processId: "Recipe_IronPlate_C",
       }),
     ).toThrow(/Somersloop count.*between 0 and 1/);
+
+    expect(() =>
+      createProcessNode({
+        buildableId: "Build_GeneratorGeoThermal_C",
+        id: "overclocked-geothermal",
+        instances: [{ clockSpeedPercent: 100, id: "geothermal-1" }],
+        processId: "power-generation:Build_GeneratorGeoThermal_C",
+      }),
+    ).toThrow(/cannot change Clock Speed/);
   });
 });

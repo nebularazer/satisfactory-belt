@@ -1,6 +1,7 @@
 export {
   findBuildable,
   findDescriptor,
+  findPowerGenerator,
   findProductionMachine,
   findRecipe,
   findResourceExtractor,
@@ -37,6 +38,7 @@ export type {
   ProcessNode,
   ProcessNodeConfiguration,
   ProcessNodeRequest,
+  PowerGenerator,
   ProductionMachine,
   ProductionMaterial,
   ProductionProcess,

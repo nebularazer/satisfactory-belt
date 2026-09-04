@@ -14,14 +14,18 @@ export type Buildable = Readonly<{
   searchTerms?: readonly string[];
 }>;
 
+export type ClockSpeedRange = Readonly<{
+  maximumPercent: number;
+  minimumPercent: number;
+}>;
+
 export type ClockedBuildable = Buildable &
   Readonly<{
     basePowerMw: number;
-    clockSpeed: Readonly<{
-      maximumPercent: number;
-      minimumPercent: number;
-      powerConsumptionExponent: number;
-    }>;
+    clockSpeed: ClockSpeedRange &
+      Readonly<{
+        powerConsumptionExponent: number;
+      }>;
   }>;
 
 export type ProductionMachine = ClockedBuildable &
@@ -69,6 +73,34 @@ export type Recipe = Readonly<{
 
 export type ResourcePurity = "impure" | "normal" | "pure";
 
+export type GeneratorFuel = Readonly<{
+  byproduct?: Readonly<{
+    amountPerFuel: number;
+    itemId: string;
+  }>;
+  itemId: string;
+  supplemental?: Readonly<{
+    itemId: string;
+    ratePerMinute: number;
+  }>;
+}>;
+
+export type FuelPowerGenerator = Buildable &
+  Readonly<{
+    clockSpeed: ClockSpeedRange;
+    fuels: readonly GeneratorFuel[];
+    generatorKind: "fuel";
+    powerProductionMw: number;
+  }>;
+
+export type GeothermalPowerGenerator = Buildable &
+  Readonly<{
+    generatorKind: "geothermal";
+    powerProductionByPurity: Readonly<Record<ResourcePurity, PowerRange>>;
+  }>;
+
+export type PowerGenerator = FuelPowerGenerator | GeothermalPowerGenerator;
+
 export type RecipeProductionProcess = Readonly<{
   buildableIds: readonly string[];
   id: string;
@@ -89,8 +121,34 @@ export type ExtractionProductionProcess = Readonly<{
   resourceItemId: string;
 }>;
 
+export type FuelPowerGenerationProductionProcess = Readonly<{
+  buildableIds: readonly [string];
+  fuelItemId: string;
+  generationKind: "fuel";
+  id: string;
+  inputItemIds: readonly string[];
+  kind: "power-generation";
+  name: string;
+  outputItemIds: readonly string[];
+}>;
+
+export type GeothermalPowerGenerationProductionProcess = Readonly<{
+  buildableIds: readonly [string];
+  generationKind: "geothermal";
+  id: string;
+  inputItemIds: readonly [];
+  kind: "power-generation";
+  name: string;
+  outputItemIds: readonly [];
+}>;
+
+export type PowerGenerationProductionProcess =
+  | FuelPowerGenerationProductionProcess
+  | GeothermalPowerGenerationProductionProcess;
+
 export type ProductionProcess =
   | ExtractionProductionProcess
+  | PowerGenerationProductionProcess
   | RecipeProductionProcess;
 
 export type ProcessInstanceRequest = Readonly<{
@@ -122,6 +180,16 @@ export type ExtractorInstanceConfiguration = Readonly<{
   resourcePurity?: ResourcePurity;
 }>;
 
+export type FuelGeneratorInstanceConfiguration = Readonly<{
+  clockSpeedPercent: number;
+  id: string;
+}>;
+
+export type GeothermalGeneratorInstanceConfiguration = Readonly<{
+  id: string;
+  resourcePurity: ResourcePurity;
+}>;
+
 export type RecipeProcessNodeConfiguration = Readonly<{
   buildableId: string;
   id: string;
@@ -138,8 +206,31 @@ export type ExtractionProcessNodeConfiguration = Readonly<{
   processKind: "extraction";
 }>;
 
+export type FuelPowerGenerationNodeConfiguration = Readonly<{
+  buildableId: string;
+  generationKind: "fuel";
+  id: string;
+  instances: readonly FuelGeneratorInstanceConfiguration[];
+  processId: string;
+  processKind: "power-generation";
+}>;
+
+export type GeothermalPowerGenerationNodeConfiguration = Readonly<{
+  buildableId: string;
+  generationKind: "geothermal";
+  id: string;
+  instances: readonly GeothermalGeneratorInstanceConfiguration[];
+  processId: string;
+  processKind: "power-generation";
+}>;
+
+export type PowerGenerationNodeConfiguration =
+  | FuelPowerGenerationNodeConfiguration
+  | GeothermalPowerGenerationNodeConfiguration;
+
 export type ProcessNodeConfiguration =
   | ExtractionProcessNodeConfiguration
+  | PowerGenerationNodeConfiguration
   | RecipeProcessNodeConfiguration;
 
 export type MaterialRate = Readonly<{
@@ -175,4 +266,13 @@ export type ExtractionProcessNode = Readonly<{
   profile: NodeProfile;
 }>;
 
-export type ProcessNode = ExtractionProcessNode | RecipeProcessNode;
+export type PowerGenerationProcessNode = Readonly<{
+  configuration: PowerGenerationNodeConfiguration;
+  kind: "process";
+  profile: NodeProfile;
+}>;
+
+export type ProcessNode =
+  | ExtractionProcessNode
+  | PowerGenerationProcessNode
+  | RecipeProcessNode;

@@ -1,5 +1,6 @@
 import {
   BUILDABLES,
+  POWER_GENERATORS,
   PRODUCTION_MACHINES,
   RESOURCE_EXTRACTORS,
 } from "./data/buildables";
@@ -18,6 +19,9 @@ const machinesById = new Map(
 );
 const extractorsById = new Map(
   RESOURCE_EXTRACTORS.map((extractor) => [extractor.id, extractor]),
+);
+const powerGeneratorsById = new Map(
+  POWER_GENERATORS.map((generator) => [generator.id, generator]),
 );
 const descriptorsById = new Map(
   DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor]),
@@ -70,6 +74,10 @@ export function findProductionMachine(machineId: string) {
 
 export function findResourceExtractor(extractorId: string) {
   return extractorsById.get(extractorId);
+}
+
+export function findPowerGenerator(generatorId: string) {
+  return powerGeneratorsById.get(generatorId);
 }
 
 export function resourcesForExtractor(extractorId: string) {

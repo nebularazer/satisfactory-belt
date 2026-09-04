@@ -1,4 +1,7 @@
 import type { Buildable, ProductionMachine, ResourceExtractor } from "../types";
+import { POWER_GENERATORS } from "./power-generators";
+
+export { POWER_GENERATORS } from "./power-generators";
 
 const CLOCK_SPEED = {
   maximumPercent: 250,
@@ -264,6 +267,7 @@ export const SPECIAL_BUILDABLES: readonly Buildable[] = [
 export const BUILDABLES: readonly Buildable[] = [
   ...PRODUCTION_MACHINES,
   ...RESOURCE_EXTRACTORS,
+  ...POWER_GENERATORS,
   ...PRODUCTION_SUPPORT_BUILDABLES,
   ...LOGISTICS_BUILDABLES,
   ...SPECIAL_BUILDABLES,

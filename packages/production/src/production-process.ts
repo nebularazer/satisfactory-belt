@@ -1,7 +1,8 @@
 import { RECIPES, findDescriptor } from "./catalog";
-import { RESOURCE_EXTRACTORS } from "./data/buildables";
+import { POWER_GENERATORS, RESOURCE_EXTRACTORS } from "./data/buildables";
 import type {
   ExtractionProductionProcess,
+  PowerGenerationProductionProcess,
   ProductionProcess,
   RecipeProductionProcess,
 } from "./types";
@@ -42,9 +43,43 @@ const extractionProcesses: readonly ExtractionProductionProcess[] = [
   }))
   .toSorted((left, right) => left.name.localeCompare(right.name));
 
+const powerGenerationProcesses: readonly PowerGenerationProductionProcess[] =
+  POWER_GENERATORS.flatMap(
+    (generator): readonly PowerGenerationProductionProcess[] => {
+      if (generator.generatorKind === "geothermal") {
+        return [
+          {
+            buildableIds: [generator.id],
+            generationKind: "geothermal",
+            id: `power-generation:${generator.id}`,
+            inputItemIds: [],
+            kind: "power-generation",
+            name: generator.name,
+            outputItemIds: [],
+          } as const,
+        ];
+      }
+
+      return generator.fuels.map((fuel) => ({
+        buildableIds: [generator.id] as const,
+        fuelItemId: fuel.itemId,
+        generationKind: "fuel" as const,
+        id: `power-generation:${generator.id}:${fuel.itemId}`,
+        inputItemIds: [
+          fuel.itemId,
+          ...(fuel.supplemental ? [fuel.supplemental.itemId] : []),
+        ],
+        kind: "power-generation" as const,
+        name: `${generator.name}: ${findDescriptor(fuel.itemId)?.name ?? fuel.itemId}`,
+        outputItemIds: fuel.byproduct ? [fuel.byproduct.itemId] : [],
+      }));
+    },
+  );
+
 const productionProcesses: readonly ProductionProcess[] = [
   ...recipeProcesses,
   ...extractionProcesses,
+  ...powerGenerationProcesses,
 ];
 const productionProcessesById = new Map(
   productionProcesses.map((process) => [process.id, process]),
