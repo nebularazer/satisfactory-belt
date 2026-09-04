@@ -222,6 +222,7 @@ export type ProcessNodeRequest = Readonly<{
   instances?: readonly ProcessInstanceRequest[];
   /** Optionally binds a Consumption Process to one accepted Descriptor. */
   itemId?: string;
+  kind: "process";
   processId: string;
 }>;
 
@@ -266,6 +267,7 @@ export type RecipeProcessNodeConfiguration = Readonly<{
   buildableId: string;
   id: string;
   instances: readonly MachineInstanceConfiguration[];
+  kind: "process";
   processId: string;
   processKind: "recipe";
 }>;
@@ -274,6 +276,7 @@ export type ExtractionProcessNodeConfiguration = Readonly<{
   buildableId: string;
   id: string;
   instances: readonly ExtractorInstanceConfiguration[];
+  kind: "process";
   processId: string;
   processKind: "extraction";
 }>;
@@ -283,6 +286,7 @@ export type FuelPowerGenerationNodeConfiguration = Readonly<{
   generationKind: "fuel";
   id: string;
   instances: readonly FuelGeneratorInstanceConfiguration[];
+  kind: "process";
   processId: string;
   processKind: "power-generation";
 }>;
@@ -292,6 +296,7 @@ export type GeothermalPowerGenerationNodeConfiguration = Readonly<{
   generationKind: "geothermal";
   id: string;
   instances: readonly GeothermalGeneratorInstanceConfiguration[];
+  kind: "process";
   processId: string;
   processKind: "power-generation";
 }>;
@@ -305,6 +310,7 @@ export type ConsumptionProcessNodeConfiguration = Readonly<{
   id: string;
   instances: readonly ConsumptionInstanceConfiguration[];
   itemId?: string;
+  kind: "process";
   processId: string;
   processKind: "consumption";
 }>;
@@ -313,6 +319,7 @@ export type ResourceWellProcessNodeConfiguration = Readonly<{
   buildableId: string;
   id: string;
   instances: readonly ResourceWellInstanceConfiguration[];
+  kind: "process";
   processId: string;
   processKind: "resource-well";
 }>;
@@ -434,6 +441,20 @@ export type TransportNodeConfiguration = Readonly<{
   kind: "transport";
   mode: "load" | "unload";
 }>;
+
+export type MaterialNodeConfiguration =
+  | BufferNodeConfiguration
+  | RouterNodeConfiguration
+  | TransportNodeConfiguration;
+
+export type NodeRequest = MaterialNodeRequest | ProcessNodeRequest;
+
+export type NodeConfiguration =
+  | MaterialNodeConfiguration
+  | ProcessNodeConfiguration;
+
+export type NodeTemplate<T extends NodeRequest = NodeRequest> =
+  T extends NodeRequest ? Omit<T, "id"> : never;
 
 export type RouterNode = Readonly<{
   configuration: RouterNodeConfiguration;

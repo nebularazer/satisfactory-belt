@@ -41,6 +41,11 @@ export {
   createMaterialNode,
   MaterialNodeConfigurationError,
 } from "./material-node";
+export {
+  createNode,
+  NodeConfigurationError,
+  parseNodeConfiguration,
+} from "./node";
 export type {
   BufferBuildable,
   BufferNode,
@@ -48,6 +53,7 @@ export type {
   BuildableCategory,
   Descriptor,
   MaterialNode,
+  MaterialNodeConfiguration,
   MaterialNodeRequest,
   MaterialConsumer,
   MaterialPort,
@@ -55,6 +61,9 @@ export type {
   MaterialRate,
   NodeProfile,
   Node,
+  NodeConfiguration,
+  NodeRequest,
+  NodeTemplate,
   PowerProfile,
   ProcessNode,
   ProcessNodeConfiguration,
@@ -66,6 +75,7 @@ export type {
   Recipe,
   ResourceExtractor,
   ResourcePurity,
+  ResourceWellPressurizer,
   RouterBuildable,
   RouterNode,
   TransportBuildable,

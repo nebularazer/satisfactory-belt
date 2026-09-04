@@ -5,7 +5,12 @@ import {
   createProcessNode,
   findProductionProcess,
   productionProcessesForBuildable,
+  type ProcessNodeRequest,
 } from "./index";
+
+function createTestProcessNode(request: Omit<ProcessNodeRequest, "kind">) {
+  return createProcessNode({ ...request, kind: "process" });
+}
 
 function calculatedMaterials(node: ReturnType<typeof createProcessNode>) {
   if (node.profile.materials.kind !== "calculated") {
@@ -53,7 +58,7 @@ describe("Production Processes", () => {
 describe("Process Nodes", () => {
   it("creates one machine at 100% by default", () => {
     expect(
-      createProcessNode({
+      createTestProcessNode({
         buildableId: "Build_ConstructorMk1_C",
         id: "iron-plates",
         processId: "Recipe_IronPlate_C",
@@ -69,6 +74,7 @@ describe("Process Nodes", () => {
             somersloopCount: 0,
           },
         ],
+        kind: "process",
         processId: "Recipe_IronPlate_C",
         processKind: "recipe",
       },
@@ -104,7 +110,7 @@ describe("Process Nodes", () => {
   });
 
   it("aggregates whole machines with individual Clock Speeds", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_ConstructorMk1_C",
       id: "iron-plates",
       instances: [
@@ -126,7 +132,7 @@ describe("Process Nodes", () => {
   });
 
   it("amplifies products and power without amplifying ingredients", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_ConstructorMk1_C",
       id: "amplified-plates",
       instances: [
@@ -152,7 +158,7 @@ describe("Process Nodes", () => {
   });
 
   it("supports the Smelter's single Somersloop slot", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_SmelterMk1_C",
       id: "amplified-ingots",
       instances: [{ id: "smelter-1", somersloopCount: 1 }],
@@ -169,7 +175,7 @@ describe("Process Nodes", () => {
   });
 
   it("preserves variable power ranges", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_Converter_C",
       id: "converted-bauxite",
       processId: "Recipe_Bauxite_Caterium_C",
@@ -189,7 +195,7 @@ describe("Process Nodes", () => {
     );
     if (!process) throw new Error("Missing Iron Ore extraction process");
 
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_MinerMk2_C",
       id: "iron-ore",
       instances: [
@@ -210,7 +216,7 @@ describe("Process Nodes", () => {
   });
 
   it("derives fuel, supplemental input, and power generation linearly", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_GeneratorCoal_C",
       id: "coal-power",
       instances: [
@@ -232,7 +238,7 @@ describe("Process Nodes", () => {
   });
 
   it("derives nuclear waste from the selected fuel", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_GeneratorNuclear_C",
       id: "uranium-power",
       processId:
@@ -253,7 +259,7 @@ describe("Process Nodes", () => {
   });
 
   it("represents Geothermal Generator fluctuation by Geyser purity", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_GeneratorGeoThermal_C",
       id: "geothermal-power",
       instances: [
@@ -272,7 +278,7 @@ describe("Process Nodes", () => {
   });
 
   it("creates an AWESOME Sink without inventing a consumption rate", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_ResourceSink_C",
       id: "sink",
       itemId: "Desc_IronPlate_C",
@@ -296,7 +302,7 @@ describe("Process Nodes", () => {
   });
 
   it("coordinates Resource Well Pressurizers and satellite Extractors", () => {
-    const node = createProcessNode({
+    const node = createTestProcessNode({
       buildableId: "Build_FrackingSmasher_C",
       id: "oil-well",
       instances: [
@@ -337,7 +343,7 @@ describe("Process Nodes", () => {
 
   it("rejects incompatible machines and invalid operating settings", () => {
     expect(() =>
-      createProcessNode({
+      createTestProcessNode({
         buildableId: "Build_SmelterMk1_C",
         id: "wrong-machine",
         processId: "Recipe_IronPlate_C",
@@ -345,7 +351,7 @@ describe("Process Nodes", () => {
     ).toThrow(ProcessNodeConfigurationError);
 
     expect(() =>
-      createProcessNode({
+      createTestProcessNode({
         buildableId: "Build_ConstructorMk1_C",
         id: "too-many-somersloops",
         instances: [{ id: "constructor-1", somersloopCount: 2 }],
@@ -354,7 +360,7 @@ describe("Process Nodes", () => {
     ).toThrow(/Somersloop count.*between 0 and 1/);
 
     expect(() =>
-      createProcessNode({
+      createTestProcessNode({
         buildableId: "Build_GeneratorGeoThermal_C",
         id: "overclocked-geothermal",
         instances: [{ clockSpeedPercent: 100, id: "geothermal-1" }],
@@ -363,7 +369,7 @@ describe("Process Nodes", () => {
     ).toThrow(/cannot change Clock Speed/);
 
     expect(() =>
-      createProcessNode({
+      createTestProcessNode({
         buildableId: "Build_ResourceSink_C",
         id: "radioactive-sink",
         itemId: "Desc_NuclearWaste_C",
@@ -372,7 +378,7 @@ describe("Process Nodes", () => {
     ).toThrow(/cannot consume Uranium Waste/);
 
     expect(() =>
-      createProcessNode({
+      createTestProcessNode({
         buildableId: "Build_FrackingSmasher_C",
         id: "empty-well",
         instances: [{ id: "pressurizer-1", satellites: [] }],
