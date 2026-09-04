@@ -98,6 +98,12 @@ A logical input, output, or bidirectional endpoint on a Node, constrained by
 material form and optionally a Descriptor, but independent of any connection.
 _Avoid_: Edge, physical connector, material rate
 
+**Material Profile**:
+The material input and output rates of a Node. It is calculated directly when
+the Node's configuration determines its rates and connection-dependent
+otherwise.
+_Avoid_: Material Port, recipe ingredients
+
 **Router**:
 A Node that redistributes material without producing or intentionally storing
 it, such as a Conveyor Splitter, Conveyor Merger, or Pipeline Junction.
