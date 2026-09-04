@@ -77,6 +77,168 @@ const rateFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+function normalizedSearchTerms(query: string) {
+  return [
+    ...new Set(query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)),
+  ];
+}
+
+function includesSearchTerms(value: string, terms: readonly string[]) {
+  const normalizedValue = value.toLocaleLowerCase();
+  return terms.every((term) => normalizedValue.includes(term));
+}
+
+function missingSearchTerms(value: string, query: string) {
+  const normalizedValue = value.toLocaleLowerCase();
+  return normalizedSearchTerms(query).filter(
+    (term) => !normalizedValue.includes(term),
+  );
+}
+
+function highlightSearchTerms(query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return [];
+  return [...new Set([normalizedQuery, ...normalizedSearchTerms(query)])]
+    .filter(Boolean)
+    .toSorted((left, right) => right.length - left.length);
+}
+
+function escapeRegularExpression(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightedText({ query, text }: { query: string; text: string }) {
+  const terms = highlightSearchTerms(query);
+  if (terms.length === 0) return text;
+
+  const expression = new RegExp(
+    `(${terms.map(escapeRegularExpression).join("|")})`,
+    "gi",
+  );
+  return (
+    <>
+      {text.split(expression).map((part, index) =>
+        terms.includes(part.toLocaleLowerCase()) ? (
+          <mark
+            className="rounded-[0.2rem] bg-amber-300/60 px-0.5 text-foreground dark:bg-amber-400/30"
+            key={`${part}:${index}`}
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+function MatchReason({ query, reason }: { query: string; reason?: string }) {
+  if (!reason) return null;
+  return (
+    <div
+      className="truncate text-[0.625rem] text-muted-foreground"
+      title={reason}
+    >
+      <HighlightedText query={query} text={reason} />
+    </div>
+  );
+}
+
+function buildableMatchReason(
+  buildable: CatalogBuildable,
+  query: string,
+  categoryLabel: string,
+  categoryKeywords: readonly string[],
+) {
+  const missingTerms = missingSearchTerms(buildable.name, query);
+  if (missingTerms.length === 0) return undefined;
+
+  const matchingSearchTerm = buildable.searchTerms?.find((term) =>
+    includesSearchTerms(term, missingTerms),
+  );
+  if (matchingSearchTerm) return `Matches: ${matchingSearchTerm}`;
+
+  if (
+    [categoryLabel, ...categoryKeywords].some((value) =>
+      includesSearchTerms(value, missingTerms),
+    )
+  ) {
+    return `Matches category: ${categoryLabel}`;
+  }
+  if (includesSearchTerms(buildable.id, missingTerms)) {
+    return `Matches building ID: ${buildable.id}`;
+  }
+  return undefined;
+}
+
+function extractorMatchReason(extractor: ResourceExtractor, query: string) {
+  const missingTerms = missingSearchTerms(extractor.name, query);
+  if (missingTerms.length === 0) return undefined;
+
+  const matchingResource = resourcesForExtractor(extractor.id).find(
+    (resource) => includesSearchTerms(resource.name, missingTerms),
+  );
+  if (matchingResource) return `Matches resource: ${matchingResource.name}`;
+
+  const matchingSearchTerm = extractor.searchTerms?.find((term) =>
+    includesSearchTerms(term, missingTerms),
+  );
+  if (matchingSearchTerm) return `Matches resource: ${matchingSearchTerm}`;
+
+  return buildableMatchReason(extractor, query, "Resource extraction", [
+    "resource",
+    "extraction",
+    "extractor",
+    "miner",
+  ]);
+}
+
+function standaloneBuildableMatchReason(
+  buildable: CatalogBuildable,
+  query: string,
+) {
+  if (LOGISTICS_BUILDABLES.some(({ id }) => id === buildable.id)) {
+    return buildableMatchReason(buildable, query, "Logistics", [
+      "logistics",
+      "conveyor",
+      "pipeline",
+    ]);
+  }
+  return buildableMatchReason(buildable, query, "Special", ["special", "sink"]);
+}
+
+function recipeMatchReason(
+  recipe: ProductionRecipe,
+  machine: ProductionMachine,
+  query: string,
+) {
+  const terms = normalizedSearchTerms(query);
+  if (terms.length === 0) return undefined;
+
+  const visibleValues = [
+    recipe.name,
+    recipe.alternate ? "Alternate" : "Standard",
+    machine.name,
+    ...formatMaterials(recipe.inputs).map(({ name }) => name),
+    ...formatMaterials(recipe.outputs).map(({ name }) => name),
+  ];
+  if (
+    terms.every((term) =>
+      visibleValues.some((value) => value.toLocaleLowerCase().includes(term)),
+    )
+  ) {
+    return undefined;
+  }
+  if (includesSearchTerms(recipe.id, terms)) {
+    return `Matches recipe ID: ${recipe.id}`;
+  }
+  if (includesSearchTerms(machine.id, terms)) {
+    return `Matches machine ID: ${machine.id}`;
+  }
+  return undefined;
+}
+
 function filterProductionCatalog(
   value: string,
   query: string,
@@ -238,6 +400,7 @@ function RecipeRow({
   const outputItem = output ? productionItem(output.itemId) : undefined;
   const inputMaterials = formatMaterials(recipe.inputs);
   const outputMaterials = formatMaterials(recipe.outputs);
+  const matchReason = recipeMatchReason(recipe, machine, query);
   const routeLabel = outputItem
     ? `Show ${outputItem.name} recipes`
     : "Show recipes";
@@ -267,10 +430,15 @@ function RecipeRow({
         />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="truncate font-medium">{recipe.name}</span>
+            <span className="truncate font-medium">
+              <HighlightedText query={query} text={recipe.name} />
+            </span>
             {(recipe.alternate || showStandardBadge) && (
               <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.5625rem] leading-none text-muted-foreground">
-                {recipe.alternate ? "Alternate" : "Standard"}
+                <HighlightedText
+                  query={query}
+                  text={recipe.alternate ? "Alternate" : "Standard"}
+                />
               </span>
             )}
           </div>
@@ -285,7 +453,7 @@ function RecipeRow({
                 </span>
                 <span className="text-right tabular-nums">{material.rate}</span>
                 <span className="truncate" title={material.name}>
-                  {material.name}
+                  <HighlightedText query={query} text={material.name} />
                 </span>
               </div>
             ))}
@@ -302,16 +470,22 @@ function RecipeRow({
                 </span>
                 <span className="text-right tabular-nums">{material.rate}</span>
                 <span className="truncate" title={material.name}>
-                  {material.name}
+                  <HighlightedText query={query} text={material.name} />
                 </span>
               </div>
             ))}
           </div>
+          {matchReason && (
+            <div className="mt-0.5">
+              <MatchReason query={query} reason={matchReason} />
+            </div>
+          )}
           <div
             className="mt-0.5 text-[0.625rem] text-muted-foreground"
             title="Power at 100% clock speed without production amplification"
           >
-            {machine.name} · {formatPower(recipe, machine)}
+            <HighlightedText query={query} text={machine.name} /> ·{" "}
+            {formatPower(recipe, machine)}
           </div>
         </div>
       </div>
@@ -790,7 +964,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         className="px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
                         role="separator"
                       >
-                        {row.label}
+                        <HighlightedText query={query} text={row.label} />
                       </div>
                     ) : row.type === "machine" ? (
                       <div
@@ -813,13 +987,27 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           src={row.machine.imageUrl}
                         />
                         <div className="min-w-0">
-                          <div className="font-medium">{row.machine.name}</div>
+                          <div className="font-medium">
+                            <HighlightedText
+                              query={query}
+                              text={row.machine.name}
+                            />
+                          </div>
                           <div className="text-[0.625rem] text-muted-foreground">
                             {recipesForMachine(row.machine.id).length}{" "}
                             {recipesForMachine(row.machine.id).length === 1
                               ? "recipe"
                               : "recipes"}
                           </div>
+                          <MatchReason
+                            query={query}
+                            reason={buildableMatchReason(
+                              row.machine,
+                              query,
+                              "Machines",
+                              ["machine"],
+                            )}
+                          />
                         </div>
                       </div>
                     ) : row.type === "extractor" ? (
@@ -844,7 +1032,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         />
                         <div className="min-w-0">
                           <div className="font-medium">
-                            {row.extractor.name}
+                            <HighlightedText
+                              query={query}
+                              text={row.extractor.name}
+                            />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
                             {row.extractor.resourceItemIds.length}{" "}
@@ -852,6 +1043,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                               ? "recipe"
                               : "recipes"}
                           </div>
+                          <MatchReason
+                            query={query}
+                            reason={extractorMatchReason(row.extractor, query)}
+                          />
                         </div>
                       </div>
                     ) : row.type === "extractor-resource" ? (
@@ -874,7 +1069,12 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           loading="lazy"
                           src={row.extractor.imageUrl}
                         />
-                        <div className="font-medium">{row.resource.name}</div>
+                        <div className="font-medium">
+                          <HighlightedText
+                            query={query}
+                            text={row.resource.name}
+                          />
+                        </div>
                       </div>
                     ) : row.type === "buildable" ? (
                       <div
@@ -896,7 +1096,21 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           loading="lazy"
                           src={row.buildable.imageUrl}
                         />
-                        <div className="font-medium">{row.buildable.name}</div>
+                        <div className="min-w-0">
+                          <div className="font-medium">
+                            <HighlightedText
+                              query={query}
+                              text={row.buildable.name}
+                            />
+                          </div>
+                          <MatchReason
+                            query={query}
+                            reason={standaloneBuildableMatchReason(
+                              row.buildable,
+                              query,
+                            )}
+                          />
+                        </div>
                       </div>
                     ) : (
                       <RecipeRow

@@ -89,6 +89,56 @@ describe("NodePicker", () => {
     expect(within(recipe).queryByText(/^(?:→|\+)$/)).not.toBeInTheDocument();
   });
 
+  it("highlights the visible text that caused a recipe result", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "sink" } },
+    );
+
+    const directMatch = screen.getByRole("option", {
+      name: /^AWESOME Sink/,
+    });
+    expect(
+      within(directMatch).getByText("Sink", { selector: "mark" }),
+    ).toBeInTheDocument();
+
+    const materialMatch = screen.getByRole("option", {
+      name: /^Cooling Device/,
+    });
+    expect(
+      within(materialMatch).getByText("Sink", { selector: "mark" }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains matches found through extractor resource metadata", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "iron ore" } },
+    );
+
+    const miner = screen.getByRole("option", { name: /^Miner Mk\.1/ });
+    expect(within(miner).getByText("Matches resource:")).toBeInTheDocument();
+    expect(
+      within(miner).getByText("Iron Ore", { selector: "mark" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows every recipe material without collapsing complex recipes", () => {
     render(
       <NodePicker
