@@ -189,8 +189,8 @@ function RecipeRow({
     .map(({ itemId }) => productionItem(itemId)?.name)
     .filter((name): name is string => Boolean(name));
   const routeLabel = outputItem
-    ? `Show ${routes.length} ways to produce ${outputItem.name}`
-    : "Show production routes";
+    ? `Show ${outputItem.name} recipes`
+    : "Show recipes";
 
   return (
     <div className="flex items-stretch rounded-md has-[>[data-selected=true]]:bg-muted">
@@ -209,7 +209,7 @@ function RecipeRow({
         <img
           alt=""
           aria-hidden="true"
-          className="mt-0.5 size-10 shrink-0 object-contain"
+          className="mt-0.5 size-12 shrink-0 object-contain brightness-125 saturate-110"
           src={machine.imageUrl}
         />
         <div className="min-w-0 flex-1">
@@ -265,7 +265,7 @@ function RecipeRow({
       {onOpenRoutes && output && routes.length > 1 ? (
         <button
           aria-label={routeLabel}
-          className="flex size-11 shrink-0 items-center justify-center self-center rounded-md text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground focus-visible:bg-muted-foreground/10 focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="flex size-11 shrink-0 items-center justify-center self-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           onClick={() => onOpenRoutes(output.itemId)}
           title={routeLabel}
           type="button"
@@ -305,7 +305,7 @@ function BuildableGroup({
           <img
             alt=""
             aria-hidden="true"
-            className="size-9 object-contain"
+            className="size-11 object-contain brightness-125 saturate-110"
             src={buildable.imageUrl}
           />
           <div className="font-medium">{buildable.name}</div>
@@ -431,7 +431,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const heading = selectedMachine
     ? selectedMachine.name
     : routeItem
-      ? `Ways to produce ${routeItem.name}`
+      ? `${routeItem.name} Recipes`
       : undefined;
 
   return (
@@ -448,7 +448,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
           <div className="flex items-center gap-2 px-2 pt-2">
             <button
               aria-label="Back to previous recipe results"
-              className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
               onClick={returnToPreviousResults}
               type="button"
             >
@@ -458,7 +458,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
               <img
                 alt=""
                 aria-hidden="true"
-                className="size-8 object-contain"
+                className="size-9 object-contain brightness-125 saturate-110"
                 src={selectedMachine.imageUrl}
               />
             )}
@@ -478,13 +478,13 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             selectedMachine
               ? `Search ${selectedMachine.name} recipes...`
               : routeItem
-                ? `Search ways to produce ${routeItem.name}...`
+                ? `Search ${routeItem.name} recipes...`
                 : "Search buildings or recipes..."
           }
           value={query}
         />
         <CommandList
-          className="min-h-0 flex-1 max-h-none overscroll-contain sm:max-h-[min(32rem,calc(100dvh-12rem))]"
+          className="min-h-0 flex-1 max-h-none overscroll-contain [&_[cmdk-group-items]]:space-y-1 sm:max-h-[min(32rem,calc(100dvh-12rem))]"
           ref={listRef}
         >
           <CommandEmpty>No buildings or recipes found.</CommandEmpty>
@@ -505,7 +505,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                     <img
                       alt=""
                       aria-hidden="true"
-                      className="size-9 object-contain"
+                      className="size-11 object-contain brightness-125 saturate-110"
                       src={machine.imageUrl}
                     />
                     <div className="min-w-0">
@@ -539,11 +539,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             </>
           )}
           {matchingRecipes.length > 0 && (
-            <CommandGroup
-              heading={
-                scope.type === "routes" ? "Production routes" : "Recipes"
-              }
-            >
+            <CommandGroup heading="Recipes">
               {matchingRecipes.map((recipe) => {
                 const machine =
                   selectedMachine ?? productionMachine(recipe.machineIds[0]);

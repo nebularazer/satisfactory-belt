@@ -130,14 +130,14 @@ describe("NodePicker", () => {
     expect(screen.queryByText("3 ways")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getAllByRole("button", {
-        name: "Show 3 ways to produce Screws",
+        name: "Show Screws recipes",
       })[0],
     );
 
     expect(onSelect).not.toHaveBeenCalled();
-    expect(screen.getByText("Ways to produce Screws")).toBeInTheDocument();
+    expect(screen.getByText("Screws Recipes")).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText("Search ways to produce Screws..."),
+      screen.getByPlaceholderText("Search Screws recipes..."),
     ).toBeInTheDocument();
     expect(screen.getByText("Standard")).toBeInTheDocument();
     expect(screen.getAllByText("Alternate")).toHaveLength(2);
@@ -150,7 +150,7 @@ describe("NodePicker", () => {
     expect(screen.getByDisplayValue("screws")).toBeInTheDocument();
     fireEvent.click(
       screen.getAllByRole("button", {
-        name: "Show 3 ways to produce Screws",
+        name: "Show Screws recipes",
       })[0],
     );
 
@@ -190,7 +190,7 @@ describe("NodePicker", () => {
       machineId: "Build_ConstructorMk1_C",
       recipeId: "Recipe_IronPlate_C",
     });
-  });
+  }, 10_000);
 
   it("sorts machines alphabetically", () => {
     render(

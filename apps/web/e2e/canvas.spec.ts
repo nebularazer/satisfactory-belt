@@ -67,8 +67,8 @@ test("keeps recipe search usable in a compact mobile viewport", async ({
     /^Screws/,
   );
   await page
-    .getByRole("button", { name: "Show 3 ways to produce Screws" })
+    .getByRole("button", { name: "Show Screws recipes" })
     .first()
     .click();
-  await expect(page.getByText("Ways to produce Screws")).toBeVisible();
+  await expect(page.getByText("Screws Recipes")).toBeVisible();
 });
