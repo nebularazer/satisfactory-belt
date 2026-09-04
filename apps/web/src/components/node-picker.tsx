@@ -18,13 +18,10 @@ import { CommandDialog } from "@/components/ui/command";
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
 import {
   LOGISTICS_BUILDABLES,
-  PRODUCTION_MACHINES,
-  PRODUCTION_RECIPES,
-  RESOURCE_EXTRACTORS,
-  SPECIAL_BUILDABLES,
+  catalogBuildable,
   productionItem,
   productionMachine,
-  recipesForMachine,
+  productionRecipe,
   recipesProducing,
   resourceExtractor,
   resourcesForExtractor,
@@ -36,6 +33,16 @@ import {
   type ProductionRecipe,
   type ResourceExtractor,
 } from "@/game/production-catalog";
+import {
+  recipeCountForMachine,
+  searchExtractorResources,
+  searchExtractors,
+  searchLogistics,
+  searchMachines,
+  searchRecipes,
+  searchSpecialBuildables,
+} from "@/game/production-search";
+import { cn } from "@/lib/utils";
 
 type NodePickerProps = {
   onOpenChange: (open: boolean) => void;
@@ -57,6 +64,12 @@ type PickerHistoryEntry = {
 
 type PickerRow =
   | { key: string; label: string; type: "heading" }
+  | {
+      buildable: CatalogBuildable;
+      key: string;
+      selection: NodePickerSelection;
+      type: "recent";
+    }
   | { key: string; machine: ProductionMachine; type: "machine" }
   | { extractor: ResourceExtractor; key: string; type: "extractor" }
   | {
@@ -76,6 +89,49 @@ type PickerRow =
 const rateFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
+
+const RECENT_SELECTIONS_KEY = "satisfactory-belt-recent-node-selections";
+const RECENT_SELECTION_LIMIT = 5;
+
+function isNodePickerSelection(value: unknown): value is NodePickerSelection {
+  if (!value || typeof value !== "object") return false;
+  const selection = value as Record<string, unknown>;
+  return (
+    typeof selection.label === "string" &&
+    typeof selection.machineId === "string" &&
+    (selection.recipeId === undefined || typeof selection.recipeId === "string")
+  );
+}
+
+function readRecentSelections() {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed: unknown = JSON.parse(
+      localStorage.getItem(RECENT_SELECTIONS_KEY) ?? "[]",
+    );
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(isNodePickerSelection)
+      .slice(0, RECENT_SELECTION_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function selectionKey(selection: NodePickerSelection) {
+  return `${selection.machineId}:${selection.recipeId ?? ""}:${selection.label}`;
+}
+
+function withRecentSelection(
+  selections: readonly NodePickerSelection[],
+  selection: NodePickerSelection,
+) {
+  const key = selectionKey(selection);
+  return [
+    selection,
+    ...selections.filter((recent) => selectionKey(recent) !== key),
+  ].slice(0, RECENT_SELECTION_LIMIT);
+}
 
 function normalizedSearchTerms(query: string) {
   return [
@@ -239,82 +295,6 @@ function recipeMatchReason(
   return undefined;
 }
 
-function filterProductionCatalog(
-  value: string,
-  query: string,
-  keywords?: string[],
-) {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  if (!normalizedQuery) return 1;
-
-  const haystack = [value, ...(keywords ?? [])].join(" ").toLocaleLowerCase();
-  if (haystack.includes(normalizedQuery)) return 2;
-
-  return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term))
-    ? 1
-    : 0;
-}
-
-function matchingBuildables<T extends CatalogBuildable>(
-  buildables: readonly T[],
-  query: string,
-  categoryKeywords: string[],
-): T[] {
-  return buildables
-    .filter(
-      (buildable) =>
-        filterProductionCatalog(buildable.name, query, [
-          buildable.id,
-          ...categoryKeywords,
-          ...(buildable.searchTerms ?? []),
-        ]) > 0,
-    )
-    .toSorted((left, right) => left.name.localeCompare(right.name));
-}
-
-function recipeSearchScore(
-  recipe: ProductionRecipe,
-  machine: ProductionMachine | undefined,
-  query: string,
-) {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  if (!normalizedQuery) return 1;
-
-  const name = recipe.name.toLocaleLowerCase();
-  if (name === normalizedQuery) return 100;
-  if (name.startsWith(normalizedQuery)) return 90;
-  if (name.includes(normalizedQuery)) return 80;
-
-  const outputNames = recipe.outputs.map(
-    ({ itemId }) => productionItem(itemId)?.name.toLocaleLowerCase() ?? "",
-  );
-  if (outputNames.some((outputName) => outputName.includes(normalizedQuery))) {
-    return 60;
-  }
-
-  const inputNames = recipe.inputs.map(
-    ({ itemId }) => productionItem(itemId)?.name.toLocaleLowerCase() ?? "",
-  );
-  if (inputNames.some((inputName) => inputName.includes(normalizedQuery))) {
-    return 40;
-  }
-
-  const haystack = [
-    recipe.name,
-    recipe.id,
-    recipe.alternate ? "alternate" : "standard",
-    machine?.name ?? "",
-    machine?.id ?? "",
-    ...inputNames,
-    ...outputNames,
-  ]
-    .join(" ")
-    .toLocaleLowerCase();
-  return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term))
-    ? 10
-    : 0;
-}
-
 function formatMaterial(material: ProductionMaterial) {
   const item = productionItem(material.itemId);
   if (!item) return null;
@@ -400,6 +380,17 @@ function RecipeRow({
   const outputItem = output ? productionItem(output.itemId) : undefined;
   const inputMaterials = formatMaterials(recipe.inputs);
   const outputMaterials = formatMaterials(recipe.outputs);
+  const materialSearchTerms = normalizedSearchTerms(query);
+  const hasMaterialMatch = [...inputMaterials, ...outputMaterials].some(
+    ({ name }) => includesSearchTerms(name, materialSearchTerms),
+  );
+  const materialClassName = (name: string) =>
+    cn(
+      "transition-opacity",
+      hasMaterialMatch &&
+        !includesSearchTerms(name, materialSearchTerms) &&
+        "opacity-45",
+    );
   const matchReason = recipeMatchReason(recipe, machine, query);
   const routeLabel = outputItem
     ? `Show ${outputItem.name} recipes`
@@ -451,8 +442,18 @@ function RecipeRow({
                 >
                   {index === 0 ? "IN" : ""}
                 </span>
-                <span className="text-right tabular-nums">{material.rate}</span>
-                <span className="truncate" title={material.name}>
+                <span
+                  className={cn(
+                    "text-right tabular-nums",
+                    materialClassName(material.name),
+                  )}
+                >
+                  {material.rate}
+                </span>
+                <span
+                  className={cn("truncate", materialClassName(material.name))}
+                  title={material.name}
+                >
                   <HighlightedText query={query} text={material.name} />
                 </span>
               </div>
@@ -468,8 +469,18 @@ function RecipeRow({
                 >
                   {index === 0 ? "OUT" : ""}
                 </span>
-                <span className="text-right tabular-nums">{material.rate}</span>
-                <span className="truncate" title={material.name}>
+                <span
+                  className={cn(
+                    "text-right tabular-nums",
+                    materialClassName(material.name),
+                  )}
+                >
+                  {material.rate}
+                </span>
+                <span
+                  className={cn("truncate", materialClassName(material.name))}
+                  title={material.name}
+                >
                   <HighlightedText query={query} text={material.name} />
                 </span>
               </div>
@@ -510,6 +521,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const [scope, setScope] = useState<PickerScope>({ type: "root" });
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [recentSelections, setRecentSelections] =
+    useState(readRecentSelections);
   const listRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<PickerHistoryEntry[]>([]);
   const restoreScrollTopRef = useRef<number | null>(null);
@@ -523,73 +536,85 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       : undefined;
   const routeItem =
     scope.type === "routes" ? productionItem(scope.itemId) : undefined;
-  const visibleRecipes =
-    scope.type === "extractor"
-      ? []
-      : selectedMachine
-        ? recipesForMachine(selectedMachine.id)
-        : routeItem
-          ? recipesProducing(routeItem.id)
-          : PRODUCTION_RECIPES;
-  const matchingRecipes = visibleRecipes
-    .map((recipe, index) => ({
-      index,
-      recipe,
-      score: recipeSearchScore(
-        recipe,
-        selectedMachine ?? productionMachine(recipe.machineIds[0]),
-        query,
-      ),
-    }))
-    .filter(({ score }) => score > 0)
-    .toSorted(
-      (left, right) => right.score - left.score || left.index - right.index,
-    )
-    .map(({ recipe }) => recipe);
-  const matchingMachines =
-    scope.type === "root"
-      ? PRODUCTION_MACHINES.filter(
-          (machine) =>
-            filterProductionCatalog(`machine ${machine.name}`, query, [
-              machine.id,
-            ]) > 0,
-        ).toSorted((left, right) => left.name.localeCompare(right.name))
-      : [];
-  const matchingExtractors =
-    scope.type === "root"
-      ? matchingBuildables(RESOURCE_EXTRACTORS, query, [
-          "resource",
-          "extraction",
-          "extractor",
-          "miner",
-        ])
-      : [];
-  const matchingLogistics =
-    scope.type === "root"
-      ? matchingBuildables(LOGISTICS_BUILDABLES, query, [
-          "logistics",
-          "conveyor",
-          "pipeline",
-        ])
-      : [];
-  const matchingSpecial =
-    scope.type === "root"
-      ? matchingBuildables(SPECIAL_BUILDABLES, query, ["special", "sink"])
-      : [];
-  const matchingExtractorResources = selectedExtractor
-    ? resourcesForExtractor(selectedExtractor.id).filter(
-        (resource) =>
-          filterProductionCatalog(resource.name, query, [
-            resource.id,
-            selectedExtractor.name,
-          ]) > 0,
-      )
-    : [];
+  const rootScope = scope.type === "root";
+  const rootQueryActive = rootScope && query.trim().length > 0;
+  const matchingRecipes = useMemo(() => {
+    if (
+      !open ||
+      scope.type === "extractor" ||
+      (rootScope && !rootQueryActive)
+    ) {
+      return [];
+    }
+    return searchRecipes(query, {
+      machineId: selectedMachine?.id,
+      outputItemId: routeItem?.id,
+    });
+  }, [
+    open,
+    query,
+    rootQueryActive,
+    rootScope,
+    routeItem?.id,
+    scope.type,
+    selectedMachine?.id,
+  ]);
+  const matchingMachines = useMemo(
+    () => (open && rootScope ? searchMachines(query) : []),
+    [open, query, rootScope],
+  );
+  const matchingExtractors = useMemo(
+    () => (open && rootScope ? searchExtractors(query) : []),
+    [open, query, rootScope],
+  );
+  const matchingLogistics = useMemo(
+    () => (open && rootScope ? searchLogistics(query) : []),
+    [open, query, rootScope],
+  );
+  const matchingSpecial = useMemo(
+    () => (open && rootScope ? searchSpecialBuildables(query) : []),
+    [open, query, rootScope],
+  );
+  const matchingExtractorResources = useMemo(
+    () =>
+      open && selectedExtractor
+        ? searchExtractorResources(selectedExtractor.id, query)
+        : [],
+    [open, query, selectedExtractor],
+  );
+  const recentRows = useMemo(
+    () =>
+      rootScope && !rootQueryActive
+        ? recentSelections.flatMap((selection) => {
+            const buildable = catalogBuildable(selection.machineId);
+            if (
+              !buildable ||
+              (selection.recipeId && !productionRecipe(selection.recipeId))
+            ) {
+              return [];
+            }
+            return [
+              {
+                buildable,
+                key: `recent:${selectionKey(selection)}`,
+                selection,
+                type: "recent" as const,
+              },
+            ];
+          })
+        : [],
+    [recentSelections, rootQueryActive, rootScope],
+  );
 
   const rows = useMemo(() => {
     const nextRows: PickerRow[] = [];
     const addHeading = (key: string, label: string) =>
       nextRows.push({ key: `heading:${key}`, label, type: "heading" });
+
+    if (recentRows.length > 0) {
+      addHeading("recent", "Recently used");
+      nextRows.push(...recentRows);
+    }
 
     if (matchingMachines.length > 0) {
       addHeading("machines", "Machines");
@@ -667,6 +692,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     matchingRecipes,
     matchingSpecial,
     matchingExtractorResources,
+    recentRows,
     selectedExtractor,
     selectedMachine,
   ]);
@@ -752,22 +778,37 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     onOpenChange(nextOpen);
   };
 
-  const selectRecipe = (recipe: ProductionRecipe, machineId: string) => {
-    onSelect({ label: recipe.name, machineId, recipeId: recipe.id });
+  const submitSelection = (selection: NodePickerSelection) => {
+    setRecentSelections((current) => {
+      const next = withRecentSelection(current, selection);
+      try {
+        localStorage.setItem(RECENT_SELECTIONS_KEY, JSON.stringify(next));
+      } catch {
+        // The selection should still work when browser storage is unavailable.
+      }
+      return next;
+    });
+    onSelect(selection);
     setOpen(false);
   };
 
+  const selectRecipe = (recipe: ProductionRecipe, machineId: string) => {
+    submitSelection({
+      label: recipe.name,
+      machineId,
+      recipeId: recipe.id,
+    });
+  };
+
   const selectBuildable = (buildable: CatalogBuildable) => {
-    onSelect({ label: buildable.name, machineId: buildable.id });
-    setOpen(false);
+    submitSelection({ label: buildable.name, machineId: buildable.id });
   };
 
   const selectExtractorResource = (
     extractor: ResourceExtractor,
     resource: ProductionItem,
   ) => {
-    onSelect({ label: resource.name, machineId: extractor.id });
-    setOpen(false);
+    submitSelection({ label: resource.name, machineId: extractor.id });
   };
 
   const enterScope = (nextScope: PickerScope) => {
@@ -792,7 +833,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   };
 
   const selectRow = (row: PickerRow) => {
-    if (row.type === "machine") {
+    if (row.type === "recent") {
+      submitSelection(row.selection);
+    } else if (row.type === "machine") {
       enterScope({ machineId: row.machine.id, type: "machine" });
     } else if (row.type === "extractor") {
       const resources = resourcesForExtractor(row.extractor.id);
@@ -930,7 +973,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
         </div>
         <div
           aria-label="Buildings and recipes"
-          className="no-scrollbar min-h-0 flex-1 max-h-none overscroll-contain overflow-x-hidden overflow-y-auto outline-none sm:max-h-[min(32rem,calc(100dvh-12rem))]"
+          className="no-scrollbar min-h-[clamp(10rem,45dvh,20rem)] flex-1 max-h-none overscroll-contain overflow-x-hidden overflow-y-auto outline-none sm:min-h-[min(32rem,calc(100dvh-12rem))] sm:max-h-[min(32rem,calc(100dvh-12rem))]"
           id={listId}
           ref={listRef}
           role="listbox"
@@ -966,6 +1009,37 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                       >
                         <HighlightedText query={query} text={row.label} />
                       </div>
+                    ) : row.type === "recent" ? (
+                      <div
+                        aria-posinset={position}
+                        aria-selected={active}
+                        aria-setsize={selectableIndices.length}
+                        className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
+                        data-active={active}
+                        id={domId}
+                        onClick={() => selectRow(row)}
+                        onMouseEnter={() => setActiveKey(row.key)}
+                        role="option"
+                      >
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className="size-14 object-contain"
+                          decoding="async"
+                          loading="lazy"
+                          src={row.buildable.imageUrl}
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {row.selection.label}
+                          </div>
+                          {row.selection.label !== row.buildable.name && (
+                            <div className="truncate text-[0.625rem] text-muted-foreground">
+                              {row.buildable.name}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     ) : row.type === "machine" ? (
                       <div
                         aria-posinset={position}
@@ -994,8 +1068,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
-                            {recipesForMachine(row.machine.id).length}{" "}
-                            {recipesForMachine(row.machine.id).length === 1
+                            {recipeCountForMachine(row.machine.id)}{" "}
+                            {recipeCountForMachine(row.machine.id) === 1
                               ? "recipe"
                               : "recipes"}
                           </div>

@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -44,10 +46,9 @@ import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
-import { NodePicker } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
-import type { NodePickerSelection } from "@/game/production-catalog";
+import type { NodePickerSelection } from "@/game/catalog-types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,6 +60,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Toaster } from "@/components/ui/sonner";
+
+const loadNodePicker = () => import("@/components/node-picker");
+const NodePicker = lazy(async () => ({
+  default: (await loadNodePicker()).NodePicker,
+}));
+
+function preloadNodePicker() {
+  void loadNodePicker();
+}
 
 type BootstrapState =
   | { ready: false }
@@ -152,6 +162,24 @@ function CanvasWorkspace({
   }, []);
 
   useEffect(() => {
+    const idleWindow = window as Window & {
+      cancelIdleCallback?: (handle: number) => void;
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions,
+      ) => number;
+    };
+    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+      const idleCallback = idleWindow.requestIdleCallback(preloadNodePicker, {
+        timeout: 1_500,
+      });
+      return () => idleWindow.cancelIdleCallback?.(idleCallback);
+    }
+    const timeout = window.setTimeout(preloadNodePicker, 250);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
     if (!autosaveEnabled) return;
     return attachCanvasAutosave(
       editor,
@@ -196,7 +224,10 @@ function CanvasWorkspace({
     setShowGridDots(enabled);
     writeBooleanPreference(CANVAS_PREFERENCES.showGridDots, enabled);
   };
-  const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
+  const requestNodeAt = useCallback((at: Point) => {
+    preloadNodePicker();
+    setPendingNode({ at });
+  }, []);
 
   const openSavePlan = useCallback(() => {
     setPendingNode(null);
@@ -434,13 +465,15 @@ function CanvasWorkspace({
         tabIndex={-1}
         type="file"
       />
-      <NodePicker
-        onOpenChange={(open) => {
-          if (!open) setPendingNode(null);
-        }}
-        onSelect={addPendingNode}
-        open={pendingNode !== null}
-      />
+      <Suspense fallback={null}>
+        <NodePicker
+          onOpenChange={(open) => {
+            if (!open) setPendingNode(null);
+          }}
+          onSelect={addPendingNode}
+          open={pendingNode !== null}
+        />
+      </Suspense>
       <ManagePlansDialog
         activeSave={activeSave}
         onDelete={(save) => {

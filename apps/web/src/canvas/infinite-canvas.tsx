@@ -13,7 +13,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
   CATALOG_BUILDABLE_IMAGE_URLS,
   catalogBuildable,
-} from "@/game/production-catalog";
+} from "@/game/buildable-catalog";
 
 import {
   SNAP_INTERVAL,

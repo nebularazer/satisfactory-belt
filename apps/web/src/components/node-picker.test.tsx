@@ -9,6 +9,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -31,8 +32,28 @@ beforeAll(() => {
 
 afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
+beforeEach(() => localStorage.clear());
 
 describe("NodePicker", () => {
+  it("keeps recipes out of the initial building browser", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    expect(screen.getByText("Machines")).toBeInTheDocument();
+    expect(screen.queryByText("Recipes")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("listbox", { name: "Buildings and recipes" }),
+    ).toHaveClass(
+      "min-h-[clamp(10rem,45dvh,20rem)]",
+      "sm:min-h-[min(32rem,calc(100dvh-12rem))]",
+    );
+  });
+
   it("finds and selects a machine by recipe", () => {
     const onSelect = vi.fn();
     render(
@@ -115,6 +136,54 @@ describe("NodePicker", () => {
     });
     expect(
       within(materialMatch).getByText("Sink", { selector: "mark" }),
+    ).toBeInTheDocument();
+  });
+
+  it("de-emphasizes recipe materials that did not cause the match", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "heat sink" } },
+    );
+
+    const recipe = screen.getByRole("option", { name: /^Cooling Device/ });
+    expect(within(recipe).getByText("Heat Sink")).not.toHaveClass("opacity-45");
+    expect(within(recipe).getByText("Motor")).toHaveClass("opacity-45");
+  });
+
+  it("remembers recent selections for the next picker", () => {
+    const firstPicker = render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "cast screws" } },
+    );
+    fireEvent.click(screen.getByRole("option", { name: /^Cast Screws/ }));
+    firstPicker.unmount();
+
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    expect(screen.getByText("Recently used")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Cast Screws Constructor/ }),
     ).toBeInTheDocument();
   });
 
