@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { format } from "oxfmt";
 
@@ -8,6 +8,14 @@ const sourcePath = path.join(
   ".dev/assets/data/game-docs.en-US.json",
 );
 const outputDirectory = path.join(repositoryRoot, "apps/web/src/game");
+const sourceItemImageDirectory = path.join(
+  repositoryRoot,
+  ".dev/assets/game/items",
+);
+const outputItemImageDirectory = path.join(
+  repositoryRoot,
+  "apps/web/public/items",
+);
 
 const productionMachineIds = new Set([
   "Build_AssemblerMk1_C",
@@ -169,6 +177,18 @@ async function writeFormattedJson(fileName, value) {
 await Promise.all([
   writeFormattedJson("items.json", items),
   writeFormattedJson("recipes.json", recipes),
+  mkdir(outputItemImageDirectory, { recursive: true }).then(() =>
+    Promise.all(
+      items.map(({ id }) =>
+        copyFile(
+          path.join(sourceItemImageDirectory, `${id}.png`),
+          path.join(outputItemImageDirectory, `${id}.png`),
+        ),
+      ),
+    ),
+  ),
 ]);
 
-console.log(`Extracted ${recipes.length} recipes and ${items.length} items.`);
+console.log(
+  `Extracted ${recipes.length} recipes and ${items.length} items with images.`,
+);

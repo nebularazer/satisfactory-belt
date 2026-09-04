@@ -50,6 +50,7 @@ describe("production catalog", () => {
     );
 
     expect(water?.form).toBe("liquid");
+    expect(water?.imageUrl).toBe("/items/Desc_Water_C.png");
     expect(
       wetConcrete?.inputs.find(({ itemId }) => itemId === "Desc_Water_C"),
     ).toMatchObject({ amount: 5, ratePerMinute: 100 });

@@ -897,7 +897,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       : routeItem
         ? `${routeItem.name} Recipes`
         : undefined;
-  const headingImage = selectedMachine?.imageUrl ?? selectedExtractor?.imageUrl;
+  const headingImage =
+    selectedMachine?.imageUrl ??
+    selectedExtractor?.imageUrl ??
+    routeItem?.imageUrl;
 
   return (
     <CommandDialog

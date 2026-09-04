@@ -6,7 +6,14 @@ import recipeData from "./recipes.json";
 export * from "./buildable-catalog";
 export type * from "./catalog-types";
 
-export const PRODUCTION_ITEMS = itemData as readonly ProductionItem[];
+type ProductionItemData = Omit<ProductionItem, "imageUrl">;
+
+export const PRODUCTION_ITEMS = (itemData as readonly ProductionItemData[]).map(
+  (item) => ({
+    ...item,
+    imageUrl: `${import.meta.env.BASE_URL}items/${item.id}.png`,
+  }),
+);
 export const PRODUCTION_RECIPES = recipeData as readonly ProductionRecipe[];
 
 const machinesById = new Map(

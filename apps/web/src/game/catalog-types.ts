@@ -18,6 +18,7 @@ export type ResourceExtractor = CatalogBuildable &
 export type ProductionItem = Readonly<{
   form: "gas" | "liquid" | "solid";
   id: string;
+  imageUrl: string;
   name: string;
 }>;
 

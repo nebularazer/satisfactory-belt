@@ -254,7 +254,11 @@ describe("NodePicker", () => {
     );
 
     expect(onSelect).not.toHaveBeenCalled();
-    expect(screen.getByText("Screws Recipes")).toBeInTheDocument();
+    const heading = screen.getByText("Screws Recipes");
+    expect(heading).toBeInTheDocument();
+    expect(
+      heading.parentElement?.parentElement?.querySelector("img"),
+    ).toHaveAttribute("src", "/items/Desc_IronScrew_C.png");
     expect(
       screen.getByPlaceholderText("Search Screws recipes..."),
     ).toBeInTheDocument();
