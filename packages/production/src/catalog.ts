@@ -5,6 +5,7 @@ import {
   POWER_GENERATORS,
   PRODUCTION_MACHINES,
   RESOURCE_EXTRACTORS,
+  SPECIAL_BUILDABLES,
   TRANSPORT_BUILDABLES,
 } from "./data/buildables";
 import descriptorData from "./data/items.json";
@@ -34,6 +35,9 @@ const buffersById = new Map(
 );
 const transportsById = new Map(
   TRANSPORT_BUILDABLES.map((transport) => [transport.id, transport]),
+);
+const materialConsumersById = new Map(
+  SPECIAL_BUILDABLES.map((consumer) => [consumer.id, consumer]),
 );
 const descriptorsById = new Map(
   DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor]),
@@ -102,6 +106,10 @@ export function findBuffer(bufferId: string) {
 
 export function findTransport(transportId: string) {
   return transportsById.get(transportId);
+}
+
+export function findMaterialConsumer(consumerId: string) {
+  return materialConsumersById.get(consumerId);
 }
 
 export function resourcesForExtractor(extractorId: string) {

@@ -102,6 +102,12 @@ export type GeothermalPowerGenerator = Buildable &
 
 export type PowerGenerator = FuelPowerGenerator | GeothermalPowerGenerator;
 
+export type MaterialConsumer = Buildable &
+  Readonly<{
+    acceptedForms: readonly Descriptor["form"][];
+    basePowerMw: number;
+  }>;
+
 export type RecipeProductionProcess = Readonly<{
   buildableIds: readonly string[];
   id: string;
@@ -147,7 +153,18 @@ export type PowerGenerationProductionProcess =
   | FuelPowerGenerationProductionProcess
   | GeothermalPowerGenerationProductionProcess;
 
+export type ConsumptionProductionProcess = Readonly<{
+  acceptedForms: readonly Descriptor["form"][];
+  buildableIds: readonly [string];
+  id: string;
+  inputItemIds: readonly [];
+  kind: "consumption";
+  name: string;
+  outputItemIds: readonly [];
+}>;
+
 export type ProductionProcess =
+  | ConsumptionProductionProcess
   | ExtractionProductionProcess
   | PowerGenerationProductionProcess
   | RecipeProductionProcess;
@@ -166,6 +183,8 @@ export type ProcessNodeRequest = Readonly<{
   buildableId: string;
   id: string;
   instances?: readonly ProcessInstanceRequest[];
+  /** Optionally binds a Consumption Process to one accepted Descriptor. */
+  itemId?: string;
   processId: string;
 }>;
 
@@ -189,6 +208,10 @@ export type FuelGeneratorInstanceConfiguration = Readonly<{
 export type GeothermalGeneratorInstanceConfiguration = Readonly<{
   id: string;
   resourcePurity: ResourcePurity;
+}>;
+
+export type ConsumptionInstanceConfiguration = Readonly<{
+  id: string;
 }>;
 
 export type RecipeProcessNodeConfiguration = Readonly<{
@@ -229,7 +252,17 @@ export type PowerGenerationNodeConfiguration =
   | FuelPowerGenerationNodeConfiguration
   | GeothermalPowerGenerationNodeConfiguration;
 
+export type ConsumptionProcessNodeConfiguration = Readonly<{
+  buildableId: string;
+  id: string;
+  instances: readonly ConsumptionInstanceConfiguration[];
+  itemId?: string;
+  processId: string;
+  processKind: "consumption";
+}>;
+
 export type ProcessNodeConfiguration =
+  | ConsumptionProcessNodeConfiguration
   | ExtractionProcessNodeConfiguration
   | PowerGenerationNodeConfiguration
   | RecipeProcessNodeConfiguration;
@@ -378,7 +411,15 @@ export type PowerGenerationProcessNode = Readonly<{
   profile: NodeProfile;
 }>;
 
+export type ConsumptionProcessNode = Readonly<{
+  configuration: ConsumptionProcessNodeConfiguration;
+  kind: "process";
+  ports: readonly MaterialPort[];
+  profile: NodeProfile;
+}>;
+
 export type ProcessNode =
+  | ConsumptionProcessNode
   | ExtractionProcessNode
   | PowerGenerationProcessNode
   | RecipeProcessNode;

@@ -1,6 +1,11 @@
 import { RECIPES, findDescriptor } from "./catalog";
-import { POWER_GENERATORS, RESOURCE_EXTRACTORS } from "./data/buildables";
+import {
+  POWER_GENERATORS,
+  RESOURCE_EXTRACTORS,
+  SPECIAL_BUILDABLES,
+} from "./data/buildables";
 import type {
+  ConsumptionProductionProcess,
   ExtractionProductionProcess,
   PowerGenerationProductionProcess,
   ProductionProcess,
@@ -76,10 +81,22 @@ const powerGenerationProcesses: readonly PowerGenerationProductionProcess[] =
     },
   );
 
+const consumptionProcesses: readonly ConsumptionProductionProcess[] =
+  SPECIAL_BUILDABLES.map((consumer) => ({
+    acceptedForms: consumer.acceptedForms,
+    buildableIds: [consumer.id],
+    id: `consumption:${consumer.id}`,
+    inputItemIds: [],
+    kind: "consumption",
+    name: consumer.name,
+    outputItemIds: [],
+  }));
+
 const productionProcesses: readonly ProductionProcess[] = [
   ...recipeProcesses,
   ...extractionProcesses,
   ...powerGenerationProcesses,
+  ...consumptionProcesses,
 ];
 const productionProcessesById = new Map(
   productionProcesses.map((process) => [process.id, process]),

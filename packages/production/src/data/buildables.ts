@@ -1,6 +1,7 @@
 import type {
   BufferBuildable,
   Buildable,
+  MaterialConsumer,
   MaterialPort,
   ProductionMachine,
   ResourceExtractor,
@@ -425,8 +426,10 @@ export const TRANSPORT_BUILDABLES: readonly TransportBuildable[] = [
   },
 ];
 
-export const SPECIAL_BUILDABLES: readonly Buildable[] = [
+export const SPECIAL_BUILDABLES: readonly MaterialConsumer[] = [
   {
+    acceptedForms: ["solid"],
+    basePowerMw: 30,
     category: "special",
     id: "Build_ResourceSink_C",
     name: "AWESOME Sink",

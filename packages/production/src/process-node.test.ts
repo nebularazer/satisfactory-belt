@@ -261,6 +261,31 @@ describe("Process Nodes", () => {
     });
   });
 
+  it("creates an AWESOME Sink without inventing a consumption rate", () => {
+    const node = createProcessNode({
+      buildableId: "Build_ResourceSink_C",
+      id: "sink",
+      itemId: "Desc_IronPlate_C",
+      processId: "consumption:Build_ResourceSink_C",
+    });
+
+    expect(node.ports).toEqual([
+      {
+        direction: "input",
+        forms: ["solid"],
+        id: "input:material",
+        itemId: "Desc_IronPlate_C",
+        medium: "conveyor",
+      },
+    ]);
+    expect(node.profile.inputs).toEqual([]);
+    expect(node.profile.outputs).toEqual([]);
+    expect(node.profile.power.consumed).toEqual({
+      maximumMw: 30,
+      minimumMw: 30,
+    });
+  });
+
   it("rejects incompatible machines and invalid operating settings", () => {
     expect(() =>
       createProcessNode({
@@ -287,5 +312,14 @@ describe("Process Nodes", () => {
         processId: "power-generation:Build_GeneratorGeoThermal_C",
       }),
     ).toThrow(/cannot change Clock Speed/);
+
+    expect(() =>
+      createProcessNode({
+        buildableId: "Build_ResourceSink_C",
+        id: "radioactive-sink",
+        itemId: "Desc_NuclearWaste_C",
+        processId: "consumption:Build_ResourceSink_C",
+      }),
+    ).toThrow(/cannot consume Uranium Waste/);
   });
 });

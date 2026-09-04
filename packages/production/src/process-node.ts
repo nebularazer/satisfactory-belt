@@ -1,5 +1,6 @@
 import {
   findDescriptor,
+  findMaterialConsumer,
   findPowerGenerator,
   findProductionMachine,
   findRecipe,
@@ -8,6 +9,7 @@ import {
 import { findProductionProcess } from "./production-process";
 import type {
   ClockedBuildable,
+  ConsumptionProcessNode,
   ExtractorInstanceConfiguration,
   ExtractionProcessNode,
   MaterialRate,
@@ -223,6 +225,80 @@ function createRecipeNode(
           maximumMw: round(consumed.maximumMw),
           minimumMw: round(consumed.minimumMw),
         },
+        produced: zeroPowerRange(),
+      },
+    },
+  };
+}
+
+function createConsumptionNode(
+  request: ProcessNodeRequest,
+  instances: readonly ProcessInstanceRequest[],
+): ConsumptionProcessNode {
+  const process = findProductionProcess(request.processId);
+  if (process?.kind !== "consumption") {
+    invalid(`Consumption Process ${request.processId} does not exist.`);
+  }
+  const consumer = findMaterialConsumer(request.buildableId);
+  if (!consumer) {
+    invalid(`Material Consumer ${request.buildableId} does not exist.`);
+  }
+  if (!process.buildableIds.includes(consumer.id)) {
+    invalid(`${consumer.name} cannot perform ${process.name}.`);
+  }
+  const configurations = instances.map((instance) => {
+    if (
+      instance.clockSpeedPercent !== undefined ||
+      instance.resourcePurity !== undefined ||
+      (instance.somersloopCount ?? 0) !== 0
+    ) {
+      invalid(
+        `${consumer.name} does not have configurable operating settings.`,
+      );
+    }
+    return { id: instance.id };
+  });
+  const descriptor = request.itemId
+    ? findDescriptor(request.itemId)
+    : undefined;
+  if (request.itemId && !descriptor) {
+    invalid(`Descriptor ${request.itemId} does not exist.`);
+  }
+  if (
+    descriptor &&
+    (!consumer.acceptedForms.includes(descriptor.form) ||
+      descriptor.sinkPoints === undefined)
+  ) {
+    invalid(`${consumer.name} cannot consume ${descriptor.name}.`);
+  }
+  const consumedMw = consumer.basePowerMw * configurations.length;
+
+  return {
+    configuration: {
+      buildableId: consumer.id,
+      id: request.id,
+      instances: configurations,
+      ...(descriptor ? { itemId: descriptor.id } : {}),
+      processId: process.id,
+      processKind: "consumption",
+    },
+    kind: "process",
+    ports: [
+      {
+        direction: "input",
+        forms: consumer.acceptedForms,
+        id: "input:material",
+        ...(descriptor ? { itemId: descriptor.id } : {}),
+        medium: consumer.acceptedForms.includes("solid")
+          ? "conveyor"
+          : "pipeline",
+      },
+    ],
+    profile: {
+      inputs: [],
+      outputs: [],
+      power: {
+        consumed: { maximumMw: consumedMw, minimumMw: consumedMw },
         produced: zeroPowerRange(),
       },
     },
@@ -486,7 +562,12 @@ export function createProcessNode(request: ProcessNodeRequest): ProcessNode {
     invalid(`Production Process ${request.processId} does not exist.`);
   }
   const instances = requestedInstances(request);
+  if (process.kind !== "consumption" && request.itemId !== undefined) {
+    invalid("Only Consumption Processes accept a direct material binding.");
+  }
   switch (process.kind) {
+    case "consumption":
+      return createConsumptionNode(request, instances);
     case "extraction":
       return createExtractionNode(request, instances);
     case "power-generation":
