@@ -61,6 +61,15 @@ describe("Nodes", () => {
 
   it("rejects structurally invalid persisted configuration", () => {
     expect(() =>
+      createNode({
+        buildableId: "Build_SmelterMk1_C",
+        id: "wrong-machine",
+        kind: "process",
+        processId: "Recipe_IronPlate_C",
+      }),
+    ).toThrow(NodeConfigurationError);
+
+    expect(() =>
       parseNodeConfiguration({
         buildableId: "Build_ConstructorMk1_C",
         id: "iron-plates",

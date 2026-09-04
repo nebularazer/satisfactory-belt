@@ -1,18 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ProcessNodeConfigurationError,
-  createProcessNode,
+  NodeConfigurationError,
+  createNode,
   findProductionProcess,
   productionProcessesForBuildable,
-  type ProcessNodeRequest,
+  type NodeRequest,
 } from "./index";
 
+type ProcessNodeRequest = Extract<NodeRequest, { kind: "process" }>;
+
 function createTestProcessNode(request: Omit<ProcessNodeRequest, "kind">) {
-  return createProcessNode({ ...request, kind: "process" });
+  const node = createNode({ ...request, kind: "process" });
+  if (node.kind !== "process") throw new Error("Expected a Process Node");
+  return node;
 }
 
-function calculatedMaterials(node: ReturnType<typeof createProcessNode>) {
+function calculatedMaterials(node: ReturnType<typeof createTestProcessNode>) {
   if (node.profile.materials.kind !== "calculated") {
     throw new Error("Expected a calculated Material Profile");
   }
@@ -346,7 +350,7 @@ describe("Process Nodes", () => {
         id: "wrong-machine",
         processId: "Recipe_IronPlate_C",
       }),
-    ).toThrow(ProcessNodeConfigurationError);
+    ).toThrow(NodeConfigurationError);
 
     expect(() =>
       createTestProcessNode({

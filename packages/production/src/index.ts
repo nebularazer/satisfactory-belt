@@ -34,14 +34,6 @@ export {
   productionProcessesForBuildable,
 } from "./production-process";
 export {
-  createProcessNode,
-  ProcessNodeConfigurationError,
-} from "./process-node";
-export {
-  createMaterialNode,
-  MaterialNodeConfigurationError,
-} from "./material-node";
-export {
   createNode,
   NodeConfigurationError,
   parseNodeConfiguration,

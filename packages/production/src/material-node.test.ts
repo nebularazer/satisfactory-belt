@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  MaterialNodeConfigurationError,
-  createMaterialNode,
-  findBuffer,
-} from "./index";
+import { NodeConfigurationError, createNode, findBuffer } from "./index";
 
 describe("material nodes", () => {
   it("creates a Conveyor Splitter with one input and three outputs", () => {
-    const node = createMaterialNode({
+    const node = createNode({
       buildableId: "Build_ConveyorAttachmentSplitter_C",
       id: "splitter",
       itemId: "Desc_IronPlate_C",
@@ -29,7 +25,7 @@ describe("material nodes", () => {
   });
 
   it("keeps Pipeline Junction ports bidirectional", () => {
-    const node = createMaterialNode({
+    const node = createNode({
       buildableId: "Build_PipelineJunction_Cross_C",
       id: "junction",
       itemId: "Desc_Water_C",
@@ -51,7 +47,7 @@ describe("material nodes", () => {
       type: "inventory",
     });
 
-    const node = createMaterialNode({
+    const node = createNode({
       buildableId: "Build_IndustrialTank_C",
       id: "water-buffer",
       itemId: "Desc_Water_C",
@@ -76,7 +72,7 @@ describe("material nodes", () => {
   });
 
   it("orients Transport ports from the configured mode", () => {
-    const node = createMaterialNode({
+    const node = createNode({
       buildableId: "Build_TruckStation_C",
       id: "truck-loader",
       itemId: "Desc_Coal_C",
@@ -122,12 +118,12 @@ describe("material nodes", () => {
 
   it("rejects material forms a Buildable cannot carry", () => {
     expect(() =>
-      createMaterialNode({
+      createNode({
         buildableId: "Build_ConveyorAttachmentSplitter_C",
         id: "wet-splitter",
         itemId: "Desc_Water_C",
         kind: "router",
       }),
-    ).toThrow(MaterialNodeConfigurationError);
+    ).toThrow(NodeConfigurationError);
   });
 });

@@ -16,6 +16,14 @@ function invalid(message: string): never {
   throw new NodeConfigurationError(message);
 }
 
+function configurationFailure(error: unknown): never {
+  if (error instanceof NodeConfigurationError) throw error;
+  throw new NodeConfigurationError(
+    error instanceof Error ? error.message : "Invalid Node configuration.",
+    { cause: error },
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -143,27 +151,33 @@ function parseRequest(value: unknown): NodeRequest {
 /**
  * Validates a Node request and derives its canonical configuration, ports, and
  * profiles without resolving any connections.
+ *
+ * @throws {NodeConfigurationError} if ids, Buildable behavior, compatibility,
+ * or operating settings are invalid.
  */
 export function createNode(request: NodeRequest): Node {
-  return request.kind === "process"
-    ? createProcessNode(request)
-    : createMaterialNode(request);
+  try {
+    return request.kind === "process"
+      ? createProcessNode(request)
+      : createMaterialNode(request);
+  } catch (error) {
+    return configurationFailure(error);
+  }
 }
 
 /**
  * Restores unknown persisted data into a canonical Node configuration. Derived
  * ports and profiles are deliberately discarded and can be recreated with
  * createNode.
+ *
+ * @throws {NodeConfigurationError} if the persisted structure or its domain
+ * configuration is invalid.
  */
 export function parseNodeConfiguration(value: unknown): NodeConfiguration {
   try {
     const node = createNode(parseRequest(value));
     return node.configuration;
   } catch (error) {
-    if (error instanceof NodeConfigurationError) throw error;
-    throw new NodeConfigurationError(
-      error instanceof Error ? error.message : "Invalid Node configuration.",
-      { cause: error },
-    );
+    return configurationFailure(error);
   }
 }
