@@ -51,6 +51,7 @@ export type {
   MaterialNodeRequest,
   MaterialConsumer,
   MaterialPort,
+  MaterialProfile,
   MaterialRate,
   NodeProfile,
   Node,

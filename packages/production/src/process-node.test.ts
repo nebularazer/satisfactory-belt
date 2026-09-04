@@ -7,6 +7,13 @@ import {
   productionProcessesForBuildable,
 } from "./index";
 
+function calculatedMaterials(node: ReturnType<typeof createProcessNode>) {
+  if (node.profile.materials.kind !== "calculated") {
+    throw new Error("Expected a calculated Material Profile");
+  }
+  return node.profile.materials;
+}
+
 describe("Production Processes", () => {
   it("presents authored Recipes through the common process model", () => {
     expect(findProductionProcess("Recipe_IronPlate_C")).toEqual({
@@ -83,8 +90,11 @@ describe("Process Nodes", () => {
         },
       ],
       profile: {
-        inputs: [{ itemId: "Desc_IronIngot_C", ratePerMinute: 30 }],
-        outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 20 }],
+        materials: {
+          inputs: [{ itemId: "Desc_IronIngot_C", ratePerMinute: 30 }],
+          kind: "calculated",
+          outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 20 }],
+        },
         power: {
           consumed: { maximumMw: 4, minimumMw: 4 },
           produced: { maximumMw: 0, minimumMw: 0 },
@@ -105,10 +115,10 @@ describe("Process Nodes", () => {
       processId: "Recipe_IronPlate_C",
     });
 
-    expect(node.profile.inputs).toEqual([
+    expect(calculatedMaterials(node).inputs).toEqual([
       { itemId: "Desc_IronIngot_C", ratePerMinute: 72 },
     ]);
-    expect(node.profile.outputs).toEqual([
+    expect(calculatedMaterials(node).outputs).toEqual([
       { itemId: "Desc_IronPlate_C", ratePerMinute: 48 },
     ]);
     expect(node.configuration.instances).toHaveLength(3);
@@ -129,10 +139,10 @@ describe("Process Nodes", () => {
       processId: "Recipe_IronPlate_C",
     });
 
-    expect(node.profile.inputs).toEqual([
+    expect(calculatedMaterials(node).inputs).toEqual([
       { itemId: "Desc_IronIngot_C", ratePerMinute: 30 },
     ]);
-    expect(node.profile.outputs).toEqual([
+    expect(calculatedMaterials(node).outputs).toEqual([
       { itemId: "Desc_IronPlate_C", ratePerMinute: 40 },
     ]);
     expect(node.profile.power.consumed).toEqual({
@@ -149,7 +159,7 @@ describe("Process Nodes", () => {
       processId: "Recipe_IngotIron_C",
     });
 
-    expect(node.profile.outputs).toEqual([
+    expect(calculatedMaterials(node).outputs).toEqual([
       { itemId: "Desc_IronIngot_C", ratePerMinute: 60 },
     ]);
     expect(node.profile.power.consumed).toEqual({
@@ -192,8 +202,8 @@ describe("Process Nodes", () => {
       processId: process.id,
     });
 
-    expect(node.profile.inputs).toEqual([]);
-    expect(node.profile.outputs).toEqual([
+    expect(calculatedMaterials(node).inputs).toEqual([]);
+    expect(calculatedMaterials(node).outputs).toEqual([
       { itemId: "Desc_OreIron_C", ratePerMinute: 600 },
     ]);
     expect(node.profile.power.consumed.minimumMw).toBeCloseTo(50.366259, 6);
@@ -210,11 +220,11 @@ describe("Process Nodes", () => {
       processId: "power-generation:Build_GeneratorCoal_C:Desc_Coal_C",
     });
 
-    expect(node.profile.inputs).toEqual([
+    expect(calculatedMaterials(node).inputs).toEqual([
       { itemId: "Desc_Coal_C", ratePerMinute: 22.5 },
       { itemId: "Desc_Water_C", ratePerMinute: 67.5 },
     ]);
-    expect(node.profile.outputs).toEqual([]);
+    expect(calculatedMaterials(node).outputs).toEqual([]);
     expect(node.profile.power).toEqual({
       consumed: { maximumMw: 0, minimumMw: 0 },
       produced: { maximumMw: 112.5, minimumMw: 112.5 },
@@ -229,11 +239,11 @@ describe("Process Nodes", () => {
         "power-generation:Build_GeneratorNuclear_C:Desc_NuclearFuelRod_C",
     });
 
-    expect(node.profile.inputs).toEqual([
+    expect(calculatedMaterials(node).inputs).toEqual([
       { itemId: "Desc_NuclearFuelRod_C", ratePerMinute: 0.2 },
       { itemId: "Desc_Water_C", ratePerMinute: 240 },
     ]);
-    expect(node.profile.outputs).toEqual([
+    expect(calculatedMaterials(node).outputs).toEqual([
       { itemId: "Desc_NuclearWaste_C", ratePerMinute: 10 },
     ]);
     expect(node.profile.power.produced).toEqual({
@@ -253,8 +263,8 @@ describe("Process Nodes", () => {
       processId: "power-generation:Build_GeneratorGeoThermal_C",
     });
 
-    expect(node.profile.inputs).toEqual([]);
-    expect(node.profile.outputs).toEqual([]);
+    expect(calculatedMaterials(node).inputs).toEqual([]);
+    expect(calculatedMaterials(node).outputs).toEqual([]);
     expect(node.profile.power.produced).toEqual({
       maximumMw: 750,
       minimumMw: 250,
@@ -278,8 +288,7 @@ describe("Process Nodes", () => {
         medium: "conveyor",
       },
     ]);
-    expect(node.profile.inputs).toEqual([]);
-    expect(node.profile.outputs).toEqual([]);
+    expect(node.profile.materials).toEqual({ kind: "connection-dependent" });
     expect(node.profile.power.consumed).toEqual({
       maximumMw: 30,
       minimumMw: 30,
@@ -317,7 +326,7 @@ describe("Process Nodes", () => {
       ],
       processKind: "resource-well",
     });
-    expect(node.profile.outputs).toEqual([
+    expect(calculatedMaterials(node).outputs).toEqual([
       { itemId: "Desc_LiquidOil_C", ratePerMinute: 210 },
     ]);
     expect(node.profile.power.consumed).toEqual({

@@ -220,8 +220,7 @@ function createRecipeNode(
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
     profile: {
-      inputs,
-      outputs,
+      materials: { inputs, kind: "calculated", outputs },
       power: {
         consumed: {
           maximumMw: round(consumed.maximumMw),
@@ -297,8 +296,7 @@ function createConsumptionNode(
       },
     ],
     profile: {
-      inputs: [],
-      outputs: [],
+      materials: { kind: "connection-dependent" },
       power: {
         consumed: { maximumMw: consumedMw, minimumMw: consumedMw },
         produced: zeroPowerRange(),
@@ -379,13 +377,16 @@ function createExtractionNode(
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
     profile: {
-      inputs: [],
-      outputs: [
-        {
-          itemId: process.resourceItemId,
-          ratePerMinute: round(outputRate),
-        },
-      ],
+      materials: {
+        inputs: [],
+        kind: "calculated",
+        outputs: [
+          {
+            itemId: process.resourceItemId,
+            ratePerMinute: round(outputRate),
+          },
+        ],
+      },
       power: {
         consumed: {
           maximumMw: round(consumedMw),
@@ -454,8 +455,7 @@ function createPowerGenerationNode(
       kind: "process",
       ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
       profile: {
-        inputs: [],
-        outputs: [],
+        materials: { inputs: [], kind: "calculated", outputs: [] },
         power: {
           consumed: zeroPowerRange(),
           produced: {
@@ -541,8 +541,7 @@ function createPowerGenerationNode(
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
     profile: {
-      inputs,
-      outputs,
+      materials: { inputs, kind: "calculated", outputs },
       power: {
         consumed: zeroPowerRange(),
         produced: {
@@ -633,13 +632,16 @@ function createResourceWellNode(
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
     profile: {
-      inputs: [],
-      outputs: [
-        {
-          itemId: process.resourceItemId,
-          ratePerMinute: round(outputRate),
-        },
-      ],
+      materials: {
+        inputs: [],
+        kind: "calculated",
+        outputs: [
+          {
+            itemId: process.resourceItemId,
+            ratePerMinute: round(outputRate),
+          },
+        ],
+      },
       power: {
         consumed: {
           maximumMw: round(consumedMw),

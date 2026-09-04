@@ -377,9 +377,18 @@ export type PowerProfile = Readonly<{
   produced: PowerRange;
 }>;
 
+export type MaterialProfile =
+  | Readonly<{
+      kind: "calculated";
+      inputs: readonly MaterialRate[];
+      outputs: readonly MaterialRate[];
+    }>
+  | Readonly<{
+      kind: "connection-dependent";
+    }>;
+
 export type NodeProfile = Readonly<{
-  inputs: readonly MaterialRate[];
-  outputs: readonly MaterialRate[];
+  materials: MaterialProfile;
   power: PowerProfile;
 }>;
 

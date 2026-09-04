@@ -28,8 +28,7 @@ function requireId(value: string, label: string) {
 
 function emptyProfile(consumedMw: number): NodeProfile {
   return {
-    inputs: [],
-    outputs: [],
+    materials: { kind: "connection-dependent" },
     power: {
       consumed: { maximumMw: consumedMw, minimumMw: consumedMw },
       produced: { maximumMw: 0, minimumMw: 0 },

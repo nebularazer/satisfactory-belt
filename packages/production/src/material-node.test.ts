@@ -25,8 +25,7 @@ describe("material nodes", () => {
     expect(
       node.ports.every(({ itemId }) => itemId === "Desc_IronPlate_C"),
     ).toBe(true);
-    expect(node.profile.inputs).toEqual([]);
-    expect(node.profile.outputs).toEqual([]);
+    expect(node.profile.materials).toEqual({ kind: "connection-dependent" });
   });
 
   it("keeps Pipeline Junction ports bidirectional", () => {
