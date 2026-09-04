@@ -46,6 +46,11 @@ The configured operating rate of a Production Machine relative to its nominal
 rate, affecting its material rates and Power Profile.
 _Avoid_: Utilization, machine-equivalent
 
+**Efficiency**:
+The share of a Node's configured production capacity that it actually achieves,
+reduced when required inputs are undersupplied or outputs are blocked.
+_Avoid_: Clock Speed, Production Amplification
+
 **Production Amplification**:
 The output multiplier configured on a compatible Production Machine by
 installing Somersloops, affecting its product rates and Power Profile without

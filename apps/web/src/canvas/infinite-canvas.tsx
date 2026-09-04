@@ -10,12 +10,10 @@ import {
 } from "pixi.js";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
-import {
-  CATALOG_BUILDABLE_IMAGE_URLS,
-  buildableImageUrl,
-} from "@/game/catalog-images";
+import { CATALOG_BUILDABLE_IMAGE_URLS } from "@/game/catalog-images";
 
 import {
+  NODE_WIDTH,
   SNAP_INTERVAL,
   type CanvasEditor,
   type CanvasEditorChange,
@@ -24,6 +22,12 @@ import {
 import { canvasNodeId, type CanvasNode } from "./document";
 import type { Point, Rectangle } from "./geometry";
 import { attachCanvasInteractions } from "./interactions";
+import {
+  createNodeCardModel,
+  type NodeCardMaterial,
+  type NodeCardModel,
+  type NodeCardPortStatus,
+} from "./node-card-model";
 import {
   createPerformanceSampler,
   type CanvasPerformanceMetrics,
@@ -68,12 +72,27 @@ type NodeDisplay = {
   baseY: number;
   card: Graphics;
   cardVisualKey: string;
+  clock: Text;
   container: Container;
+  efficiency: Text;
+  footerIcons: Graphics;
+  inputs: readonly MaterialDisplay[];
+  machineImage: Sprite;
+  machineImageVisualKey: string;
+  model?: NodeCardModel;
+  modelNode?: CanvasNode;
+  node: CanvasNode;
+  outputs: readonly MaterialDisplay[];
+  power: Text;
+  subtitle: Text;
+  title: Text;
+};
+
+type MaterialDisplay = {
   image: Sprite;
   imageVisualKey: string;
-  label: Text;
-  labelVisualKey: string;
-  node: CanvasNode;
+  port: Graphics;
+  rate: Text;
 };
 
 type GridDisplay = {
@@ -152,6 +171,157 @@ function textResolutionForZoom(zoom: number, rendererResolution: number) {
   return Math.max(rendererResolution, Math.ceil(zoom * rendererResolution));
 }
 
+const NODE_CARD_SIZE = NODE_WIDTH;
+const NODE_CARD_HEADER_HEIGHT = 48;
+const NODE_CARD_FOOTER_HEIGHT = 48;
+const INPUT_PORT_Y = [80, 112, 144, 176] as const;
+const OUTPUT_PORT_Y = [112, 144] as const;
+const BLUEPRINT_COLORS = {
+  blocked: 0xb75b65,
+  input: 0xb8794f,
+  output: 0x5a9b8c,
+  selected: 0x3d6f9f,
+  warning: 0xc29b3c,
+} as const;
+
+function requestTexture(imageUrl: string, onReady: () => void) {
+  if (Assets.cache.has(imageUrl)) return;
+  void Assets.load(imageUrl)
+    .then(onReady)
+    .catch(() => undefined);
+}
+
+function cachedTexture(imageUrl: string) {
+  return Assets.cache.has(imageUrl) ? Assets.get<Texture>(imageUrl) : undefined;
+}
+
+function statusColor(status: NodeCardPortStatus) {
+  if (status === "warning") return BLUEPRINT_COLORS.warning;
+  if (status === "blocked") return BLUEPRINT_COLORS.blocked;
+  return undefined;
+}
+
+function updateTextResolution(text: Text, resolution: number) {
+  if (text.resolution !== resolution) text.resolution = resolution;
+}
+
+function fitText(text: Text, value: string, maximumWidth: number) {
+  text.text = value;
+  if (text.width <= maximumWidth) return;
+
+  let lower = 0;
+  let upper = value.length;
+  while (lower < upper) {
+    const middle = Math.ceil((lower + upper) / 2);
+    text.text = `${value.slice(0, middle).trimEnd()}…`;
+    if (text.width <= maximumWidth) lower = middle;
+    else upper = middle - 1;
+  }
+  text.text = `${value.slice(0, lower).trimEnd()}…`;
+}
+
+function updateMaterialVisual(
+  display: MaterialDisplay,
+  material: NodeCardMaterial | undefined,
+  role: "input" | "output",
+  index: number,
+  dark: boolean,
+  textResolution: number,
+  onAssetReady: () => void,
+) {
+  const y = (role === "input" ? INPUT_PORT_Y : OUTPUT_PORT_Y)[index];
+  const visible = material !== undefined && y !== undefined;
+  display.image.visible = visible;
+  display.port.visible = visible;
+  display.rate.visible = visible;
+  if (!visible || !material || y === undefined) return;
+
+  const imageUrl = material.imageUrl ?? "";
+  const texture = imageUrl ? cachedTexture(imageUrl) : undefined;
+  const imageVisualKey = `${imageUrl}:${Boolean(texture)}`;
+  if (display.imageVisualKey !== imageVisualKey) {
+    display.image.texture = texture ?? Texture.EMPTY;
+    display.image.visible = Boolean(texture);
+    display.imageVisualKey = imageVisualKey;
+  }
+  if (imageUrl && !texture) requestTexture(imageUrl, onAssetReady);
+
+  display.image.anchor.set(0.5);
+  display.image.position.set(role === "input" ? 28 : 228, y);
+  display.image.setSize(24, 24);
+  display.rate.anchor.set(role === "input" ? 0 : 1, 0.5);
+  display.rate.position.set(role === "input" ? 46 : 210, y);
+  display.rate.text = material.rate;
+  display.rate.style = {
+    fill: material.connected
+      ? dark
+        ? 0xe4e4e7
+        : 0x3f3f46
+      : dark
+        ? 0x52525b
+        : 0xa1a1aa,
+    fontFamily: "Inter Variable, Inter, sans-serif",
+    fontSize: 12,
+    fontWeight: "400",
+  };
+  updateTextResolution(display.rate, textResolution);
+
+  const center = statusColor(material.status);
+  display.port
+    .clear()
+    .circle(0, 0, 10)
+    .fill({
+      color:
+        role === "input" ? BLUEPRINT_COLORS.input : BLUEPRINT_COLORS.output,
+    })
+    .circle(0, 0, 8)
+    .fill({ color: dark ? 0x18181b : 0xffffff });
+  if (center !== undefined) {
+    display.port.circle(0, 0, 5).fill({ color: center });
+  }
+  display.port.position.set(role === "input" ? 0 : NODE_CARD_SIZE, y);
+}
+
+function drawFooterIcons(
+  graphics: Graphics,
+  powerTextWidth: number,
+  efficiencyStatus: NodeCardPortStatus,
+  dark: boolean,
+) {
+  const foreground = dark ? 0xd4d4d8 : 0x52525b;
+  const efficiency = statusColor(efficiencyStatus) ?? foreground;
+  const powerX = 240 - powerTextWidth - 10;
+  graphics
+    .clear()
+    .arc(21, 233, 6, Math.PI, 0)
+    .stroke({ color: foreground, width: 1.5 })
+    .moveTo(21, 233)
+    .lineTo(25, 229)
+    .stroke({ color: foreground, width: 1.5 })
+    .circle(78, 232, 6)
+    .stroke({ color: efficiency, width: 1.5 })
+    .moveTo(74, 233)
+    .lineTo(76, 230)
+    .lineTo(79, 234)
+    .lineTo(82, 229)
+    .stroke({ color: efficiency, width: 1.25 })
+    .poly([
+      powerX,
+      225,
+      powerX - 4,
+      232,
+      powerX,
+      232,
+      powerX - 2,
+      239,
+      powerX + 5,
+      230,
+      powerX + 1,
+      230,
+    ])
+    .fill({ color: 0xeab308 });
+}
+
 function updateNodeVisual(
   display: NodeDisplay,
   node: CanvasNode,
@@ -159,77 +329,212 @@ function updateNodeVisual(
   selected: boolean,
   textResolution: number,
   zoom: number,
+  onAssetReady: () => void,
 ) {
-  const cardVisualKey = `${dark}:${selected}:${node.width}:${node.height}:${selected ? zoom : ""}`;
+  const model =
+    display.modelNode === node && display.model
+      ? display.model
+      : createNodeCardModel(node);
+  display.model = model;
+  display.modelNode = node;
+  const cardVisualKey = `${dark}:${selected}:${selected ? zoom : ""}`;
   if (display.cardVisualKey !== cardVisualKey) {
+    const body = dark ? 0x18181b : 0xffffff;
+    const chrome = dark ? 0x242427 : 0xfafafa;
+    const border = selected
+      ? BLUEPRINT_COLORS.selected
+      : dark
+        ? 0x3f3f46
+        : 0xd4d4d8;
     display.card
       .clear()
-      .roundRect(0, 0, node.width, node.height, 10)
-      .fill({ color: dark ? 0x202024 : 0xffffff })
+      .roundRect(0, 0, NODE_CARD_SIZE, NODE_CARD_SIZE, 12)
+      .fill({ color: body })
+      .roundRect(0, 0, NODE_CARD_SIZE, NODE_CARD_HEADER_HEIGHT, 12)
+      .fill({ color: chrome })
+      .rect(0, 12, NODE_CARD_SIZE, NODE_CARD_HEADER_HEIGHT - 12)
+      .fill({ color: chrome })
+      .roundRect(
+        0,
+        NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT,
+        NODE_CARD_SIZE,
+        NODE_CARD_FOOTER_HEIGHT,
+        12,
+      )
+      .fill({ color: chrome })
+      .rect(
+        0,
+        NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT,
+        NODE_CARD_SIZE,
+        NODE_CARD_FOOTER_HEIGHT - 12,
+      )
+      .fill({ color: chrome })
+      .moveTo(0, NODE_CARD_HEADER_HEIGHT)
+      .lineTo(NODE_CARD_SIZE, NODE_CARD_HEADER_HEIGHT)
+      .moveTo(0, NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT)
+      .lineTo(NODE_CARD_SIZE, NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT)
+      .stroke({ color: dark ? 0x3f3f46 : 0xe4e4e7, width: 1 })
+      .roundRect(0, 0, NODE_CARD_SIZE, NODE_CARD_SIZE, 12)
       .stroke({
-        color: selected ? 0x6366f1 : dark ? 0x52525b : 0xd4d4d8,
+        color: border,
         width: selected ? 2 / zoom : 1,
       });
     display.cardVisualKey = cardVisualKey;
   }
 
-  const buildableId = node.configuration.buildableId;
-  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}:${buildableId}`;
-  if (display.labelVisualKey !== labelVisualKey) {
-    display.label.text = node.label;
-    display.label.position.set(node.width / 2, node.height - 17);
-    display.label.style = {
-      align: "center",
-      fill: dark ? 0xf4f4f5 : 0x27272a,
-      fontFamily: "Inter Variable, Inter, sans-serif",
-      fontSize: 12,
-      fontWeight: "600",
-      wordWrap: true,
-      wordWrapWidth: node.width - 16,
-    };
-    display.labelVisualKey = labelVisualKey;
+  display.title.style = {
+    fill: dark ? 0xf4f4f5 : 0x27272a,
+    fontFamily: "Inter Variable, Inter, sans-serif",
+    fontSize: 16,
+    fontWeight: "600",
+  };
+  display.subtitle.style = {
+    fill: dark ? 0xa1a1aa : 0x71717a,
+    fontFamily: "Inter Variable, Inter, sans-serif",
+    fontSize: 12,
+    fontWeight: "500",
+  };
+  fitText(display.title, model.title, 168);
+  fitText(display.subtitle, model.subtitle, 168);
+
+  const machineImageUrl = model.buildableImageUrl ?? "";
+  const machineTexture = machineImageUrl
+    ? cachedTexture(machineImageUrl)
+    : undefined;
+  const machineImageVisualKey = `${machineImageUrl}:${Boolean(machineTexture)}`;
+  if (display.machineImageVisualKey !== machineImageVisualKey) {
+    display.machineImage.texture = machineTexture ?? Texture.EMPTY;
+    display.machineImage.setSize(40, 40);
+    display.machineImage.visible = Boolean(machineTexture);
+    display.machineImageVisualKey = machineImageVisualKey;
+  }
+  if (machineImageUrl && !machineTexture) {
+    requestTexture(machineImageUrl, onAssetReady);
   }
 
-  const imageVisualKey = buildableImageUrl(buildableId) ?? "";
-  if (display.imageVisualKey !== imageVisualKey) {
-    const texture = imageVisualKey
-      ? Assets.get<Texture>(imageVisualKey)
-      : undefined;
-    display.image.texture = texture ?? Texture.EMPTY;
-    display.image.setSize(52, 52);
-    display.image.visible = Boolean(texture);
-    display.imageVisualKey = imageVisualKey;
-  }
+  display.inputs.forEach((materialDisplay, index) =>
+    updateMaterialVisual(
+      materialDisplay,
+      model.inputs[index],
+      "input",
+      index,
+      dark,
+      textResolution,
+      onAssetReady,
+    ),
+  );
+  display.outputs.forEach((materialDisplay, index) =>
+    updateMaterialVisual(
+      materialDisplay,
+      model.outputs[index],
+      "output",
+      index,
+      dark,
+      textResolution,
+      onAssetReady,
+    ),
+  );
 
-  if (display.label.resolution !== textResolution) {
-    display.label.resolution = textResolution;
+  const metricStyle = {
+    fill: dark ? 0xd4d4d8 : 0x52525b,
+    fontFamily: "Inter Variable, Inter, sans-serif",
+    fontSize: 12,
+    fontWeight: "600" as const,
+  };
+  display.clock.text = model.clock;
+  display.clock.style = metricStyle;
+  display.efficiency.text = model.efficiency.percent;
+  display.efficiency.style = {
+    ...metricStyle,
+    fill: statusColor(model.efficiency.status) ?? (dark ? 0xd4d4d8 : 0x52525b),
+  };
+  display.power.text = model.power;
+  display.power.style = metricStyle;
+  drawFooterIcons(
+    display.footerIcons,
+    display.power.width,
+    model.efficiency.status,
+    dark,
+  );
+
+  for (const text of [
+    display.title,
+    display.subtitle,
+    display.clock,
+    display.efficiency,
+    display.power,
+  ]) {
+    updateTextResolution(text, textResolution);
   }
+}
+
+function createMaterialDisplay(): MaterialDisplay {
+  const image = new Sprite(Texture.EMPTY);
+  const port = new Graphics();
+  const rate = new Text({ text: "" });
+  image.visible = false;
+  port.visible = false;
+  rate.visible = false;
+  return { image, imageVisualKey: "", port, rate };
 }
 
 function createNodeDisplay(node: CanvasNode): NodeDisplay {
   const container = new Container();
   const card = new Graphics();
-  const image = new Sprite(Texture.EMPTY);
-  const label = new Text({ text: node.label });
+  const machineImage = new Sprite(Texture.EMPTY);
+  const title = new Text({ text: "" });
+  const subtitle = new Text({ text: "" });
+  const inputs = Array.from({ length: 4 }, createMaterialDisplay);
+  const outputs = Array.from({ length: 2 }, createMaterialDisplay);
+  const footerIcons = new Graphics();
+  const clock = new Text({ text: "" });
+  const efficiency = new Text({ text: "" });
+  const power = new Text({ text: "" });
+
   container.eventMode = "none";
-  image.anchor.set(0.5);
-  image.position.set(node.width / 2, 35);
-  image.setSize(52, 52);
-  image.visible = false;
-  label.anchor.set(0.5);
-  container.addChild(card, image, label);
+  machineImage.anchor.set(0.5);
+  machineImage.position.set(36, 24);
+  machineImage.setSize(40, 40);
+  machineImage.visible = false;
+  title.position.set(72, 6);
+  subtitle.position.set(72, 28);
+  clock.anchor.set(0, 0.5);
+  clock.position.set(30, 232);
+  efficiency.anchor.set(0, 0.5);
+  efficiency.position.set(87, 232);
+  power.anchor.set(1, 0.5);
+  power.position.set(240, 232);
+
+  container.addChild(
+    card,
+    machineImage,
+    title,
+    subtitle,
+    ...inputs.flatMap(({ image, port, rate }) => [image, rate, port]),
+    ...outputs.flatMap(({ image, port, rate }) => [image, rate, port]),
+    footerIcons,
+    clock,
+    efficiency,
+    power,
+  );
 
   return {
     baseX: node.x,
     baseY: node.y,
     card,
     cardVisualKey: "",
+    clock,
     container,
-    image,
-    imageVisualKey: "",
-    label,
-    labelVisualKey: "",
+    efficiency,
+    footerIcons,
+    inputs,
+    machineImage,
+    machineImageVisualKey: "",
     node,
+    outputs,
+    power,
+    subtitle,
+    title,
   };
 }
 
@@ -254,6 +559,7 @@ function syncDocument(
   visibleNodes: readonly CanvasNode[],
   textResolution: number,
   zoom: number,
+  onAssetReady: () => void,
 ) {
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = new Set(state.selectedIds);
@@ -288,7 +594,15 @@ function syncDocument(
       scene.setChildIndex(display.container, index);
     }
 
-    updateNodeVisual(display, node, dark, selected, textResolution, zoom);
+    updateNodeVisual(
+      display,
+      node,
+      dark,
+      selected,
+      textResolution,
+      zoom,
+      onAssetReady,
+    );
   }
 }
 
@@ -298,6 +612,7 @@ function syncEditorChange(
   change: CanvasEditorChange,
   textResolution: number,
   zoom: number,
+  onAssetReady: () => void,
 ) {
   if (change.kind === "document" || change.kind === "settings") return false;
 
@@ -322,6 +637,7 @@ function syncEditorChange(
         selectedIds?.has(id) ?? false,
         textResolution,
         zoom,
+        onAssetReady,
       );
     }
   }
@@ -396,6 +712,10 @@ export const InfiniteCanvas = forwardRef<
       visibleCanvasNodes(state, viewportRef.current, app.screen, editor.query),
       textResolutionRef.current,
       viewportRef.current.zoom,
+      () => {
+        syncVisibleScene();
+        renderSchedulerRef.current?.request();
+      },
     );
   };
 
@@ -656,6 +976,10 @@ export const InfiniteCanvas = forwardRef<
               change,
               textResolutionRef.current,
               viewportRef.current.zoom,
+              () => {
+                syncVisibleScene();
+                renderSchedulerRef.current?.request();
+              },
             );
           }
           if (!needsRender) return;

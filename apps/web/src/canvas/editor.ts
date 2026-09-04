@@ -10,8 +10,8 @@ import type { Point, Rectangle } from "./geometry";
 import { createCanvasSpatialIndex } from "./spatial-index";
 
 export const SNAP_INTERVAL = 32;
-export const NODE_WIDTH = 176;
-export const NODE_HEIGHT = 96;
+export const NODE_WIDTH = SNAP_INTERVAL * 8;
+export const NODE_HEIGHT = SNAP_INTERVAL * 8;
 export const HISTORY_LIMIT = 100;
 
 export type CanvasEditorState = Readonly<{

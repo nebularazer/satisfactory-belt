@@ -49,13 +49,13 @@ describe("canvas editor", () => {
     const [first, second] = editor.getState().document.nodes;
     expect(first).toMatchObject({
       configuration: { id: "node-1" },
-      x: 0,
-      y: 64,
+      x: -32,
+      y: -32,
     });
     expect(second).toMatchObject({
       configuration: { id: "node-2" },
-      x: 320,
-      y: 256,
+      x: 288,
+      y: 160,
     });
     expect(canvasNodeId(editor.hitTest({ x: 20, y: 80 })!)).toBe("node-1");
 
@@ -122,11 +122,14 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.move.commit" });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: -32 });
     editor.dispatch({ type: "history.undo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: -32,
+      y: -32,
+    });
     editor.dispatch({ type: "history.redo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: -32 });
   });
 
   it("keeps pointer movement transient until the move is committed", () => {
@@ -180,8 +183,8 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.move.commit" });
 
     expect(editor.getState().document.nodes).toMatchObject([
-      { x: 32, y: 32 },
-      { x: 352, y: 224 },
+      { x: 0, y: -64 },
+      { x: 320, y: 128 },
     ]);
   });
 
@@ -203,7 +206,10 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.move.commit" });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 25, y: 69 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: -15,
+      y: -11,
+    });
   });
 
   it("copies, pastes, duplicates, deletes, and restores selections", () => {
@@ -218,8 +224,8 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.duplicate" });
 
     expect(editor.getState().document.nodes).toHaveLength(3);
-    expect(editor.getState().document.nodes[1]?.x).toBe(SNAP_INTERVAL);
-    expect(editor.getState().document.nodes[2]?.x).toBe(SNAP_INTERVAL * 2);
+    expect(editor.getState().document.nodes[1]?.x).toBe(0);
+    expect(editor.getState().document.nodes[2]?.x).toBe(SNAP_INTERVAL);
 
     editor.dispatch({ type: "selection.delete" });
     expect(editor.getState().document.nodes).toHaveLength(2);
@@ -237,9 +243,12 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.nudge", delta: { x: 32, y: -32 } });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: -64 });
     editor.dispatch({ type: "history.undo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: -32,
+      y: -32,
+    });
   });
 
   it("calculates all-node and selection bounds", () => {
@@ -256,16 +265,16 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getBounds("all")).toEqual({
-      height: 288,
-      width: 496,
-      x: 0,
-      y: 64,
+      height: 448,
+      width: 576,
+      x: -32,
+      y: -32,
     });
     expect(editor.getBounds("selection")).toEqual({
-      height: 96,
-      width: 176,
-      x: 320,
-      y: 256,
+      height: 256,
+      width: 256,
+      x: 288,
+      y: 160,
     });
   });
 
