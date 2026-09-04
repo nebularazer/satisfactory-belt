@@ -18,12 +18,29 @@ export {
   searchRecipes,
   searchSpecialBuildables,
 } from "./search";
+export {
+  findProductionProcess,
+  listProductionProcesses,
+  productionProcessesForBuildable,
+} from "./production-process";
+export {
+  createProcessNode,
+  ProcessNodeConfigurationError,
+} from "./process-node";
 export type {
   Buildable,
   BuildableCategory,
   Descriptor,
+  MaterialRate,
+  NodeProfile,
+  PowerProfile,
+  ProcessNode,
+  ProcessNodeConfiguration,
+  ProcessNodeRequest,
   ProductionMachine,
   ProductionMaterial,
+  ProductionProcess,
   Recipe,
   ResourceExtractor,
+  ResourcePurity,
 } from "./types";
