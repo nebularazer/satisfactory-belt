@@ -15,6 +15,11 @@ A graphable transformation or capability, including authored Recipes as well as
 extraction, power generation, resource wells, and other machine behavior.
 _Avoid_: Synthetic recipe, fake recipe
 
+**Consumption Process**:
+A Production Process that accepts material without producing material, such as
+the AWESOME Sink. Its resolved consumption rate depends on connected flow.
+_Avoid_: Sink category, deletion
+
 **Buildable**:
 A placeable game entity whose runtime class may expose one or more clearance
 boxes and an aggregate spatial footprint.
@@ -81,6 +86,26 @@ _Avoid_: Static snapshot, calculation
 A planned factory element. In Basic Mode it may summarize a Machine Allocation;
 in Detailed and Layout Modes it represents one Buildable instance.
 _Avoid_: Buildable, graph vertex
+
+**Material Port**:
+A logical input, output, or bidirectional endpoint on a Node, constrained by
+material form and optionally a Descriptor, but independent of any connection.
+_Avoid_: Edge, physical connector, material rate
+
+**Router**:
+A Node that redistributes material without producing or intentionally storing
+it, such as a Conveyor Splitter, Conveyor Merger, or Pipeline Junction.
+_Avoid_: Logistics category, transport
+
+**Buffer**:
+A Node that intentionally stores material between flows, such as a Storage
+Container or Fluid Buffer.
+_Avoid_: Router, inventory slot
+
+**Transport**:
+A Node that transfers material between remote locations using vehicles, trains,
+or drones.
+_Avoid_: Logistics category, belt, pipe
 
 **Basic Mode**:
 A logical production graph that may summarize a Machine Allocation as one Node
