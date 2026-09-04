@@ -33,9 +33,13 @@ function parseNode(value: unknown, index: number): CanvasNode {
   }
 
   return {
+    ...(typeof value.buildableId === "string"
+      ? { buildableId: value.buildableId }
+      : {}),
     height: value.height,
     id: value.id,
     label: value.label,
+    ...(typeof value.recipeId === "string" ? { recipeId: value.recipeId } : {}),
     width: value.width,
     x: value.x,
     y: value.y,

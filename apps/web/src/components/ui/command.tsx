@@ -33,12 +33,14 @@ function CommandDialog({
   description = "Search for a command to run...",
   children,
   className,
+  initialFocus,
   showCloseButton = false,
   ...props
 }: Omit<React.ComponentProps<typeof Dialog>, "children"> & {
   title?: string;
   description?: string;
   className?: string;
+  initialFocus?: React.ComponentProps<typeof DialogContent>["initialFocus"];
   showCloseButton?: boolean;
   children: React.ReactNode;
 }) {
@@ -53,6 +55,7 @@ function CommandDialog({
           "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
           className,
         )}
+        initialFocus={initialFocus}
         showCloseButton={showCloseButton}
       >
         {children}

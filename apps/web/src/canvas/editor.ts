@@ -33,7 +33,13 @@ export type CanvasEditorChange = Readonly<
 export type CanvasEditorAction =
   | { type: "document.replace"; document: CanvasDocument }
   | { type: "document.reset" }
-  | { type: "node.create"; at: Point }
+  | {
+      type: "node.create";
+      at: Point;
+      buildableId?: string;
+      label?: string;
+      recipeId?: string;
+    }
   | { type: "selection.clear" }
   | { type: "selection.delete" }
   | { type: "selection.duplicate" }
@@ -226,9 +232,11 @@ export function createCanvasEditor(
         const x = action.at.x - NODE_WIDTH / 2;
         const y = action.at.y - NODE_HEIGHT / 2;
         const node: CanvasNode = {
+          ...(action.buildableId ? { buildableId: action.buildableId } : {}),
           height: NODE_HEIGHT,
           id: idFactory(),
-          label: `Node ${nodeSequence}`,
+          label: action.label ?? `Node ${nodeSequence}`,
+          ...(action.recipeId ? { recipeId: action.recipeId } : {}),
           width: NODE_WIDTH,
           x: state.snapToGrid ? snap(x) : x,
           y: state.snapToGrid ? snap(y) : y,

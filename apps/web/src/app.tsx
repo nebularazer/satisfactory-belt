@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -44,9 +46,9 @@ import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
-import { NodePicker } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
+import type { NodePickerSelection } from "@/game/catalog-types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,6 +60,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Toaster } from "@/components/ui/sonner";
+
+const loadNodePicker = () => import("@/components/node-picker");
+const NodePicker = lazy(async () => ({
+  default: (await loadNodePicker()).NodePicker,
+}));
+
+function preloadNodePicker() {
+  void loadNodePicker();
+}
 
 type BootstrapState =
   | { ready: false }
@@ -145,14 +156,27 @@ function CanvasWorkspace({
     initialActiveSave,
   );
   const activeSaveRef = useRef<SavedCanvasDocument | null>(initialActiveSave);
-  const [contextTarget, setContextTarget] = useState<{
-    at: Point;
-    nodeId?: string;
-  } | null>(null);
-
   const selectActiveSave = useCallback((save: SavedCanvasDocument | null) => {
     activeSaveRef.current = save;
     setActiveSave(save);
+  }, []);
+
+  useEffect(() => {
+    const idleWindow = window as Window & {
+      cancelIdleCallback?: (handle: number) => void;
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions,
+      ) => number;
+    };
+    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+      const idleCallback = idleWindow.requestIdleCallback(preloadNodePicker, {
+        timeout: 1_500,
+      });
+      return () => idleWindow.cancelIdleCallback?.(idleCallback);
+    }
+    const timeout = window.setTimeout(preloadNodePicker, 250);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
@@ -200,7 +224,10 @@ function CanvasWorkspace({
     setShowGridDots(enabled);
     writeBooleanPreference(CANVAS_PREFERENCES.showGridDots, enabled);
   };
-  const requestNodeAt = useCallback((at: Point) => setPendingNode({ at }), []);
+  const requestNodeAt = useCallback((at: Point) => {
+    preloadNodePicker();
+    setPendingNode({ at });
+  }, []);
 
   const openSavePlan = useCallback(() => {
     setPendingNode(null);
@@ -252,25 +279,35 @@ function CanvasWorkspace({
     return () => window.removeEventListener("keydown", handleSaveShortcut);
   }, [managePlansOpen, openSavePlan, saveCurrentPlan, savePlanOpen]);
 
-  const addPendingNode = () => {
+  const addPendingNode = (selection: NodePickerSelection) => {
     if (!pendingNode) return;
-    editor.dispatch({ type: "node.create", at: pendingNode.at });
+    editor.dispatch({
+      type: "node.create",
+      at: pendingNode.at,
+      buildableId: selection.buildableId,
+      label: selection.label,
+      recipeId: selection.recipeId,
+    });
     setPendingNode(null);
   };
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return false;
     const bounds = event.currentTarget.getBoundingClientRect();
     const at = canvas.screenToWorld({
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     });
     const hit = editor.hitTest(at);
-    if (hit && !editor.getState().selectedIds.includes(hit.id)) {
+    if (!hit) {
+      requestNodeAt(at);
+      return false;
+    }
+    if (!editor.getState().selectedIds.includes(hit.id)) {
       editor.dispatch({ type: "selection.node", additive: false, id: hit.id });
     }
-    setContextTarget({ at, nodeId: hit?.id });
+    return true;
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -282,7 +319,6 @@ function CanvasWorkspace({
       const document = parseCanvasDocument(await file.text());
       selectActiveSave(null);
       editor.dispatch({ type: "document.replace", document });
-      setContextTarget(null);
       requestAnimationFrame(() => canvasRef.current?.fitContent());
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
@@ -317,7 +353,6 @@ function CanvasWorkspace({
   const loadDocument = (save: SavedCanvasDocument) => {
     selectActiveSave(save);
     editor.dispatch({ type: "document.replace", document: save.document });
-    setContextTarget(null);
     requestAnimationFrame(() => canvasRef.current?.fitContent());
     if (autosaveEnabled) {
       void storage.saveWorkspace(save.document, save.id).catch(() => {
@@ -329,7 +364,6 @@ function CanvasWorkspace({
   const resetCanvas = () => {
     selectActiveSave(null);
     editor.dispatch({ type: "document.reset" });
-    setContextTarget(null);
     canvasRef.current?.resetView();
     setResetCanvasOpen(false);
     toast.success("Canvas reset.");
@@ -339,10 +373,6 @@ function CanvasWorkspace({
     <main className="relative h-dvh w-dvw overflow-hidden bg-canvas text-foreground">
       <h1 className="sr-only">Satisfactory Belt canvas</h1>
       <CanvasContextMenu
-        hasNodeTarget={contextTarget?.nodeId !== undefined}
-        onAddNode={() => {
-          if (contextTarget) requestNodeAt(contextTarget.at);
-        }}
         onContextMenu={handleContextMenu}
         onDelete={deleteSelection}
         onDuplicate={duplicateSelection}
@@ -435,13 +465,15 @@ function CanvasWorkspace({
         tabIndex={-1}
         type="file"
       />
-      <NodePicker
-        onOpenChange={(open) => {
-          if (!open) setPendingNode(null);
-        }}
-        onSelect={addPendingNode}
-        open={pendingNode !== null}
-      />
+      <Suspense fallback={null}>
+        <NodePicker
+          onOpenChange={(open) => {
+            if (!open) setPendingNode(null);
+          }}
+          onSelect={addPendingNode}
+          open={pendingNode !== null}
+        />
+      </Suspense>
       <ManagePlansDialog
         activeSave={activeSave}
         onDelete={(save) => {

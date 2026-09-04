@@ -1,12 +1,19 @@
 import {
   Application,
+  Assets,
   Container,
   Graphics,
+  Sprite,
   Text,
   Texture,
   TilingSprite,
 } from "pixi.js";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+
+import {
+  CATALOG_BUILDABLE_IMAGE_URLS,
+  catalogBuildable,
+} from "@/game/buildable-catalog";
 
 import {
   SNAP_INTERVAL,
@@ -62,6 +69,8 @@ type NodeDisplay = {
   card: Graphics;
   cardVisualKey: string;
   container: Container;
+  image: Sprite;
+  imageVisualKey: string;
   label: Text;
   labelVisualKey: string;
   node: CanvasNode;
@@ -164,17 +173,37 @@ function updateNodeVisual(
     display.cardVisualKey = cardVisualKey;
   }
 
-  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}`;
+  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}:${node.buildableId ?? ""}`;
   if (display.labelVisualKey !== labelVisualKey) {
     display.label.text = node.label;
-    display.label.position.set(node.width / 2, node.height / 2);
+    display.label.position.set(
+      node.width / 2,
+      node.buildableId ? node.height - 17 : node.height / 2,
+    );
     display.label.style = {
+      align: "center",
       fill: dark ? 0xf4f4f5 : 0x27272a,
       fontFamily: "Inter Variable, Inter, sans-serif",
-      fontSize: 14,
+      fontSize: node.buildableId ? 12 : 14,
       fontWeight: "600",
+      wordWrap: true,
+      wordWrapWidth: node.width - 16,
     };
     display.labelVisualKey = labelVisualKey;
+  }
+
+  const buildable = node.buildableId
+    ? catalogBuildable(node.buildableId)
+    : undefined;
+  const imageVisualKey = buildable?.imageUrl ?? "";
+  if (display.imageVisualKey !== imageVisualKey) {
+    const texture = imageVisualKey
+      ? Assets.get<Texture>(imageVisualKey)
+      : undefined;
+    display.image.texture = texture ?? Texture.EMPTY;
+    display.image.setSize(52, 52);
+    display.image.visible = Boolean(texture);
+    display.imageVisualKey = imageVisualKey;
   }
 
   if (display.label.resolution !== textResolution) {
@@ -185,10 +214,15 @@ function updateNodeVisual(
 function createNodeDisplay(node: CanvasNode): NodeDisplay {
   const container = new Container();
   const card = new Graphics();
+  const image = new Sprite(Texture.EMPTY);
   const label = new Text({ text: node.label });
   container.eventMode = "none";
+  image.anchor.set(0.5);
+  image.position.set(node.width / 2, 35);
+  image.setSize(52, 52);
+  image.visible = false;
   label.anchor.set(0.5);
-  container.addChild(card, label);
+  container.addChild(card, image, label);
 
   return {
     baseX: node.x,
@@ -196,6 +230,8 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
     card,
     cardVisualKey: "",
     container,
+    image,
+    imageVisualKey: "",
     label,
     labelVisualKey: "",
     node,
@@ -480,7 +516,10 @@ export const InfiniteCanvas = forwardRef<
         resolution: Math.min(window.devicePixelRatio, 2),
         width: Math.max(host.clientWidth, 1),
       })
-      .then(() => {
+      .then(async () => {
+        await Promise.allSettled(
+          CATALOG_BUILDABLE_IMAGE_URLS.map((imageUrl) => Assets.load(imageUrl)),
+        );
         if (!active) {
           app.destroy(true);
           return;

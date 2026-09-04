@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CopyPlus, Plus, Trash2 } from "lucide-react";
+import { CopyPlus, Trash2 } from "lucide-react";
 
 import {
   ContextMenu,
@@ -11,17 +11,13 @@ import {
 
 type CanvasContextMenuProps = {
   children: ReactNode;
-  hasNodeTarget: boolean;
-  onAddNode: () => void;
-  onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => void;
+  onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => boolean;
   onDelete: () => void;
   onDuplicate: () => void;
 };
 
 export function CanvasContextMenu({
   children,
-  hasNodeTarget,
-  onAddNode,
   onContextMenu,
   onDelete,
   onDuplicate,
@@ -30,31 +26,25 @@ export function CanvasContextMenu({
     <ContextMenu>
       <ContextMenuTrigger
         className="block h-full w-full"
-        onContextMenu={onContextMenu}
+        onContextMenu={(event) => {
+          if (onContextMenu(event)) return;
+          event.preventDefault();
+          event.preventBaseUIHandler();
+        }}
       >
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
-        {hasNodeTarget ? (
-          <>
-            <ContextMenuItem onClick={onDuplicate}>
-              <CopyPlus aria-hidden="true" />
-              Duplicate selection
-              <ContextMenuShortcut>⌘/Ctrl D</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onClick={onDelete} variant="destructive">
-              <Trash2 aria-hidden="true" />
-              Delete selection
-              <ContextMenuShortcut>⌫</ContextMenuShortcut>
-            </ContextMenuItem>
-          </>
-        ) : (
-          <ContextMenuItem onClick={onAddNode}>
-            <Plus aria-hidden="true" />
-            Add node here
-            <ContextMenuShortcut>N</ContextMenuShortcut>
-          </ContextMenuItem>
-        )}
+        <ContextMenuItem onClick={onDuplicate}>
+          <CopyPlus aria-hidden="true" />
+          Duplicate selection
+          <ContextMenuShortcut>⌘/Ctrl D</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem onClick={onDelete} variant="destructive">
+          <Trash2 aria-hidden="true" />
+          Delete selection
+          <ContextMenuShortcut>⌫</ContextMenuShortcut>
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
