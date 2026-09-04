@@ -11,6 +11,7 @@ import type {
   ExtractorInstanceConfiguration,
   ExtractionProcessNode,
   MaterialRate,
+  MaterialPort,
   PowerGenerationProcessNode,
   ProcessInstanceRequest,
   ProcessNode,
@@ -93,6 +94,30 @@ function aggregateMaterialRates(materials: readonly MaterialRate[]) {
 
 function zeroPowerRange() {
   return { maximumMw: 0, minimumMw: 0 } as const;
+}
+
+function materialPort(
+  direction: "input" | "output",
+  itemId: string,
+): MaterialPort {
+  const descriptor = findDescriptor(itemId);
+  if (!descriptor) invalid(`Descriptor ${itemId} does not exist.`);
+  return {
+    direction,
+    forms: [descriptor.form],
+    id: `${direction}:${itemId}`,
+    itemId,
+  };
+}
+
+function materialPortsFor(
+  inputItemIds: readonly string[],
+  outputItemIds: readonly string[],
+) {
+  return [
+    ...inputItemIds.map((itemId) => materialPort("input", itemId)),
+    ...outputItemIds.map((itemId) => materialPort("output", itemId)),
+  ];
 }
 
 function createRecipeNode(
@@ -188,6 +213,7 @@ function createRecipeNode(
       processKind: "recipe",
     },
     kind: "process",
+    ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
     profile: {
       inputs,
       outputs,
@@ -267,6 +293,7 @@ function createExtractionNode(
       processKind: "extraction",
     },
     kind: "process",
+    ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
     profile: {
       inputs: [],
       outputs: [
@@ -341,6 +368,7 @@ function createPowerGenerationNode(
         processKind: "power-generation",
       },
       kind: "process",
+      ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
       profile: {
         inputs: [],
         outputs: [],
@@ -427,6 +455,7 @@ function createPowerGenerationNode(
       processKind: "power-generation",
     },
     kind: "process",
+    ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
     profile: {
       inputs,
       outputs,

@@ -238,6 +238,13 @@ export type MaterialRate = Readonly<{
   ratePerMinute: number;
 }>;
 
+export type MaterialPort = Readonly<{
+  direction: "bidirectional" | "input" | "output";
+  forms: readonly Descriptor["form"][];
+  id: string;
+  itemId?: string;
+}>;
+
 export type PowerRange = Readonly<{
   maximumMw: number;
   minimumMw: number;
@@ -257,18 +264,21 @@ export type NodeProfile = Readonly<{
 export type RecipeProcessNode = Readonly<{
   configuration: RecipeProcessNodeConfiguration;
   kind: "process";
+  ports: readonly MaterialPort[];
   profile: NodeProfile;
 }>;
 
 export type ExtractionProcessNode = Readonly<{
   configuration: ExtractionProcessNodeConfiguration;
   kind: "process";
+  ports: readonly MaterialPort[];
   profile: NodeProfile;
 }>;
 
 export type PowerGenerationProcessNode = Readonly<{
   configuration: PowerGenerationNodeConfiguration;
   kind: "process";
+  ports: readonly MaterialPort[];
   profile: NodeProfile;
 }>;
 

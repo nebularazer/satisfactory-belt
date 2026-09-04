@@ -32,6 +32,7 @@ export type {
   Buildable,
   BuildableCategory,
   Descriptor,
+  MaterialPort,
   MaterialRate,
   NodeProfile,
   PowerProfile,

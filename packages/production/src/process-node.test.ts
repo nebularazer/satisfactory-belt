@@ -66,6 +66,20 @@ describe("Process Nodes", () => {
         processKind: "recipe",
       },
       kind: "process",
+      ports: [
+        {
+          direction: "input",
+          forms: ["solid"],
+          id: "input:Desc_IronIngot_C",
+          itemId: "Desc_IronIngot_C",
+        },
+        {
+          direction: "output",
+          forms: ["solid"],
+          id: "output:Desc_IronPlate_C",
+          itemId: "Desc_IronPlate_C",
+        },
+      ],
       profile: {
         inputs: [{ itemId: "Desc_IronIngot_C", ratePerMinute: 30 }],
         outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 20 }],
