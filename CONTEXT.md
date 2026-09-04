@@ -31,6 +31,11 @@ A Buildable that produces, extracts, consumes, or converts factory resources or
 power.
 _Avoid_: Producer
 
+**Power Generator**:
+A Production Machine that converts fuel or a geothermal resource into power;
+its power is represented by a Power Profile rather than a material output.
+_Avoid_: Power producer, generator Recipe
+
 **Clock Speed**:
 The configured operating rate of a Production Machine relative to its nominal
 rate, affecting its material rates and Power Profile.
