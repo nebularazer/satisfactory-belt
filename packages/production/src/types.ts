@@ -269,7 +269,6 @@ export type RecipeProcessNodeConfiguration = Readonly<{
   instances: readonly MachineInstanceConfiguration[];
   kind: "process";
   processId: string;
-  processKind: "recipe";
 }>;
 
 export type ExtractionProcessNodeConfiguration = Readonly<{
@@ -278,27 +277,22 @@ export type ExtractionProcessNodeConfiguration = Readonly<{
   instances: readonly ExtractorInstanceConfiguration[];
   kind: "process";
   processId: string;
-  processKind: "extraction";
 }>;
 
 export type FuelPowerGenerationNodeConfiguration = Readonly<{
   buildableId: string;
-  generationKind: "fuel";
   id: string;
   instances: readonly FuelGeneratorInstanceConfiguration[];
   kind: "process";
   processId: string;
-  processKind: "power-generation";
 }>;
 
 export type GeothermalPowerGenerationNodeConfiguration = Readonly<{
   buildableId: string;
-  generationKind: "geothermal";
   id: string;
   instances: readonly GeothermalGeneratorInstanceConfiguration[];
   kind: "process";
   processId: string;
-  processKind: "power-generation";
 }>;
 
 export type PowerGenerationNodeConfiguration =
@@ -312,7 +306,6 @@ export type ConsumptionProcessNodeConfiguration = Readonly<{
   itemId?: string;
   kind: "process";
   processId: string;
-  processKind: "consumption";
 }>;
 
 export type ResourceWellProcessNodeConfiguration = Readonly<{
@@ -321,7 +314,6 @@ export type ResourceWellProcessNodeConfiguration = Readonly<{
   instances: readonly ResourceWellInstanceConfiguration[];
   kind: "process";
   processId: string;
-  processKind: "resource-well";
 }>;
 
 export type ProcessNodeConfiguration =
@@ -481,6 +473,7 @@ export type RecipeProcessNode = Readonly<{
   configuration: RecipeProcessNodeConfiguration;
   kind: "process";
   ports: readonly MaterialPort[];
+  process: RecipeProductionProcess;
   profile: NodeProfile;
 }>;
 
@@ -488,6 +481,7 @@ export type ExtractionProcessNode = Readonly<{
   configuration: ExtractionProcessNodeConfiguration;
   kind: "process";
   ports: readonly MaterialPort[];
+  process: ExtractionProductionProcess;
   profile: NodeProfile;
 }>;
 
@@ -495,6 +489,7 @@ export type PowerGenerationProcessNode = Readonly<{
   configuration: PowerGenerationNodeConfiguration;
   kind: "process";
   ports: readonly MaterialPort[];
+  process: PowerGenerationProductionProcess;
   profile: NodeProfile;
 }>;
 
@@ -502,6 +497,7 @@ export type ConsumptionProcessNode = Readonly<{
   configuration: ConsumptionProcessNodeConfiguration;
   kind: "process";
   ports: readonly MaterialPort[];
+  process: ConsumptionProductionProcess;
   profile: NodeProfile;
 }>;
 
@@ -509,6 +505,7 @@ export type ResourceWellProcessNode = Readonly<{
   configuration: ResourceWellProcessNodeConfiguration;
   kind: "process";
   ports: readonly MaterialPort[];
+  process: ResourceWellProductionProcess;
   profile: NodeProfile;
 }>;
 

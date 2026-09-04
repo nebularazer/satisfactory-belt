@@ -28,7 +28,6 @@ describe("canvas editor", () => {
         buildableId: "Build_ConstructorMk1_C",
         kind: "process",
         processId: "Recipe_IronPlate_C",
-        processKind: "recipe",
       },
       label: "Iron Plate",
     });
@@ -288,7 +287,7 @@ describe("canvas editor", () => {
             width: 50,
           },
         ],
-        version: 2,
+        version: 3,
       },
     });
 
@@ -314,7 +313,7 @@ describe("canvas editor", () => {
     expect(editor.getState()).toMatchObject({
       canRedo: false,
       canUndo: false,
-      document: { nodes: [], version: 2 },
+      document: { nodes: [], version: 3 },
       moveDelta: null,
       selectedIds: [],
     });

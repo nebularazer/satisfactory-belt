@@ -63,7 +63,7 @@ describe("Process Nodes", () => {
         id: "iron-plates",
         processId: "Recipe_IronPlate_C",
       }),
-    ).toEqual({
+    ).toMatchObject({
       configuration: {
         buildableId: "Build_ConstructorMk1_C",
         id: "iron-plates",
@@ -76,7 +76,6 @@ describe("Process Nodes", () => {
         ],
         kind: "process",
         processId: "Recipe_IronPlate_C",
-        processKind: "recipe",
       },
       kind: "process",
       ports: [
@@ -330,7 +329,6 @@ describe("Process Nodes", () => {
           ],
         },
       ],
-      processKind: "resource-well",
     });
     expect(calculatedMaterials(node).outputs).toEqual([
       { itemId: "Desc_LiquidOil_C", ratePerMinute: 210 },

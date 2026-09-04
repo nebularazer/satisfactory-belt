@@ -8,18 +8,19 @@ import {
 
 describe("Nodes", () => {
   it("creates every Node family through one interface", () => {
-    expect(
-      createNode({
-        buildableId: "Build_ConstructorMk1_C",
-        id: "iron-plates",
-        kind: "process",
-        processId: "Recipe_IronPlate_C",
-      }).configuration,
-    ).toMatchObject({
+    const processNode = createNode({
+      buildableId: "Build_ConstructorMk1_C",
       id: "iron-plates",
       kind: "process",
-      processKind: "recipe",
+      processId: "Recipe_IronPlate_C",
     });
+    expect(processNode.configuration).toMatchObject({
+      id: "iron-plates",
+      kind: "process",
+    });
+    expect(processNode.kind === "process" && processNode.process.kind).toBe(
+      "recipe",
+    );
 
     expect(
       createNode({
@@ -42,7 +43,6 @@ describe("Nodes", () => {
         instances: [{ id: "constructor-1" }],
         kind: "process",
         processId: "Recipe_IronPlate_C",
-        processKind: "recipe",
       }),
     ).toEqual({
       buildableId: "Build_ConstructorMk1_C",
@@ -56,11 +56,10 @@ describe("Nodes", () => {
       ],
       kind: "process",
       processId: "Recipe_IronPlate_C",
-      processKind: "recipe",
     });
   });
 
-  it("rejects structurally invalid and inconsistent persisted configuration", () => {
+  it("rejects structurally invalid persisted configuration", () => {
     expect(() =>
       parseNodeConfiguration({
         buildableId: "Build_ConstructorMk1_C",
@@ -68,7 +67,6 @@ describe("Nodes", () => {
         instances: [],
         kind: "process",
         processId: "Recipe_IronPlate_C",
-        processKind: "extraction",
       }),
     ).toThrow(NodeConfigurationError);
 

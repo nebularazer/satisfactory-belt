@@ -216,10 +216,10 @@ function createRecipeNode(
       instances: configurations,
       kind: "process",
       processId: process.id,
-      processKind: "recipe",
     },
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
+    process,
     profile: {
       materials: { inputs, kind: "calculated", outputs },
       power: {
@@ -283,7 +283,6 @@ function createConsumptionNode(
       ...(descriptor ? { itemId: descriptor.id } : {}),
       kind: "process",
       processId: process.id,
-      processKind: "consumption",
     },
     kind: "process",
     ports: [
@@ -297,6 +296,7 @@ function createConsumptionNode(
           : "pipeline",
       },
     ],
+    process,
     profile: {
       materials: { kind: "connection-dependent" },
       power: {
@@ -375,10 +375,10 @@ function createExtractionNode(
       instances: configurations,
       kind: "process",
       processId: process.id,
-      processKind: "extraction",
     },
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
+    process,
     profile: {
       materials: {
         inputs: [],
@@ -449,15 +449,14 @@ function createPowerGenerationNode(
     return {
       configuration: {
         buildableId: generator.id,
-        generationKind: "geothermal",
         id: request.id,
         instances: configurations,
         kind: "process",
         processId: process.id,
-        processKind: "power-generation",
       },
       kind: "process",
       ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
+      process,
       profile: {
         materials: { inputs: [], kind: "calculated", outputs: [] },
         power: {
@@ -536,15 +535,14 @@ function createPowerGenerationNode(
   return {
     configuration: {
       buildableId: generator.id,
-      generationKind: "fuel",
       id: request.id,
       instances: configurations,
       kind: "process",
       processId: process.id,
-      processKind: "power-generation",
     },
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
+    process,
     profile: {
       materials: { inputs, kind: "calculated", outputs },
       power: {
@@ -633,10 +631,10 @@ function createResourceWellNode(
       instances: configurations,
       kind: "process",
       processId: process.id,
-      processKind: "resource-well",
     },
     kind: "process",
     ports: materialPortsFor(process.inputItemIds, process.outputItemIds),
+    process,
     profile: {
       materials: {
         inputs: [],

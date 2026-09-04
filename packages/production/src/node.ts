@@ -158,21 +158,6 @@ export function createNode(request: NodeRequest): Node {
 export function parseNodeConfiguration(value: unknown): NodeConfiguration {
   try {
     const node = createNode(parseRequest(value));
-    if (
-      node.configuration.kind === "process" &&
-      isRecord(value) &&
-      value.processKind !== node.configuration.processKind
-    ) {
-      invalid("processKind does not match the selected Production Process.");
-    }
-    if (
-      node.configuration.kind === "process" &&
-      node.configuration.processKind === "power-generation" &&
-      isRecord(value) &&
-      value.generationKind !== node.configuration.generationKind
-    ) {
-      invalid("generationKind does not match the selected Power Generator.");
-    }
     return node.configuration;
   } catch (error) {
     if (error instanceof NodeConfigurationError) throw error;

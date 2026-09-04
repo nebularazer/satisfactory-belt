@@ -1,6 +1,6 @@
 import type { NodeConfiguration } from "@satisfactory-belt/production";
 
-export const CANVAS_DOCUMENT_VERSION = 2;
+export const CANVAS_DOCUMENT_VERSION = 3;
 
 export type CanvasNode = Readonly<{
   configuration: NodeConfiguration;

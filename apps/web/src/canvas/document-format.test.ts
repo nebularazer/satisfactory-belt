@@ -21,7 +21,6 @@ const document = {
         ],
         kind: "process" as const,
         processId: "Recipe_IronPlate_C",
-        processKind: "recipe" as const,
       },
       height: 96,
       label: "Node 1",
@@ -30,7 +29,7 @@ const document = {
       y: 32,
     },
   ],
-  version: 2 as const,
+  version: 3 as const,
 };
 
 describe("canvas document format", () => {
@@ -41,8 +40,8 @@ describe("canvas document format", () => {
   });
 
   it("rejects unknown versions without attempting migration", () => {
-    expect(() => validateCanvasDocument({ ...document, version: 3 })).toThrow(
-      "Unsupported document version: 3.",
+    expect(() => validateCanvasDocument({ ...document, version: 4 })).toThrow(
+      "Unsupported document version: 4.",
     );
     expect(() => validateCanvasDocument({ ...document, version: 1 })).toThrow(
       "Unsupported document version: 1.",
@@ -50,19 +49,19 @@ describe("canvas document format", () => {
   });
 
   it("rejects malformed and duplicate nodes", () => {
-    expect(() => validateCanvasDocument({ nodes: [{}], version: 2 })).toThrow(
+    expect(() => validateCanvasDocument({ nodes: [{}], version: 3 })).toThrow(
       "invalid label",
     );
     expect(() =>
       validateCanvasDocument({
         nodes: [{ ...document.nodes[0], configuration: null }],
-        version: 2,
+        version: 3,
       }),
     ).toThrow("Node configuration must be an object");
     expect(() =>
       validateCanvasDocument({
         nodes: [document.nodes[0], document.nodes[0]],
-        version: 2,
+        version: 3,
       }),
     ).toThrow("Node ids must be unique.");
   });
