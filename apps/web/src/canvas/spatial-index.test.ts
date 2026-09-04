@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import type { CanvasDocument, CanvasNode } from "./document";
+import {
+  CANVAS_DOCUMENT_VERSION,
+  canvasNodeId,
+  type CanvasDocument,
+  type CanvasNode,
+} from "./document";
 import { createCanvasSpatialIndex } from "./spatial-index";
+import { testCanvasNode } from "./test-fixtures";
 
-const node = (id: string, x: number, y: number): CanvasNode => ({
-  height: 100,
-  id,
-  label: id,
-  width: 100,
-  x,
-  y,
-});
+const node = (id: string, x: number, y: number): CanvasNode =>
+  testCanvasNode(id, x, y, { height: 100, width: 100 });
 
 const document = (nodes: readonly CanvasNode[]): CanvasDocument => ({
   nodes,
-  version: 1,
+  version: CANVAS_DOCUMENT_VERSION,
 });
 
 describe("canvas spatial index", () => {
@@ -24,7 +24,7 @@ describe("canvas spatial index", () => {
     const index = createCanvasSpatialIndex(document([first, second]));
 
     expect(
-      index.query({ height: 600, width: 600, x: 0, y: 0 }).map(({ id }) => id),
+      index.query({ height: 600, width: 600, x: 0, y: 0 }).map(canvasNodeId),
     ).toEqual(["first", "second"]);
   });
 
@@ -33,7 +33,7 @@ describe("canvas spatial index", () => {
     const upper = node("upper", 0, 0);
     const index = createCanvasSpatialIndex(document([lower, upper]));
 
-    expect(index.hitTest({ x: 50, y: 50 })?.id).toBe("upper");
+    expect(canvasNodeId(index.hitTest({ x: 50, y: 50 })!)).toBe("upper");
   });
 
   it("updates changed nodes without rebuilding unchanged buckets", () => {
@@ -46,7 +46,7 @@ describe("canvas spatial index", () => {
     index.apply(nextDocument, [moving], [moved]);
 
     expect(index.hitTest({ x: 50, y: 50 })).toBeUndefined();
-    expect(index.hitTest({ x: 750, y: 50 })?.id).toBe("moving");
+    expect(canvasNodeId(index.hitTest({ x: 750, y: 50 })!)).toBe("moving");
     expect(index.get("unchanged")).toBe(unchanged);
   });
 });

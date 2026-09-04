@@ -13,26 +13,37 @@ import {
   type Range,
 } from "@tanstack/react-virtual";
 import {
+  createNode,
+  findBuffer,
   findBuildable,
   findDescriptor,
+  findPowerGenerator,
   findProductionMachine,
-  findRecipe,
   findResourceExtractor,
+  findResourceWellPressurizer,
+  findRouter,
+  findTransport,
+  productionProcessesForBuildable,
   recipeCountForMachine,
   recipesProducing,
-  resourcesForExtractor,
-  searchExtractorResources,
+  searchBuffers,
   searchExtractors,
   searchLogistics,
   searchMachines,
+  searchPowerGenerators,
   searchRecipes,
+  searchResourceWellPressurizers,
   searchSpecialBuildables,
+  searchTransports,
   type Buildable,
   type Descriptor,
   type ProductionMachine,
   type ProductionMaterial,
   type Recipe,
   type ResourceExtractor,
+  type ResourceWellPressurizer,
+  type NodeRequest,
+  type NodeTemplate,
 } from "@satisfactory-belt/production";
 import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
 
@@ -42,9 +53,8 @@ import { buildableImageUrl, descriptorImageUrl } from "@/game/catalog-images";
 import { cn } from "@/lib/utils";
 
 export type NodePickerSelection = Readonly<{
-  buildableId: string;
   label: string;
-  recipeId?: string;
+  node: NodeTemplate;
 }>;
 
 type NodePickerProps = {
@@ -57,6 +67,7 @@ type PickerScope =
   | { type: "root" }
   | { machineId: string; type: "machine" }
   | { extractorId: string; type: "extractor" }
+  | { buildableId: string; type: "configuration" }
   | { itemId: string; type: "routes" };
 
 type PickerHistoryEntry = {
@@ -64,6 +75,8 @@ type PickerHistoryEntry = {
   scope: PickerScope;
   scrollTop: number;
 };
+
+type ResourceSource = ResourceExtractor | ResourceWellPressurizer;
 
 type RecentPickerOption = {
   buildable: Buildable;
@@ -78,17 +91,32 @@ type BuildablePickerOption = {
   type: "buildable";
 };
 
+type ConfigurableBuildablePickerOption = {
+  buildable: Buildable;
+  key: string;
+  type: "configurable-buildable";
+};
+
+type ConfigurationPickerOption = {
+  buildable: Buildable;
+  key: string;
+  selection: NodePickerSelection;
+  type: "configuration";
+};
+
 type PickerOption =
   | RecentPickerOption
   | { key: string; machine: ProductionMachine; type: "machine" }
-  | { extractor: ResourceExtractor; key: string; type: "extractor" }
+  | { extractor: ResourceSource; key: string; type: "extractor" }
   | {
-      extractor: ResourceExtractor;
+      extractor: ResourceSource;
       key: string;
       resource: Descriptor;
       type: "extractor-resource";
     }
   | BuildablePickerOption
+  | ConfigurableBuildablePickerOption
+  | ConfigurationPickerOption
   | {
       key: string;
       machine: ProductionMachine;
@@ -129,11 +157,16 @@ const LOGISTICS_QUICK_ADD_ORDER = new Map(
 function isNodePickerSelection(value: unknown): value is NodePickerSelection {
   if (!value || typeof value !== "object") return false;
   const selection = value as Record<string, unknown>;
-  return (
-    typeof selection.buildableId === "string" &&
-    typeof selection.label === "string" &&
-    (selection.recipeId === undefined || typeof selection.recipeId === "string")
-  );
+  if (typeof selection.label !== "string" || !selection.node) return false;
+  try {
+    createNode({
+      ...(selection.node as NodeTemplate),
+      id: "recent-selection-validation",
+    } as NodeRequest);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readRecentSelections() {
@@ -152,7 +185,7 @@ function readRecentSelections() {
 }
 
 function selectionKey(selection: NodePickerSelection) {
-  return `${selection.buildableId}:${selection.recipeId ?? ""}:${selection.label}`;
+  return `${JSON.stringify(selection.node)}:${selection.label}`;
 }
 
 function withRecentSelection(
@@ -261,12 +294,19 @@ function buildableMatchReason(
   return undefined;
 }
 
-function extractorMatchReason(extractor: ResourceExtractor, query: string) {
+function resourcesForSource(source: ResourceSource) {
+  return source.resourceItemIds.flatMap((itemId) => {
+    const descriptor = findDescriptor(itemId);
+    return descriptor ? [descriptor] : [];
+  });
+}
+
+function extractorMatchReason(extractor: ResourceSource, query: string) {
   const missingTerms = missingSearchTerms(extractor.name, query);
   if (missingTerms.length === 0) return undefined;
 
-  const matchingResource = resourcesForExtractor(extractor.id).find(
-    (resource) => includesSearchTerms(resource.name, missingTerms),
+  const matchingResource = resourcesForSource(extractor).find((resource) =>
+    includesSearchTerms(resource.name, missingTerms),
   );
   if (matchingResource) return `Matches resource: ${matchingResource.name}`;
 
@@ -285,14 +325,42 @@ function extractorMatchReason(extractor: ResourceExtractor, query: string) {
 }
 
 function standaloneBuildableMatchReason(buildable: Buildable, query: string) {
-  if (buildable.category === "logistics") {
-    return buildableMatchReason(buildable, query, "Logistics", [
-      "logistics",
-      "conveyor",
-      "pipeline",
-    ]);
+  const categories: Readonly<
+    Record<Buildable["category"], readonly [string, readonly string[]]>
+  > = {
+    architecture: ["Architecture", ["architecture"]],
+    logistics: ["Logistics", ["logistics", "conveyor", "pipeline"]],
+    organization: ["Organization", ["organization", "storage", "buffer"]],
+    power: ["Power", ["power", "generation", "generator"]],
+    production: ["Production", ["production"]],
+    special: ["Special", ["special", "sink"]],
+    transport: ["Transport", ["transport", "station", "platform", "port"]],
+  };
+  const [label, keywords] = categories[buildable.category];
+  return buildableMatchReason(buildable, query, label, keywords);
+}
+
+function configurationsForBuildable(
+  buildable: Buildable,
+): readonly NodePickerSelection[] {
+  const generator = findPowerGenerator(buildable.id);
+  if (generator) {
+    return productionProcessesForBuildable(generator.id).map((process) => ({
+      label: process.name,
+      node: {
+        buildableId: generator.id,
+        kind: "process" as const,
+        processId: process.id,
+      },
+    }));
   }
-  return buildableMatchReason(buildable, query, "Special", ["special", "sink"]);
+
+  const transport = findTransport(buildable.id);
+  if (!transport) return [];
+  return (["load", "unload"] as const).map((mode) => ({
+    label: `${transport.name} (${mode === "load" ? "Load" : "Unload"})`,
+    node: { buildableId: transport.id, kind: "transport", mode },
+  }));
 }
 
 function recipeMatchReason(
@@ -622,16 +690,22 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       : undefined;
   const selectedExtractor =
     scope.type === "extractor"
-      ? findResourceExtractor(scope.extractorId)
+      ? (findResourceExtractor(scope.extractorId) ??
+        findResourceWellPressurizer(scope.extractorId))
       : undefined;
   const routeItem =
     scope.type === "routes" ? findDescriptor(scope.itemId) : undefined;
+  const selectedConfigurableBuildable =
+    scope.type === "configuration"
+      ? findBuildable(scope.buildableId)
+      : undefined;
   const rootScope = scope.type === "root";
   const rootQueryActive = rootScope && query.trim().length > 0;
   const matchingRecipes = useMemo(() => {
     if (
       !open ||
       scope.type === "extractor" ||
+      scope.type === "configuration" ||
       (rootScope && !rootQueryActive)
     ) {
       return [];
@@ -654,11 +728,31 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     [open, query, rootScope],
   );
   const matchingExtractors = useMemo(
-    () => (open && rootScope ? searchExtractors(query) : []),
+    () =>
+      open && rootScope
+        ? [
+            ...searchExtractors(query).filter(
+              (extractor) => extractor.resourceWell !== true,
+            ),
+            ...searchResourceWellPressurizers(query),
+          ]
+        : [],
     [open, query, rootScope],
   );
   const matchingLogistics = useMemo(
     () => (open && rootScope ? searchLogistics(query) : []),
+    [open, query, rootScope],
+  );
+  const matchingPowerGenerators = useMemo(
+    () => (open && rootScope ? searchPowerGenerators(query) : []),
+    [open, query, rootScope],
+  );
+  const matchingBuffers = useMemo(
+    () => (open && rootScope ? searchBuffers(query) : []),
+    [open, query, rootScope],
+  );
+  const matchingTransports = useMemo(
+    () => (open && rootScope ? searchTransports(query) : []),
     [open, query, rootScope],
   );
   const matchingSpecial = useMemo(
@@ -668,7 +762,12 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const matchingExtractorResources = useMemo(
     () =>
       open && selectedExtractor
-        ? searchExtractorResources(selectedExtractor.id, query)
+        ? resourcesForSource(selectedExtractor).filter((resource) =>
+            includesSearchTerms(
+              `${resource.name} ${resource.id} ${selectedExtractor.name}`,
+              normalizedSearchTerms(query),
+            ),
+          )
         : [],
     [open, query, selectedExtractor],
   );
@@ -676,13 +775,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     () =>
       rootScope && !rootQueryActive
         ? recentSelections.flatMap((selection) => {
-            const buildable = findBuildable(selection.buildableId);
-            if (
-              !buildable ||
-              (selection.recipeId && !findRecipe(selection.recipeId))
-            ) {
-              return [];
-            }
+            const buildable = findBuildable(selection.node.buildableId);
+            if (!buildable) return [];
             return [
               {
                 buildable,
@@ -695,6 +789,13 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
         : [],
     [recentSelections, rootQueryActive, rootScope],
   );
+  const matchingConfigurations = useMemo(() => {
+    if (!open || !selectedConfigurableBuildable) return [];
+    const terms = normalizedSearchTerms(query);
+    return configurationsForBuildable(selectedConfigurableBuildable).filter(
+      (selection) => includesSearchTerms(selection.label, terms),
+    );
+  }, [open, query, selectedConfigurableBuildable]);
 
   const rows = useMemo(() => {
     const nextRows: PickerRow[] = [];
@@ -755,6 +856,17 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       );
     }
 
+    if (matchingPowerGenerators.length > 0) {
+      addHeading("power", "Power");
+      matchingPowerGenerators.forEach((buildable) =>
+        nextRows.push({
+          buildable,
+          key: `configurable-buildable:${buildable.id}`,
+          type: "configurable-buildable",
+        }),
+      );
+    }
+
     const addBuildables = (
       key: string,
       label: string,
@@ -774,7 +886,30 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     if (rootQueryActive) {
       addBuildables("logistics", "Logistics", matchingLogistics);
     }
+    addBuildables("organization", "Organization", matchingBuffers);
+    if (matchingTransports.length > 0) {
+      addHeading("transport", "Transport");
+      matchingTransports.forEach((buildable) =>
+        nextRows.push({
+          buildable,
+          key: `configurable-buildable:${buildable.id}`,
+          type: "configurable-buildable",
+        }),
+      );
+    }
     addBuildables("special", "Special", matchingSpecial);
+
+    if (selectedConfigurableBuildable && matchingConfigurations.length > 0) {
+      addHeading("configurations", "Configurations");
+      matchingConfigurations.forEach((selection) =>
+        nextRows.push({
+          buildable: selectedConfigurableBuildable,
+          key: `configuration:${selectionKey(selection)}`,
+          selection,
+          type: "configuration",
+        }),
+      );
+    }
 
     if (selectedExtractor && matchingExtractorResources.length > 0) {
       addHeading("extractor-recipes", "Recipes");
@@ -805,13 +940,18 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
 
     return nextRows;
   }, [
+    matchingBuffers,
+    matchingConfigurations,
     matchingExtractors,
     matchingLogistics,
     matchingMachines,
+    matchingPowerGenerators,
     matchingRecipes,
     matchingSpecial,
+    matchingTransports,
     matchingExtractorResources,
     recentRows,
+    selectedConfigurableBuildable,
     selectedExtractor,
     selectedMachine,
   ]);
@@ -919,21 +1059,61 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
 
   const selectRecipe = (recipe: Recipe, machineId: string) => {
     submitSelection({
-      buildableId: machineId,
       label: recipe.name,
-      recipeId: recipe.id,
+      node: {
+        buildableId: machineId,
+        kind: "process",
+        processId: recipe.id,
+      },
     });
   };
 
   const selectBuildable = (buildable: Buildable) => {
-    submitSelection({ buildableId: buildable.id, label: buildable.name });
+    if (findRouter(buildable.id)) {
+      submitSelection({
+        label: buildable.name,
+        node: { buildableId: buildable.id, kind: "router" },
+      });
+      return;
+    }
+    if (findBuffer(buildable.id)) {
+      submitSelection({
+        label: buildable.name,
+        node: { buildableId: buildable.id, kind: "buffer" },
+      });
+      return;
+    }
+    const process = productionProcessesForBuildable(buildable.id)[0];
+    if (!process) return;
+    submitSelection({
+      label: buildable.name,
+      node: {
+        buildableId: buildable.id,
+        kind: "process",
+        processId: process.id,
+      },
+    });
   };
 
   const selectExtractorResource = (
-    extractor: ResourceExtractor,
+    extractor: ResourceSource,
     resource: Descriptor,
   ) => {
-    submitSelection({ buildableId: extractor.id, label: resource.name });
+    const process = productionProcessesForBuildable(extractor.id).find(
+      (candidate) =>
+        (candidate.kind === "extraction" ||
+          candidate.kind === "resource-well") &&
+        candidate.outputItemIds.includes(resource.id),
+    );
+    if (!process) return;
+    submitSelection({
+      label: resource.name,
+      node: {
+        buildableId: extractor.id,
+        kind: "process",
+        processId: process.id,
+      },
+    });
   };
 
   const enterScope = (nextScope: PickerScope) => {
@@ -963,7 +1143,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     } else if (option.type === "machine") {
       enterScope({ machineId: option.machine.id, type: "machine" });
     } else if (option.type === "extractor") {
-      const resources = resourcesForExtractor(option.extractor.id);
+      const resources = resourcesForSource(option.extractor);
       if (resources.length > 1) {
         enterScope({ extractorId: option.extractor.id, type: "extractor" });
       } else if (resources[0]) {
@@ -973,6 +1153,13 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       }
     } else if (option.type === "extractor-resource") {
       selectExtractorResource(option.extractor, option.resource);
+    } else if (option.type === "configurable-buildable") {
+      enterScope({
+        buildableId: option.buildable.id,
+        type: "configuration",
+      });
+    } else if (option.type === "configuration") {
+      submitSelection(option.selection);
     } else if (option.type === "buildable") {
       selectBuildable(option.buildable);
     } else if (option.type === "recipe") {
@@ -1012,16 +1199,20 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     ? selectedMachine.name
     : selectedExtractor
       ? selectedExtractor.name
-      : routeItem
-        ? `${routeItem.name} Recipes`
-        : undefined;
+      : selectedConfigurableBuildable
+        ? selectedConfigurableBuildable.name
+        : routeItem
+          ? `${routeItem.name} Recipes`
+          : undefined;
   const headingImage = selectedMachine
     ? buildableImageUrl(selectedMachine.id)
     : selectedExtractor
       ? buildableImageUrl(selectedExtractor.id)
-      : routeItem
-        ? descriptorImageUrl(routeItem.id)
-        : undefined;
+      : selectedConfigurableBuildable
+        ? buildableImageUrl(selectedConfigurableBuildable.id)
+        : routeItem
+          ? descriptorImageUrl(routeItem.id)
+          : undefined;
 
   return (
     <CommandDialog
@@ -1055,7 +1246,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             <div className="min-w-0">
               <div className="truncate text-base font-medium">{heading}</div>
               <div className="text-xs text-muted-foreground">
-                Select a recipe
+                {selectedConfigurableBuildable
+                  ? "Select a configuration"
+                  : "Select a recipe"}
               </div>
             </div>
           </div>
@@ -1083,9 +1276,11 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                   ? `Search ${selectedMachine.name} recipes...`
                   : selectedExtractor
                     ? `Search ${selectedExtractor.name} recipes...`
-                    : routeItem
-                      ? `Search ${routeItem.name} recipes...`
-                      : "Search buildings or recipes..."
+                    : selectedConfigurableBuildable
+                      ? `Search ${selectedConfigurableBuildable.name} configurations...`
+                      : routeItem
+                        ? `Search ${routeItem.name} recipes...`
+                        : "Search buildings or recipes..."
               }
               role="combobox"
               value={query}
@@ -1282,7 +1477,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                           />
                         </div>
                       </div>
-                    ) : row.type === "buildable" ? (
+                    ) : row.type === "buildable" ||
+                      row.type === "configurable-buildable" ? (
                       <div
                         aria-posinset={position}
                         aria-selected={active}
@@ -1315,6 +1511,33 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                               row.buildable,
                               query,
                             )}
+                          />
+                        </div>
+                      </div>
+                    ) : row.type === "configuration" ? (
+                      <div
+                        aria-posinset={position}
+                        aria-selected={active}
+                        aria-setsize={selectableEntries.length}
+                        className="flex min-h-11 cursor-default items-center gap-3 rounded-md px-2.5 py-1.5 text-xs/relaxed data-[active=true]:bg-muted"
+                        data-active={active}
+                        id={domId}
+                        onClick={() => selectOption(row)}
+                        onMouseEnter={() => setActiveKey(row.key)}
+                        role="option"
+                      >
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className="size-14 object-contain"
+                          decoding="async"
+                          loading="lazy"
+                          src={buildableImageUrl(row.buildable.id)}
+                        />
+                        <div className="font-medium">
+                          <HighlightedText
+                            query={query}
+                            text={row.selection.label}
                           />
                         </div>
                       </div>

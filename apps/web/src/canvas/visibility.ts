@@ -1,4 +1,4 @@
-import type { CanvasDocument, CanvasNode } from "./document";
+import { canvasNodeId, type CanvasDocument, type CanvasNode } from "./document";
 import type { Point, Rectangle } from "./geometry";
 import type { Viewport } from "./viewport";
 
@@ -39,7 +39,7 @@ export function visibleCanvasNodes(
     : viewportBounds;
 
   return query(queryBounds).filter((node) => {
-    const moving = movingIds?.has(node.id);
+    const moving = movingIds?.has(canvasNodeId(node));
     const x = node.x + (moving ? (state.moveDelta?.x ?? 0) : 0);
     const y = node.y + (moving ? (state.moveDelta?.y ?? 0) : 0);
 

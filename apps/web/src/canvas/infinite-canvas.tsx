@@ -21,7 +21,7 @@ import {
   type CanvasEditorChange,
   type CanvasEditorState,
 } from "./editor";
-import type { CanvasNode } from "./document";
+import { canvasNodeId, type CanvasNode } from "./document";
 import type { Point, Rectangle } from "./geometry";
 import { attachCanvasInteractions } from "./interactions";
 import {
@@ -173,18 +173,16 @@ function updateNodeVisual(
     display.cardVisualKey = cardVisualKey;
   }
 
-  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}:${node.buildableId ?? ""}`;
+  const buildableId = node.configuration.buildableId;
+  const labelVisualKey = `${dark}:${node.width}:${node.height}:${node.label}:${buildableId}`;
   if (display.labelVisualKey !== labelVisualKey) {
     display.label.text = node.label;
-    display.label.position.set(
-      node.width / 2,
-      node.buildableId ? node.height - 17 : node.height / 2,
-    );
+    display.label.position.set(node.width / 2, node.height - 17);
     display.label.style = {
       align: "center",
       fill: dark ? 0xf4f4f5 : 0x27272a,
       fontFamily: "Inter Variable, Inter, sans-serif",
-      fontSize: node.buildableId ? 12 : 14,
+      fontSize: 12,
       fontWeight: "600",
       wordWrap: true,
       wordWrapWidth: node.width - 16,
@@ -192,9 +190,7 @@ function updateNodeVisual(
     display.labelVisualKey = labelVisualKey;
   }
 
-  const imageVisualKey = node.buildableId
-    ? (buildableImageUrl(node.buildableId) ?? "")
-    : "";
+  const imageVisualKey = buildableImageUrl(buildableId) ?? "";
   if (display.imageVisualKey !== imageVisualKey) {
     const texture = imageVisualKey
       ? Assets.get<Texture>(imageVisualKey)
@@ -261,7 +257,7 @@ function syncDocument(
 ) {
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = new Set(state.selectedIds);
-  const visibleIds = new Set(visibleNodes.map((node) => node.id));
+  const visibleIds = new Set(visibleNodes.map(canvasNodeId));
 
   for (const [id, display] of displays) {
     if (visibleIds.has(id)) continue;
@@ -270,12 +266,13 @@ function syncDocument(
   }
 
   for (const [index, node] of visibleNodes.entries()) {
-    const selected = selectedIds.has(node.id);
-    let display = displays.get(node.id);
+    const id = canvasNodeId(node);
+    const selected = selectedIds.has(id);
+    let display = displays.get(id);
 
     if (!display) {
       display = pool.pop() ?? createNodeDisplay(node);
-      displays.set(node.id, display);
+      displays.set(id, display);
     }
 
     display.baseX = node.x;

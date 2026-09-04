@@ -17,8 +17,12 @@ export function createCanvasLoadFixture(nodeCount: number): CanvasDocument {
 
   return {
     nodes: Array.from({ length: count }, (_, index) => ({
+      configuration: {
+        buildableId: "Build_ConveyorAttachmentSplitter_C",
+        id: `fixture-node-${index + 1}`,
+        kind: "router" as const,
+      },
       height: NODE_HEIGHT,
-      id: `fixture-node-${index + 1}`,
       label: `Node ${index + 1}`,
       width: NODE_WIDTH,
       x: originX + (index % columns) * horizontalStep,

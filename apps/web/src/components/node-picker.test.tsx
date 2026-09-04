@@ -77,8 +77,11 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Reinforced Iron Plate",
-      buildableId: "Build_AssemblerMk1_C",
-      recipeId: "Recipe_IronPlateReinforced_C",
+      node: {
+        buildableId: "Build_AssemblerMk1_C",
+        kind: "process",
+        processId: "Recipe_IronPlateReinforced_C",
+      },
     });
   });
 
@@ -312,8 +315,11 @@ describe("NodePicker", () => {
     );
     expect(onSelect).toHaveBeenCalledWith({
       label: "Steel Screws",
-      buildableId: "Build_ConstructorMk1_C",
-      recipeId: "Recipe_Alternate_Screw_2_C",
+      node: {
+        buildableId: "Build_ConstructorMk1_C",
+        kind: "process",
+        processId: "Recipe_Alternate_Screw_2_C",
+      },
     });
   });
 
@@ -340,8 +346,11 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Iron Plate",
-      buildableId: "Build_ConstructorMk1_C",
-      recipeId: "Recipe_IronPlate_C",
+      node: {
+        buildableId: "Build_ConstructorMk1_C",
+        kind: "process",
+        processId: "Recipe_IronPlate_C",
+      },
     });
   }, 10_000);
 
@@ -455,7 +464,10 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Conveyor Merger",
-      buildableId: "Build_ConveyorAttachmentMerger_C",
+      node: {
+        buildableId: "Build_ConveyorAttachmentMerger_C",
+        kind: "router",
+      },
     });
   });
 
@@ -473,7 +485,10 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Conveyor Splitter",
-      buildableId: "Build_ConveyorAttachmentSplitter_C",
+      node: {
+        buildableId: "Build_ConveyorAttachmentSplitter_C",
+        kind: "router",
+      },
     });
   }, 10_000);
 
@@ -488,9 +503,9 @@ describe("NodePicker", () => {
 
     const cases = [
       ["iron ore", ["Miner Mk.1", "Miner Mk.2", "Miner Mk.3"]],
-      ["water", ["Resource Well Extractor", "Water Extractor"]],
-      ["crude oil", ["Oil Extractor", "Resource Well Extractor"]],
-      ["nitrogen gas", ["Resource Well Extractor"]],
+      ["water", ["Resource Well Pressurizer", "Water Extractor"]],
+      ["crude oil", ["Oil Extractor", "Resource Well Pressurizer"]],
+      ["nitrogen gas", ["Resource Well Pressurizer"]],
     ] as const;
 
     for (const [query, extractorNames] of cases) {
@@ -538,7 +553,11 @@ describe("NodePicker", () => {
     fireEvent.click(screen.getByRole("option", { name: "Iron Ore" }));
     expect(onSelect).toHaveBeenCalledWith({
       label: "Iron Ore",
-      buildableId: "Build_MinerMk1_C",
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
     });
   });
 
@@ -558,7 +577,111 @@ describe("NodePicker", () => {
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "Water",
-      buildableId: "Build_WaterPump_C",
+      node: {
+        buildableId: "Build_WaterPump_C",
+        kind: "process",
+        processId: "extraction:Desc_Water_C",
+      },
+    });
+  });
+
+  it("places buffers directly", () => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "storage container" } },
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Storage Container" }));
+
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Storage Container",
+      node: {
+        buildableId: "Build_StorageContainerMk1_C",
+        kind: "buffer",
+      },
+    });
+  });
+
+  it("selects a Power Generator process", () => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "coal-powered generator" } },
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: "Coal-Powered Generator" }),
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: "Coal-Powered Generator: Coal" }),
+    );
+
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Coal-Powered Generator: Coal",
+      node: {
+        buildableId: "Build_GeneratorCoal_C",
+        kind: "process",
+        processId: "power-generation:Build_GeneratorCoal_C:Desc_Coal_C",
+      },
+    });
+  });
+
+  it("selects a Resource Well process through its Pressurizer", () => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "resource well pressurizer" } },
+    );
+    fireEvent.click(
+      screen.getByRole("option", {
+        name: /^Resource Well Pressurizer.*3 recipes$/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Nitrogen Gas" }));
+
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Nitrogen Gas",
+      node: {
+        buildableId: "Build_FrackingSmasher_C",
+        kind: "process",
+        processId: "resource-well:Desc_NitrogenGas_C",
+      },
+    });
+  });
+
+  it("selects the operating mode for a Transport", () => {
+    const onSelect = vi.fn();
+    render(
+      <NodePicker onOpenChange={() => undefined} onSelect={onSelect} open />,
+    );
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "truck station" } },
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Truck Station" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "Truck Station (Unload)" }),
+    );
+
+    expect(onSelect).toHaveBeenCalledWith({
+      label: "Truck Station (Unload)",
+      node: {
+        buildableId: "Build_TruckStation_C",
+        kind: "transport",
+        mode: "unload",
+      },
     });
   });
 });
