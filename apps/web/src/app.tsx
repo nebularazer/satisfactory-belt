@@ -146,11 +146,6 @@ function CanvasWorkspace({
     initialActiveSave,
   );
   const activeSaveRef = useRef<SavedCanvasDocument | null>(initialActiveSave);
-  const [contextTarget, setContextTarget] = useState<{
-    at: Point;
-    nodeId?: string;
-  } | null>(null);
-
   const selectActiveSave = useCallback((save: SavedCanvasDocument | null) => {
     activeSaveRef.current = save;
     setActiveSave(save);
@@ -267,17 +262,21 @@ function CanvasWorkspace({
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return false;
     const bounds = event.currentTarget.getBoundingClientRect();
     const at = canvas.screenToWorld({
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     });
     const hit = editor.hitTest(at);
-    if (hit && !editor.getState().selectedIds.includes(hit.id)) {
+    if (!hit) {
+      requestNodeAt(at);
+      return false;
+    }
+    if (!editor.getState().selectedIds.includes(hit.id)) {
       editor.dispatch({ type: "selection.node", additive: false, id: hit.id });
     }
-    setContextTarget({ at, nodeId: hit?.id });
+    return true;
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -289,7 +288,6 @@ function CanvasWorkspace({
       const document = parseCanvasDocument(await file.text());
       selectActiveSave(null);
       editor.dispatch({ type: "document.replace", document });
-      setContextTarget(null);
       requestAnimationFrame(() => canvasRef.current?.fitContent());
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
@@ -324,7 +322,6 @@ function CanvasWorkspace({
   const loadDocument = (save: SavedCanvasDocument) => {
     selectActiveSave(save);
     editor.dispatch({ type: "document.replace", document: save.document });
-    setContextTarget(null);
     requestAnimationFrame(() => canvasRef.current?.fitContent());
     if (autosaveEnabled) {
       void storage.saveWorkspace(save.document, save.id).catch(() => {
@@ -336,7 +333,6 @@ function CanvasWorkspace({
   const resetCanvas = () => {
     selectActiveSave(null);
     editor.dispatch({ type: "document.reset" });
-    setContextTarget(null);
     canvasRef.current?.resetView();
     setResetCanvasOpen(false);
     toast.success("Canvas reset.");
@@ -346,10 +342,6 @@ function CanvasWorkspace({
     <main className="relative h-dvh w-dvw overflow-hidden bg-canvas text-foreground">
       <h1 className="sr-only">Satisfactory Belt canvas</h1>
       <CanvasContextMenu
-        hasNodeTarget={contextTarget?.nodeId !== undefined}
-        onAddNode={() => {
-          if (contextTarget) requestNodeAt(contextTarget.at);
-        }}
         onContextMenu={handleContextMenu}
         onDelete={deleteSelection}
         onDuplicate={duplicateSelection}
