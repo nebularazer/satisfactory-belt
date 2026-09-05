@@ -445,6 +445,37 @@ describe("NodePicker", () => {
     ).toEqual(["Conveyor Splitter", "Conveyor Merger"]);
   });
 
+  it("keeps pipeline junction topology out of node creation", () => {
+    localStorage.setItem(
+      "satisfactory-belt-recent-node-selections",
+      JSON.stringify([
+        {
+          label: "Pipeline Junction",
+          node: {
+            buildableId: "Build_PipelineJunction_Cross_C",
+            kind: "router",
+          },
+        },
+      ]),
+    );
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    expect(screen.queryByText("Pipeline Junction")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pipeline T-Junction")).not.toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "pipeline junction" } },
+    );
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+  });
+
   it("navigates quick-add tiles with the keyboard", () => {
     const onSelect = vi.fn();
     render(

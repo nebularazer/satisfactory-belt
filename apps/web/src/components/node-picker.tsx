@@ -143,11 +143,9 @@ const LOGISTICS_QUICK_ADD_ORDER = new Map(
   [
     "Build_ConveyorAttachmentSplitter_C",
     "Build_ConveyorAttachmentMerger_C",
-    "Build_PipelineJunction_Cross_C",
     "Build_ConveyorAttachmentSplitterSmart_C",
     "Build_ConveyorAttachmentMergerPriority_C",
     "Build_ConveyorAttachmentSplitterProgrammable_C",
-    "Build_PipelineJunction_T_C",
   ].map((id, index) => [id, index]),
 );
 
@@ -160,7 +158,13 @@ function isNodePickerSelection(value: unknown): value is NodePickerSelection {
       ...(selection.node as NodeTemplate),
       id: "recent-selection-validation",
     } as NodeRequest);
-    return true;
+    return nodeChoicesForBuildable(
+      (selection.node as NodeTemplate).buildableId,
+    ).some(
+      ({ label, template }) =>
+        selectionKey({ label, node: template }) ===
+        selectionKey(selection as NodePickerSelection),
+    );
   } catch {
     return false;
   }
@@ -723,7 +727,12 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     [open, query, rootScope],
   );
   const matchingLogistics = useMemo(
-    () => (open && rootScope ? searchLogistics(query) : []),
+    () =>
+      open && rootScope
+        ? searchLogistics(query).filter(
+            (buildable) => selectionsForBuildable(buildable).length > 0,
+          )
+        : [],
     [open, query, rootScope],
   );
   const matchingPowerGenerators = useMemo(

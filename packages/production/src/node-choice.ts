@@ -8,6 +8,11 @@ import {
 import { productionProcessesForBuildable } from "./production-process";
 import type { NodeChoice, ProductionProcess } from "./types";
 
+const PIPE_JUNCTION_BUILDABLE_IDS = new Set([
+  "Build_PipelineJunction_Cross_C",
+  "Build_PipelineJunction_T_C",
+]);
+
 function processLabel(process: ProductionProcess) {
   if (process.kind !== "extraction" && process.kind !== "resource-well") {
     return process.name;
@@ -38,7 +43,10 @@ export function nodeChoicesForBuildable(
     }));
   }
 
-  if (findRouter(buildable.id)) {
+  if (
+    findRouter(buildable.id) &&
+    !PIPE_JUNCTION_BUILDABLE_IDS.has(buildable.id)
+  ) {
     return [
       {
         label: buildable.name,

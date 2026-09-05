@@ -33,6 +33,7 @@ import {
   NODE_CARD_FOOTER_HEIGHT,
   NODE_CARD_HEADER_HEIGHT,
   nodeCardLayout,
+  nodeCardPortY,
 } from "./node-card-layout";
 import {
   createPerformanceSampler,
@@ -211,17 +212,6 @@ function portColor(direction: NodeCardPortDirection) {
   return BLUEPRINT_COLORS.bidirectional;
 }
 
-function gridAlignedPortY(index: number, count: number, cardHeight: number) {
-  // Center on the closest grid row. Even sets keep 32 px spacing and bias
-  // upward because exact centering would place every port off-grid.
-  const gridAlignedCenter =
-    Math.round(cardHeight / 2 / SNAP_INTERVAL) * SNAP_INTERVAL;
-  const centeredStart = gridAlignedCenter - ((count - 1) * SNAP_INTERVAL) / 2;
-  const gridAlignedStart =
-    Math.floor(centeredStart / SNAP_INTERVAL) * SNAP_INTERVAL;
-  return gridAlignedStart + index * SNAP_INTERVAL;
-}
-
 const LUCIDE_PATHS = {
   activity:
     "M 22 12 h -2.48 a 2 2 0 0 0 -1.93 1.46 l -2.35 8.36 a 0.25 0.25 0 0 1 -0.48 0 L 9.24 2.18 a 0.25 0.25 0 0 0 -0.48 0 l -2.35 8.36 A 2 2 0 0 1 4.49 12 H 2",
@@ -278,7 +268,7 @@ function updateMaterialVisual(
   textResolution: number,
   onAssetReady: () => void,
 ) {
-  const y = gridAlignedPortY(index, count, cardHeight);
+  const y = nodeCardPortY(cardHeight, index, count);
   const visible = material !== undefined;
   display.image.visible = false;
   display.port.visible = visible;
