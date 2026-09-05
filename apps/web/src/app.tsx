@@ -370,23 +370,25 @@ function CanvasWorkspace({
   };
 
   return (
-    <main className="relative h-dvh w-dvw overflow-hidden bg-canvas text-foreground">
+    <main className="relative isolate h-dvh w-dvw touch-none overflow-hidden bg-canvas text-foreground">
       <h1 className="sr-only">Satisfactory Belt canvas</h1>
-      <CanvasContextMenu
-        onContextMenu={handleContextMenu}
-        onDelete={deleteSelection}
-        onDuplicate={duplicateSelection}
-      >
-        <InfiniteCanvas
-          editor={editor}
-          onPerformanceMetricsChange={handlePerformanceMetricsChange}
-          onRequestAddNode={requestNodeAt}
-          onViewportChange={handleViewportChange}
-          performanceMetricsEnabled={showPerformance}
-          ref={canvasRef}
-          showGridDots={showGridDots}
-        />
-      </CanvasContextMenu>
+      <div className="absolute inset-0 z-0">
+        <CanvasContextMenu
+          onContextMenu={handleContextMenu}
+          onDelete={deleteSelection}
+          onDuplicate={duplicateSelection}
+        >
+          <InfiniteCanvas
+            editor={editor}
+            onPerformanceMetricsChange={handlePerformanceMetricsChange}
+            onRequestAddNode={requestNodeAt}
+            onViewportChange={handleViewportChange}
+            performanceMetricsEnabled={showPerformance}
+            ref={canvasRef}
+            showGridDots={showGridDots}
+          />
+        </CanvasContextMenu>
+      </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
         <div className="pointer-events-auto absolute left-3 top-3 sm:left-4 sm:top-4">

@@ -110,6 +110,23 @@ type GridDisplay = {
   texture: Texture;
 };
 
+type CanvasSize = Readonly<{
+  height: number;
+  width: number;
+}>;
+
+function canvasHostSize(host: HTMLElement): CanvasSize {
+  const bounds = host.getBoundingClientRect();
+  return {
+    height: Math.max(bounds.height, 1),
+    width: Math.max(bounds.width, 1),
+  };
+}
+
+function sameCanvasSize(left: CanvasSize, right: CanvasSize) {
+  return left.height === right.height && left.width === right.width;
+}
+
 function gridSpacing(zoom: number) {
   let spacing = GRID_INTERVAL * zoom;
   while (spacing < 20) spacing *= 2;
@@ -891,6 +908,7 @@ export const InfiniteCanvas = forwardRef<
     if (!host) return;
 
     const app = new Application();
+    const initialSize = canvasHostSize(host);
     let active = true;
     let longTaskObserver: PerformanceObserver | undefined;
     let resizeObserver: ResizeObserver | undefined;
@@ -904,15 +922,23 @@ export const InfiniteCanvas = forwardRef<
         autoStart: false,
         autoDensity: true,
         backgroundAlpha: 0,
-        height: Math.max(host.clientHeight, 1),
+        height: initialSize.height,
         preference: "webgl",
         resolution: Math.min(window.devicePixelRatio, 2),
-        width: Math.max(host.clientWidth, 1),
+        width: initialSize.width,
       })
       .then(() => {
         if (!active) {
           app.destroy(true);
           return;
+        }
+
+        const mountedSize = canvasHostSize(host);
+        if (
+          app.screen.height !== mountedSize.height ||
+          app.screen.width !== mountedSize.width
+        ) {
+          app.renderer.resize(mountedSize.width, mountedSize.height);
         }
 
         appRef.current = app;
@@ -995,10 +1021,7 @@ export const InfiniteCanvas = forwardRef<
           app.renderer.resolution,
         );
         renderViewport(initialViewport);
-        let canvasSize = {
-          height: app.screen.height,
-          width: app.screen.width,
-        };
+        let canvasSize = mountedSize;
 
         const canvas = app.canvas;
 
@@ -1026,10 +1049,8 @@ export const InfiniteCanvas = forwardRef<
         resizeObserver = new ResizeObserver(([entry]) => {
           if (!entry) return;
 
-          const nextSize = {
-            height: Math.max(entry.contentRect.height, 1),
-            width: Math.max(entry.contentRect.width, 1),
-          };
+          const nextSize = canvasHostSize(host);
+          if (sameCanvasSize(nextSize, canvasSize)) return;
 
           app.renderer.resize(nextSize.width, nextSize.height);
           renderViewport(

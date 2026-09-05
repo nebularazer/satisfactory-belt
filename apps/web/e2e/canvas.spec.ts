@@ -75,3 +75,43 @@ test("keeps recipe search usable in a compact mobile viewport", async ({
     .click();
   await expect(page.getByText("Screws Recipes")).toBeVisible();
 });
+
+test("keeps the canvas and floating controls aligned to a mobile viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 500, width: 320 });
+  await page.goto("/");
+
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const menu = page.getByRole("button", { name: "Open canvas menu" });
+  const controls = page.getByRole("toolbar", { name: "Canvas controls" });
+  await expect(canvas).toBeVisible();
+
+  await page.setViewportSize({ height: 915, width: 412 });
+
+  await expect(menu).toBeInViewport();
+  await expect(controls).toBeInViewport();
+  await expect
+    .poll(() =>
+      canvas.evaluate((element: HTMLCanvasElement) => {
+        const bounds = element.getBoundingClientRect();
+        const resolution = Math.min(window.devicePixelRatio, 2);
+        return {
+          backingHeight: element.height,
+          backingWidth: element.width,
+          expectedHeight: Math.round(bounds.height * resolution),
+          expectedWidth: Math.round(bounds.width * resolution),
+          height: bounds.height,
+          width: bounds.width,
+        };
+      }),
+    )
+    .toEqual({
+      backingHeight: 915,
+      backingWidth: 412,
+      expectedHeight: 915,
+      expectedWidth: 412,
+      height: 915,
+      width: 412,
+    });
+});
