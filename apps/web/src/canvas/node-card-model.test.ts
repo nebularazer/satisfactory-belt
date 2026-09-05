@@ -38,7 +38,7 @@ describe("node card model", () => {
     expect(model).toMatchObject({
       clock: "75%",
       efficiency: { percent: "—", status: "neutral" },
-      power: { direction: "consumed", text: "−105 MW" },
+      power: "105 MW",
       subtitle: "2× Blender",
       title: "Nitro Rocket Fuel",
     });
@@ -93,7 +93,7 @@ describe("node card model", () => {
     expect(model.clock).toBe("100%");
   });
 
-  it("distinguishes produced power from consumed power", () => {
+  it("hides generated power", () => {
     const model = createNodeCardModel({
       configuration: {
         buildableId: "Build_GeneratorCoal_C",
@@ -114,7 +114,7 @@ describe("node card model", () => {
       y: 0,
     });
 
-    expect(model.power).toEqual({ direction: "produced", text: "+75 MW" });
+    expect(model.power).toBeUndefined();
   });
 
   it("omits clock for a non-clockable process without inventing efficiency", () => {
@@ -135,7 +135,7 @@ describe("node card model", () => {
 
     expect(model.clock).toBeUndefined();
     expect(model.efficiency).toEqual({ percent: "—", status: "neutral" });
-    expect(model.power).toEqual({ direction: "consumed", text: "−30 MW" });
+    expect(model.power).toBe("30 MW");
   });
 
   it("keeps every physical splitter port and hides inapplicable metrics", () => {

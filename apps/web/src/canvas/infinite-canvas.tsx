@@ -74,15 +74,17 @@ type NodeDisplay = {
   card: Graphics;
   cardVisualKey: string;
   clock: Text;
+  clockIcon: Graphics;
   container: Container;
   efficiency: Text;
-  footerIcons: Graphics;
+  efficiencyIcon: Graphics;
   leftPorts: readonly MaterialDisplay[];
   machineImage: Sprite;
   machineImageVisualKey: string;
   model?: NodeCardModel;
   modelNode?: CanvasNode;
   node: CanvasNode;
+  powerIcon: Graphics;
   rightPorts: readonly MaterialDisplay[];
   power: Text;
   subtitle: Text;
@@ -207,8 +209,30 @@ function portColor(direction: NodeCardPortDirection) {
   return BLUEPRINT_COLORS.bidirectional;
 }
 
-function centeredPortY(index: number, count: number) {
-  return NODE_CARD_SIZE / 2 + (index - (count - 1) / 2) * SNAP_INTERVAL;
+function gridAlignedPortY(index: number, count: number) {
+  // Odd sets center exactly. Even sets keep 32 px spacing and bias upward by
+  // half a step because exact centering would place every port off-grid.
+  const centeredStart = NODE_CARD_SIZE / 2 - ((count - 1) * SNAP_INTERVAL) / 2;
+  const gridAlignedStart =
+    Math.floor(centeredStart / SNAP_INTERVAL) * SNAP_INTERVAL;
+  return gridAlignedStart + index * SNAP_INTERVAL;
+}
+
+const LUCIDE_PATHS = {
+  activity:
+    "M 22 12 h -2.48 a 2 2 0 0 0 -1.93 1.46 l -2.35 8.36 a 0.25 0.25 0 0 1 -0.48 0 L 9.24 2.18 a 0.25 0.25 0 0 0 -0.48 0 l -2.35 8.36 A 2 2 0 0 1 4.49 12 H 2",
+  gauge: ["m 12 14 4 -4", "M 3.34 19 a 10 10 0 1 1 17.32 0"],
+  zap: "M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z",
+} as const;
+
+function createLucideIcon(paths: string | readonly string[], size: number) {
+  const pathList = typeof paths === "string" ? [paths] : paths;
+  const graphics = new Graphics().svg(
+    `<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${pathList.map((path) => `<path d="${path}" />`).join("")}</svg>`,
+  );
+  graphics.scale.set(size / 24);
+  graphics.visible = false;
+  return graphics;
 }
 
 function updateTextResolution(text: Text, resolution: number) {
@@ -240,7 +264,7 @@ function updateMaterialVisual(
   textResolution: number,
   onAssetReady: () => void,
 ) {
-  const y = centeredPortY(index, count);
+  const y = gridAlignedPortY(index, count);
   const visible = material !== undefined;
   display.image.visible = false;
   display.port.visible = visible;
@@ -290,61 +314,36 @@ function updateMaterialVisual(
   display.port.position.set(side === "left" ? 0 : NODE_CARD_SIZE, y);
 }
 
-function drawFooterIcons(
-  graphics: Graphics,
+function updateFooterIcons(
+  display: NodeDisplay,
   model: NodeCardModel,
-  powerTextWidth: number,
   dark: boolean,
 ) {
   const foreground = dark ? 0xd4d4d8 : 0x52525b;
   const efficiency = model.efficiency
     ? (statusColor(model.efficiency.status) ?? foreground)
     : foreground;
-  const powerX = 240 - powerTextWidth - 10;
-  let leftX = 21;
-  graphics.clear();
+  let leftX = 16;
 
-  if (model.clock) {
-    graphics
-      .arc(leftX, 233, 6, Math.PI, 0)
-      .stroke({ color: foreground, width: 1.5 })
-      .moveTo(leftX, 233)
-      .lineTo(leftX + 4, 229)
-      .stroke({ color: foreground, width: 1.5 });
-    leftX += 57;
+  display.clockIcon.visible = model.clock !== undefined;
+  display.clockIcon.tint = foreground;
+  if (model.clock !== undefined) {
+    display.clockIcon.position.set(leftX, 225);
+    display.clock.position.x = leftX + 20;
+    leftX = display.clock.position.x + display.clock.width + 8;
   }
-  if (model.efficiency) {
-    graphics
-      .circle(leftX, 232, 6)
-      .stroke({ color: efficiency, width: 1.5 })
-      .moveTo(leftX - 4, 233)
-      .lineTo(leftX - 2, 230)
-      .lineTo(leftX + 1, 234)
-      .lineTo(leftX + 4, 229)
-      .stroke({ color: efficiency, width: 1.25 });
+
+  display.efficiencyIcon.visible = model.efficiency !== undefined;
+  display.efficiencyIcon.tint = efficiency;
+  if (model.efficiency !== undefined) {
+    display.efficiencyIcon.position.set(leftX, 225);
+    display.efficiency.position.x = leftX + 20;
   }
-  if (model.power) {
-    graphics
-      .poly([
-        powerX,
-        225,
-        powerX - 4,
-        232,
-        powerX,
-        232,
-        powerX - 2,
-        239,
-        powerX + 5,
-        230,
-        powerX + 1,
-        230,
-      ])
-      .fill({
-        color:
-          model.power.direction === "produced"
-            ? BLUEPRINT_COLORS.output
-            : 0xeab308,
-      });
+
+  display.powerIcon.visible = model.power !== undefined;
+  display.powerIcon.tint = 0xeab308;
+  if (model.power !== undefined) {
+    display.powerIcon.position.set(218 - display.power.width, 224);
   }
 }
 
@@ -483,10 +482,9 @@ function updateNodeVisual(
       (dark ? 0xd4d4d8 : 0x52525b),
   };
   display.power.visible = model.power !== undefined;
-  display.power.text = model.power?.text ?? "";
+  display.power.text = model.power ?? "";
   display.power.style = metricStyle;
-  display.efficiency.position.x = model.clock ? 87 : 30;
-  drawFooterIcons(display.footerIcons, model, display.power.width, dark);
+  updateFooterIcons(display, model, dark);
 
   for (const text of [
     display.title,
@@ -517,7 +515,9 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
   const subtitle = new Text({ text: "" });
   const leftPorts = Array.from({ length: 4 }, createMaterialDisplay);
   const rightPorts = Array.from({ length: 4 }, createMaterialDisplay);
-  const footerIcons = new Graphics();
+  const clockIcon = createLucideIcon(LUCIDE_PATHS.gauge, 14);
+  const efficiencyIcon = createLucideIcon(LUCIDE_PATHS.activity, 14);
+  const powerIcon = createLucideIcon(LUCIDE_PATHS.zap, 16);
   const clock = new Text({ text: "" });
   const efficiency = new Text({ text: "" });
   const power = new Text({ text: "" });
@@ -530,9 +530,9 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
   title.position.set(72, 6);
   subtitle.position.set(72, 28);
   clock.anchor.set(0, 0.5);
-  clock.position.set(30, 232);
+  clock.position.set(36, 232);
   efficiency.anchor.set(0, 0.5);
-  efficiency.position.set(87, 232);
+  efficiency.position.set(93, 232);
   power.anchor.set(1, 0.5);
   power.position.set(240, 232);
 
@@ -543,7 +543,9 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
     subtitle,
     ...leftPorts.flatMap(({ image, port, rate }) => [image, rate, port]),
     ...rightPorts.flatMap(({ image, port, rate }) => [image, rate, port]),
-    footerIcons,
+    clockIcon,
+    efficiencyIcon,
+    powerIcon,
     clock,
     efficiency,
     power,
@@ -555,15 +557,17 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
     card,
     cardVisualKey: "",
     clock,
+    clockIcon,
     container,
     efficiency,
-    footerIcons,
+    efficiencyIcon,
     leftPorts,
     machineImage,
     machineImageVisualKey: "",
     node,
-    rightPorts,
     power,
+    powerIcon,
+    rightPorts,
     subtitle,
     title,
   };

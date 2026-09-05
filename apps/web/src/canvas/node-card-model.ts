@@ -49,10 +49,7 @@ export type NodeCardModel = Readonly<{
     status: NodeCardPortStatus;
   }>;
   leftPorts: readonly NodeCardPort[];
-  power?: Readonly<{
-    direction: "consumed" | "produced";
-    text: string;
-  }>;
+  power?: string;
   rightPorts: readonly NodeCardPort[];
   subtitle?: string;
   title: string;
@@ -151,19 +148,9 @@ function connectionDependentPorts(
 }
 
 function powerMetric(profile: ReturnType<typeof createNode>["profile"]) {
-  if (profile.power.produced.maximumMw > 0) {
-    return {
-      direction: "produced" as const,
-      text: `+${formatPower(profile.power.produced)}`,
-    };
-  }
-  if (profile.power.consumed.maximumMw > 0) {
-    return {
-      direction: "consumed" as const,
-      text: `−${formatPower(profile.power.consumed)}`,
-    };
-  }
-  return undefined;
+  return profile.power.consumed.maximumMw > 0
+    ? formatPower(profile.power.consumed)
+    : undefined;
 }
 
 function materialNodeSubtitle(canvasNode: CanvasNode) {
