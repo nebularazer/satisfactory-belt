@@ -428,11 +428,11 @@ describe("canvas interactions", () => {
       at: { x: 100, y: 100 },
     });
 
-    pointer("pointerdown", 20, 30, {
+    pointer("pointerdown", 20, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
-    pointer("pointermove", 40, 50, {
+    pointer("pointermove", 40, 100, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -440,19 +440,24 @@ describe("canvas interactions", () => {
     expect(editor.getState().selectedIds).toEqual(["node-1"]);
     expect(editor.getState().moveDelta).toEqual({ x: 20, y: 20 });
 
-    pointer("pointerup", 40, 50, {
+    pointer("pointerup", 40, 100, {
       pointerId: 1,
       pointerType: "touch",
     });
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
-  it("pans when a single-touch drag starts on a selected node body", () => {
+  it("pans when a single-touch drag starts on an unselected node body", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
       at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
     });
     const original = editor.getState().document;
 
@@ -470,7 +475,7 @@ describe("canvas interactions", () => {
     });
 
     expect(viewport()).toEqual({ x: 20, y: 20, zoom: 1 });
-    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
     expect(editor.getState().document).toEqual(original);
   });
 
@@ -548,7 +553,7 @@ describe("canvas interactions", () => {
     expect(editor.getState().document).toEqual(original);
   });
 
-  it("rolls back a selected-node header drag when it becomes a pinch", () => {
+  it("rolls back a selected-node drag when it becomes a pinch", () => {
     const { editor, pointer } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",

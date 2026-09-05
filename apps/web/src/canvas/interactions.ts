@@ -2,7 +2,6 @@ import { canvasNodeId } from "./document";
 import type { CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
-import { NODE_CARD_HEADER_HEIGHT } from "./node-card-layout";
 import { screenToWorld, ZOOM_STEP, type Viewport } from "./viewport";
 
 const MOUSE_DRAG_THRESHOLD = 4;
@@ -240,9 +239,7 @@ export function attachCanvasInteractions(
       const hitId = canvasNodeId(hit);
       const selectionBefore = editor.getState().selectedIds;
       const touchCanMoveNode =
-        event.pointerType === "touch" &&
-        selectionBefore.includes(hitId) &&
-        worldPoint.y - hit.y <= NODE_CARD_HEADER_HEIGHT;
+        event.pointerType === "touch" && selectionBefore.includes(hitId);
       if (event.pointerType === "touch" && !touchCanMoveNode) {
         interaction = {
           clearSelectionOnClick: false,
