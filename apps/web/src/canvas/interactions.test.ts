@@ -242,7 +242,7 @@ describe("canvas interactions", () => {
     pointer("pointermove", 230, 230);
     pointer("pointerup", 230, 230);
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 48, y: 32 });
   });
 
   it("selects through a Ctrl/Cmd-drag marquee in world coordinates", () => {
@@ -373,7 +373,9 @@ describe("canvas interactions", () => {
       at: { x: 100, y: 100 },
     });
     key("ArrowRight");
-    expect(editor.getState().document.nodes[0]?.x).toBe(32);
+    expect(editor.getState().document.nodes[0]?.x).toBe(16);
+    key("ArrowRight", { shiftKey: true });
+    expect(editor.getState().document.nodes[0]?.x).toBe(48);
   });
 
   it("supports two-pointer pan and pinch gestures", () => {

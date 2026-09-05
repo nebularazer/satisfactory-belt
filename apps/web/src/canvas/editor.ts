@@ -7,12 +7,12 @@ import {
   type CanvasNode,
 } from "./document";
 import type { Point, Rectangle } from "./geometry";
-import { NODE_CARD_GRID_UNIT, nodeCardLayout } from "./node-card-layout";
+import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
+import { nodeCardLayout } from "./node-card-layout";
 import { createCanvasSpatialIndex } from "./spatial-index";
 
-export const SNAP_INTERVAL = NODE_CARD_GRID_UNIT;
-export const NODE_WIDTH = SNAP_INTERVAL * 8;
-export const NODE_HEIGHT = SNAP_INTERVAL * 8;
+export const NODE_WIDTH = GRID_INTERVAL * 8;
+export const NODE_HEIGHT = GRID_INTERVAL * 8;
 export const HISTORY_LIMIT = 100;
 
 export type CanvasEditorState = Readonly<{

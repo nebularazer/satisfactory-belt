@@ -13,14 +13,14 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 import { CATALOG_BUILDABLE_IMAGE_URLS } from "@/game/catalog-images";
 
-import {
-  SNAP_INTERVAL,
-  type CanvasEditor,
-  type CanvasEditorChange,
-  type CanvasEditorState,
+import type {
+  CanvasEditor,
+  CanvasEditorChange,
+  CanvasEditorState,
 } from "./editor";
 import { canvasNodeId, type CanvasNode } from "./document";
 import type { Point, Rectangle } from "./geometry";
+import { GRID_INTERVAL } from "./grid";
 import { attachCanvasInteractions } from "./interactions";
 import {
   createNodeCardModel,
@@ -111,7 +111,7 @@ type GridDisplay = {
 };
 
 function gridSpacing(zoom: number) {
-  let spacing = SNAP_INTERVAL * zoom;
+  let spacing = GRID_INTERVAL * zoom;
   while (spacing < 20) spacing *= 2;
   return spacing;
 }

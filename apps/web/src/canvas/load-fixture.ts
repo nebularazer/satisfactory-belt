@@ -1,5 +1,5 @@
 import { CANVAS_DOCUMENT_VERSION, type CanvasDocument } from "./document";
-import { SNAP_INTERVAL } from "./editor";
+import { GRID_INTERVAL } from "./grid";
 import { nodeCardLayout } from "./node-card-layout";
 
 export const LOAD_FIXTURE_LIMIT = 10_000;
@@ -17,8 +17,8 @@ export function createCanvasLoadFixture(nodeCount: number): CanvasDocument {
     kind: "router" as const,
   };
   const layout = nodeCardLayout(configuration);
-  const horizontalStep = layout.width + SNAP_INTERVAL;
-  const verticalStep = layout.height + SNAP_INTERVAL;
+  const horizontalStep = layout.width + GRID_INTERVAL;
+  const verticalStep = layout.height + GRID_INTERVAL;
   const originX = -((columns - 1) * horizontalStep) / 2;
   const originY = -((rows - 1) * verticalStep) / 2;
 

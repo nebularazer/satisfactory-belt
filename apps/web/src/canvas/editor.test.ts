@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { canvasNodeId } from "./document";
-import { createCanvasEditor, HISTORY_LIMIT, SNAP_INTERVAL } from "./editor";
+import { createCanvasEditor, HISTORY_LIMIT } from "./editor";
+import { SNAP_INTERVAL } from "./grid";
 import { TEST_NODE_TEMPLATE, testCanvasNode } from "./test-fixtures";
 
 function createEditor() {
@@ -52,13 +53,13 @@ describe("canvas editor", () => {
       height: 160,
       width: 192,
       x: 0,
-      y: 32,
+      y: 16,
     });
     expect(second).toMatchObject({
       configuration: { id: "node-2" },
       height: 160,
       width: 192,
-      x: 320,
+      x: 304,
       y: 224,
     });
     expect(canvasNodeId(editor.hitTest({ x: 20, y: 80 })!)).toBe("node-1");
@@ -126,14 +127,14 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.move.commit" });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 48, y: 32 });
     editor.dispatch({ type: "history.undo" });
     expect(editor.getState().document.nodes[0]).toMatchObject({
       x: 0,
-      y: 32,
+      y: 16,
     });
     editor.dispatch({ type: "history.redo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 48, y: 32 });
   });
 
   it("keeps pointer movement transient until the move is committed", () => {
@@ -154,7 +155,7 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getState().document).toBe(document);
-    expect(editor.getState().moveDelta).toEqual({ x: 32, y: 0 });
+    expect(editor.getState().moveDelta).toEqual({ x: 48, y: 16 });
     expect(changes.at(-1)).toMatchObject({ kind: "move" });
 
     editor.dispatch({ type: "selection.move.commit" });
@@ -187,8 +188,8 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.move.commit" });
 
     expect(editor.getState().document.nodes).toMatchObject([
-      { x: 32, y: 0 },
-      { x: 352, y: 192 },
+      { x: 32, y: -16 },
+      { x: 336, y: 192 },
     ]);
   });
 
@@ -247,11 +248,14 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.nudge", delta: { x: 32, y: -32 } });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 0 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: 32,
+      y: -16,
+    });
     editor.dispatch({ type: "history.undo" });
     expect(editor.getState().document.nodes[0]).toMatchObject({
       x: 0,
-      y: 32,
+      y: 16,
     });
   });
 
@@ -269,15 +273,15 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getBounds("all")).toEqual({
-      height: 352,
-      width: 512,
+      height: 368,
+      width: 496,
       x: 0,
-      y: 32,
+      y: 16,
     });
     expect(editor.getBounds("selection")).toEqual({
       height: 160,
       width: 192,
-      x: 320,
+      x: 304,
       y: 224,
     });
   });

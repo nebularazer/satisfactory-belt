@@ -1,6 +1,7 @@
 import { canvasNodeId } from "./document";
-import { SNAP_INTERVAL, type CanvasEditor } from "./editor";
+import type { CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
+import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
 import { screenToWorld, ZOOM_STEP, type Viewport } from "./viewport";
 
 const DRAG_THRESHOLD = 4;
@@ -434,8 +435,13 @@ export function attachCanvasInteractions(
       const state = editor.getState();
       if (state.selectedIds.length === 0) return;
       event.preventDefault();
-      const step =
-        (state.snapToGrid ? SNAP_INTERVAL : 1) * (event.shiftKey ? 4 : 1);
+      const step = state.snapToGrid
+        ? event.shiftKey
+          ? GRID_INTERVAL
+          : SNAP_INTERVAL
+        : event.shiftKey
+          ? 4
+          : 1;
       editor.dispatch({
         type: "selection.nudge",
         delta: {

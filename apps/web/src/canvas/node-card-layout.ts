@@ -1,6 +1,7 @@
 import type { NodeConfiguration } from "@satisfactory-belt/production";
 
-export const NODE_CARD_GRID_UNIT = 32;
+import { GRID_INTERVAL } from "./grid";
+
 export const NODE_CARD_HEADER_HEIGHT = 48;
 export const NODE_CARD_FOOTER_HEIGHT = 48;
 
@@ -12,34 +13,22 @@ export type NodeCardLayout = Readonly<{
 
 const PROCESS_LAYOUT: NodeCardLayout = {
   hasFooter: true,
-  height: NODE_CARD_GRID_UNIT * 8,
-  width: NODE_CARD_GRID_UNIT * 8,
+  height: GRID_INTERVAL * 8,
+  width: GRID_INTERVAL * 8,
 };
 
 const TRANSPORT_LAYOUT: NodeCardLayout = PROCESS_LAYOUT;
 
 const BUFFER_LAYOUT: NodeCardLayout = {
   hasFooter: false,
-  height: NODE_CARD_GRID_UNIT * 6,
-  width: NODE_CARD_GRID_UNIT * 8,
+  height: GRID_INTERVAL * 6,
+  width: GRID_INTERVAL * 8,
 };
 
 const ROUTER_LAYOUT: NodeCardLayout = {
   hasFooter: false,
-  height: NODE_CARD_GRID_UNIT * 5,
-  width: NODE_CARD_GRID_UNIT * 6,
-};
-
-const PORT_LANE_OFFSETS: Readonly<Record<number, readonly number[]>> = {
-  1: [0],
-  2: [-NODE_CARD_GRID_UNIT, NODE_CARD_GRID_UNIT],
-  3: [-NODE_CARD_GRID_UNIT, 0, NODE_CARD_GRID_UNIT],
-  4: [
-    -NODE_CARD_GRID_UNIT * 2,
-    -NODE_CARD_GRID_UNIT,
-    NODE_CARD_GRID_UNIT,
-    NODE_CARD_GRID_UNIT * 2,
-  ],
+  height: GRID_INTERVAL * 5,
+  width: GRID_INTERVAL * 6,
 };
 
 export function nodeCardLayout(
@@ -56,7 +45,7 @@ export function nodeCardPortY(
   index: number,
   count: number,
 ) {
-  const center =
-    Math.round(cardHeight / 2 / NODE_CARD_GRID_UNIT) * NODE_CARD_GRID_UNIT;
-  return center + (PORT_LANE_OFFSETS[count]?.[index] ?? 0);
+  const center = Math.round(cardHeight / 2 / GRID_INTERVAL) * GRID_INTERVAL;
+  const start = center - ((count - 1) * GRID_INTERVAL) / 2;
+  return start + index * GRID_INTERVAL;
 }

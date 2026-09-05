@@ -17,14 +17,14 @@ describe("node card layout", () => {
 
   it.each([
     [256, 1, [128]],
-    [256, 2, [96, 160]],
+    [256, 2, [112, 144]],
     [256, 3, [96, 128, 160]],
-    [256, 4, [64, 96, 160, 192]],
+    [256, 4, [80, 112, 144, 176]],
     [160, 1, [96]],
-    [160, 2, [64, 128]],
+    [160, 2, [80, 112]],
     [160, 3, [64, 96, 128]],
   ] as const)(
-    "centers %s px cards with %s grid-aligned port lanes",
+    "centers %s px cards with %s half-grid port lanes",
     (height, count, expected) => {
       expect(
         Array.from({ length: count }, (_, index) =>
