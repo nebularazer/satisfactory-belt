@@ -82,8 +82,6 @@ const BUILDABLE_IMAGE_URLS = new Map<string, string>([
   ["Build_WaterPump_C", waterExtractorImage],
 ]);
 
-export const CATALOG_BUILDABLE_IMAGE_URLS = [...BUILDABLE_IMAGE_URLS.values()];
-
 export function buildableImageUrl(buildableId: string) {
   return BUILDABLE_IMAGE_URLS.get(buildableId);
 }

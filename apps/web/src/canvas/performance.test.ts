@@ -17,6 +17,13 @@ describe("performance sampler", () => {
     expect(report).toHaveBeenCalledTimes(2);
     expect(report).toHaveBeenLastCalledWith({
       fps: 62.5,
+      longTasks: {
+        averageMs: 0,
+        count: 0,
+        maximumMs: 0,
+        p95Ms: 0,
+        supported: false,
+      },
       render: {
         averageMs: 4.126984126984127,
         maximumMs: 12,
@@ -40,6 +47,13 @@ describe("performance sampler", () => {
 
     expect(report).toHaveBeenLastCalledWith({
       fps: 0,
+      longTasks: {
+        averageMs: 0,
+        count: 0,
+        maximumMs: 0,
+        p95Ms: 0,
+        supported: false,
+      },
       render: { averageMs: 4, maximumMs: 4, p95Ms: 4 },
       update: { averageMs: 3, maximumMs: 3, p95Ms: 3 },
       visibleNodes: 0,
@@ -56,9 +70,37 @@ describe("performance sampler", () => {
     expect(report).toHaveBeenCalledTimes(2);
     expect(report).toHaveBeenLastCalledWith({
       fps: 0,
+      longTasks: {
+        averageMs: 0,
+        count: 0,
+        maximumMs: 0,
+        p95Ms: 0,
+        supported: false,
+      },
       render: { averageMs: 5, maximumMs: 5, p95Ms: 5 },
       update: { averageMs: 0, maximumMs: 0, p95Ms: 0 },
       visibleNodes: 0,
+    });
+  });
+
+  it("reports browser long tasks immediately when supported", () => {
+    const report = vi.fn();
+    const sampler = createPerformanceSampler(report, true);
+    sampler.recordRender(0, 2, 5);
+    sampler.recordLongTasks([75, 120]);
+
+    expect(report).toHaveBeenLastCalledWith({
+      fps: 0,
+      longTasks: {
+        averageMs: 97.5,
+        count: 2,
+        maximumMs: 120,
+        p95Ms: 120,
+        supported: true,
+      },
+      render: { averageMs: 0, maximumMs: 0, p95Ms: 0 },
+      update: { averageMs: 0, maximumMs: 0, p95Ms: 0 },
+      visibleNodes: 5,
     });
   });
 });

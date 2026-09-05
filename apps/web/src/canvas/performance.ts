@@ -6,6 +6,7 @@ export type TimingSummary = Readonly<{
 
 export type CanvasPerformanceMetrics = Readonly<{
   fps: number;
+  longTasks: TimingSummary & Readonly<{ count: number; supported: boolean }>;
   render: TimingSummary;
   update: TimingSummary;
   visibleNodes: number;
@@ -31,9 +32,11 @@ function summarize(samples: readonly number[]): TimingSummary {
 
 export function createPerformanceSampler(
   report: (metrics: CanvasPerformanceMetrics) => void,
+  longTasksSupported = false,
 ) {
   let frameIntervals: number[] = [];
   let lastRenderAt: number | undefined;
+  let longTaskSamples: number[] = [];
   let renderSamples: number[] = [];
   let sampleStartedAt: number | undefined;
   let updateSamples: number[] = [];
@@ -48,16 +51,30 @@ export function createPerformanceSampler(
 
     report({
       fps: averageFrameInterval ? 1000 / averageFrameInterval : 0,
+      longTasks: {
+        ...summarize(longTaskSamples),
+        count: longTaskSamples.length,
+        supported: longTasksSupported,
+      },
       render: summarize(renderSamples),
       update: summarize(updateSamples),
       visibleNodes,
     });
     frameIntervals = [];
+    longTaskSamples = [];
     renderSamples = [];
     updateSamples = [];
   };
 
   return {
+    recordLongTasks(durations: readonly number[]) {
+      const samples = durations.filter(
+        (duration) => Number.isFinite(duration) && duration > 0,
+      );
+      if (samples.length === 0) return;
+      longTaskSamples.push(...samples);
+      emit();
+    },
     recordRender(now: number, renderTimeMs: number, visibleNodeCount = 0) {
       const frameInterval =
         lastRenderAt === undefined ? undefined : now - lastRenderAt;
@@ -93,6 +110,7 @@ export function createPerformanceSampler(
     reset() {
       frameIntervals = [];
       lastRenderAt = undefined;
+      longTaskSamples = [];
       renderSamples = [];
       sampleStartedAt = undefined;
       updateSamples = [];
