@@ -6,6 +6,7 @@ import {
   type CanvasDocument,
   type CanvasNode,
   type CanvasPortOrder,
+  type CanvasRouterPriorities,
   type CanvasRouterRules,
 } from "./document";
 
@@ -51,6 +52,23 @@ function parseRouterRules(value: unknown): CanvasRouterRules | undefined {
   );
 }
 
+function parseRouterPriorities(
+  value: unknown,
+): CanvasRouterPriorities | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error("Node routerPriorities must be an object.");
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([portId, priority]) => {
+      if (priority !== "low" && priority !== "medium" && priority !== "high") {
+        throw new Error(`Priority for ${portId} is invalid.`);
+      }
+      return [portId, priority];
+    }),
+  );
+}
+
 function parseNode(value: unknown, index: number): CanvasNode {
   if (!isRecord(value)) throw new Error(`Node ${index + 1} is not an object.`);
   if (typeof value.label !== "string") {
@@ -69,12 +87,14 @@ function parseNode(value: unknown, index: number): CanvasNode {
   }
 
   const portOrder = parsePortOrder(value.portOrder);
+  const routerPriorities = parseRouterPriorities(value.routerPriorities);
   const routerRules = parseRouterRules(value.routerRules);
   return {
     configuration: parseNodeConfiguration(value.configuration),
     height: value.height,
     label: value.label,
     ...(portOrder ? { portOrder } : {}),
+    ...(routerPriorities ? { routerPriorities } : {}),
     ...(routerRules ? { routerRules } : {}),
     width: value.width,
     x: value.x,

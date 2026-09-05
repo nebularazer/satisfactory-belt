@@ -43,6 +43,35 @@ describe("canvas document format", () => {
     );
   });
 
+  it("round-trips router priorities", () => {
+    const priorityMerger = {
+      nodes: [
+        {
+          configuration: {
+            buildableId: "Build_ConveyorAttachmentMergerPriority_C",
+            id: "priority-merger",
+            kind: "router" as const,
+          },
+          height: 160,
+          label: "Priority Merger",
+          routerPriorities: {
+            "input:1": "high" as const,
+            "input:2": "medium" as const,
+            "input:3": "low" as const,
+          },
+          width: 192,
+          x: 0,
+          y: 0,
+        },
+      ],
+      version: 3 as const,
+    };
+
+    expect(
+      parseCanvasDocument(serializeCanvasDocument(priorityMerger)),
+    ).toEqual(priorityMerger);
+  });
+
   it("rejects unknown versions without attempting migration", () => {
     expect(() => validateCanvasDocument({ ...document, version: 4 })).toThrow(
       "Unsupported document version: 4.",

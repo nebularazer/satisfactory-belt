@@ -29,6 +29,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 
@@ -246,12 +247,14 @@ function DescriptorPicker({
 function Section({
   children,
   title,
-}: Readonly<{ children: ReactNode; title: string }>) {
+}: Readonly<{ children: ReactNode; title?: string }>) {
   return (
     <section className="border-t border-border px-3 py-3">
-      <h3 className="mb-2 text-[0.625rem] font-medium tracking-wide text-muted-foreground uppercase">
-        {title}
-      </h3>
+      {title && (
+        <h3 className="mb-2 text-[0.625rem] font-medium tracking-wide text-muted-foreground uppercase">
+          {title}
+        </h3>
+      )}
       {children}
     </section>
   );
@@ -288,7 +291,7 @@ function NumberStepper({
       >
         {label}
       </label>
-      <div className="flex items-center">
+      <div className="flex items-center rounded-md focus-within:ring-2 focus-within:ring-ring/30">
         <Button
           aria-label={`Decrease ${label}`}
           className="rounded-r-none"
@@ -304,7 +307,7 @@ function NumberStepper({
           <Input
             aria-label={label}
             className={cn(
-              "h-7 w-20 rounded-none border-x-0 text-center tabular-nums",
+              "h-7 w-20 rounded-none border-x-0 text-center tabular-nums focus-visible:border-input focus-visible:ring-0",
               suffix && "pr-6",
             )}
             id={`node-inspector-${label.replaceAll(" ", "-").toLowerCase()}`}
@@ -358,7 +361,7 @@ function SegmentedControl<T extends string | number>({
 }>) {
   return (
     <div className="grid gap-2">
-      <div className="text-xs font-medium">{label}</div>
+      <div className="flex h-7 items-center text-xs font-medium">{label}</div>
       <div
         className="grid grid-flow-col auto-cols-fr gap-1"
         role="group"
@@ -475,7 +478,7 @@ function ProcessControls({
 
   return (
     <Section title="Configuration">
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         {scope === "all" && (
           <NumberStepper
             label="Machine count"
@@ -483,20 +486,6 @@ function ProcessControls({
             minimum={1}
             onChange={(value) => setInstanceCount(Math.round(value))}
             value={instances.length}
-          />
-        )}
-        {isMiner && scope === "all" && (
-          <SegmentedControl
-            label="Miner tier"
-            onChange={(buildableId) =>
-              editor.dispatch({
-                type: "node.configure",
-                configuration: { ...configuration, buildableId },
-                id: nodeId,
-              })
-            }
-            options={MINER_TIERS}
-            value={configuration.buildableId}
           />
         )}
         {hasClock && range && (
@@ -534,6 +523,20 @@ function ProcessControls({
               scopedInstances,
               (instance) => instance.somersloopCount!,
             )}
+          />
+        )}
+        {isMiner && scope === "all" && (
+          <SegmentedControl
+            label="Miner tier"
+            onChange={(buildableId) =>
+              editor.dispatch({
+                type: "node.configure",
+                configuration: { ...configuration, buildableId },
+                id: nodeId,
+              })
+            }
+            options={MINER_TIERS}
+            value={configuration.buildableId}
           />
         )}
         {hasPurity && (
@@ -687,9 +690,7 @@ function RateColumn({
       >
         {title}
       </div>
-      {materials.length === 0 ? (
-        <div className="text-xs text-muted-foreground">None</div>
-      ) : (
+      {materials.length > 0 && (
         <div className="grid gap-2">
           {materials.map((material, index) => {
             const item = findDescriptor(material.itemId);
@@ -803,7 +804,7 @@ function NodeMetrics({
   };
 
   return (
-    <Section title="Rates">
+    <Section>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         <RateColumn
           direction="input"
@@ -924,8 +925,49 @@ function RouterControls({
   const programmable = configuration.buildableId.includes(
     "SplitterProgrammable",
   );
+  const priorityMerger = configuration.buildableId.includes("MergerPriority");
   const smart = configuration.buildableId.includes("SplitterSmart");
-  if (!programmable && !smart) return null;
+  if (!programmable && !priorityMerger && !smart) return null;
+  if (priorityMerger) {
+    const inputs = createNode(configuration).ports.filter(
+      (port) => port.direction === "input",
+    );
+    return (
+      <Section title="Input priorities">
+        <div className="grid gap-3">
+          {inputs.map((port, index) => {
+            const label =
+              inputs.length === 3
+                ? (["Top input", "Middle input", "Bottom input"][index] ??
+                  `Input ${index + 1}`)
+                : `Input ${index + 1}`;
+            return (
+              <SegmentedControl
+                key={port.id}
+                label={label}
+                onChange={(priority) =>
+                  editor.dispatch({
+                    type: "node.router.priorities",
+                    id: configuration.id,
+                    priorities: {
+                      ...canvasNode.routerPriorities,
+                      [port.id]: priority,
+                    },
+                  })
+                }
+                options={[
+                  { label: "Low", value: "low" },
+                  { label: "Medium", value: "medium" },
+                  { label: "High", value: "high" },
+                ]}
+                value={canvasNode.routerPriorities?.[port.id] ?? "low"}
+              />
+            );
+          })}
+        </div>
+      </Section>
+    );
+  }
   const outputs = createNode(configuration).ports.filter(
     (port) => port.direction === "output",
   );
@@ -1025,7 +1067,24 @@ function RouterControls({
 function InspectorContent({
   editor,
   node,
-}: Readonly<{ editor: CanvasEditor; node: CanvasNode }>) {
+  onSheetHandlePointerCancel,
+  onSheetHandlePointerDown,
+  onSheetHandlePointerMove,
+  onSheetHandlePointerUp,
+}: Readonly<{
+  editor: CanvasEditor;
+  node: CanvasNode;
+  onSheetHandlePointerCancel: (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => void;
+  onSheetHandlePointerDown: (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => void;
+  onSheetHandlePointerMove: (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => void;
+  onSheetHandlePointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}>) {
   const [scope, setScope] = useState<InspectorScope>("all");
   const configuration = node.configuration;
   const instances =
@@ -1037,7 +1096,17 @@ function InspectorContent({
 
   return (
     <>
-      <div className="mx-auto mt-1.5 h-1 w-9 shrink-0 rounded-full bg-border lg:hidden" />
+      <button
+        aria-label="Drag down to close node details"
+        className="flex h-5 w-full shrink-0 touch-none cursor-ns-resize items-center justify-center lg:hidden"
+        onPointerCancel={onSheetHandlePointerCancel}
+        onPointerDown={onSheetHandlePointerDown}
+        onPointerMove={onSheetHandlePointerMove}
+        onPointerUp={onSheetHandlePointerUp}
+        type="button"
+      >
+        <span className="h-1 w-9 rounded-full bg-border" />
+      </button>
       <header className="flex min-w-0 items-center gap-3 px-3 py-2.5">
         <CatalogImage
           className="size-12 shrink-0"
@@ -1121,6 +1190,12 @@ export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
   );
   const selectedId =
     state.selectedIds.length === 1 ? state.selectedIds[0] : undefined;
+  const [sheetOffset, setSheetOffset] = useState(0);
+  const sheetDragRef = useRef<{ offset: number; startY: number } | null>(null);
+  useEffect(() => {
+    sheetDragRef.current = null;
+    setSheetOffset(0);
+  }, [selectedId]);
   const node = selectedId
     ? state.document.nodes.find(
         (candidate) => candidate.configuration.id === selectedId,
@@ -1128,12 +1203,56 @@ export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
     : undefined;
   if (!node || state.moveDelta !== null) return null;
 
+  const handleSheetPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    sheetDragRef.current = { offset: 0, startY: event.clientY };
+  };
+  const handleSheetPointerMove = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const drag = sheetDragRef.current;
+    if (!drag) return;
+    drag.offset = Math.max(0, event.clientY - drag.startY);
+    setSheetOffset(drag.offset);
+  };
+  const finishSheetDrag = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    cancelled: boolean,
+  ) => {
+    const drag = sheetDragRef.current;
+    if (!drag) return;
+    sheetDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (!cancelled && drag.offset >= 72) {
+      editor.dispatch({ type: "selection.clear" });
+      return;
+    }
+    setSheetOffset(0);
+  };
+
   return (
     <aside
       aria-label={`Node details: ${node.label}`}
       className="pointer-events-auto absolute right-0 bottom-0 left-0 z-20 flex max-h-[82dvh] flex-col overflow-hidden rounded-t-2xl border border-x-0 border-b-0 border-border bg-card text-card-foreground shadow-2xl lg:top-4 lg:right-4 lg:bottom-auto lg:left-auto lg:z-auto lg:max-h-[calc(100dvh-2rem)] lg:w-[22rem] lg:rounded-xl lg:border-x lg:border-b lg:shadow-xl"
+      style={{
+        transform: sheetOffset > 0 ? `translateY(${sheetOffset}px)` : undefined,
+        transition: sheetDragRef.current ? "none" : "transform 150ms ease-out",
+      }}
     >
-      <InspectorContent editor={editor} node={node} />
+      <InspectorContent
+        editor={editor}
+        node={node}
+        onSheetHandlePointerCancel={(event) => finishSheetDrag(event, true)}
+        onSheetHandlePointerDown={handleSheetPointerDown}
+        onSheetHandlePointerMove={handleSheetPointerMove}
+        onSheetHandlePointerUp={(event) => finishSheetDrag(event, false)}
+      />
     </aside>
   );
 }

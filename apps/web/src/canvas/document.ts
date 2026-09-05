@@ -9,11 +9,16 @@ export type CanvasPortOrder = Readonly<{
 
 export type CanvasRouterRules = Readonly<Record<string, readonly string[]>>;
 
+export type CanvasRouterPriorities = Readonly<
+  Record<string, "high" | "low" | "medium">
+>;
+
 export type CanvasNode = Readonly<{
   configuration: NodeConfiguration;
   height: number;
   label: string;
   portOrder?: CanvasPortOrder;
+  routerPriorities?: CanvasRouterPriorities;
   routerRules?: CanvasRouterRules;
   width: number;
   x: number;

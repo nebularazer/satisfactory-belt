@@ -9,6 +9,7 @@ import {
   canvasNodeId,
   type CanvasDocument,
   type CanvasNode,
+  type CanvasRouterPriorities,
   type CanvasRouterRules,
 } from "./document";
 import type { Point, Rectangle } from "./geometry";
@@ -52,6 +53,11 @@ export type CanvasEditorAction =
       direction: "input" | "output";
       id: string;
       portIds: readonly string[];
+    }
+  | {
+      type: "node.router.priorities";
+      id: string;
+      priorities: CanvasRouterPriorities;
     }
   | {
       type: "node.router.rules";
@@ -383,6 +389,31 @@ export function createCanvasEditor(
         const afterNode: CanvasNode = {
           ...beforeNode,
           routerRules: action.rules,
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
+        return;
+      }
+
+      case "node.router.priorities": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (
+          !beforeNode ||
+          index === undefined ||
+          beforeNode.configuration.kind !== "router"
+        ) {
+          return;
+        }
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          routerPriorities: action.priorities,
         };
         const before = [{ index, node: beforeNode }];
         const after = [{ index, node: afterNode }];

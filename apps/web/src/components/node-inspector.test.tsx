@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import { createNode } from "@satisfactory-belt/production";
 import {
@@ -30,6 +31,9 @@ beforeAll(() => {
     },
   );
   Element.prototype.scrollIntoView = vi.fn();
+  HTMLElement.prototype.hasPointerCapture = vi.fn(() => true);
+  HTMLElement.prototype.releasePointerCapture = vi.fn();
+  HTMLElement.prototype.setPointerCapture = vi.fn();
 });
 afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
@@ -127,6 +131,20 @@ describe("NodeInspector", () => {
     expect(screen.getByLabelText("Node details: Iron Plate")).toBeVisible();
   });
 
+  it("dismisses the mobile sheet when its handle is dragged down", () => {
+    const editor = createProcessEditor();
+    render(<NodeInspector editor={editor} />);
+    const handle = screen.getByRole("button", {
+      name: "Drag down to close node details",
+    });
+
+    fireEvent.pointerDown(handle, { button: 0, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientY: 190, pointerId: 1 });
+    fireEvent.pointerUp(handle, { clientY: 190, pointerId: 1 });
+
+    expect(screen.queryByLabelText("Node details: Iron Plate")).toBeNull();
+  });
+
   it("switches miner tiers without replacing the resource", () => {
     const editor = createCanvasEditor();
     editor.dispatch({
@@ -147,6 +165,8 @@ describe("NodeInspector", () => {
       buildableId: "Build_MinerMk2_C",
       processId: "extraction:Desc_OreIron_C",
     });
+    expect(screen.queryByText("Rates")).toBeNull();
+    expect(screen.queryByText("None")).toBeNull();
   });
 
   it("reorders recipe inputs for both the inspector and node card", () => {
@@ -195,5 +215,32 @@ describe("NodeInspector", () => {
     expect(editor.getState().document.nodes[0]?.routerRules).toMatchObject({
       "output:1": ["overflow"],
     });
+  });
+
+  it("configures each Priority Merger input independently", () => {
+    const editor = createCanvasEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Priority Merger",
+      node: {
+        buildableId: "Build_ConveyorAttachmentMergerPriority_C",
+        kind: "router",
+      },
+    });
+    render(<NodeInspector editor={editor} />);
+
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Top input" })).getByRole(
+        "button",
+        { name: "High" },
+      ),
+    );
+
+    expect(editor.getState().document.nodes[0]?.routerPriorities).toMatchObject(
+      {
+        "input:1": "high",
+      },
+    );
   });
 });
