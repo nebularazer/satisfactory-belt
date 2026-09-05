@@ -46,7 +46,13 @@ import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
 
 import { CommandDialog } from "@/components/ui/command";
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
-import { buildableImageUrl, descriptorImageUrl } from "@/game/catalog-images";
+import {
+  buildableImage,
+  descriptorImage,
+  imageSrcSet,
+  selectImageUrl,
+  type ResponsiveImage,
+} from "@/game/catalog-images";
 import { cn } from "@/lib/utils";
 
 export type NodePickerSelection = Readonly<{
@@ -439,7 +445,7 @@ function estimatedRowHeight(row: PickerRow) {
 type PickerTileProps = {
   active: boolean;
   domId: string;
-  imageUrl: string;
+  image: ResponsiveImage | undefined;
   label: string;
   onActivate: () => void;
   onSelect: () => void;
@@ -451,7 +457,7 @@ type PickerTileProps = {
 function PickerTile({
   active,
   domId,
-  imageUrl,
+  image,
   label,
   onActivate,
   onSelect,
@@ -471,13 +477,10 @@ function PickerTile({
       onMouseEnter={onActivate}
       role="option"
     >
-      <img
-        alt=""
-        aria-hidden="true"
+      <ResponsiveCatalogImage
         className="size-14 shrink-0 object-contain"
-        decoding="async"
         loading="lazy"
-        src={imageUrl}
+        image={image}
       />
       <div className="line-clamp-2 text-[0.6875rem] leading-tight font-medium">
         {label}
@@ -488,6 +491,30 @@ function PickerTile({
         </div>
       )}
     </div>
+  );
+}
+
+function ResponsiveCatalogImage({
+  className,
+  image,
+  loading,
+}: Readonly<{
+  className: string;
+  image: ResponsiveImage | undefined;
+  loading?: "eager" | "lazy";
+}>) {
+  if (!image) return null;
+  return (
+    <img
+      alt=""
+      aria-hidden="true"
+      className={className}
+      decoding="async"
+      loading={loading}
+      sizes="56px"
+      src={selectImageUrl(image, 128)}
+      srcSet={imageSrcSet(image)}
+    />
   );
 }
 
@@ -554,13 +581,10 @@ function RecipeRow({
         onClick={onSelect}
         role="option"
       >
-        <img
-          alt=""
-          aria-hidden="true"
+        <ResponsiveCatalogImage
           className="mt-0.5 size-14 shrink-0 object-contain"
-          decoding="async"
+          image={buildableImage(machine.id)}
           loading="lazy"
-          src={buildableImageUrl(machine.id)}
         />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1168,13 +1192,13 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
           ? `${routeItem.name} Recipes`
           : undefined;
   const headingImage = selectedMachine
-    ? buildableImageUrl(selectedMachine.id)
+    ? buildableImage(selectedMachine.id)
     : selectedExtractor
-      ? buildableImageUrl(selectedExtractor.id)
+      ? buildableImage(selectedExtractor.id)
       : selectedConfigurableBuildable
-        ? buildableImageUrl(selectedConfigurableBuildable.id)
+        ? buildableImage(selectedConfigurableBuildable.id)
         : routeItem
-          ? descriptorImageUrl(routeItem.id)
+          ? descriptorImage(routeItem.id)
           : undefined;
 
   return (
@@ -1198,12 +1222,9 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
               <ArrowLeft aria-hidden="true" className="size-4" />
             </button>
             {headingImage && (
-              <img
-                alt=""
-                aria-hidden="true"
+              <ResponsiveCatalogImage
                 className="size-14 object-contain"
-                decoding="async"
-                src={headingImage}
+                image={headingImage}
               />
             )}
             <div className="min-w-0">
@@ -1314,9 +1335,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             <PickerTile
                               active={option.key === activeKey}
                               domId={optionDomId(listId, option.key)}
-                              imageUrl={
-                                buildableImageUrl(tileBuildable.id) ?? ""
-                              }
+                              image={buildableImage(tileBuildable.id)}
                               key={option.key}
                               label={tileLabel}
                               onActivate={() => setActiveKey(option.key)}
@@ -1342,13 +1361,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
-                        <img
-                          alt=""
-                          aria-hidden="true"
+                        <ResponsiveCatalogImage
                           className="size-14 object-contain"
-                          decoding="async"
+                          image={buildableImage(row.machine.id)}
                           loading="lazy"
-                          src={buildableImageUrl(row.machine.id)}
                         />
                         <div className="min-w-0">
                           <div className="font-medium">
@@ -1386,13 +1402,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
-                        <img
-                          alt=""
-                          aria-hidden="true"
+                        <ResponsiveCatalogImage
                           className="size-14 object-contain"
-                          decoding="async"
+                          image={buildableImage(row.extractor.id)}
                           loading="lazy"
-                          src={buildableImageUrl(row.extractor.id)}
                         />
                         <div className="min-w-0">
                           <div className="font-medium">
@@ -1425,13 +1438,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
-                        <img
-                          alt=""
-                          aria-hidden="true"
+                        <ResponsiveCatalogImage
                           className="size-14 object-contain"
-                          decoding="async"
+                          image={buildableImage(row.extractor.id)}
                           loading="lazy"
-                          src={buildableImageUrl(row.extractor.id)}
                         />
                         <div className="font-medium">
                           <HighlightedText
@@ -1453,13 +1463,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
-                        <img
-                          alt=""
-                          aria-hidden="true"
+                        <ResponsiveCatalogImage
                           className="size-14 object-contain"
-                          decoding="async"
+                          image={buildableImage(row.buildable.id)}
                           loading="lazy"
-                          src={buildableImageUrl(row.buildable.id)}
                         />
                         <div className="min-w-0">
                           <div className="font-medium">
@@ -1489,13 +1496,10 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         onMouseEnter={() => setActiveKey(row.key)}
                         role="option"
                       >
-                        <img
-                          alt=""
-                          aria-hidden="true"
+                        <ResponsiveCatalogImage
                           className="size-14 object-contain"
-                          decoding="async"
+                          image={buildableImage(row.buildable.id)}
                           loading="lazy"
-                          src={buildableImageUrl(row.buildable.id)}
                         />
                         <div className="font-medium">
                           <HighlightedText

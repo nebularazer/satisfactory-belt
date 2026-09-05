@@ -11,6 +11,8 @@ import {
 } from "pixi.js";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
+import { selectImageUrl, type ResponsiveImage } from "@/game/catalog-images";
+
 import type {
   CanvasEditor,
   CanvasEditorChange,
@@ -19,6 +21,7 @@ import type {
 import { canvasNodeId, type CanvasNode } from "./document";
 import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL } from "./grid";
+import { stableImageScaleTier } from "./image-scale";
 import { attachCanvasInteractions } from "./interactions";
 import {
   createNodeCardModel,
@@ -39,7 +42,11 @@ import {
   type CanvasPerformanceMetrics,
 } from "./performance";
 import { createRenderScheduler } from "./render-scheduler";
-import { createTextureLoadQueue } from "./texture-load-queue";
+import { createTextureCache } from "./texture-cache";
+import {
+  createTextureLoadQueue,
+  type TextureLoadPriority,
+} from "./texture-load-queue";
 import { visibleCanvasNodes } from "./visibility";
 import {
   fitRectangleInViewport,
@@ -52,6 +59,10 @@ import {
 
 const MAX_POOLED_NODE_DISPLAYS = 256;
 const GRID_DOT_RADIUS = 1;
+const ITEM_IMAGE_SIZE = 24;
+const MACHINE_IMAGE_SIZE = 40;
+
+type RequestImage = (imageUrl: string, priority: TextureLoadPriority) => void;
 
 export type InfiniteCanvasHandle = {
   fitContent: () => void;
@@ -211,6 +222,14 @@ function cachedTexture(imageUrl: string) {
   return Assets.cache.has(imageUrl) ? Assets.get<Texture>(imageUrl) : undefined;
 }
 
+function renderedImageUrl(
+  image: ResponsiveImage | undefined,
+  displaySize: number,
+  imageScale: number,
+) {
+  return image ? (selectImageUrl(image, displaySize * imageScale) ?? "") : "";
+}
+
 function statusColor(status: NodeCardPortStatus) {
   if (status === "warning") return BLUEPRINT_COLORS.warning;
   if (status === "blocked") return BLUEPRINT_COLORS.blocked;
@@ -276,8 +295,9 @@ function updateMaterialVisual(
   layout: NodeCardLayout,
   cardWidth: number,
   dark: boolean,
+  imageScale: number,
   textResolution: number,
-  requestImage: (imageUrl: string) => void,
+  requestImage: RequestImage,
 ) {
   const y = nodeCardPortY(layout, index, count);
   const visible = material !== undefined;
@@ -286,7 +306,11 @@ function updateMaterialVisual(
   display.rate.visible = visible && material?.rate !== undefined;
   if (!visible || !material) return;
 
-  const imageUrl = material.imageUrl ?? "";
+  const imageUrl = renderedImageUrl(
+    material.image,
+    ITEM_IMAGE_SIZE,
+    imageScale,
+  );
   const texture = imageUrl ? cachedTexture(imageUrl) : undefined;
   const imageVisualKey = `${imageUrl}:${Boolean(texture)}`;
   if (display.imageVisualKey !== imageVisualKey) {
@@ -294,11 +318,11 @@ function updateMaterialVisual(
     display.imageVisualKey = imageVisualKey;
   }
   display.image.visible = Boolean(texture);
-  if (imageUrl && !texture) requestImage(imageUrl);
+  if (imageUrl && !texture) requestImage(imageUrl, "normal");
 
   display.image.anchor.set(0.5);
   display.image.position.set(side === "left" ? 28 : cardWidth - 28, y);
-  display.image.setSize(24, 24);
+  display.image.setSize(ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
   display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
   display.rate.position.set(side === "left" ? 46 : cardWidth - 46, y);
   display.rate.text = material.rate ?? "";
@@ -372,8 +396,9 @@ function nodeVisualKey(
   selected: boolean,
   textResolution: number,
   zoom: number,
+  imageScaleTier: number,
 ) {
-  return `${dark}:${selected}:${textResolution}:${selected ? zoom : ""}`;
+  return `${dark}:${selected}:${textResolution}:${selected ? zoom : ""}:${imageScaleTier}`;
 }
 
 function updateNodeVisual(
@@ -383,7 +408,9 @@ function updateNodeVisual(
   selected: boolean,
   textResolution: number,
   zoom: number,
-  requestImage: (imageUrl: string) => void,
+  imageScale: number,
+  imageScaleTier: number,
+  requestImage: RequestImage,
 ) {
   const model =
     display.modelNode === node && display.model
@@ -391,7 +418,13 @@ function updateNodeVisual(
       : createNodeCardModel(node);
   display.model = model;
   display.modelNode = node;
-  display.visualKey = nodeVisualKey(dark, selected, textResolution, zoom);
+  display.visualKey = nodeVisualKey(
+    dark,
+    selected,
+    textResolution,
+    zoom,
+    imageScaleTier,
+  );
   const layout = nodeCardLayout(node.configuration);
   const cardVisualKey = `${dark}:${selected}:${selected ? zoom : ""}:${node.width}:${node.height}:${layout.hasFooter}`;
   if (display.cardVisualKey !== cardVisualKey) {
@@ -461,19 +494,23 @@ function updateNodeVisual(
   display.subtitle.visible = model.subtitle !== undefined;
   fitText(display.subtitle, model.subtitle ?? "", titleWidth);
 
-  const machineImageUrl = model.buildableImageUrl ?? "";
+  const machineImageUrl = renderedImageUrl(
+    model.buildableImage,
+    MACHINE_IMAGE_SIZE,
+    imageScale,
+  );
   const machineTexture = machineImageUrl
     ? cachedTexture(machineImageUrl)
     : undefined;
   const machineImageVisualKey = `${machineImageUrl}:${Boolean(machineTexture)}`;
   if (display.machineImageVisualKey !== machineImageVisualKey) {
     display.machineImage.texture = machineTexture ?? Texture.EMPTY;
-    display.machineImage.setSize(40, 40);
+    display.machineImage.setSize(MACHINE_IMAGE_SIZE, MACHINE_IMAGE_SIZE);
     display.machineImage.visible = Boolean(machineTexture);
     display.machineImageVisualKey = machineImageVisualKey;
   }
   if (machineImageUrl && !machineTexture) {
-    requestImage(machineImageUrl);
+    requestImage(machineImageUrl, "high");
   }
 
   display.leftPorts.forEach((materialDisplay, index) =>
@@ -486,6 +523,7 @@ function updateNodeVisual(
       layout,
       node.width,
       dark,
+      imageScale,
       textResolution,
       requestImage,
     ),
@@ -500,6 +538,7 @@ function updateNodeVisual(
       layout,
       node.width,
       dark,
+      imageScale,
       textResolution,
       requestImage,
     ),
@@ -625,11 +664,41 @@ function recycleNodeDisplay(
   pool: NodeDisplay[],
 ) {
   scene.removeChild(display.container);
+  display.machineImage.texture = Texture.EMPTY;
+  for (const material of [...display.leftPorts, ...display.rightPorts]) {
+    material.image.texture = Texture.EMPTY;
+  }
   if (pool.length < MAX_POOLED_NODE_DISPLAYS) {
     pool.push(display);
   } else {
     display.container.destroy({ children: true });
   }
+}
+
+function visibleImageUrls(
+  displays: ReadonlyMap<string, NodeDisplay>,
+  imageScale: number,
+) {
+  const imageUrls = new Set<string>();
+  for (const display of displays.values()) {
+    const model = display.model;
+    if (!model) continue;
+    const machineImageUrl = renderedImageUrl(
+      model.buildableImage,
+      MACHINE_IMAGE_SIZE,
+      imageScale,
+    );
+    if (machineImageUrl) imageUrls.add(machineImageUrl);
+    for (const material of [...model.leftPorts, ...model.rightPorts]) {
+      const itemImageUrl = renderedImageUrl(
+        material.image,
+        ITEM_IMAGE_SIZE,
+        imageScale,
+      );
+      if (itemImageUrl) imageUrls.add(itemImageUrl);
+    }
+  }
+  return imageUrls;
 }
 
 function syncDocument(
@@ -640,7 +709,9 @@ function syncDocument(
   visibleNodes: readonly CanvasNode[],
   textResolution: number,
   zoom: number,
-  requestImage: (imageUrl: string) => void,
+  imageScale: number,
+  imageScaleTier: number,
+  requestImage: RequestImage,
   forceVisualUpdate = false,
 ) {
   const dark = document.documentElement.classList.contains("dark");
@@ -679,7 +750,8 @@ function syncDocument(
     if (
       forceVisualUpdate ||
       display.modelNode !== node ||
-      display.visualKey !== nodeVisualKey(dark, selected, textResolution, zoom)
+      display.visualKey !==
+        nodeVisualKey(dark, selected, textResolution, zoom, imageScaleTier)
     ) {
       updateNodeVisual(
         display,
@@ -688,6 +760,8 @@ function syncDocument(
         selected,
         textResolution,
         zoom,
+        imageScale,
+        imageScaleTier,
         requestImage,
       );
     }
@@ -700,7 +774,9 @@ function syncEditorChange(
   change: CanvasEditorChange,
   textResolution: number,
   zoom: number,
-  requestImage: (imageUrl: string) => void,
+  imageScale: number,
+  imageScaleTier: number,
+  requestImage: RequestImage,
 ) {
   if (change.kind === "document" || change.kind === "settings") return false;
 
@@ -725,6 +801,8 @@ function syncEditorChange(
         selectedIds?.has(id) ?? false,
         textResolution,
         zoom,
+        imageScale,
+        imageScaleTier,
         requestImage,
       );
     }
@@ -779,9 +857,13 @@ export const InfiniteCanvas = forwardRef<
     typeof createRenderScheduler
   > | null>(null);
   const textResolutionRef = useRef(1);
+  const imageScaleTierRef = useRef(stableImageScaleTier(1));
   const textureLoadQueueRef = useRef<ReturnType<
     typeof createTextureLoadQueue
   > | null>(null);
+  const textureCacheRef = useRef<ReturnType<typeof createTextureCache> | null>(
+    null,
+  );
   const textureRefreshPendingRef = useRef(false);
   const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
   const showGridDotsRef = useRef(showGridDots);
@@ -790,8 +872,8 @@ export const InfiniteCanvas = forwardRef<
   performanceMetricsEnabledRef.current = performanceMetricsEnabled;
   showGridDotsRef.current = showGridDots;
 
-  const requestImage = (imageUrl: string) => {
-    textureLoadQueueRef.current?.request(imageUrl);
+  const requestImage: RequestImage = (imageUrl, priority) => {
+    textureLoadQueueRef.current?.request(imageUrl, priority);
   };
 
   const syncVisibleScene = (forceVisualUpdate = false) => {
@@ -800,6 +882,7 @@ export const InfiniteCanvas = forwardRef<
     if (!app || !scene) return;
 
     const state = editor.getState();
+    const imageScale = viewportRef.current.zoom * app.renderer.resolution;
     syncDocument(
       scene,
       state,
@@ -808,8 +891,13 @@ export const InfiniteCanvas = forwardRef<
       visibleCanvasNodes(state, viewportRef.current, app.screen, editor.query),
       textResolutionRef.current,
       viewportRef.current.zoom,
+      imageScale,
+      imageScaleTierRef.current,
       requestImage,
       forceVisualUpdate,
+    );
+    textureCacheRef.current?.retain(
+      visibleImageUrls(nodeDisplaysRef.current, imageScale),
     );
   };
 
@@ -823,6 +911,11 @@ export const InfiniteCanvas = forwardRef<
 
     if (app && grid && world) {
       const updateStartedAt = performance.now();
+      const imageScale = viewport.zoom * app.renderer.resolution;
+      imageScaleTierRef.current = stableImageScaleTier(
+        imageScale,
+        imageScaleTierRef.current,
+      );
       world.position.set(viewport.x, viewport.y);
       world.scale.set(viewport.zoom);
       updateGrid(grid, viewport, app.screen.width, app.screen.height);
@@ -984,10 +1077,20 @@ export const InfiniteCanvas = forwardRef<
         });
         performanceSamplerRef.current = performanceSampler;
         renderSchedulerRef.current = renderScheduler;
+        const textureCache = createTextureCache({
+          isCached: (imageUrl) => Assets.cache.has(imageUrl),
+          unload: (imageUrl) => Assets.unload(imageUrl),
+        });
+        textureCacheRef.current = textureCache;
         const textureLoadQueue = createTextureLoadQueue({
           isCached: (imageUrl) => Assets.cache.has(imageUrl),
           load: (imageUrl) => Assets.load(imageUrl),
-          onReady: () => {
+          maxConcurrent: 4,
+          onDiscard: (imageUrl) => {
+            void Assets.unload(imageUrl).catch(() => undefined);
+          },
+          onReady: (imageUrl) => {
+            textureCache.recordLoaded(imageUrl);
             textureRefreshPendingRef.current = true;
             renderScheduler.request();
           },
@@ -1098,7 +1201,15 @@ export const InfiniteCanvas = forwardRef<
               change,
               textResolutionRef.current,
               viewportRef.current.zoom,
+              viewportRef.current.zoom * app.renderer.resolution,
+              imageScaleTierRef.current,
               requestImage,
+            );
+            textureCache.retain(
+              visibleImageUrls(
+                nodeDisplaysRef.current,
+                viewportRef.current.zoom * app.renderer.resolution,
+              ),
             );
           }
           if (!needsRender) return;
@@ -1121,6 +1232,8 @@ export const InfiniteCanvas = forwardRef<
       themeObserver?.disconnect();
       textureLoadQueueRef.current?.dispose();
       textureLoadQueueRef.current = null;
+      textureCacheRef.current?.dispose();
+      textureCacheRef.current = null;
       textureRefreshPendingRef.current = false;
       renderSchedulerRef.current?.cancel();
       gridRef.current?.texture.destroy(true);
@@ -1136,6 +1249,7 @@ export const InfiniteCanvas = forwardRef<
       }
       nodeDisplayPoolRef.current = [];
       textResolutionRef.current = 1;
+      imageScaleTierRef.current = stableImageScaleTier(1);
 
       if (appRef.current === app) {
         appRef.current = null;

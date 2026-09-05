@@ -7,7 +7,11 @@ import {
   type MaterialRate,
 } from "@satisfactory-belt/production";
 
-import { buildableImageUrl, descriptorImageUrl } from "@/game/catalog-images";
+import {
+  buildableImage,
+  descriptorImage,
+  type ResponsiveImage,
+} from "@/game/catalog-images";
 
 import type { CanvasNode } from "./document";
 
@@ -34,7 +38,7 @@ export type NodeCardRuntime = Readonly<{
 export type NodeCardPort = Readonly<{
   connected: boolean;
   direction: NodeCardPortDirection;
-  imageUrl?: string;
+  image?: ResponsiveImage;
   itemName?: string;
   portId: string;
   rate?: string;
@@ -42,7 +46,7 @@ export type NodeCardPort = Readonly<{
 }>;
 
 export type NodeCardModel = Readonly<{
-  buildableImageUrl?: string;
+  buildableImage?: ResponsiveImage;
   clock?: string;
   efficiency?: Readonly<{
     percent: string;
@@ -95,7 +99,7 @@ function runtimePort(
       port.direction === "bidirectional"
         ? (state?.direction ?? "bidirectional")
         : port.direction,
-    ...(itemId ? { imageUrl: descriptorImageUrl(itemId) } : {}),
+    ...(itemId ? { image: descriptorImage(itemId) } : {}),
     ...(item ? { itemName: item.name } : {}),
     portId: port.id,
     ...(rate ? { rate: formatNumber(rate.ratePerMinute) } : {}),
@@ -207,7 +211,7 @@ export function createNodeCardModel(
           status: "neutral" as const,
         })
       : undefined;
-  const imageUrl = buildableImageUrl(canvasNode.configuration.buildableId);
+  const image = buildableImage(canvasNode.configuration.buildableId);
   const power = powerMetric(node.profile);
   const subtitle =
     node.kind === "process"
@@ -215,7 +219,7 @@ export function createNodeCardModel(
       : materialNodeSubtitle(canvasNode);
 
   return {
-    ...(imageUrl ? { buildableImageUrl: imageUrl } : {}),
+    ...(image ? { buildableImage: image } : {}),
     ...(clock === undefined ? {} : { clock: `${formatNumber(clock)}%` }),
     ...(efficiency
       ? {

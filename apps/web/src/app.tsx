@@ -31,10 +31,7 @@ import {
   createCanvasLoadFixture,
   loadFixtureNodeCount,
 } from "@/canvas/load-fixture";
-import {
-  InfiniteCanvas,
-  type InfiniteCanvasHandle,
-} from "@/canvas/infinite-canvas";
+import type { InfiniteCanvasHandle } from "@/canvas/infinite-canvas";
 import type { CanvasPerformanceMetrics } from "@/canvas/performance";
 import {
   CANVAS_PREFERENCES,
@@ -63,6 +60,10 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 
 const loadNodePicker = () => import("@/components/node-picker");
+const loadInfiniteCanvas = () => import("@/canvas/infinite-canvas");
+const InfiniteCanvas = lazy(async () => ({
+  default: (await loadInfiniteCanvas()).InfiniteCanvas,
+}));
 const NodePicker = lazy(async () => ({
   default: (await loadNodePicker()).NodePicker,
 }));
@@ -366,8 +367,7 @@ function CanvasWorkspace({
   const duplicateSelection = () =>
     editor.dispatch({ type: "selection.duplicate" });
   const requestNodeAtCenter = () => {
-    const center = canvasRef.current?.getViewportCenter();
-    if (center) requestNodeAt(center);
+    requestNodeAt(canvasRef.current?.getViewportCenter() ?? { x: 0, y: 0 });
   };
   const loadDocument = (save: SavedCanvasDocument) => {
     selectActiveSave(save);
@@ -398,15 +398,17 @@ function CanvasWorkspace({
           onDuplicate={duplicateSelection}
           onTouchStart={handleContextMenuTouchStart}
         >
-          <InfiniteCanvas
-            editor={editor}
-            onPerformanceMetricsChange={handlePerformanceMetricsChange}
-            onRequestAddNode={requestNodeAt}
-            onViewportChange={handleViewportChange}
-            performanceMetricsEnabled={showPerformance}
-            ref={canvasRef}
-            showGridDots={showGridDots}
-          />
+          <Suspense fallback={<div className="infinite-canvas" />}>
+            <InfiniteCanvas
+              editor={editor}
+              onPerformanceMetricsChange={handlePerformanceMetricsChange}
+              onRequestAddNode={requestNodeAt}
+              onViewportChange={handleViewportChange}
+              performanceMetricsEnabled={showPerformance}
+              ref={canvasRef}
+              showGridDots={showGridDots}
+            />
+          </Suspense>
         </CanvasContextMenu>
       </div>
 

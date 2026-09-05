@@ -1,6 +1,13 @@
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { format } from "oxfmt";
+
+import {
+  generateImageVariants,
+  mapConcurrent,
+  removeUnexpectedWebpAssets,
+  writeAssetVersionManifest,
+} from "./image-assets.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const sourcePath = path.join(
@@ -187,17 +194,29 @@ async function writeFormattedJson(fileName, value) {
 await Promise.all([
   writeFormattedJson("items.json", items),
   writeFormattedJson("recipes.json", recipes),
-  mkdir(outputItemImageDirectory, { recursive: true }).then(() =>
-    Promise.all(
-      items.map(({ id }) =>
-        copyFile(
-          path.join(sourceItemImageDirectory, `${id}.png`),
-          path.join(outputItemImageDirectory, `${id}.png`),
-        ),
-      ),
+  mapConcurrent(items, 8, ({ id }) =>
+    generateImageVariants(
+      path.join(sourceItemImageDirectory, `${id}.png`),
+      outputItemImageDirectory,
+      [64, 128, 256],
     ),
   ),
 ]);
+await removeUnexpectedWebpAssets(
+  outputItemImageDirectory,
+  new Set(
+    items.flatMap(({ id }) =>
+      [64, 128, 256].map((width) => `${id}-${width}.webp`),
+    ),
+  ),
+);
+await writeAssetVersionManifest(
+  [
+    outputItemImageDirectory,
+    path.join(repositoryRoot, "apps/web/public/buildables"),
+  ],
+  path.join(repositoryRoot, "apps/web/src/game/image-assets.generated.json"),
+);
 
 console.log(
   `Extracted ${recipes.length} recipes and ${items.length} items with images.`,

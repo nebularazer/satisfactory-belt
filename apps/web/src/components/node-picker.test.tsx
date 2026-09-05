@@ -291,7 +291,12 @@ describe("NodePicker", () => {
     expect(heading).toBeInTheDocument();
     expect(
       heading.parentElement?.parentElement?.querySelector("img"),
-    ).toHaveAttribute("src", "/items/Desc_IronScrew_C.png");
+    ).toHaveAttribute(
+      "src",
+      expect.stringMatching(
+        /^\/items\/Desc_IronScrew_C-128\.webp\?v=[a-f\d]{12}$/,
+      ),
+    );
     expect(
       screen.getByPlaceholderText("Search Screws recipes..."),
     ).toBeInTheDocument();
