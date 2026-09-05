@@ -37,19 +37,19 @@ describe("node card model", () => {
 
     expect(model).toMatchObject({
       clock: "75%",
-      efficiency: { percent: "100%", status: "neutral" },
-      power: "105 MW",
+      efficiency: { percent: "—", status: "neutral" },
+      power: { direction: "consumed", text: "−105 MW" },
       subtitle: "2× Blender",
       title: "Nitro Rocket Fuel",
     });
-    expect(model.inputs.map(({ rate }) => rate)).toEqual([
+    expect(model.leftPorts.map(({ rate }) => rate)).toEqual([
       "150",
       "112.5",
       "150",
       "75",
     ]);
-    expect(model.outputs.map(({ rate }) => rate)).toEqual(["225", "37.5"]);
-    expect(model.inputs.every(({ connected }) => !connected)).toBe(true);
+    expect(model.rightPorts.map(({ rate }) => rate)).toEqual(["225", "37.5"]);
+    expect(model.leftPorts.every(({ connected }) => !connected)).toBe(true);
   });
 
   it("applies connection, port status, and efficiency runtime state", () => {
@@ -64,7 +64,7 @@ describe("node card model", () => {
     });
 
     expect(model.efficiency).toEqual({ percent: "68%", status: "warning" });
-    expect(model.inputs[1]).toMatchObject({
+    expect(model.leftPorts[1]).toMatchObject({
       connected: true,
       itemName: "Nitrogen Gas",
       status: "warning",
@@ -91,5 +91,130 @@ describe("node card model", () => {
     });
 
     expect(model.clock).toBe("100%");
+  });
+
+  it("distinguishes produced power from consumed power", () => {
+    const model = createNodeCardModel({
+      configuration: {
+        buildableId: "Build_GeneratorCoal_C",
+        id: "coal-generator-1",
+        instances: [
+          {
+            clockSpeedPercent: 100,
+            id: "coal-generator-instance-1",
+          },
+        ],
+        kind: "process",
+        processId: "power-generation:Build_GeneratorCoal_C:Desc_Coal_C",
+      },
+      height: 256,
+      label: "Coal-Powered Generator: Coal",
+      width: 256,
+      x: 0,
+      y: 0,
+    });
+
+    expect(model.power).toEqual({ direction: "produced", text: "+75 MW" });
+  });
+
+  it("omits clock for a non-clockable process without inventing efficiency", () => {
+    const model = createNodeCardModel({
+      configuration: {
+        buildableId: "Build_ResourceSink_C",
+        id: "sink-1",
+        instances: [{ id: "sink-instance-1" }],
+        kind: "process",
+        processId: "consumption:Build_ResourceSink_C",
+      },
+      height: 256,
+      label: "AWESOME Sink",
+      width: 256,
+      x: 0,
+      y: 0,
+    });
+
+    expect(model.clock).toBeUndefined();
+    expect(model.efficiency).toEqual({ percent: "—", status: "neutral" });
+    expect(model.power).toEqual({ direction: "consumed", text: "−30 MW" });
+  });
+
+  it("keeps every physical splitter port and hides inapplicable metrics", () => {
+    const model = createNodeCardModel({
+      configuration: {
+        buildableId: "Build_ConveyorAttachmentSplitter_C",
+        id: "splitter-1",
+        kind: "router",
+      },
+      height: 256,
+      label: "Conveyor Splitter",
+      width: 256,
+      x: 0,
+      y: 0,
+    });
+
+    expect(model).toMatchObject({
+      leftPorts: [{ direction: "input" }],
+      rightPorts: [
+        { direction: "output" },
+        { direction: "output" },
+        { direction: "output" },
+      ],
+      title: "Conveyor Splitter",
+    });
+    expect(model.subtitle).toBeUndefined();
+    expect(model.clock).toBeUndefined();
+    expect(model.efficiency).toBeUndefined();
+    expect(model.power).toBeUndefined();
+    expect(model.rightPorts.every(({ rate }) => rate === undefined)).toBe(true);
+  });
+
+  it("keeps unresolved junction ports bidirectional", () => {
+    const model = createNodeCardModel({
+      configuration: {
+        buildableId: "Build_PipelineJunction_T_C",
+        id: "junction-1",
+        kind: "router",
+      },
+      height: 256,
+      label: "Pipeline T-Junction",
+      width: 256,
+      x: 0,
+      y: 0,
+    });
+
+    expect(model.leftPorts).toHaveLength(2);
+    expect(model.rightPorts).toHaveLength(1);
+    expect(
+      [...model.leftPorts, ...model.rightPorts].every(
+        ({ direction }) => direction === "bidirectional",
+      ),
+    ).toBe(true);
+  });
+
+  it("uses runtime flow direction for a bidirectional port", () => {
+    const model = createNodeCardModel(
+      {
+        configuration: {
+          buildableId: "Build_PipeStorageTank_C",
+          id: "buffer-1",
+          kind: "buffer",
+        },
+        height: 256,
+        label: "Fluid Buffer",
+        width: 256,
+        x: 0,
+        y: 0,
+      },
+      {
+        ports: {
+          "port:1": { connected: true, direction: "input" },
+          "port:2": { connected: true, direction: "output" },
+        },
+      },
+    );
+
+    expect(model.leftPorts[0]?.direction).toBe("input");
+    expect(model.rightPorts[0]?.direction).toBe("output");
+    expect(model.subtitle).toBe("400 m³");
   });
 });

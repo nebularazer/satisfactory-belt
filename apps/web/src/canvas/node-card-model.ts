@@ -1,5 +1,6 @@
 import {
   createNode,
+  findBuffer,
   findBuildable,
   findDescriptor,
   type MaterialPort,
@@ -11,6 +12,7 @@ import { buildableImageUrl, descriptorImageUrl } from "@/game/catalog-images";
 import type { CanvasNode } from "./document";
 
 export type NodeCardPortStatus = "blocked" | "neutral" | "warning";
+export type NodeCardPortDirection = "bidirectional" | "input" | "output";
 
 export type NodeCardRuntime = Readonly<{
   efficiency?: Readonly<{
@@ -22,32 +24,37 @@ export type NodeCardRuntime = Readonly<{
       string,
       Readonly<{
         connected: boolean;
+        direction?: "input" | "output";
         status?: NodeCardPortStatus;
       }>
     >
   >;
 }>;
 
-export type NodeCardMaterial = Readonly<{
+export type NodeCardPort = Readonly<{
   connected: boolean;
+  direction: NodeCardPortDirection;
   imageUrl?: string;
   itemName?: string;
   portId: string;
-  rate: string;
+  rate?: string;
   status: NodeCardPortStatus;
 }>;
 
 export type NodeCardModel = Readonly<{
   buildableImageUrl?: string;
-  clock: string;
-  efficiency: Readonly<{
+  clock?: string;
+  efficiency?: Readonly<{
     percent: string;
     status: NodeCardPortStatus;
   }>;
-  inputs: readonly NodeCardMaterial[];
-  outputs: readonly NodeCardMaterial[];
-  power: string;
-  subtitle: string;
+  leftPorts: readonly NodeCardPort[];
+  power?: Readonly<{
+    direction: "consumed" | "produced";
+    text: string;
+  }>;
+  rightPorts: readonly NodeCardPort[];
+  subtitle?: string;
   title: string;
 }>;
 
@@ -69,81 +76,107 @@ function formatPower({
 }
 
 function averageClock(configuration: CanvasNode["configuration"]) {
-  if (configuration.kind !== "process") return 100;
-  const clocks = configuration.instances.map((instance) =>
-    "clockSpeedPercent" in instance ? instance.clockSpeedPercent : 100,
+  if (configuration.kind !== "process") return undefined;
+  const clocks = configuration.instances.flatMap((instance) =>
+    "clockSpeedPercent" in instance ? [instance.clockSpeedPercent] : [],
   );
+  if (clocks.length === 0) return undefined;
   return clocks.reduce((total, clock) => total + clock, 0) / clocks.length;
 }
 
-function runtimeMaterial(
+function runtimePort(
   port: MaterialPort,
   rate: MaterialRate | undefined,
   runtime: NodeCardRuntime | undefined,
-): NodeCardMaterial {
+): NodeCardPort {
   const itemId = rate?.itemId ?? port.itemId;
   const item = itemId ? findDescriptor(itemId) : undefined;
   const state = runtime?.ports?.[port.id];
   return {
     connected: state?.connected ?? false,
+    direction:
+      port.direction === "bidirectional"
+        ? (state?.direction ?? "bidirectional")
+        : port.direction,
     ...(itemId ? { imageUrl: descriptorImageUrl(itemId) } : {}),
     ...(item ? { itemName: item.name } : {}),
     portId: port.id,
-    rate: rate ? formatNumber(rate.ratePerMinute) : "—",
+    ...(rate ? { rate: formatNumber(rate.ratePerMinute) } : {}),
     status: state?.status ?? "neutral",
   };
 }
 
-function calculatedMaterials(
+function calculatedPorts(
   ports: readonly MaterialPort[],
   rates: readonly MaterialRate[],
   direction: "input" | "output",
   runtime: NodeCardRuntime | undefined,
 ) {
-  return rates.map((rate) => {
-    const port = ports.find(
-      (candidate) =>
-        candidate.direction === direction && candidate.itemId === rate.itemId,
+  return ports
+    .filter((port) => port.direction === direction)
+    .map((port) =>
+      runtimePort(
+        port,
+        rates.find(({ itemId }) => itemId === port.itemId),
+        runtime,
+      ),
     );
-    return runtimeMaterial(
-      port ?? {
-        direction,
-        forms: [],
-        id: `${direction}:${rate.itemId}`,
-        itemId: rate.itemId,
-        medium: "conveyor",
-      },
-      rate,
-      runtime,
-    );
-  });
 }
 
-function connectionDependentMaterials(
+function connectionDependentPorts(
   ports: readonly MaterialPort[],
   runtime: NodeCardRuntime | undefined,
 ) {
-  const inputs = ports
+  const leftPorts = ports
     .filter(({ direction }) => direction === "input")
-    .map((port) => runtimeMaterial(port, undefined, runtime));
-  const outputs = ports
+    .map((port) => runtimePort(port, undefined, runtime));
+  const rightPorts = ports
     .filter(({ direction }) => direction === "output")
-    .map((port) => runtimeMaterial(port, undefined, runtime));
+    .map((port) => runtimePort(port, undefined, runtime));
   const bidirectional = ports.filter(
     ({ direction }) => direction === "bidirectional",
   );
   const splitAt = Math.ceil(bidirectional.length / 2);
-  inputs.push(
+  leftPorts.push(
     ...bidirectional
       .slice(0, splitAt)
-      .map((port) => runtimeMaterial(port, undefined, runtime)),
+      .map((port) => runtimePort(port, undefined, runtime)),
   );
-  outputs.push(
+  rightPorts.push(
     ...bidirectional
       .slice(splitAt)
-      .map((port) => runtimeMaterial(port, undefined, runtime)),
+      .map((port) => runtimePort(port, undefined, runtime)),
   );
-  return { inputs, outputs };
+  return { leftPorts, rightPorts };
+}
+
+function powerMetric(profile: ReturnType<typeof createNode>["profile"]) {
+  if (profile.power.produced.maximumMw > 0) {
+    return {
+      direction: "produced" as const,
+      text: `+${formatPower(profile.power.produced)}`,
+    };
+  }
+  if (profile.power.consumed.maximumMw > 0) {
+    return {
+      direction: "consumed" as const,
+      text: `−${formatPower(profile.power.consumed)}`,
+    };
+  }
+  return undefined;
+}
+
+function materialNodeSubtitle(canvasNode: CanvasNode) {
+  if (canvasNode.configuration.kind === "transport") {
+    return canvasNode.configuration.mode === "load" ? "Load" : "Unload";
+  }
+  if (canvasNode.configuration.kind !== "buffer") return undefined;
+
+  const capacity = findBuffer(canvasNode.configuration.buildableId)?.capacity;
+  if (!capacity) return undefined;
+  return capacity.type === "inventory"
+    ? `${formatNumber(capacity.slots)} slots`
+    : `${formatNumber(capacity.cubicMetres)} m³`;
 }
 
 export function createNodeCardModel(
@@ -155,49 +188,53 @@ export function createNodeCardModel(
   const materials =
     node.profile.materials.kind === "calculated"
       ? {
-          inputs: calculatedMaterials(
+          leftPorts: calculatedPorts(
             node.ports,
             node.profile.materials.inputs,
             "input",
             runtime,
           ),
-          outputs: calculatedMaterials(
+          rightPorts: calculatedPorts(
             node.ports,
             node.profile.materials.outputs,
             "output",
             runtime,
           ),
         }
-      : connectionDependentMaterials(node.ports, runtime);
-  const power =
-    node.profile.power.produced.maximumMw > 0
-      ? node.profile.power.produced
-      : node.profile.power.consumed;
-  const efficiency = runtime?.efficiency ?? {
-    percent: 100,
-    status: "neutral" as const,
-  };
+      : connectionDependentPorts(node.ports, runtime);
+  const clock = averageClock(canvasNode.configuration);
+  const efficiency =
+    node.kind === "process"
+      ? (runtime?.efficiency ?? {
+          percent: undefined,
+          status: "neutral" as const,
+        })
+      : undefined;
+  const imageUrl = buildableImageUrl(canvasNode.configuration.buildableId);
+  const power = powerMetric(node.profile);
+  const subtitle =
+    node.kind === "process"
+      ? `${node.configuration.instances.length}× ${buildable?.name ?? "Buildable"}`
+      : materialNodeSubtitle(canvasNode);
 
   return {
-    ...(buildableImageUrl(canvasNode.configuration.buildableId)
+    ...(imageUrl ? { buildableImageUrl: imageUrl } : {}),
+    ...(clock === undefined ? {} : { clock: `${formatNumber(clock)}%` }),
+    ...(efficiency
       ? {
-          buildableImageUrl: buildableImageUrl(
-            canvasNode.configuration.buildableId,
-          ),
+          efficiency: {
+            percent:
+              efficiency.percent === undefined
+                ? "—"
+                : `${formatNumber(efficiency.percent)}%`,
+            status: efficiency.status,
+          },
         }
       : {}),
-    clock: `${formatNumber(averageClock(canvasNode.configuration))}%`,
-    efficiency: {
-      percent: `${formatNumber(efficiency.percent)}%`,
-      status: efficiency.status,
-    },
-    inputs: materials.inputs.slice(0, 4),
-    outputs: materials.outputs.slice(0, 2),
-    power: formatPower(power),
-    subtitle:
-      node.kind === "process"
-        ? `${node.configuration.instances.length}× ${buildable?.name ?? "Buildable"}`
-        : (buildable?.name ?? canvasNode.label),
+    leftPorts: materials.leftPorts,
+    ...(power ? { power } : {}),
+    rightPorts: materials.rightPorts,
+    ...(subtitle ? { subtitle } : {}),
     title: node.kind === "process" ? node.process.name : canvasNode.label,
   };
 }

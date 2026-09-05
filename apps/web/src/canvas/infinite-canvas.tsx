@@ -24,8 +24,9 @@ import type { Point, Rectangle } from "./geometry";
 import { attachCanvasInteractions } from "./interactions";
 import {
   createNodeCardModel,
-  type NodeCardMaterial,
   type NodeCardModel,
+  type NodeCardPort,
+  type NodeCardPortDirection,
   type NodeCardPortStatus,
 } from "./node-card-model";
 import {
@@ -76,13 +77,13 @@ type NodeDisplay = {
   container: Container;
   efficiency: Text;
   footerIcons: Graphics;
-  inputs: readonly MaterialDisplay[];
+  leftPorts: readonly MaterialDisplay[];
   machineImage: Sprite;
   machineImageVisualKey: string;
   model?: NodeCardModel;
   modelNode?: CanvasNode;
   node: CanvasNode;
-  outputs: readonly MaterialDisplay[];
+  rightPorts: readonly MaterialDisplay[];
   power: Text;
   subtitle: Text;
   title: Text;
@@ -174,9 +175,8 @@ function textResolutionForZoom(zoom: number, rendererResolution: number) {
 const NODE_CARD_SIZE = NODE_WIDTH;
 const NODE_CARD_HEADER_HEIGHT = 48;
 const NODE_CARD_FOOTER_HEIGHT = 48;
-const INPUT_PORT_Y = [80, 112, 144, 176] as const;
-const OUTPUT_PORT_Y = [112, 144] as const;
 const BLUEPRINT_COLORS = {
+  bidirectional: 0x7c8798,
   blocked: 0xb75b65,
   input: 0xb8794f,
   output: 0x5a9b8c,
@@ -201,6 +201,16 @@ function statusColor(status: NodeCardPortStatus) {
   return undefined;
 }
 
+function portColor(direction: NodeCardPortDirection) {
+  if (direction === "input") return BLUEPRINT_COLORS.input;
+  if (direction === "output") return BLUEPRINT_COLORS.output;
+  return BLUEPRINT_COLORS.bidirectional;
+}
+
+function centeredPortY(index: number, count: number) {
+  return NODE_CARD_SIZE / 2 + (index - (count - 1) / 2) * SNAP_INTERVAL;
+}
+
 function updateTextResolution(text: Text, resolution: number) {
   if (text.resolution !== resolution) text.resolution = resolution;
 }
@@ -222,36 +232,37 @@ function fitText(text: Text, value: string, maximumWidth: number) {
 
 function updateMaterialVisual(
   display: MaterialDisplay,
-  material: NodeCardMaterial | undefined,
-  role: "input" | "output",
+  material: NodeCardPort | undefined,
+  side: "left" | "right",
   index: number,
+  count: number,
   dark: boolean,
   textResolution: number,
   onAssetReady: () => void,
 ) {
-  const y = (role === "input" ? INPUT_PORT_Y : OUTPUT_PORT_Y)[index];
-  const visible = material !== undefined && y !== undefined;
-  display.image.visible = visible;
+  const y = centeredPortY(index, count);
+  const visible = material !== undefined;
+  display.image.visible = false;
   display.port.visible = visible;
-  display.rate.visible = visible;
-  if (!visible || !material || y === undefined) return;
+  display.rate.visible = visible && material?.rate !== undefined;
+  if (!visible || !material) return;
 
   const imageUrl = material.imageUrl ?? "";
   const texture = imageUrl ? cachedTexture(imageUrl) : undefined;
   const imageVisualKey = `${imageUrl}:${Boolean(texture)}`;
   if (display.imageVisualKey !== imageVisualKey) {
     display.image.texture = texture ?? Texture.EMPTY;
-    display.image.visible = Boolean(texture);
     display.imageVisualKey = imageVisualKey;
   }
+  display.image.visible = Boolean(texture);
   if (imageUrl && !texture) requestTexture(imageUrl, onAssetReady);
 
   display.image.anchor.set(0.5);
-  display.image.position.set(role === "input" ? 28 : 228, y);
+  display.image.position.set(side === "left" ? 28 : 228, y);
   display.image.setSize(24, 24);
-  display.rate.anchor.set(role === "input" ? 0 : 1, 0.5);
-  display.rate.position.set(role === "input" ? 46 : 210, y);
-  display.rate.text = material.rate;
+  display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
+  display.rate.position.set(side === "left" ? 46 : 210, y);
+  display.rate.text = material.rate ?? "";
   display.rate.style = {
     fill: material.connected
       ? dark
@@ -270,56 +281,71 @@ function updateMaterialVisual(
   display.port
     .clear()
     .circle(0, 0, 10)
-    .fill({
-      color:
-        role === "input" ? BLUEPRINT_COLORS.input : BLUEPRINT_COLORS.output,
-    })
+    .fill({ color: portColor(material.direction) })
     .circle(0, 0, 8)
     .fill({ color: dark ? 0x18181b : 0xffffff });
   if (center !== undefined) {
     display.port.circle(0, 0, 5).fill({ color: center });
   }
-  display.port.position.set(role === "input" ? 0 : NODE_CARD_SIZE, y);
+  display.port.position.set(side === "left" ? 0 : NODE_CARD_SIZE, y);
 }
 
 function drawFooterIcons(
   graphics: Graphics,
+  model: NodeCardModel,
   powerTextWidth: number,
-  efficiencyStatus: NodeCardPortStatus,
   dark: boolean,
 ) {
   const foreground = dark ? 0xd4d4d8 : 0x52525b;
-  const efficiency = statusColor(efficiencyStatus) ?? foreground;
+  const efficiency = model.efficiency
+    ? (statusColor(model.efficiency.status) ?? foreground)
+    : foreground;
   const powerX = 240 - powerTextWidth - 10;
-  graphics
-    .clear()
-    .arc(21, 233, 6, Math.PI, 0)
-    .stroke({ color: foreground, width: 1.5 })
-    .moveTo(21, 233)
-    .lineTo(25, 229)
-    .stroke({ color: foreground, width: 1.5 })
-    .circle(78, 232, 6)
-    .stroke({ color: efficiency, width: 1.5 })
-    .moveTo(74, 233)
-    .lineTo(76, 230)
-    .lineTo(79, 234)
-    .lineTo(82, 229)
-    .stroke({ color: efficiency, width: 1.25 })
-    .poly([
-      powerX,
-      225,
-      powerX - 4,
-      232,
-      powerX,
-      232,
-      powerX - 2,
-      239,
-      powerX + 5,
-      230,
-      powerX + 1,
-      230,
-    ])
-    .fill({ color: 0xeab308 });
+  let leftX = 21;
+  graphics.clear();
+
+  if (model.clock) {
+    graphics
+      .arc(leftX, 233, 6, Math.PI, 0)
+      .stroke({ color: foreground, width: 1.5 })
+      .moveTo(leftX, 233)
+      .lineTo(leftX + 4, 229)
+      .stroke({ color: foreground, width: 1.5 });
+    leftX += 57;
+  }
+  if (model.efficiency) {
+    graphics
+      .circle(leftX, 232, 6)
+      .stroke({ color: efficiency, width: 1.5 })
+      .moveTo(leftX - 4, 233)
+      .lineTo(leftX - 2, 230)
+      .lineTo(leftX + 1, 234)
+      .lineTo(leftX + 4, 229)
+      .stroke({ color: efficiency, width: 1.25 });
+  }
+  if (model.power) {
+    graphics
+      .poly([
+        powerX,
+        225,
+        powerX - 4,
+        232,
+        powerX,
+        232,
+        powerX - 2,
+        239,
+        powerX + 5,
+        230,
+        powerX + 1,
+        230,
+      ])
+      .fill({
+        color:
+          model.power.direction === "produced"
+            ? BLUEPRINT_COLORS.output
+            : 0xeab308,
+      });
+  }
 }
 
 function updateNodeVisual(
@@ -395,7 +421,9 @@ function updateNodeVisual(
     fontWeight: "500",
   };
   fitText(display.title, model.title, 168);
-  fitText(display.subtitle, model.subtitle, 168);
+  display.title.position.y = model.subtitle ? 6 : 14;
+  display.subtitle.visible = model.subtitle !== undefined;
+  fitText(display.subtitle, model.subtitle ?? "", 168);
 
   const machineImageUrl = model.buildableImageUrl ?? "";
   const machineTexture = machineImageUrl
@@ -412,23 +440,25 @@ function updateNodeVisual(
     requestTexture(machineImageUrl, onAssetReady);
   }
 
-  display.inputs.forEach((materialDisplay, index) =>
+  display.leftPorts.forEach((materialDisplay, index) =>
     updateMaterialVisual(
       materialDisplay,
-      model.inputs[index],
-      "input",
+      model.leftPorts[index],
+      "left",
       index,
+      model.leftPorts.length,
       dark,
       textResolution,
       onAssetReady,
     ),
   );
-  display.outputs.forEach((materialDisplay, index) =>
+  display.rightPorts.forEach((materialDisplay, index) =>
     updateMaterialVisual(
       materialDisplay,
-      model.outputs[index],
-      "output",
+      model.rightPorts[index],
+      "right",
       index,
+      model.rightPorts.length,
       dark,
       textResolution,
       onAssetReady,
@@ -441,21 +471,22 @@ function updateNodeVisual(
     fontSize: 12,
     fontWeight: "600" as const,
   };
-  display.clock.text = model.clock;
+  display.clock.visible = model.clock !== undefined;
+  display.clock.text = model.clock ?? "";
   display.clock.style = metricStyle;
-  display.efficiency.text = model.efficiency.percent;
+  display.efficiency.visible = model.efficiency !== undefined;
+  display.efficiency.text = model.efficiency?.percent ?? "";
   display.efficiency.style = {
     ...metricStyle,
-    fill: statusColor(model.efficiency.status) ?? (dark ? 0xd4d4d8 : 0x52525b),
+    fill:
+      statusColor(model.efficiency?.status ?? "neutral") ??
+      (dark ? 0xd4d4d8 : 0x52525b),
   };
-  display.power.text = model.power;
+  display.power.visible = model.power !== undefined;
+  display.power.text = model.power?.text ?? "";
   display.power.style = metricStyle;
-  drawFooterIcons(
-    display.footerIcons,
-    display.power.width,
-    model.efficiency.status,
-    dark,
-  );
+  display.efficiency.position.x = model.clock ? 87 : 30;
+  drawFooterIcons(display.footerIcons, model, display.power.width, dark);
 
   for (const text of [
     display.title,
@@ -484,8 +515,8 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
   const machineImage = new Sprite(Texture.EMPTY);
   const title = new Text({ text: "" });
   const subtitle = new Text({ text: "" });
-  const inputs = Array.from({ length: 4 }, createMaterialDisplay);
-  const outputs = Array.from({ length: 2 }, createMaterialDisplay);
+  const leftPorts = Array.from({ length: 4 }, createMaterialDisplay);
+  const rightPorts = Array.from({ length: 4 }, createMaterialDisplay);
   const footerIcons = new Graphics();
   const clock = new Text({ text: "" });
   const efficiency = new Text({ text: "" });
@@ -510,8 +541,8 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
     machineImage,
     title,
     subtitle,
-    ...inputs.flatMap(({ image, port, rate }) => [image, rate, port]),
-    ...outputs.flatMap(({ image, port, rate }) => [image, rate, port]),
+    ...leftPorts.flatMap(({ image, port, rate }) => [image, rate, port]),
+    ...rightPorts.flatMap(({ image, port, rate }) => [image, rate, port]),
     footerIcons,
     clock,
     efficiency,
@@ -527,11 +558,11 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
     container,
     efficiency,
     footerIcons,
-    inputs,
+    leftPorts,
     machineImage,
     machineImageVisualKey: "",
     node,
-    outputs,
+    rightPorts,
     power,
     subtitle,
     title,
