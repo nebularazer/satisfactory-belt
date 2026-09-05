@@ -9,6 +9,7 @@ import {
   useSyncExternalStore,
   type ChangeEvent,
   type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { toast } from "sonner";
 
@@ -310,6 +311,24 @@ function CanvasWorkspace({
     return true;
   };
 
+  const handleContextMenuTouchStart = (
+    event: ReactTouchEvent<HTMLDivElement>,
+  ) => {
+    const canvas = canvasRef.current;
+    const touch = event.touches.item(0);
+    if (!canvas || event.touches.length !== 1 || !touch) return false;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return Boolean(
+      editor.hitTest(
+        canvas.screenToWorld({
+          x: touch.clientX - bounds.left,
+          y: touch.clientY - bounds.top,
+        }),
+      ),
+    );
+  };
+
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -377,6 +396,7 @@ function CanvasWorkspace({
           onContextMenu={handleContextMenu}
           onDelete={deleteSelection}
           onDuplicate={duplicateSelection}
+          onTouchStart={handleContextMenuTouchStart}
         >
           <InfiniteCanvas
             editor={editor}
