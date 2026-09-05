@@ -28,7 +28,7 @@ function createHarness(
 ) {
   let id = 0;
   let viewport = options.viewport ?? { x: 0, y: 0, zoom: 1 };
-  let capturedPointer: number | undefined;
+  const capturedPointers = new Set<number>();
   const editor = createCanvasEditor({
     idFactory: () => `node-${++id}`,
     snapToGrid: options.snapToGrid,
@@ -57,16 +57,16 @@ function createHarness(
       }),
     },
     hasPointerCapture: {
-      value: (pointerId: number) => capturedPointer === pointerId,
+      value: (pointerId: number) => capturedPointers.has(pointerId),
     },
     releasePointerCapture: {
       value: (pointerId: number) => {
-        if (capturedPointer === pointerId) capturedPointer = undefined;
+        capturedPointers.delete(pointerId);
       },
     },
     setPointerCapture: {
       value: (pointerId: number) => {
-        capturedPointer = pointerId;
+        capturedPointers.add(pointerId);
       },
     },
   });
@@ -389,5 +389,174 @@ describe("canvas interactions", () => {
       anchor: { x: 175, y: 100 },
       factor: 1.5,
     });
+  });
+
+  it("defers touch selection until a tap is confirmed", () => {
+    const { editor, pointer } = createHarness({ snapToGrid: false });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({ type: "selection.clear" });
+    const original = editor.getState().document.nodes[0];
+
+    pointer("pointerdown", 20, 80, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    pointer("pointermove", 26, 86, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+
+    expect(editor.getState().selectedIds).toEqual([]);
+    expect(editor.getState().document.nodes[0]).toEqual(original);
+
+    pointer("pointerup", 26, 86, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+  });
+
+  it("starts a single-touch node drag after the touch threshold", () => {
+    const { editor, pointer } = createHarness({ snapToGrid: false });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({ type: "selection.clear" });
+
+    pointer("pointerdown", 20, 80, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    pointer("pointermove", 40, 100, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().moveDelta).toEqual({ x: 20, y: 20 });
+
+    pointer("pointerup", 40, 100, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
+  });
+
+  it("does not change selection when a pinch starts on a node", () => {
+    const { editor, pointer, zooms } = createHarness({ snapToGrid: false });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
+    const original = editor.getState().document;
+
+    pointer("pointerdown", 20, 80, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
+
+    pointer("pointerdown", 200, 80, {
+      pointerId: 2,
+      pointerType: "touch",
+    });
+    pointer("pointermove", 250, 80, {
+      pointerId: 2,
+      pointerType: "touch",
+    });
+    pointer("pointerup", 20, 80, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    pointer("pointerup", 250, 80, {
+      pointerId: 2,
+      pointerType: "touch",
+    });
+
+    expect(zooms).toHaveLength(1);
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
+    expect(editor.getState().document).toEqual(original);
+  });
+
+  it("rolls back a touch drag when it becomes a pinch", () => {
+    const { editor, pointer } = createHarness({ snapToGrid: false });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
+    const original = editor.getState().document;
+
+    pointer("pointerdown", 20, 80, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    pointer("pointermove", 40, 100, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().moveDelta).toEqual({ x: 20, y: 20 });
+
+    pointer("pointerdown", 200, 80, {
+      pointerId: 2,
+      pointerType: "touch",
+    });
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
+    expect(editor.getState().moveDelta).toBeNull();
+
+    pointer("pointerup", 200, 80, {
+      pointerId: 2,
+      pointerType: "touch",
+    });
+    pointer("pointerup", 40, 100, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
+    expect(editor.getState().document).toEqual(original);
+  });
+
+  it("discards a pending touch when the pointer is cancelled", () => {
+    const { editor, pointer } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
+
+    pointer("pointerdown", 20, 80, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    pointer("pointercancel", 20, 80, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
   });
 });
