@@ -218,6 +218,11 @@ const BLUEPRINT_COLORS = {
   warning: 0xc29b3c,
 } as const;
 
+function materialContentAlpha(connected: boolean, dark: boolean) {
+  if (connected) return 1;
+  return dark ? 0.3 : 0.48;
+}
+
 function cachedTexture(imageUrl: string) {
   return Assets.cache.has(imageUrl) ? Assets.get<Texture>(imageUrl) : undefined;
 }
@@ -323,17 +328,14 @@ function updateMaterialVisual(
   display.image.anchor.set(0.5);
   display.image.position.set(side === "left" ? 28 : cardWidth - 28, y);
   display.image.setSize(ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
+  const contentAlpha = materialContentAlpha(material.connected, dark);
+  display.image.alpha = contentAlpha;
   display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
   display.rate.position.set(side === "left" ? 46 : cardWidth - 46, y);
   display.rate.text = material.rate ?? "";
+  display.rate.alpha = contentAlpha;
   display.rate.style = {
-    fill: material.connected
-      ? dark
-        ? 0xe4e4e7
-        : 0x3f3f46
-      : dark
-        ? 0x52525b
-        : 0xa1a1aa,
+    fill: dark ? 0xe4e4e7 : 0x3f3f46,
     fontFamily: "Inter Variable, Inter, sans-serif",
     fontSize: 12,
     fontWeight: "400",
