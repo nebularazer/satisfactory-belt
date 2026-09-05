@@ -42,6 +42,7 @@ import {
   type CanvasPerformanceMetrics,
 } from "./performance";
 import { createRenderScheduler } from "./render-scheduler";
+import { resolveResponsiveImage } from "./responsive-image-cache";
 import { createTextureCache } from "./texture-cache";
 import {
   createTextureLoadQueue,
@@ -311,19 +312,20 @@ function updateMaterialVisual(
   display.rate.visible = visible && material?.rate !== undefined;
   if (!visible || !material) return;
 
-  const imageUrl = renderedImageUrl(
+  const { displayUrl = "", requestedUrl = "" } = resolveResponsiveImage(
     material.image,
-    ITEM_IMAGE_SIZE,
-    imageScale,
+    ITEM_IMAGE_SIZE * imageScale,
+    (imageUrl) => Assets.cache.has(imageUrl),
   );
-  const texture = imageUrl ? cachedTexture(imageUrl) : undefined;
-  const imageVisualKey = `${imageUrl}:${Boolean(texture)}`;
-  if (display.imageVisualKey !== imageVisualKey) {
+  const texture = displayUrl ? cachedTexture(displayUrl) : undefined;
+  if (display.imageVisualKey !== displayUrl) {
     display.image.texture = texture ?? Texture.EMPTY;
-    display.imageVisualKey = imageVisualKey;
+    display.imageVisualKey = displayUrl;
   }
   display.image.visible = Boolean(texture);
-  if (imageUrl && !texture) requestImage(imageUrl, "normal");
+  if (requestedUrl && requestedUrl !== displayUrl) {
+    requestImage(requestedUrl, "normal");
+  }
 
   display.image.anchor.set(0.5);
   display.image.position.set(side === "left" ? 28 : cardWidth - 28, y);
@@ -496,23 +498,20 @@ function updateNodeVisual(
   display.subtitle.visible = model.subtitle !== undefined;
   fitText(display.subtitle, model.subtitle ?? "", titleWidth);
 
-  const machineImageUrl = renderedImageUrl(
+  const { displayUrl = "", requestedUrl = "" } = resolveResponsiveImage(
     model.buildableImage,
-    MACHINE_IMAGE_SIZE,
-    imageScale,
+    MACHINE_IMAGE_SIZE * imageScale,
+    (imageUrl) => Assets.cache.has(imageUrl),
   );
-  const machineTexture = machineImageUrl
-    ? cachedTexture(machineImageUrl)
-    : undefined;
-  const machineImageVisualKey = `${machineImageUrl}:${Boolean(machineTexture)}`;
-  if (display.machineImageVisualKey !== machineImageVisualKey) {
+  const machineTexture = displayUrl ? cachedTexture(displayUrl) : undefined;
+  if (display.machineImageVisualKey !== displayUrl) {
     display.machineImage.texture = machineTexture ?? Texture.EMPTY;
     display.machineImage.setSize(MACHINE_IMAGE_SIZE, MACHINE_IMAGE_SIZE);
     display.machineImage.visible = Boolean(machineTexture);
-    display.machineImageVisualKey = machineImageVisualKey;
+    display.machineImageVisualKey = displayUrl;
   }
-  if (machineImageUrl && !machineTexture) {
-    requestImage(machineImageUrl, "high");
+  if (requestedUrl && requestedUrl !== displayUrl) {
+    requestImage(requestedUrl, "high");
   }
 
   display.leftPorts.forEach((materialDisplay, index) =>
@@ -667,8 +666,10 @@ function recycleNodeDisplay(
 ) {
   scene.removeChild(display.container);
   display.machineImage.texture = Texture.EMPTY;
+  display.machineImageVisualKey = "";
   for (const material of [...display.leftPorts, ...display.rightPorts]) {
     material.image.texture = Texture.EMPTY;
+    material.imageVisualKey = "";
   }
   if (pool.length < MAX_POOLED_NODE_DISPLAYS) {
     pool.push(display);
@@ -691,6 +692,9 @@ function visibleImageUrls(
       imageScale,
     );
     if (machineImageUrl) imageUrls.add(machineImageUrl);
+    if (display.machineImageVisualKey) {
+      imageUrls.add(display.machineImageVisualKey);
+    }
     for (const material of [...model.leftPorts, ...model.rightPorts]) {
       const itemImageUrl = renderedImageUrl(
         material.image,
@@ -698,6 +702,9 @@ function visibleImageUrls(
         imageScale,
       );
       if (itemImageUrl) imageUrls.add(itemImageUrl);
+    }
+    for (const material of [...display.leftPorts, ...display.rightPorts]) {
+      if (material.imageVisualKey) imageUrls.add(material.imageVisualKey);
     }
   }
   return imageUrls;
