@@ -159,13 +159,55 @@ describe("node card model", () => {
         { direction: "output" },
         { direction: "output" },
       ],
-      title: "Conveyor Splitter",
+      title: "Splitter",
     });
     expect(model.subtitle).toBeUndefined();
     expect(model.clock).toBeUndefined();
     expect(model.efficiency).toBeUndefined();
     expect(model.power).toBeUndefined();
     expect(model.rightPorts.every(({ rate }) => rate === undefined)).toBe(true);
+  });
+
+  it.each([
+    ["Build_ConveyorAttachmentSplitter_C", "Conveyor Splitter", "Splitter"],
+    ["Build_ConveyorAttachmentMerger_C", "Conveyor Merger", "Merger"],
+  ] as const)(
+    "shortens the %s router title",
+    (buildableId, label, expectedTitle) => {
+      const model = createNodeCardModel({
+        configuration: {
+          buildableId,
+          id: `router-${expectedTitle.toLowerCase()}`,
+          kind: "router",
+        },
+        height: 160,
+        label,
+        width: 192,
+        x: 0,
+        y: 0,
+      });
+
+      expect(model.title).toBe(expectedTitle);
+    },
+  );
+
+  it("shows the truck station mode only in the subtitle", () => {
+    const model = createNodeCardModel({
+      configuration: {
+        buildableId: "Build_TruckStation_C",
+        id: "truck-station-unload",
+        kind: "transport",
+        mode: "unload",
+      },
+      height: 256,
+      label: "Truck Station (Unload)",
+      width: 256,
+      x: 0,
+      y: 0,
+    });
+
+    expect(model.title).toBe("Truck Station");
+    expect(model.subtitle).toBe("Unload");
   });
 
   it("keeps unresolved junction ports bidirectional", () => {

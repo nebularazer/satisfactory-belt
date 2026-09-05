@@ -166,6 +166,16 @@ function materialNodeSubtitle(canvasNode: CanvasNode) {
     : `${formatNumber(capacity.cubicMetres)} m³`;
 }
 
+function materialNodeTitle(canvasNode: CanvasNode) {
+  if (canvasNode.configuration.kind === "transport") {
+    return canvasNode.label.replace(/\s+\((?:Load|Unload)\)$/, "");
+  }
+  if (canvasNode.configuration.kind === "router") {
+    return canvasNode.label.replace(/^Conveyor\s+/, "");
+  }
+  return canvasNode.label;
+}
+
 export function createNodeCardModel(
   canvasNode: CanvasNode,
   runtime?: NodeCardRuntime,
@@ -222,6 +232,9 @@ export function createNodeCardModel(
     ...(power ? { power } : {}),
     rightPorts: materials.rightPorts,
     ...(subtitle ? { subtitle } : {}),
-    title: node.kind === "process" ? node.process.name : canvasNode.label,
+    title:
+      node.kind === "process"
+        ? node.process.name
+        : materialNodeTitle(canvasNode),
   };
 }
