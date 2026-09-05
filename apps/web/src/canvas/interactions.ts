@@ -2,6 +2,7 @@ import { canvasNodeId } from "./document";
 import type { CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
+import { NODE_CARD_HEADER_HEIGHT } from "./node-card-layout";
 import { screenToWorld, ZOOM_STEP, type Viewport } from "./viewport";
 
 const MOUSE_DRAG_THRESHOLD = 4;
@@ -14,6 +15,7 @@ type Interaction =
       lastScreen: Point;
       moved: boolean;
       pointerId: number;
+      selectNodeOnTap?: string;
       startScreen: Point;
     }
   | {
@@ -156,13 +158,16 @@ export function attachCanvasInteractions(
       }
     }
 
-    if (
-      interaction.kind === "pan" &&
-      !cancelled &&
-      !interaction.moved &&
-      interaction.clearSelectionOnClick
-    ) {
-      editor.dispatch({ type: "selection.clear" });
+    if (interaction.kind === "pan" && !cancelled && !interaction.moved) {
+      if (interaction.selectNodeOnTap) {
+        editor.dispatch({
+          type: "selection.node",
+          additive: false,
+          id: interaction.selectNodeOnTap,
+        });
+      } else if (interaction.clearSelectionOnClick) {
+        editor.dispatch({ type: "selection.clear" });
+      }
     }
 
     releasePointer(event.pointerId);
@@ -234,6 +239,23 @@ export function attachCanvasInteractions(
     if (hit) {
       const hitId = canvasNodeId(hit);
       const selectionBefore = editor.getState().selectedIds;
+      const touchCanMoveNode =
+        event.pointerType === "touch" &&
+        selectionBefore.includes(hitId) &&
+        worldPoint.y - hit.y <= NODE_CARD_HEADER_HEIGHT;
+      if (event.pointerType === "touch" && !touchCanMoveNode) {
+        interaction = {
+          clearSelectionOnClick: false,
+          kind: "pan",
+          lastScreen: screen,
+          moved: false,
+          pointerId: event.pointerId,
+          selectNodeOnTap: hitId,
+          startScreen: screen,
+        };
+        canvas.dataset.cursor = "grabbing";
+        return;
+      }
       const started = event.pointerType !== "touch";
       if (started) {
         if (!selectionBefore.includes(hitId)) {
