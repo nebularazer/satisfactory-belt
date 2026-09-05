@@ -44,7 +44,6 @@ import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
-import { NodeInspector } from "@/components/node-inspector";
 import type { NodePickerSelection } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
@@ -61,12 +60,16 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 
 const loadNodePicker = () => import("@/components/node-picker");
+const loadNodeInspector = () => import("@/components/node-inspector");
 const loadInfiniteCanvas = () => import("@/canvas/infinite-canvas");
 const InfiniteCanvas = lazy(async () => ({
   default: (await loadInfiniteCanvas()).InfiniteCanvas,
 }));
 const NodePicker = lazy(async () => ({
   default: (await loadNodePicker()).NodePicker,
+}));
+const NodeInspector = lazy(async () => ({
+  default: (await loadNodeInspector()).NodeInspector,
 }));
 
 function preloadNodePicker() {
@@ -458,7 +461,9 @@ function CanvasWorkspace({
           />
         )}
 
-        <NodeInspector editor={editor} />
+        <Suspense fallback={null}>
+          <NodeInspector editor={editor} />
+        </Suspense>
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
           <CanvasControls

@@ -9,6 +9,7 @@ import {
   canvasNodeId,
   type CanvasDocument,
   type CanvasNode,
+  type CanvasRouterRules,
 } from "./document";
 import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
@@ -45,6 +46,17 @@ export type CanvasEditorAction =
       type: "node.configure";
       configuration: NodeConfiguration;
       id: string;
+    }
+  | {
+      type: "node.ports.reorder";
+      direction: "input" | "output";
+      id: string;
+      portIds: readonly string[];
+    }
+  | {
+      type: "node.router.rules";
+      id: string;
+      rules: CanvasRouterRules;
     }
   | {
       type: "node.create";
@@ -324,6 +336,53 @@ export function createCanvasEditor(
           configuration,
           height: layout.height,
           width: layout.width,
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
+        return;
+      }
+
+      case "node.ports.reorder": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (!beforeNode || index === undefined) return;
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          portOrder: {
+            ...beforeNode.portOrder,
+            [action.direction]: [...action.portIds],
+          },
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
+        return;
+      }
+
+      case "node.router.rules": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (
+          !beforeNode ||
+          index === undefined ||
+          beforeNode.configuration.kind !== "router"
+        ) {
+          return;
+        }
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          routerRules: action.rules,
         };
         const before = [{ index, node: beforeNode }];
         const after = [{ index, node: afterNode }];

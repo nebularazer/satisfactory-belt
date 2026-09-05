@@ -111,10 +111,17 @@ function calculatedPorts(
   ports: readonly MaterialPort[],
   rates: readonly MaterialRate[],
   direction: "input" | "output",
+  order: readonly string[] | undefined,
   runtime: NodeCardRuntime | undefined,
 ) {
-  return ports
-    .filter((port) => port.direction === direction)
+  const directionPorts = ports.filter((port) => port.direction === direction);
+  const rank = new Map(order?.map((portId, index) => [portId, index]));
+  return directionPorts
+    .toSorted(
+      (left, right) =>
+        (rank.get(left.id) ?? directionPorts.length) -
+        (rank.get(right.id) ?? directionPorts.length),
+    )
     .map((port) =>
       runtimePort(
         port,
@@ -126,14 +133,19 @@ function calculatedPorts(
 
 function connectionDependentPorts(
   ports: readonly MaterialPort[],
+  routerRules: CanvasNode["routerRules"],
   runtime: NodeCardRuntime | undefined,
 ) {
+  const configuredPort = (port: MaterialPort) => {
+    const itemId = routerRules?.[port.id]?.find((rule) => findDescriptor(rule));
+    return itemId ? { ...port, itemId } : port;
+  };
   const leftPorts = ports
     .filter(({ direction }) => direction === "input")
-    .map((port) => runtimePort(port, undefined, runtime));
+    .map((port) => runtimePort(configuredPort(port), undefined, runtime));
   const rightPorts = ports
     .filter(({ direction }) => direction === "output")
-    .map((port) => runtimePort(port, undefined, runtime));
+    .map((port) => runtimePort(configuredPort(port), undefined, runtime));
   const bidirectional = ports.filter(
     ({ direction }) => direction === "bidirectional",
   );
@@ -141,12 +153,12 @@ function connectionDependentPorts(
   leftPorts.push(
     ...bidirectional
       .slice(0, splitAt)
-      .map((port) => runtimePort(port, undefined, runtime)),
+      .map((port) => runtimePort(configuredPort(port), undefined, runtime)),
   );
   rightPorts.push(
     ...bidirectional
       .slice(splitAt)
-      .map((port) => runtimePort(port, undefined, runtime)),
+      .map((port) => runtimePort(configuredPort(port), undefined, runtime)),
   );
   return { leftPorts, rightPorts };
 }
@@ -193,16 +205,18 @@ export function createNodeCardModel(
             node.ports,
             node.profile.materials.inputs,
             "input",
+            canvasNode.portOrder?.input,
             runtime,
           ),
           rightPorts: calculatedPorts(
             node.ports,
             node.profile.materials.outputs,
             "output",
+            canvasNode.portOrder?.output,
             runtime,
           ),
         }
-      : connectionDependentPorts(node.ports, runtime);
+      : connectionDependentPorts(node.ports, canvasNode.routerRules, runtime);
   const clock = averageClock(canvasNode.configuration);
   const efficiency =
     node.kind === "process"

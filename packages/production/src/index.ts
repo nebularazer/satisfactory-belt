@@ -11,6 +11,7 @@ export {
   findRouter,
   findTransport,
   listBuildables,
+  listDescriptors,
   recipesForMachine,
   recipesProducing,
   resourcesForExtractor,

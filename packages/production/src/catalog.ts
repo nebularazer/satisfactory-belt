@@ -136,6 +136,10 @@ export function findDescriptor(descriptorId: string) {
   return descriptorsById.get(descriptorId);
 }
 
+export function listDescriptors() {
+  return DESCRIPTORS;
+}
+
 export function findRecipe(recipeId: string) {
   return recipesById.get(recipeId);
 }

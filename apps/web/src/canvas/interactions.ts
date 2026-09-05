@@ -238,9 +238,8 @@ export function attachCanvasInteractions(
     if (hit) {
       const hitId = canvasNodeId(hit);
       const selectionBefore = editor.getState().selectedIds;
-      const touchCanMoveNode =
-        event.pointerType === "touch" && selectionBefore.includes(hitId);
-      if (event.pointerType === "touch" && !touchCanMoveNode) {
+      const canMoveNode = selectionBefore.includes(hitId);
+      if (!canMoveNode) {
         interaction = {
           clearSelectionOnClick: false,
           kind: "pan",
@@ -255,13 +254,6 @@ export function attachCanvasInteractions(
       }
       const started = event.pointerType !== "touch";
       if (started) {
-        if (!selectionBefore.includes(hitId)) {
-          editor.dispatch({
-            type: "selection.node",
-            additive: false,
-            id: hitId,
-          });
-        }
         editor.dispatch({ type: "selection.move.begin" });
       }
       interaction = {

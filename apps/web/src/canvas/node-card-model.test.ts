@@ -52,6 +52,39 @@ describe("node card model", () => {
     expect(model.leftPorts.every(({ connected }) => !connected)).toBe(true);
   });
 
+  it("uses the user-defined material port order", () => {
+    const node = nitroRocketFuelNode();
+    const original = createNodeCardModel(node).leftPorts.map(
+      ({ portId }) => portId,
+    );
+    const model = createNodeCardModel({
+      ...node,
+      portOrder: { input: original.toReversed() },
+    });
+
+    expect(model.leftPorts.map(({ portId }) => portId)).toEqual(
+      original.toReversed(),
+    );
+  });
+
+  it("shows a configured smart splitter material on its output", () => {
+    const model = createNodeCardModel({
+      configuration: {
+        buildableId: "Build_ConveyorAttachmentSplitterSmart_C",
+        id: "smart-splitter",
+        kind: "router",
+      },
+      height: 160,
+      label: "Smart Splitter",
+      routerRules: { "output:1": ["Desc_OreIron_C"] },
+      width: 192,
+      x: 0,
+      y: 0,
+    });
+
+    expect(model.rightPorts[0]).toMatchObject({ itemName: "Iron Ore" });
+  });
+
   it("applies connection, port status, and efficiency runtime state", () => {
     const model = createNodeCardModel(nitroRocketFuelNode(), {
       efficiency: { percent: 68, status: "warning" },

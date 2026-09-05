@@ -5,6 +5,8 @@ import {
   canvasNodeId,
   type CanvasDocument,
   type CanvasNode,
+  type CanvasPortOrder,
+  type CanvasRouterRules,
 } from "./document";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -13,6 +15,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function validNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function optionalStringArray(value: unknown, label: string) {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    !value.every((entry) => typeof entry === "string")
+  ) {
+    throw new Error(`${label} must be an array of strings.`);
+  }
+  return value;
+}
+
+function parsePortOrder(value: unknown): CanvasPortOrder | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("Node portOrder must be an object.");
+  const input = optionalStringArray(value.input, "Node input port order");
+  const output = optionalStringArray(value.output, "Node output port order");
+  return {
+    ...(input ? { input } : {}),
+    ...(output ? { output } : {}),
+  };
+}
+
+function parseRouterRules(value: unknown): CanvasRouterRules | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("Node routerRules must be an object.");
+  return Object.fromEntries(
+    Object.entries(value).map(([portId, rules]) => {
+      const parsed = optionalStringArray(rules, `Rules for ${portId}`);
+      if (!parsed) throw new Error(`Rules for ${portId} are required.`);
+      return [portId, parsed];
+    }),
+  );
 }
 
 function parseNode(value: unknown, index: number): CanvasNode {
@@ -32,10 +68,14 @@ function parseNode(value: unknown, index: number): CanvasNode {
     throw new Error(`Node ${index + 1} has an invalid size.`);
   }
 
+  const portOrder = parsePortOrder(value.portOrder);
+  const routerRules = parseRouterRules(value.routerRules);
   return {
     configuration: parseNodeConfiguration(value.configuration),
     height: value.height,
     label: value.label,
+    ...(portOrder ? { portOrder } : {}),
+    ...(routerRules ? { routerRules } : {}),
     width: value.width,
     x: value.x,
     y: value.y,

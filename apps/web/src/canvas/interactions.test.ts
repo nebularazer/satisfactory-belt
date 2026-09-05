@@ -190,6 +190,29 @@ describe("canvas interactions", () => {
     expect(editor.getState().selectedIds).toEqual([]);
   });
 
+  it("pans over an unselected node without selecting it", () => {
+    const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 400, y: 300 },
+    });
+    const original = editor.getState().document;
+
+    pointer("pointerdown", 20, 80);
+    pointer("pointermove", 50, 100);
+    pointer("pointerup", 50, 100);
+
+    expect(viewport()).toEqual({ x: 30, y: 20, zoom: 1 });
+    expect(editor.getState().selectedIds).toEqual(["node-2"]);
+    expect(editor.getState().document).toEqual(original);
+  });
+
   it("does not turn small pointer movement into a drag", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({

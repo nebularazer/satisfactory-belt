@@ -24,6 +24,10 @@ const document = {
       },
       height: 96,
       label: "Node 1",
+      portOrder: {
+        input: ["input:Desc_IngotIron_C"],
+        output: ["output:Desc_IronPlate_C"],
+      },
       width: 176,
       x: 0,
       y: 32,

@@ -1,10 +1,37 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import { createNode } from "@satisfactory-belt/production";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { createCanvasEditor } from "@/canvas/editor";
 
 import { NodeInspector } from "./node-inspector";
 
+beforeAll(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class ResizeObserver {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    },
+  );
+  Element.prototype.scrollIntoView = vi.fn();
+});
+afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
 
 function createProcessEditor() {
@@ -54,7 +81,7 @@ describe("NodeInspector", () => {
     render(<NodeInspector editor={editor} />);
 
     const clockSpeed = screen.getByLabelText("Clock speed");
-    expect(clockSpeed).toHaveValue(null);
+    expect(clockSpeed).toHaveValue("");
     expect(clockSpeed).toHaveAttribute("placeholder", "Mixed");
 
     fireEvent.change(clockSpeed, { target: { value: "125" } });
@@ -81,5 +108,92 @@ describe("NodeInspector", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close node details" }));
 
     expect(screen.queryByLabelText("Node details: Iron Plate")).toBeNull();
+  });
+
+  it("stays hidden while a selected node is moving", () => {
+    const editor = createProcessEditor();
+    render(<NodeInspector editor={editor} />);
+
+    act(() => {
+      editor.dispatch({ type: "selection.move.begin" });
+      editor.dispatch({
+        type: "selection.move.update",
+        delta: { x: 20, y: 0 },
+      });
+    });
+
+    expect(screen.queryByLabelText("Node details: Iron Plate")).toBeNull();
+    act(() => editor.dispatch({ type: "selection.move.cancel" }));
+    expect(screen.getByLabelText("Node details: Iron Plate")).toBeVisible();
+  });
+
+  it("switches miner tiers without replacing the resource", () => {
+    const editor = createCanvasEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Iron Ore",
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    render(<NodeInspector editor={editor} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mk.2" }));
+
+    expect(editor.getState().document.nodes[0]?.configuration).toMatchObject({
+      buildableId: "Build_MinerMk2_C",
+      processId: "extraction:Desc_OreIron_C",
+    });
+  });
+
+  it("reorders recipe inputs for both the inspector and node card", () => {
+    const editor = createCanvasEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Nitro Rocket Fuel",
+      node: {
+        buildableId: "Build_Blender_C",
+        kind: "process",
+        processId: "Recipe_Alternate_RocketFuel_Nitro_C",
+      },
+    });
+    const configuration = editor.getState().document.nodes[0]!.configuration;
+    const initialOrder = createNode(configuration)
+      .ports.filter((port) => port.direction === "input")
+      .map((port) => port.id);
+    render(<NodeInspector editor={editor} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Move Fuel down" }));
+
+    expect(editor.getState().document.nodes[0]?.portOrder?.input).toEqual([
+      initialOrder[1],
+      initialOrder[0],
+      ...initialOrder.slice(2),
+    ]);
+  });
+
+  it("configures smart splitter output rules", () => {
+    const editor = createCanvasEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Smart Splitter",
+      node: {
+        buildableId: "Build_ConveyorAttachmentSplitterSmart_C",
+        kind: "router",
+      },
+    });
+    render(<NodeInspector editor={editor} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Top output rule" }));
+    fireEvent.click(screen.getByText("Overflow"));
+
+    expect(editor.getState().document.nodes[0]?.routerRules).toMatchObject({
+      "output:1": ["overflow"],
+    });
   });
 });
