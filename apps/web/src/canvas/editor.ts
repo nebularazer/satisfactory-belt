@@ -7,9 +7,10 @@ import {
   type CanvasNode,
 } from "./document";
 import type { Point, Rectangle } from "./geometry";
+import { NODE_CARD_GRID_UNIT, nodeCardLayout } from "./node-card-layout";
 import { createCanvasSpatialIndex } from "./spatial-index";
 
-export const SNAP_INTERVAL = 32;
+export const SNAP_INTERVAL = NODE_CARD_GRID_UNIT;
 export const NODE_WIDTH = SNAP_INTERVAL * 8;
 export const NODE_HEIGHT = SNAP_INTERVAL * 8;
 export const HISTORY_LIMIT = 100;
@@ -99,6 +100,21 @@ function snap(value: number) {
   return Math.round(value / SNAP_INTERVAL) * SNAP_INTERVAL;
 }
 
+function normalizeLegacyNodeCardSizes(
+  document: CanvasDocument,
+): CanvasDocument {
+  let changed = false;
+  const nodes = document.nodes.map((node) => {
+    if (node.width !== NODE_WIDTH || node.height !== NODE_HEIGHT) return node;
+    const layout = nodeCardLayout(node.configuration);
+    if (layout.width === node.width && layout.height === node.height)
+      return node;
+    changed = true;
+    return { ...node, height: layout.height, width: layout.width };
+  });
+  return changed ? { ...document, nodes } : document;
+}
+
 function applyPatch(
   document: CanvasDocument,
   source: readonly IndexedNode[],
@@ -131,6 +147,9 @@ function boundsFor(nodes: readonly CanvasNode[]): Rectangle | undefined {
 export function createCanvasEditor(
   options: CreateCanvasEditorOptions = {},
 ): CanvasEditor {
+  const initialDocument = normalizeLegacyNodeCardSizes(
+    options.document ?? EMPTY_CANVAS_DOCUMENT,
+  );
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: HistoryEntry[] = [];
@@ -138,11 +157,11 @@ export function createCanvasEditor(
   let clipboard: readonly CanvasNode[] = [];
   let dispatchStartedAt = 0;
   let moveTransaction: MoveTransaction | undefined;
-  let nodeSequence = options.document?.nodes.length ?? 0;
+  let nodeSequence = initialDocument.nodes.length;
   let state: CanvasEditorState = {
     canRedo: false,
     canUndo: false,
-    document: options.document ?? EMPTY_CANVAS_DOCUMENT,
+    document: initialDocument,
     moveDelta: null,
     selectedIds: [],
     snapToGrid: options.snapToGrid ?? true,
@@ -204,18 +223,20 @@ export function createCanvasEditor(
     dispatchStartedAt = performance.now();
 
     switch (action.type) {
-      case "document.replace":
+      case "document.replace": {
+        const document = normalizeLegacyNodeCardSizes(action.document);
         past.length = 0;
         future.length = 0;
         clipboard = [];
         moveTransaction = undefined;
-        nodeSequence = action.document.nodes.length;
-        spatialIndex.replace(action.document);
+        nodeSequence = document.nodes.length;
+        spatialIndex.replace(document);
         publish(
-          { document: action.document, moveDelta: null, selectedIds: [] },
+          { document, moveDelta: null, selectedIds: [] },
           { kind: "document" },
         );
         return;
+      }
 
       case "document.reset":
         past.length = 0;
@@ -237,16 +258,18 @@ export function createCanvasEditor(
       case "node.create": {
         nodeSequence += 1;
         const id = idFactory();
-        const x = action.at.x - NODE_WIDTH / 2;
-        const y = action.at.y - NODE_HEIGHT / 2;
+        const configuration = createNode({
+          ...action.node,
+          id,
+        }).configuration;
+        const layout = nodeCardLayout(configuration);
+        const x = action.at.x - layout.width / 2;
+        const y = action.at.y - layout.height / 2;
         const node: CanvasNode = {
-          configuration: createNode({
-            ...action.node,
-            id,
-          }).configuration,
-          height: NODE_HEIGHT,
+          configuration,
+          height: layout.height,
           label: action.label ?? `Node ${nodeSequence}`,
-          width: NODE_WIDTH,
+          width: layout.width,
           x: state.snapToGrid ? snap(x) : x,
           y: state.snapToGrid ? snap(y) : y,
         };

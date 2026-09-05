@@ -3,6 +3,7 @@ import {
   Assets,
   Container,
   Graphics,
+  GraphicsContext,
   Sprite,
   Text,
   Texture,
@@ -13,7 +14,6 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { CATALOG_BUILDABLE_IMAGE_URLS } from "@/game/catalog-images";
 
 import {
-  NODE_WIDTH,
   SNAP_INTERVAL,
   type CanvasEditor,
   type CanvasEditorChange,
@@ -29,6 +29,11 @@ import {
   type NodeCardPortDirection,
   type NodeCardPortStatus,
 } from "./node-card-model";
+import {
+  NODE_CARD_FOOTER_HEIGHT,
+  NODE_CARD_HEADER_HEIGHT,
+  nodeCardLayout,
+} from "./node-card-layout";
 import {
   createPerformanceSampler,
   type CanvasPerformanceMetrics,
@@ -174,9 +179,6 @@ function textResolutionForZoom(zoom: number, rendererResolution: number) {
   return Math.max(rendererResolution, Math.ceil(zoom * rendererResolution));
 }
 
-const NODE_CARD_SIZE = NODE_WIDTH;
-const NODE_CARD_HEADER_HEIGHT = 48;
-const NODE_CARD_FOOTER_HEIGHT = 48;
 const BLUEPRINT_COLORS = {
   bidirectional: 0x7c8798,
   blocked: 0xb75b65,
@@ -209,10 +211,12 @@ function portColor(direction: NodeCardPortDirection) {
   return BLUEPRINT_COLORS.bidirectional;
 }
 
-function gridAlignedPortY(index: number, count: number) {
-  // Odd sets center exactly. Even sets keep 32 px spacing and bias upward by
-  // half a step because exact centering would place every port off-grid.
-  const centeredStart = NODE_CARD_SIZE / 2 - ((count - 1) * SNAP_INTERVAL) / 2;
+function gridAlignedPortY(index: number, count: number, cardHeight: number) {
+  // Center on the closest grid row. Even sets keep 32 px spacing and bias
+  // upward because exact centering would place every port off-grid.
+  const gridAlignedCenter =
+    Math.round(cardHeight / 2 / SNAP_INTERVAL) * SNAP_INTERVAL;
+  const centeredStart = gridAlignedCenter - ((count - 1) * SNAP_INTERVAL) / 2;
   const gridAlignedStart =
     Math.floor(centeredStart / SNAP_INTERVAL) * SNAP_INTERVAL;
   return gridAlignedStart + index * SNAP_INTERVAL;
@@ -225,11 +229,19 @@ const LUCIDE_PATHS = {
   zap: "M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z",
 } as const;
 
+const lucideIconContexts = new Map<string, GraphicsContext>();
+
 function createLucideIcon(paths: string | readonly string[], size: number) {
   const pathList = typeof paths === "string" ? [paths] : paths;
-  const graphics = new Graphics().svg(
-    `<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${pathList.map((path) => `<path d="${path}" />`).join("")}</svg>`,
-  );
+  const key = pathList.join("");
+  let context = lucideIconContexts.get(key);
+  if (!context) {
+    context = new GraphicsContext().svg(
+      `<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${pathList.map((path) => `<path d="${path}" />`).join("")}</svg>`,
+    );
+    lucideIconContexts.set(key, context);
+  }
+  const graphics = new Graphics({ context });
   graphics.scale.set(size / 24);
   graphics.visible = false;
   return graphics;
@@ -260,11 +272,13 @@ function updateMaterialVisual(
   side: "left" | "right",
   index: number,
   count: number,
+  cardHeight: number,
+  cardWidth: number,
   dark: boolean,
   textResolution: number,
   onAssetReady: () => void,
 ) {
-  const y = gridAlignedPortY(index, count);
+  const y = gridAlignedPortY(index, count, cardHeight);
   const visible = material !== undefined;
   display.image.visible = false;
   display.port.visible = visible;
@@ -282,10 +296,10 @@ function updateMaterialVisual(
   if (imageUrl && !texture) requestTexture(imageUrl, onAssetReady);
 
   display.image.anchor.set(0.5);
-  display.image.position.set(side === "left" ? 28 : 228, y);
+  display.image.position.set(side === "left" ? 28 : cardWidth - 28, y);
   display.image.setSize(24, 24);
   display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
-  display.rate.position.set(side === "left" ? 46 : 210, y);
+  display.rate.position.set(side === "left" ? 46 : cardWidth - 46, y);
   display.rate.text = material.rate ?? "";
   display.rate.style = {
     fill: material.connected
@@ -311,13 +325,15 @@ function updateMaterialVisual(
   if (center !== undefined) {
     display.port.circle(0, 0, 5).fill({ color: center });
   }
-  display.port.position.set(side === "left" ? 0 : NODE_CARD_SIZE, y);
+  display.port.position.set(side === "left" ? 0 : cardWidth, y);
 }
 
 function updateFooterIcons(
   display: NodeDisplay,
   model: NodeCardModel,
   dark: boolean,
+  cardHeight: number,
+  cardWidth: number,
 ) {
   const foreground = dark ? 0xd4d4d8 : 0x52525b;
   const efficiency = model.efficiency
@@ -328,7 +344,7 @@ function updateFooterIcons(
   display.clockIcon.visible = model.clock !== undefined;
   display.clockIcon.tint = foreground;
   if (model.clock !== undefined) {
-    display.clockIcon.position.set(leftX, 225);
+    display.clockIcon.position.set(leftX, cardHeight - 31);
     display.clock.position.x = leftX + 20;
     leftX = display.clock.position.x + display.clock.width + 8;
   }
@@ -336,14 +352,17 @@ function updateFooterIcons(
   display.efficiencyIcon.visible = model.efficiency !== undefined;
   display.efficiencyIcon.tint = efficiency;
   if (model.efficiency !== undefined) {
-    display.efficiencyIcon.position.set(leftX, 225);
+    display.efficiencyIcon.position.set(leftX, cardHeight - 31);
     display.efficiency.position.x = leftX + 20;
   }
 
   display.powerIcon.visible = model.power !== undefined;
   display.powerIcon.tint = 0xeab308;
   if (model.power !== undefined) {
-    display.powerIcon.position.set(218 - display.power.width, 224);
+    display.powerIcon.position.set(
+      cardWidth - 38 - display.power.width,
+      cardHeight - 32,
+    );
   }
 }
 
@@ -362,7 +381,8 @@ function updateNodeVisual(
       : createNodeCardModel(node);
   display.model = model;
   display.modelNode = node;
-  const cardVisualKey = `${dark}:${selected}:${selected ? zoom : ""}`;
+  const layout = nodeCardLayout(node.configuration);
+  const cardVisualKey = `${dark}:${selected}:${selected ? zoom : ""}:${node.width}:${node.height}:${layout.hasFooter}`;
   if (display.cardVisualKey !== cardVisualKey) {
     const body = dark ? 0x18181b : 0xffffff;
     const chrome = dark ? 0x242427 : 0xfafafa;
@@ -371,39 +391,44 @@ function updateNodeVisual(
       : dark
         ? 0x3f3f46
         : 0xd4d4d8;
-    display.card
+    const card = display.card
       .clear()
-      .roundRect(0, 0, NODE_CARD_SIZE, NODE_CARD_SIZE, 12)
+      .roundRect(0, 0, node.width, node.height, 12)
       .fill({ color: body })
-      .roundRect(0, 0, NODE_CARD_SIZE, NODE_CARD_HEADER_HEIGHT, 12)
+      .roundRect(0, 0, node.width, NODE_CARD_HEADER_HEIGHT, 12)
       .fill({ color: chrome })
-      .rect(0, 12, NODE_CARD_SIZE, NODE_CARD_HEADER_HEIGHT - 12)
-      .fill({ color: chrome })
-      .roundRect(
-        0,
-        NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT,
-        NODE_CARD_SIZE,
-        NODE_CARD_FOOTER_HEIGHT,
-        12,
-      )
-      .fill({ color: chrome })
-      .rect(
-        0,
-        NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT,
-        NODE_CARD_SIZE,
-        NODE_CARD_FOOTER_HEIGHT - 12,
-      )
-      .fill({ color: chrome })
+      .rect(0, 12, node.width, NODE_CARD_HEADER_HEIGHT - 12)
+      .fill({ color: chrome });
+    if (layout.hasFooter) {
+      card
+        .roundRect(
+          0,
+          node.height - NODE_CARD_FOOTER_HEIGHT,
+          node.width,
+          NODE_CARD_FOOTER_HEIGHT,
+          12,
+        )
+        .fill({ color: chrome })
+        .rect(
+          0,
+          node.height - NODE_CARD_FOOTER_HEIGHT,
+          node.width,
+          NODE_CARD_FOOTER_HEIGHT - 12,
+        )
+        .fill({ color: chrome });
+    }
+    card
       .moveTo(0, NODE_CARD_HEADER_HEIGHT)
-      .lineTo(NODE_CARD_SIZE, NODE_CARD_HEADER_HEIGHT)
-      .moveTo(0, NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT)
-      .lineTo(NODE_CARD_SIZE, NODE_CARD_SIZE - NODE_CARD_FOOTER_HEIGHT)
+      .lineTo(node.width, NODE_CARD_HEADER_HEIGHT);
+    if (layout.hasFooter) {
+      card
+        .moveTo(0, node.height - NODE_CARD_FOOTER_HEIGHT)
+        .lineTo(node.width, node.height - NODE_CARD_FOOTER_HEIGHT);
+    }
+    card
       .stroke({ color: dark ? 0x3f3f46 : 0xe4e4e7, width: 1 })
-      .roundRect(0, 0, NODE_CARD_SIZE, NODE_CARD_SIZE, 12)
-      .stroke({
-        color: border,
-        width: selected ? 2 / zoom : 1,
-      });
+      .roundRect(0, 0, node.width, node.height, 12)
+      .stroke({ color: border, width: selected ? 2 / zoom : 1 });
     display.cardVisualKey = cardVisualKey;
   }
 
@@ -419,10 +444,11 @@ function updateNodeVisual(
     fontSize: 12,
     fontWeight: "500",
   };
-  fitText(display.title, model.title, 168);
+  const titleWidth = Math.max(40, node.width - 88);
+  fitText(display.title, model.title, titleWidth);
   display.title.position.y = model.subtitle ? 6 : 14;
   display.subtitle.visible = model.subtitle !== undefined;
-  fitText(display.subtitle, model.subtitle ?? "", 168);
+  fitText(display.subtitle, model.subtitle ?? "", titleWidth);
 
   const machineImageUrl = model.buildableImageUrl ?? "";
   const machineTexture = machineImageUrl
@@ -446,6 +472,8 @@ function updateNodeVisual(
       "left",
       index,
       model.leftPorts.length,
+      node.height,
+      node.width,
       dark,
       textResolution,
       onAssetReady,
@@ -458,6 +486,8 @@ function updateNodeVisual(
       "right",
       index,
       model.rightPorts.length,
+      node.height,
+      node.width,
       dark,
       textResolution,
       onAssetReady,
@@ -484,7 +514,11 @@ function updateNodeVisual(
   display.power.visible = model.power !== undefined;
   display.power.text = model.power ?? "";
   display.power.style = metricStyle;
-  updateFooterIcons(display, model, dark);
+  const footerCenterY = node.height - NODE_CARD_FOOTER_HEIGHT / 2;
+  display.clock.position.y = footerCenterY;
+  display.efficiency.position.y = footerCenterY;
+  display.power.position.set(node.width - 16, footerCenterY);
+  updateFooterIcons(display, model, dark, node.height, node.width);
 
   for (const text of [
     display.title,

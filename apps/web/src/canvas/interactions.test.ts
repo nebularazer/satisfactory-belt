@@ -225,7 +225,7 @@ describe("canvas interactions", () => {
     pointer("pointermove", 200, 250);
     pointer("pointerup", 200, 250);
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: -8, y: 2 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 50 });
   });
 
   it("applies snapping in world coordinates at a transformed zoom", () => {
@@ -242,7 +242,7 @@ describe("canvas interactions", () => {
     pointer("pointermove", 230, 230);
     pointer("pointerup", 230, 230);
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: -32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
   });
 
   it("selects through a Ctrl/Cmd-drag marquee in world coordinates", () => {
@@ -373,7 +373,7 @@ describe("canvas interactions", () => {
       at: { x: 100, y: 100 },
     });
     key("ArrowRight");
-    expect(editor.getState().document.nodes[0]?.x).toBe(0);
+    expect(editor.getState().document.nodes[0]?.x).toBe(32);
   });
 
   it("supports two-pointer pan and pinch gestures", () => {

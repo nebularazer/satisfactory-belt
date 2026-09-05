@@ -49,13 +49,17 @@ describe("canvas editor", () => {
     const [first, second] = editor.getState().document.nodes;
     expect(first).toMatchObject({
       configuration: { id: "node-1" },
-      x: -32,
-      y: -32,
+      height: 160,
+      width: 192,
+      x: 0,
+      y: 32,
     });
     expect(second).toMatchObject({
       configuration: { id: "node-2" },
-      x: 288,
-      y: 160,
+      height: 160,
+      width: 192,
+      x: 320,
+      y: 224,
     });
     expect(canvasNodeId(editor.hitTest({ x: 20, y: 80 })!)).toBe("node-1");
 
@@ -122,14 +126,14 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.move.commit" });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: -32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
     editor.dispatch({ type: "history.undo" });
     expect(editor.getState().document.nodes[0]).toMatchObject({
-      x: -32,
-      y: -32,
+      x: 0,
+      y: 32,
     });
     editor.dispatch({ type: "history.redo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: -32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
   });
 
   it("keeps pointer movement transient until the move is committed", () => {
@@ -183,8 +187,8 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.move.commit" });
 
     expect(editor.getState().document.nodes).toMatchObject([
-      { x: 0, y: -64 },
-      { x: 320, y: 128 },
+      { x: 32, y: 0 },
+      { x: 352, y: 192 },
     ]);
   });
 
@@ -207,8 +211,8 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.move.commit" });
 
     expect(editor.getState().document.nodes[0]).toMatchObject({
-      x: -15,
-      y: -11,
+      x: 17,
+      y: 37,
     });
   });
 
@@ -224,8 +228,8 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.duplicate" });
 
     expect(editor.getState().document.nodes).toHaveLength(3);
-    expect(editor.getState().document.nodes[1]?.x).toBe(0);
-    expect(editor.getState().document.nodes[2]?.x).toBe(SNAP_INTERVAL);
+    expect(editor.getState().document.nodes[1]?.x).toBe(SNAP_INTERVAL);
+    expect(editor.getState().document.nodes[2]?.x).toBe(SNAP_INTERVAL * 2);
 
     editor.dispatch({ type: "selection.delete" });
     expect(editor.getState().document.nodes).toHaveLength(2);
@@ -243,11 +247,11 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.nudge", delta: { x: 32, y: -32 } });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: -64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 0 });
     editor.dispatch({ type: "history.undo" });
     expect(editor.getState().document.nodes[0]).toMatchObject({
-      x: -32,
-      y: -32,
+      x: 0,
+      y: 32,
     });
   });
 
@@ -265,16 +269,16 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getBounds("all")).toEqual({
-      height: 448,
-      width: 576,
-      x: -32,
-      y: -32,
+      height: 352,
+      width: 512,
+      x: 0,
+      y: 32,
     });
     expect(editor.getBounds("selection")).toEqual({
-      height: 256,
-      width: 256,
-      x: 288,
-      y: 160,
+      height: 160,
+      width: 192,
+      x: 320,
+      y: 224,
     });
   });
 
@@ -304,6 +308,23 @@ describe("canvas editor", () => {
     expect(canvasNodeId(editor.hitTest({ x: 1_025, y: 1_025 })!)).toBe(
       "imported",
     );
+  });
+
+  it("compacts legacy full-size passive cards without changing custom sizes", () => {
+    const editor = createCanvasEditor({
+      document: {
+        nodes: [
+          testCanvasNode("legacy", 0, 0, { height: 256, width: 256 }),
+          testCanvasNode("custom", 320, 0),
+        ],
+        version: 3,
+      },
+    });
+
+    expect(editor.getState().document.nodes).toMatchObject([
+      { height: 160, width: 192 },
+      { height: 96, width: 176 },
+    ]);
   });
 
   it("resets the document and all transient editing state", () => {
