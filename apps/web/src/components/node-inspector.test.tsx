@@ -93,6 +93,59 @@ describe("NodeInspector", () => {
     expect(clockSpeeds(editor)).toEqual([125, 125]);
   });
 
+  it("keeps mobile actions clear of the keyboard while editing", () => {
+    const editor = createProcessEditor();
+    render(<NodeInspector editor={editor} />);
+
+    const inspector = screen.getByLabelText("Node details: Iron Plate");
+    const clockSpeed = screen.getByLabelText("Clock speed");
+    const footer = screen
+      .getByRole("button", { name: "Duplicate" })
+      .closest("footer");
+
+    fireEvent.focus(clockSpeed);
+
+    expect(inspector).toHaveClass("max-h-[100dvh]");
+    expect(footer).toHaveClass("hidden", "lg:flex");
+
+    fireEvent.blur(clockSpeed);
+
+    expect(inspector).toHaveClass("max-h-[82dvh]");
+    expect(footer).not.toHaveClass("hidden");
+  });
+
+  it("shows Somersloop usage relative to the machine capacity", () => {
+    const editor = createCanvasEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Nitro Rocket Fuel",
+      node: {
+        buildableId: "Build_Blender_C",
+        kind: "process",
+        processId: "Recipe_Alternate_RocketFuel_Nitro_C",
+      },
+    });
+    render(<NodeInspector editor={editor} />);
+
+    const somersloops = screen.getByRole("combobox", {
+      name: "Somersloops",
+    });
+    expect(somersloops).toHaveTextContent("0 / 4");
+
+    fireEvent.click(somersloops);
+    const twoLoops = screen.getByRole("option", { name: "2 / 4" });
+    fireEvent.pointerDown(twoLoops, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(twoLoops, { button: 0, pointerId: 1 });
+    fireEvent.click(twoLoops);
+
+    const configuration = editor.getState().document.nodes[0]!.configuration;
+    if (configuration.kind !== "process") throw new Error("process");
+    expect(configuration.instances).toEqual(
+      expect.arrayContaining([expect.objectContaining({ somersloopCount: 2 })]),
+    );
+  });
+
   it("edits only the selected individual machine", () => {
     const editor = createProcessEditor();
     render(<NodeInspector editor={editor} />);

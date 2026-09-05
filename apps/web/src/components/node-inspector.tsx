@@ -48,6 +48,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   buildableImage,
   descriptorImage,
   imageSrcSet,
@@ -390,6 +397,55 @@ function SegmentedControl<T extends string | number>({
   );
 }
 
+function SomersloopSelect({
+  maximum,
+  onChange,
+  value,
+}: Readonly<{
+  maximum: number;
+  onChange: (value: number) => void;
+  value: number | "mixed";
+}>) {
+  const options = Array.from({ length: maximum + 1 }, (_, count) => ({
+    label: `${count} / ${maximum}`,
+    value: count,
+  }));
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <span className="text-xs font-medium">Somersloops</span>
+      <Select
+        items={options}
+        onValueChange={(next) => {
+          if (next !== null) onChange(next);
+        }}
+        value={value === "mixed" ? null : value}
+      >
+        <SelectTrigger
+          aria-label="Somersloops"
+          className="w-[8.5rem]"
+          size="sm"
+        >
+          <SelectValue>
+            {(selected: number | null) =>
+              selected === null
+                ? `Mixed / ${maximum}`
+                : `${selected} / ${maximum}`
+            }
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent align="end" alignItemWithTrigger={false}>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function clockRange(configuration: ProcessNodeConfiguration) {
   const machine = findProductionMachine(configuration.buildableId);
   if (machine) return machine.clockSpeed;
@@ -507,18 +563,14 @@ function ProcessControls({
           />
         )}
         {hasSomersloops && (
-          <SegmentedControl
-            label="Somersloops"
+          <SomersloopSelect
+            maximum={maximumSomersloops}
             onChange={(value) =>
               configureInstances((instance) => ({
                 ...instance,
                 somersloopCount: value,
               }))
             }
-            options={Array.from(
-              { length: maximumSomersloops + 1 },
-              (_, value) => ({ label: String(value), value }),
-            )}
             value={commonValue(
               scopedInstances,
               (instance) => instance.somersloopCount!,
@@ -1066,6 +1118,7 @@ function RouterControls({
 
 function InspectorContent({
   editor,
+  keyboardEditing,
   node,
   onSheetHandlePointerCancel,
   onSheetHandlePointerDown,
@@ -1073,6 +1126,7 @@ function InspectorContent({
   onSheetHandlePointerUp,
 }: Readonly<{
   editor: CanvasEditor;
+  keyboardEditing: boolean;
   node: CanvasNode;
   onSheetHandlePointerCancel: (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -1140,7 +1194,7 @@ function InspectorContent({
           scope={safeScope}
         />
       )}
-      <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]]:overscroll-contain">
+      <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]]:overscroll-contain [&_[data-slot=scroll-area-viewport]]:scroll-py-3">
         {configuration.kind === "process" && (
           <ProcessControls
             configuration={configuration}
@@ -1160,7 +1214,12 @@ function InspectorContent({
         )}
         <NodeMetrics editor={editor} node={node} scope={safeScope} />
       </ScrollArea>
-      <footer className="flex justify-end gap-1 border-t border-border p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:pb-2">
+      <footer
+        className={cn(
+          "relative z-10 flex shrink-0 justify-end gap-1 border-t border-border bg-card p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:pb-2",
+          keyboardEditing && "hidden lg:flex",
+        )}
+      >
         <Button
           onClick={() => editor.dispatch({ type: "selection.duplicate" })}
           type="button"
@@ -1190,12 +1249,25 @@ export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
   );
   const selectedId =
     state.selectedIds.length === 1 ? state.selectedIds[0] : undefined;
+  const [keyboardEditing, setKeyboardEditing] = useState(false);
   const [sheetOffset, setSheetOffset] = useState(0);
+  const focusScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const sheetDragRef = useRef<{ offset: number; startY: number } | null>(null);
   useEffect(() => {
     sheetDragRef.current = null;
+    setKeyboardEditing(false);
     setSheetOffset(0);
   }, [selectedId]);
+  useEffect(
+    () => () => {
+      if (focusScrollTimerRef.current !== null) {
+        clearTimeout(focusScrollTimerRef.current);
+      }
+    },
+    [],
+  );
   const node = selectedId
     ? state.document.nodes.find(
         (candidate) => candidate.configuration.id === selectedId,
@@ -1239,7 +1311,29 @@ export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
   return (
     <aside
       aria-label={`Node details: ${node.label}`}
-      className="pointer-events-auto absolute right-0 bottom-0 left-0 z-20 flex max-h-[82dvh] flex-col overflow-hidden rounded-t-2xl border border-x-0 border-b-0 border-border bg-card text-card-foreground shadow-2xl lg:top-4 lg:right-4 lg:bottom-auto lg:left-auto lg:z-auto lg:max-h-[calc(100dvh-2rem)] lg:w-[22rem] lg:rounded-xl lg:border-x lg:border-b lg:shadow-xl"
+      className={cn(
+        "pointer-events-auto absolute right-0 bottom-0 left-0 z-20 flex flex-col overflow-hidden rounded-t-2xl border border-x-0 border-b-0 border-border bg-card text-card-foreground shadow-2xl lg:top-4 lg:right-4 lg:bottom-auto lg:left-auto lg:z-auto lg:max-h-[calc(100dvh-2rem)] lg:w-[22rem] lg:rounded-xl lg:border-x lg:border-b lg:shadow-xl",
+        keyboardEditing ? "max-h-[100dvh]" : "max-h-[82dvh]",
+      )}
+      onBlurCapture={(event) => {
+        if (!(event.relatedTarget instanceof HTMLInputElement)) {
+          setKeyboardEditing(false);
+        }
+      }}
+      onFocusCapture={(event) => {
+        if (!(event.target instanceof HTMLInputElement)) return;
+        setKeyboardEditing(true);
+        if (focusScrollTimerRef.current !== null) {
+          clearTimeout(focusScrollTimerRef.current);
+        }
+        const input = event.target;
+        focusScrollTimerRef.current = setTimeout(() => {
+          focusScrollTimerRef.current = null;
+          if (input.isConnected) {
+            input.scrollIntoView({ block: "center", inline: "nearest" });
+          }
+        }, 250);
+      }}
       style={{
         transform: sheetOffset > 0 ? `translateY(${sheetOffset}px)` : undefined,
         transition: sheetDragRef.current ? "none" : "transform 150ms ease-out",
@@ -1247,6 +1341,7 @@ export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
     >
       <InspectorContent
         editor={editor}
+        keyboardEditing={keyboardEditing}
         node={node}
         onSheetHandlePointerCancel={(event) => finishSheetDrag(event, true)}
         onSheetHandlePointerDown={handleSheetPointerDown}
