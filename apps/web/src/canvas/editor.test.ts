@@ -50,17 +50,17 @@ describe("canvas editor", () => {
     const [first, second] = editor.getState().document.nodes;
     expect(first).toMatchObject({
       configuration: { id: "node-1" },
-      height: 160,
+      height: 176,
       width: 192,
       x: 0,
       y: 16,
     });
     expect(second).toMatchObject({
       configuration: { id: "node-2" },
-      height: 160,
+      height: 176,
       width: 192,
       x: 304,
-      y: 224,
+      y: 208,
     });
     expect(canvasNodeId(editor.hitTest({ x: 20, y: 80 })!)).toBe("node-1");
 
@@ -189,7 +189,7 @@ describe("canvas editor", () => {
 
     expect(editor.getState().document.nodes).toMatchObject([
       { x: 32, y: -16 },
-      { x: 336, y: 192 },
+      { x: 336, y: 176 },
     ]);
   });
 
@@ -213,7 +213,7 @@ describe("canvas editor", () => {
 
     expect(editor.getState().document.nodes[0]).toMatchObject({
       x: 17,
-      y: 37,
+      y: 29,
     });
   });
 
@@ -279,10 +279,10 @@ describe("canvas editor", () => {
       y: 16,
     });
     expect(editor.getBounds("selection")).toEqual({
-      height: 160,
+      height: 176,
       width: 192,
       x: 304,
-      y: 224,
+      y: 208,
     });
   });
 
@@ -314,11 +314,30 @@ describe("canvas editor", () => {
     );
   });
 
-  it("compacts legacy full-size passive cards without changing custom sizes", () => {
+  it("migrates legacy passive card sizes without changing custom sizes", () => {
     const editor = createCanvasEditor({
       document: {
         nodes: [
-          testCanvasNode("legacy", 0, 0, { height: 256, width: 256 }),
+          testCanvasNode("legacy-full", 0, 0, {
+            height: 256,
+            width: 256,
+          }),
+          testCanvasNode("legacy-router", 320, 0, {
+            height: 160,
+            width: 192,
+          }),
+          {
+            configuration: {
+              buildableId: "Build_StorageContainerMk1_C",
+              id: "legacy-buffer",
+              kind: "buffer",
+            },
+            height: 192,
+            label: "Storage Container",
+            width: 256,
+            x: 640,
+            y: 0,
+          },
           testCanvasNode("custom", 320, 0),
         ],
         version: 3,
@@ -326,7 +345,9 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getState().document.nodes).toMatchObject([
-      { height: 160, width: 192 },
+      { height: 176, width: 192 },
+      { height: 176, width: 192 },
+      { height: 208, width: 256 },
       { height: 96, width: 176 },
     ]);
   });

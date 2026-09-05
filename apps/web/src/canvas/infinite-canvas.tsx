@@ -32,6 +32,7 @@ import {
   NODE_CARD_HEADER_HEIGHT,
   nodeCardLayout,
   nodeCardPortY,
+  type NodeCardLayout,
 } from "./node-card-layout";
 import {
   createPerformanceSampler,
@@ -272,13 +273,13 @@ function updateMaterialVisual(
   side: "left" | "right",
   index: number,
   count: number,
-  cardHeight: number,
+  layout: NodeCardLayout,
   cardWidth: number,
   dark: boolean,
   textResolution: number,
   requestImage: (imageUrl: string) => void,
 ) {
-  const y = nodeCardPortY(cardHeight, index, count);
+  const y = nodeCardPortY(layout, index, count);
   const visible = material !== undefined;
   display.image.visible = false;
   display.port.visible = visible;
@@ -482,7 +483,7 @@ function updateNodeVisual(
       "left",
       index,
       model.leftPorts.length,
-      node.height,
+      layout,
       node.width,
       dark,
       textResolution,
@@ -496,7 +497,7 @@ function updateNodeVisual(
       "right",
       index,
       model.rightPorts.length,
-      node.height,
+      layout,
       node.width,
       dark,
       textResolution,

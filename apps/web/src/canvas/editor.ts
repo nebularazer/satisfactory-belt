@@ -105,10 +105,20 @@ function normalizeLegacyNodeCardSizes(
 ): CanvasDocument {
   let changed = false;
   const nodes = document.nodes.map((node) => {
-    if (node.width !== NODE_WIDTH || node.height !== NODE_HEIGHT) return node;
     const layout = nodeCardLayout(node.configuration);
     if (layout.width === node.width && layout.height === node.height)
       return node;
+    const legacyFullSize =
+      node.width === NODE_WIDTH && node.height === NODE_HEIGHT;
+    const legacyPassiveSize =
+      (node.configuration.kind === "router" &&
+        node.width === GRID_INTERVAL * 6 &&
+        node.height === GRID_INTERVAL * 5) ||
+      (node.configuration.kind === "buffer" &&
+        node.width === GRID_INTERVAL * 8 &&
+        node.height === GRID_INTERVAL * 6);
+    if (!legacyFullSize && !legacyPassiveSize) return node;
+
     changed = true;
     return { ...node, height: layout.height, width: layout.width };
   });

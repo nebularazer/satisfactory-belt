@@ -225,7 +225,7 @@ describe("canvas interactions", () => {
     pointer("pointermove", 200, 250);
     pointer("pointerup", 200, 250);
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 50 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 42 });
   });
 
   it("applies snapping in world coordinates at a transformed zoom", () => {

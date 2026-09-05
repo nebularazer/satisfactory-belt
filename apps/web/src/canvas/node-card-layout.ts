@@ -21,13 +21,13 @@ const TRANSPORT_LAYOUT: NodeCardLayout = PROCESS_LAYOUT;
 
 const BUFFER_LAYOUT: NodeCardLayout = {
   hasFooter: false,
-  height: GRID_INTERVAL * 6,
+  height: GRID_INTERVAL * 6 + GRID_INTERVAL / 2,
   width: GRID_INTERVAL * 8,
 };
 
 const ROUTER_LAYOUT: NodeCardLayout = {
   hasFooter: false,
-  height: GRID_INTERVAL * 5,
+  height: GRID_INTERVAL * 5 + GRID_INTERVAL / 2,
   width: GRID_INTERVAL * 6,
 };
 
@@ -41,11 +41,16 @@ export function nodeCardLayout(
 }
 
 export function nodeCardPortY(
-  cardHeight: number,
+  layout: Pick<NodeCardLayout, "hasFooter" | "height">,
   index: number,
   count: number,
 ) {
-  const center = Math.round(cardHeight / 2 / GRID_INTERVAL) * GRID_INTERVAL;
+  const bodyEnd = layout.hasFooter
+    ? layout.height - NODE_CARD_FOOTER_HEIGHT
+    : layout.height;
+  const bodyCenter = (NODE_CARD_HEADER_HEIGHT + bodyEnd) / 2;
+  const center =
+    Math.round(bodyCenter / (GRID_INTERVAL / 2)) * (GRID_INTERVAL / 2);
   const start = center - ((count - 1) * GRID_INTERVAL) / 2;
   return start + index * GRID_INTERVAL;
 }
