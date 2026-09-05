@@ -1,4 +1,8 @@
-import { createNode, type NodeTemplate } from "@satisfactory-belt/production";
+import {
+  createNode,
+  type NodeConfiguration,
+  type NodeTemplate,
+} from "@satisfactory-belt/production";
 
 import {
   EMPTY_CANVAS_DOCUMENT,
@@ -37,6 +41,11 @@ export type CanvasEditorChange = Readonly<
 export type CanvasEditorAction =
   | { type: "document.replace"; document: CanvasDocument }
   | { type: "document.reset" }
+  | {
+      type: "node.configure";
+      configuration: NodeConfiguration;
+      id: string;
+    }
   | {
       type: "node.create";
       at: Point;
@@ -295,6 +304,35 @@ export function createCanvasEditor(
             beforeSelection: state.selectedIds,
           },
         );
+        return;
+      }
+
+      case "node.configure": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (
+          !beforeNode ||
+          index === undefined ||
+          action.configuration.id !== action.id
+        ) {
+          return;
+        }
+        const configuration = createNode(action.configuration).configuration;
+        const layout = nodeCardLayout(configuration);
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          configuration,
+          height: layout.height,
+          width: layout.width,
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
         return;
       }
 

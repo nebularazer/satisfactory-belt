@@ -34,6 +34,42 @@ describe("canvas editor", () => {
     });
   });
 
+  it("updates node configuration as an undoable operation", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Iron Plate",
+      node: {
+        buildableId: "Build_ConstructorMk1_C",
+        kind: "process",
+        processId: "Recipe_IronPlate_C",
+      },
+    });
+    const node = editor.getState().document.nodes[0]!;
+    if (node.configuration.kind !== "process") throw new Error("process");
+
+    editor.dispatch({
+      type: "node.configure",
+      configuration: {
+        ...node.configuration,
+        instances: node.configuration.instances.map((instance) => ({
+          ...instance,
+          clockSpeedPercent: 150,
+        })),
+      },
+      id: node.configuration.id,
+    });
+
+    expect(editor.getState().document.nodes[0]?.configuration).toMatchObject({
+      instances: [{ clockSpeedPercent: 150 }],
+    });
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.nodes[0]?.configuration).toMatchObject({
+      instances: [{ clockSpeedPercent: 100 }],
+    });
+  });
+
   it("creates snapped nodes and selects by point and marquee", () => {
     const editor = createEditor();
     editor.dispatch({

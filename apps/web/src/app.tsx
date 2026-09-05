@@ -44,6 +44,7 @@ import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
+import { NodeInspector } from "@/components/node-inspector";
 import type { NodePickerSelection } from "@/components/node-picker";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
@@ -456,6 +457,8 @@ function CanvasWorkspace({
             onManagePlans={() => setManagePlansOpen(true)}
           />
         )}
+
+        <NodeInspector editor={editor} />
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
           <CanvasControls
