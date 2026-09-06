@@ -12,7 +12,9 @@ type Interaction =
       current: Point;
       from: Readonly<{ nodeId: string; portId: string }>;
       kind: "connection";
+      moved: boolean;
       pointerId: number;
+      startScreen: Point;
       target?: Readonly<{ nodeId: string; portId: string }>;
     }
   | {
@@ -49,7 +51,10 @@ export type CanvasInteractionHost = Readonly<{
   getViewport: () => Viewport;
   getViewportCenter: () => Point;
   panBy: (delta: Point) => void;
-  requestNode: (at: Point) => void;
+  requestNode: (
+    at: Point,
+    connectionFrom?: Readonly<{ nodeId: string; portId: string }>,
+  ) => void;
   resetView: () => void;
   setMarquee: (rectangle?: Rectangle) => void;
   zoomAt: (factor: number, anchor: Point) => void;
@@ -82,6 +87,8 @@ export function attachCanvasInteractions(
   host: CanvasInteractionHost,
 ) {
   let interaction: Interaction | null = null;
+  let armedConnection: Readonly<{ nodeId: string; portId: string }> | null =
+    null;
   let lastPointerScreen: Point | null = null;
   let spacePressed = false;
   const touches = new Map<number, Point>();
@@ -116,6 +123,11 @@ export function attachCanvasInteractions(
   };
 
   const touchPair = () => [...touches.entries()].slice(0, 2);
+
+  const cancelConnection = () => {
+    armedConnection = null;
+    editor.dispatch({ type: "link.preview.cancel" });
+  };
 
   const touchGeometry = () => {
     const pair = touchPair();
@@ -159,8 +171,20 @@ export function attachCanvasInteractions(
           from: interaction.from,
           to: interaction.target,
         });
+        cancelConnection();
+      } else if (!cancelled && interaction.moved) {
+        host.requestNode(interaction.current, interaction.from);
+        cancelConnection();
+      } else if (!cancelled) {
+        armedConnection = interaction.from;
+        editor.dispatch({
+          type: "link.preview",
+          current: interaction.current,
+          from: interaction.from,
+        });
+      } else {
+        cancelConnection();
       }
-      editor.dispatch({ type: "link.preview.cancel" });
     }
 
     if (interaction.kind === "select") {
@@ -207,9 +231,10 @@ export function attachCanvasInteractions(
     const screen = screenPoint(event);
     lastPointerScreen = screen;
     const worldPoint = screenToWorld(screen, host.getViewport());
+    const coarsePointer = event.pointerType === "touch";
     const hitPort = editor.hitTestPort(
       worldPoint,
-      12 / host.getViewport().zoom,
+      (coarsePointer ? 24 : 12) / host.getViewport().zoom,
     );
     const hitLink = editor.hitTestLink(worldPoint, 8 / host.getViewport().zoom);
     const hit = editor.hitTest(worldPoint);
@@ -221,6 +246,9 @@ export function attachCanvasInteractions(
       if (touches.size === 0) touchSequenceWasMultitouch = false;
       touches.set(event.pointerId, screen);
       if (touches.size >= 2) {
+        if (interaction?.kind === "connection" || armedConnection) {
+          cancelConnection();
+        }
         if (interaction?.kind === "move") {
           if (interaction.started) {
             editor.dispatch({ type: "selection.move.cancel" });
@@ -254,16 +282,36 @@ export function attachCanvasInteractions(
 
     if (hitPort) {
       const from = { nodeId: hitPort.nodeId, portId: hitPort.port.id };
+      if (armedConnection) {
+        if (
+          from.nodeId !== armedConnection.nodeId ||
+          from.portId !== armedConnection.portId
+        ) {
+          editor.dispatch({
+            type: "link.create",
+            from: armedConnection,
+            to: from,
+          });
+        }
+        cancelConnection();
+        releasePointer(event.pointerId);
+        canvas.dataset.cursor = "grab";
+        return;
+      }
       interaction = {
         current: worldPoint,
         from,
         kind: "connection",
+        moved: false,
         pointerId: event.pointerId,
+        startScreen: screen,
       };
       editor.dispatch({ type: "link.preview", current: worldPoint, from });
       canvas.dataset.cursor = "crosshair";
       return;
     }
+
+    if (armedConnection) cancelConnection();
 
     if (selectionModifier) {
       if (hitLink) {
@@ -290,22 +338,15 @@ export function attachCanvasInteractions(
     if (hit) {
       const hitId = canvasNodeId(hit);
       const selectionBefore = editor.getState().selectedIds;
-      const canMoveNode = selectionBefore.includes(hitId);
-      if (!canMoveNode) {
-        interaction = {
-          clearSelectionOnClick: false,
-          kind: "pan",
-          lastScreen: screen,
-          moved: false,
-          pointerId: event.pointerId,
-          selectNodeOnTap: hitId,
-          startScreen: screen,
-        };
-        canvas.dataset.cursor = "grabbing";
-        return;
-      }
       const started = event.pointerType !== "touch";
       if (started) {
+        if (!selectionBefore.includes(hitId)) {
+          editor.dispatch({
+            type: "selection.node",
+            additive: false,
+            id: hitId,
+          });
+        }
         editor.dispatch({ type: "selection.move.begin" });
       }
       interaction = {
@@ -369,6 +410,28 @@ export function attachCanvasInteractions(
     }
 
     if (!interaction || interaction.pointerId !== event.pointerId) {
+      if (armedConnection) {
+        const worldPoint = screenToWorld(screen, host.getViewport());
+        const hitPort = editor.hitTestPort(
+          worldPoint,
+          (event.pointerType === "touch" ? 24 : 14) /
+            host.getViewport().zoom,
+        );
+        const target =
+          hitPort &&
+          (hitPort.nodeId !== armedConnection.nodeId ||
+            hitPort.port.id !== armedConnection.portId)
+            ? { nodeId: hitPort.nodeId, portId: hitPort.port.id }
+            : undefined;
+        editor.dispatch({
+          type: "link.preview",
+          current: worldPoint,
+          from: armedConnection,
+          ...(target ? { target } : {}),
+        });
+        canvas.dataset.cursor = "crosshair";
+        return;
+      }
       const selectionModifier = event.ctrlKey || event.metaKey;
       canvas.dataset.cursor = selectionModifier
         ? "crosshair"
@@ -379,10 +442,21 @@ export function attachCanvasInteractions(
     }
 
     if (interaction.kind === "connection") {
+      if (
+        !interaction.moved &&
+        passedDragThreshold(
+          interaction.startScreen,
+          screen,
+          event.pointerType,
+        )
+      ) {
+        interaction.moved = true;
+      }
       const worldPoint = screenToWorld(screen, host.getViewport());
       const hitPort = editor.hitTestPort(
         worldPoint,
-        14 / host.getViewport().zoom,
+        (event.pointerType === "touch" ? 24 : 14) /
+          host.getViewport().zoom,
       );
       const target =
         hitPort &&
@@ -572,12 +646,17 @@ export function attachCanvasInteractions(
         editor.dispatch({ type: "selection.move.cancel" });
       }
       if (interaction?.kind === "connection") {
-        editor.dispatch({ type: "link.preview.cancel" });
+        cancelConnection();
       }
       if (interaction?.kind === "select") host.setMarquee();
       if (interaction) {
         releasePointer(interaction.pointerId);
         interaction = null;
+        canvas.dataset.cursor = "grab";
+        return;
+      }
+      if (armedConnection) {
+        cancelConnection();
         canvas.dataset.cursor = "grab";
         return;
       }
@@ -664,11 +743,12 @@ export function attachCanvasInteractions(
       editor.dispatch({ type: "selection.move.cancel" });
     }
     if (interaction?.kind === "connection") {
-      editor.dispatch({ type: "link.preview.cancel" });
+      cancelConnection();
     }
     if (interaction?.kind === "select") host.setMarquee();
     if (interaction) releasePointer(interaction.pointerId);
     interaction = null;
+    if (armedConnection) cancelConnection();
     spacePressed = false;
     touches.clear();
     touchSequenceWasMultitouch = false;

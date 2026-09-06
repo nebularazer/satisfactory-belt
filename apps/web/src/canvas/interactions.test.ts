@@ -37,7 +37,10 @@ function createHarness(
   const fits: Array<"all" | "selection"> = [];
   const marquees: Array<Parameters<CanvasInteractionHost["setMarquee"]>[0]> =
     [];
-  const nodeRequests: Point[] = [];
+  const nodeRequests: Array<{
+    at: Point;
+    connectionFrom?: Readonly<{ nodeId: string; portId: string }>;
+  }> = [];
   const zooms: Array<{ anchor: Point; factor: number }> = [];
 
   canvas.tabIndex = 0;
@@ -78,7 +81,11 @@ function createHarness(
     panBy: (delta) => {
       viewport = panViewport(viewport, delta);
     },
-    requestNode: (at) => nodeRequests.push(at),
+    requestNode: (at, connectionFrom) =>
+      nodeRequests.push({
+        at,
+        ...(connectionFrom ? { connectionFrom } : {}),
+      }),
     resetView: () => {
       viewport = { x: 500, y: 400, zoom: 1 };
     },
@@ -176,6 +183,73 @@ describe("canvas interactions", () => {
     ]);
   });
 
+  it("creates a Material Link by tapping two touch ports", () => {
+    const { editor, pointer } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 500, y: 100 },
+      node: {
+        buildableId: "Build_SmelterMk1_C",
+        kind: "process",
+        processId: "Recipe_IngotIron_C",
+      },
+    });
+
+    pointer("pointerdown", 224, 96, { pointerType: "touch" });
+    pointer("pointerup", 224, 96, { pointerType: "touch" });
+    expect(editor.getState().connectionPreview?.from).toEqual({
+      nodeId: "node-1",
+      portId: "output:Desc_OreIron_C",
+    });
+
+    pointer("pointerdown", 368, 96, { pointerType: "touch" });
+    pointer("pointerup", 368, 96, { pointerType: "touch" });
+
+    expect(editor.getState().document.materialLinks).toEqual([
+      expect.objectContaining({
+        from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+        to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+      }),
+    ]);
+    expect(editor.getState().connectionPreview).toBeUndefined();
+  });
+
+  it("requests a compatible node after dropping a connection on empty space", () => {
+    const { editor, nodeRequests, pointer } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+
+    pointer("pointerdown", 224, 96, { pointerType: "touch" });
+    pointer("pointermove", 320, 220, { pointerType: "touch" });
+    pointer("pointerup", 320, 220, { pointerType: "touch" });
+
+    expect(nodeRequests).toEqual([
+      {
+        at: { x: 320, y: 220 },
+        connectionFrom: {
+          nodeId: "node-1",
+          portId: "output:Desc_OreIron_C",
+        },
+      },
+    ]);
+  });
+
   it("cancels a Material Link preview without changing history", () => {
     const { editor, key, pointer } = createHarness();
     editor.dispatch({
@@ -241,7 +315,7 @@ describe("canvas interactions", () => {
     expect(editor.getState().selectedIds).toEqual([]);
   });
 
-  it("pans over an unselected node without selecting it", () => {
+  it("selects and moves an unselected node in one drag", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
@@ -259,9 +333,10 @@ describe("canvas interactions", () => {
     pointer("pointermove", 50, 100);
     pointer("pointerup", 50, 100);
 
-    expect(viewport()).toEqual({ x: 30, y: 20, zoom: 1 });
-    expect(editor.getState().selectedIds).toEqual(["node-2"]);
-    expect(editor.getState().document).toEqual(original);
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().document).not.toEqual(original);
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 34, y: 32 });
   });
 
   it("does not turn small pointer movement into a drag", () => {
@@ -375,7 +450,7 @@ describe("canvas interactions", () => {
     pointer("pointermove", 300, 250, { buttons: 0 });
     key("n");
 
-    expect(nodeRequests).toEqual([{ x: 100, y: 100 }]);
+    expect(nodeRequests).toEqual([{ at: { x: 100, y: 100 } }]);
   });
 
   it("fits all nodes when empty space is double-clicked", () => {
@@ -521,7 +596,7 @@ describe("canvas interactions", () => {
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
-  it("pans when a single-touch drag starts on an unselected node body", () => {
+  it("moves when a single-touch drag starts on an unselected node body", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
@@ -548,12 +623,13 @@ describe("canvas interactions", () => {
       pointerType: "touch",
     });
 
-    expect(viewport()).toEqual({ x: 20, y: 20, zoom: 1 });
-    expect(editor.getState().selectedIds).toEqual(["node-2"]);
-    expect(editor.getState().document).toEqual(original);
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().document).not.toEqual(original);
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
-  it("pans when a single-touch drag starts on an unselected node header", () => {
+  it("moves when a single-touch drag starts on an unselected node header", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
@@ -580,9 +656,10 @@ describe("canvas interactions", () => {
       pointerType: "touch",
     });
 
-    expect(viewport()).toEqual({ x: 20, y: 20, zoom: 1 });
-    expect(editor.getState().selectedIds).toEqual(["node-2"]);
-    expect(editor.getState().document).toEqual(original);
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().document).not.toEqual(original);
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
   it("does not change selection when a pinch starts on a node", () => {
