@@ -76,6 +76,17 @@ export type PlanningRequest = Readonly<{
   allowedProcessIds?: readonly string[];
   availableResources?: readonly AvailableResource[];
   outputs: readonly RequestedOutput[];
+  processes?: readonly SolverProcessDefinition[];
+}>;
+
+export type SolverProcessDefinition = Readonly<{
+  buildableId: string;
+  id: string;
+  inputs: readonly RequestedOutput[];
+  name?: string;
+  outputs: readonly RequestedOutput[];
+  powerConsumedMw?: number;
+  powerProducedMw?: number;
 }>;
 
 export type ProcessActivity = Readonly<{

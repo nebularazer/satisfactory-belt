@@ -51,10 +51,16 @@ export function createDetailedAnalysisCoordinator(
       const explicitlyScoped =
         (change.connectionIds?.length ?? 0) > 0 ||
         (change.nodeIds?.length ?? 0) > 0;
+      const affectedConnectionIds = explicitlyScoped
+        ? affectedDetailedRegion(plan, change)
+        : plan.connections.map(({ id }) => id);
       worker.postMessage({
-        affectedConnectionIds: explicitlyScoped
-          ? affectedDetailedRegion(plan, change)
-          : plan.connections.map(({ id }) => id),
+        // A deletion can remove every supplied identity from the new Plan. In
+        // that case a full pass is the smallest safe replacement analysis.
+        affectedConnectionIds:
+          explicitlyScoped && affectedConnectionIds.length === 0
+            ? plan.connections.map(({ id }) => id)
+            : affectedConnectionIds,
         plan,
         revision: latestRevision,
       });

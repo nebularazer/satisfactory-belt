@@ -18,7 +18,11 @@ import type {
   CanvasEditorChange,
   CanvasEditorState,
 } from "./editor";
-import { canvasNodeId, type CanvasNode } from "./document";
+import {
+  canvasNodeId,
+  type CanvasMaterialLink,
+  type CanvasNode,
+} from "./document";
 import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL } from "./grid";
 import { stableImageScaleTier } from "./image-scale";
@@ -896,7 +900,7 @@ function drawMaterialLinks(
   previewGraphics: Graphics,
   state: CanvasEditorState,
   zoom: number,
-  visibleLinkIds: ReadonlySet<string>,
+  visibleLinks: readonly CanvasMaterialLink[],
 ) {
   graphics.clear();
   previewGraphics.clear();
@@ -917,14 +921,18 @@ function drawMaterialLinks(
       }
     : state.document;
   const dark = document.documentElement.classList.contains("dark");
-  for (const link of effectiveDocument.materialLinks) {
-    if (
-      !visibleLinkIds.has(link.id) &&
-      !moving?.has(link.from.nodeId) &&
-      !moving?.has(link.to.nodeId)
-    ) {
-      continue;
-    }
+  const candidates = moving
+    ? [
+        ...visibleLinks,
+        ...effectiveDocument.materialLinks.filter(
+          (link) => moving.has(link.from.nodeId) || moving.has(link.to.nodeId),
+        ),
+      ].filter(
+        (link, index, links) =>
+          links.findIndex(({ id }) => id === link.id) === index,
+      )
+    : visibleLinks;
+  for (const link of candidates) {
     const path = materialLinkPath(effectiveDocument, link);
     if (!path) continue;
     const isSelected = selected.has(link.id);
@@ -1046,22 +1054,20 @@ export const InfiniteCanvas = forwardRef<
     const previewGraphics = previewGraphicsRef.current;
     if (linkGraphics && previewGraphics) {
       const viewport = viewportRef.current;
-      const visibleLinkIds = new Set(
-        editor
-          .queryLinks({
-            height: app.screen.height / viewport.zoom,
-            width: app.screen.width / viewport.zoom,
-            x: -viewport.x / viewport.zoom,
-            y: -viewport.y / viewport.zoom,
-          })
-          .map(({ link }) => link.id),
-      );
+      const visibleLinks = editor
+        .queryLinks({
+          height: app.screen.height / viewport.zoom,
+          width: app.screen.width / viewport.zoom,
+          x: -viewport.x / viewport.zoom,
+          y: -viewport.y / viewport.zoom,
+        })
+        .map(({ link }) => link);
       drawMaterialLinks(
         linkGraphics,
         previewGraphics,
         state,
         viewportRef.current.zoom,
-        visibleLinkIds,
+        visibleLinks,
       );
     }
     const imageScale = viewportRef.current.zoom * app.renderer.resolution;

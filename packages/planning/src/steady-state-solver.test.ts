@@ -78,4 +78,61 @@ describe("steady-state solver", () => {
       expect.objectContaining({ code: "solver.resource.capacity" }),
     );
   });
+
+  it("distinguishes underdetermined alternatives from unbounded circulation", () => {
+    const output = { itemId: "A", ratePerMinute: 1 } as const;
+    const underdetermined = solveSteadyState({
+      outputs: [output],
+      processes: [
+        { buildableId: "one", id: "one", inputs: [], outputs: [output] },
+        { buildableId: "two", id: "two", inputs: [], outputs: [output] },
+      ],
+    });
+    expect(underdetermined.status).toBe("underdetermined");
+
+    const unbounded = solveSteadyState({
+      outputs: [output],
+      processes: [
+        { buildableId: "source", id: "source", inputs: [], outputs: [output] },
+        {
+          buildableId: "ab",
+          id: "ab",
+          inputs: [output],
+          outputs: [{ itemId: "B", ratePerMinute: 1 }],
+        },
+        {
+          buildableId: "ba",
+          id: "ba",
+          inputs: [{ itemId: "B", ratePerMinute: 1 }],
+          outputs: [output],
+        },
+      ],
+    });
+    expect(unbounded.status).toBe("unbounded");
+    expect(unbounded.activities).toEqual([
+      expect.objectContaining({ activity: 1, processId: "source" }),
+    ]);
+  });
+
+  it("rejects a cyclic system whose only solution has negative activity", () => {
+    const result = solveSteadyState({
+      outputs: [{ itemId: "A", ratePerMinute: 1 }],
+      processes: [
+        {
+          buildableId: "a",
+          id: "a",
+          inputs: [{ itemId: "B", ratePerMinute: 2 }],
+          outputs: [{ itemId: "A", ratePerMinute: 1 }],
+        },
+        {
+          buildableId: "b",
+          id: "b",
+          inputs: [{ itemId: "A", ratePerMinute: 2 }],
+          outputs: [{ itemId: "B", ratePerMinute: 1 }],
+        },
+      ],
+    });
+    expect(result.status).toBe("infeasible");
+    expect(result.activities).toEqual([]);
+  });
 });

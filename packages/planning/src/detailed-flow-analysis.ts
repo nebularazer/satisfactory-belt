@@ -170,70 +170,93 @@ export function analyzeDetailedPlan(plan: DetailedPlan): DetailedFlowAnalysis {
           adjacency.set(key, values);
         }
       }
-      const root = [...adjacency.keys()].toSorted()[0];
-      if (!root) continue;
-      const parent = new Map<string, { edge: Edge; vertex: string }>();
-      const order = [root];
-      for (let index = 0; index < order.length; index += 1) {
-        const vertex = order[index]!;
-        for (const edge of (adjacency.get(vertex) ?? []).toSorted((a, b) =>
-          a.id.localeCompare(b.id),
-        )) {
-          const other = edge.from === vertex ? edge.to : edge.from;
-          if (other === root || parent.has(other)) continue;
-          parent.set(other, { edge, vertex });
-          order.push(other);
+      const seeds = [...adjacency.keys()]
+        .filter((key) => resolved.ports.get(key)?.itemId === itemId)
+        .toSorted();
+      const processed = new Set<string>();
+      for (const seed of seeds) {
+        if (processed.has(seed)) continue;
+        const reachable = new Set<string>();
+        const pending = [seed];
+        while (pending.length) {
+          const vertex = pending.shift()!;
+          if (reachable.has(vertex)) continue;
+          reachable.add(vertex);
+          processed.add(vertex);
+          for (const edge of adjacency.get(vertex) ?? []) {
+            const other = edge.from === vertex ? edge.to : edge.from;
+            if (!reachable.has(other)) pending.push(other);
+          }
         }
-      }
-      const balance = new Map<string, number>();
-      for (const vertex of order) {
-        const endpoint = portEndpoint(vertex);
-        const node = resolved.nodes.get(endpoint.nodeId);
-        const port = resolved.ports.get(vertex);
-        balance.set(
-          vertex,
-          node && port && port.itemId === itemId ? processRate(node, port) : 0,
+        const root = [...reachable].toSorted()[0];
+        if (!root) continue;
+        const parent = new Map<string, { edge: Edge; vertex: string }>();
+        const order = [root];
+        for (let index = 0; index < order.length; index += 1) {
+          const vertex = order[index]!;
+          for (const edge of (adjacency.get(vertex) ?? []).toSorted((a, b) =>
+            a.id.localeCompare(b.id),
+          )) {
+            const other = edge.from === vertex ? edge.to : edge.from;
+            if (!reachable.has(other)) continue;
+            if (other === root || parent.has(other)) continue;
+            parent.set(other, { edge, vertex });
+            order.push(other);
+          }
+        }
+        const balance = new Map<string, number>();
+        for (const vertex of order) {
+          const endpoint = portEndpoint(vertex);
+          const node = resolved.nodes.get(endpoint.nodeId);
+          const port = resolved.ports.get(vertex);
+          balance.set(
+            vertex,
+            node && port && port.itemId === itemId
+              ? processRate(node, port)
+              : 0,
+          );
+        }
+        const total = [...balance.values()].reduce(
+          (sum, value) => sum + value,
+          0,
         );
-      }
-      const total = [...balance.values()].reduce(
-        (sum, value) => sum + value,
-        0,
-      );
-      if (Math.abs(total) > TOLERANCE) {
-        diagnostics.push({
-          code:
-            total > 0
-              ? "detailed.network.surplus"
-              : "detailed.network.shortage",
-          context: { ratePerMinute: Math.abs(total) },
-          itemId,
-          message:
-            total > 0
-              ? "The material network has an unconsumed surplus."
-              : "The material network is undersupplied.",
-          severity: "warning",
-        });
-        balance.set(root, (balance.get(root) ?? 0) - total);
-      }
-      for (const vertex of [...order].reverse()) {
-        const relation = parent.get(vertex);
-        if (!relation) continue;
-        const subtree = balance.get(vertex) ?? 0;
-        balance.set(
-          relation.vertex,
-          (balance.get(relation.vertex) ?? 0) + subtree,
-        );
-        if (!relation.edge.connection || Math.abs(subtree) <= TOLERANCE)
-          continue;
-        const flowsFromTo = relation.edge.from === vertex ? subtree : -subtree;
-        const ratePerMinute = Math.abs(flowsFromTo);
-        connectionFlows.push({
-          connectionId: relation.edge.connection.id,
-          itemId,
-          ratePerMinute,
-        });
-        for (const key of [relation.edge.from, relation.edge.to])
-          suppliedByPortItem.set(`${key}\u0000${itemId}`, ratePerMinute);
+        if (Math.abs(total) > TOLERANCE) {
+          diagnostics.push({
+            code:
+              total > 0
+                ? "detailed.network.surplus"
+                : "detailed.network.shortage",
+            context: { ratePerMinute: Math.abs(total) },
+            itemId,
+            message:
+              total > 0
+                ? "The material network has an unconsumed surplus."
+                : "The material network is undersupplied.",
+            severity: "warning",
+          });
+          balance.set(root, (balance.get(root) ?? 0) - total);
+        }
+        for (const vertex of [...order].reverse()) {
+          const relation = parent.get(vertex);
+          if (!relation) continue;
+          const subtree = balance.get(vertex) ?? 0;
+          balance.set(
+            relation.vertex,
+            (balance.get(relation.vertex) ?? 0) + subtree,
+          );
+          if (!relation.edge.connection || Math.abs(subtree) <= TOLERANCE)
+            continue;
+          const flowsFromTo =
+            relation.edge.from === vertex ? subtree : -subtree;
+          const ratePerMinute = Math.abs(flowsFromTo);
+          connectionFlows.push({
+            connectionId: relation.edge.connection.id,
+            itemId,
+            ratePerMinute,
+          });
+          for (const key of [relation.edge.from, relation.edge.to])
+            suppliedByPortItem.set(`${key}\u0000${itemId}`, ratePerMinute);
+        }
       }
     }
     if (component.edges.length >= component.vertices.length) {

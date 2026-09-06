@@ -13,6 +13,33 @@ export type MaterialLinkPath = Readonly<{
   to: Point;
 }>;
 
+function pathFromPoints(
+  link: MaterialLink,
+  from: Point,
+  to: Point,
+): MaterialLinkPath {
+  const bend = Math.max(48, Math.abs(to.x - from.x) * 0.5);
+  const control1 = { x: from.x + bend, y: from.y };
+  const control2 = { x: to.x - bend, y: to.y };
+  return {
+    bounds: {
+      height:
+        Math.max(from.y, to.y, control1.y, control2.y) -
+        Math.min(from.y, to.y, control1.y, control2.y),
+      width:
+        Math.max(from.x, to.x, control1.x, control2.x) -
+        Math.min(from.x, to.x, control1.x, control2.x),
+      x: Math.min(from.x, to.x, control1.x, control2.x),
+      y: Math.min(from.y, to.y, control1.y, control2.y),
+    },
+    control1,
+    control2,
+    from,
+    link,
+    to,
+  };
+}
+
 function normalized(rectangle: Rectangle): Rectangle {
   return {
     height: Math.abs(rectangle.height),
@@ -54,26 +81,7 @@ export function materialLinkPath(
       )?.point
     : undefined;
   if (!from || !to) return undefined;
-  const bend = Math.max(48, Math.abs(to.x - from.x) * 0.5);
-  const control1 = { x: from.x + bend, y: from.y };
-  const control2 = { x: to.x - bend, y: to.y };
-  return {
-    bounds: {
-      height:
-        Math.max(from.y, to.y, control1.y, control2.y) -
-        Math.min(from.y, to.y, control1.y, control2.y),
-      width:
-        Math.max(from.x, to.x, control1.x, control2.x) -
-        Math.min(from.x, to.x, control1.x, control2.x),
-      x: Math.min(from.x, to.x, control1.x, control2.x),
-      y: Math.min(from.y, to.y, control1.y, control2.y),
-    },
-    control1,
-    control2,
-    from,
-    link,
-    to,
-  };
+  return pathFromPoints(link, from, to);
 }
 
 function cubic(path: MaterialLinkPath, t: number): Point {
@@ -124,10 +132,23 @@ export function distanceToMaterialLink(path: MaterialLinkPath, point: Point) {
 
 export function createMaterialLinkIndex(document: CanvasDocument) {
   let current = document;
-  let paths = current.materialLinks.flatMap((link) => {
-    const path = materialLinkPath(current, link);
-    return path ? [path] : [];
-  });
+  let paths: MaterialLinkPath[] = [];
+  const rebuild = () => {
+    const points = new Map(
+      current.nodes.flatMap((node) =>
+        materialPortGeometry(node).map(
+          ({ nodeId, point, port }) =>
+            [`${nodeId}\u0000${port.id}`, point] as const,
+        ),
+      ),
+    );
+    paths = current.materialLinks.flatMap((link) => {
+      const from = points.get(`${link.from.nodeId}\u0000${link.from.portId}`);
+      const to = points.get(`${link.to.nodeId}\u0000${link.to.portId}`);
+      return from && to ? [pathFromPoints(link, from, to)] : [];
+    });
+  };
+  rebuild();
   return {
     hitTest(point: Point, radius: number) {
       return paths
@@ -152,10 +173,7 @@ export function createMaterialLinkIndex(document: CanvasDocument) {
     },
     replace(next: CanvasDocument) {
       current = next;
-      paths = current.materialLinks.flatMap((link) => {
-        const path = materialLinkPath(current, link);
-        return path ? [path] : [];
-      });
+      rebuild();
     },
   };
 }

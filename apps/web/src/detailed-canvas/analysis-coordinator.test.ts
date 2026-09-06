@@ -43,4 +43,20 @@ describe("Detailed analysis coordinator", () => {
     expect(onResult).toHaveBeenCalledOnce();
     expect(onResult).toHaveBeenCalledWith({ error: "current", revision: 2 });
   });
+
+  it("falls back to a full pass when a deleted identity is no longer indexed", () => {
+    const plan = generateDetailedPlan({
+      outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 20 }],
+    }).plan;
+    const worker = fakeWorker();
+    const coordinator = createDetailedAnalysisCoordinator(worker.port, vi.fn());
+
+    coordinator.analyze(plan, { connectionIds: ["deleted-connection"] });
+
+    expect(worker.port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectedConnectionIds: plan.connections.map(({ id }) => id),
+      }),
+    );
+  });
 });

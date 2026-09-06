@@ -141,4 +141,201 @@ describe("Basic topology", () => {
       ),
     );
   });
+
+  it("infers through Splitter fan-out, Merger fan-in, and Buffers", () => {
+    const ironSource = node({
+      buildableId: "Build_SmelterMk1_C",
+      id: "source",
+      kind: "process",
+      processId: "Recipe_IngotIron_C",
+    });
+    const splitter = node({
+      buildableId: "Build_ConveyorAttachmentSplitter_C",
+      id: "splitter",
+      kind: "router",
+    });
+    const buffer = node({
+      buildableId: "Build_StorageContainerMk1_C",
+      id: "buffer",
+      kind: "buffer",
+    });
+    const firstConsumer = node({
+      buildableId: "Build_ConstructorMk1_C",
+      id: "consumer-1",
+      kind: "process",
+      processId: "Recipe_IronPlate_C",
+    });
+    const secondConsumer = node({
+      buildableId: "Build_ConstructorMk1_C",
+      id: "consumer-2",
+      kind: "process",
+      processId: "Recipe_IronPlate_C",
+    });
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "source", portId: "output:Desc_IronIngot_C" },
+          id: "source-splitter",
+          to: { nodeId: "splitter", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter", portId: "output:1" },
+          id: "splitter-buffer",
+          to: { nodeId: "buffer", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "buffer", portId: "output:1" },
+          id: "buffer-first",
+          to: { nodeId: "consumer-1", portId: "input:Desc_IronIngot_C" },
+        },
+        {
+          from: { nodeId: "splitter", portId: "output:2" },
+          id: "splitter-second",
+          to: { nodeId: "consumer-2", portId: "input:Desc_IronIngot_C" },
+        },
+      ],
+      nodes: [ironSource, splitter, buffer, firstConsumer, secondConsumer],
+    });
+    expect(analyzeBasicPlan(plan).networks).toEqual([
+      expect.objectContaining({
+        itemId: "Desc_IronIngot_C",
+        linkIds: [
+          "buffer-first",
+          "source-splitter",
+          "splitter-buffer",
+          "splitter-second",
+        ],
+      }),
+    ]);
+
+    const secondSource = {
+      ...ironSource,
+      configuration: { ...ironSource.configuration, id: "source-2" },
+    };
+    const merger = node({
+      buildableId: "Build_ConveyorAttachmentMerger_C",
+      id: "merger",
+      kind: "router",
+    });
+    expect(() =>
+      createBasicPlan({
+        materialLinks: [
+          {
+            from: { nodeId: "source", portId: "output:Desc_IronIngot_C" },
+            id: "first-merger",
+            to: { nodeId: "merger", portId: "input:1" },
+          },
+          {
+            from: { nodeId: "source-2", portId: "output:Desc_IronIngot_C" },
+            id: "second-merger",
+            to: { nodeId: "merger", portId: "input:2" },
+          },
+          {
+            from: { nodeId: "merger", portId: "output:1" },
+            id: "merged",
+            to: { nodeId: "consumer-1", portId: "input:Desc_IronIngot_C" },
+          },
+        ],
+        nodes: [ironSource, secondSource, merger, firstConsumer],
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    [
+      "dangling references",
+      [
+        {
+          from: { nodeId: "missing", portId: "output" },
+          id: "bad",
+          to: { nodeId: "smelter", portId: "input:Desc_OreIron_C" },
+        },
+      ],
+      [miner, smelter],
+      "basic.endpoint.missing",
+    ],
+    [
+      "medium mismatch",
+      [
+        {
+          from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
+          id: "bad",
+          to: { nodeId: "junction", portId: "port:1" },
+        },
+      ],
+      [
+        miner,
+        node({
+          buildableId: "Build_PipelineJunction_Cross_C",
+          id: "junction",
+          kind: "router",
+        }),
+      ],
+      "basic.endpoint.medium",
+    ],
+    [
+      "unsupported remote medium",
+      [
+        {
+          from: { nodeId: "truck", portId: "cargo:remote" },
+          id: "bad",
+          to: { nodeId: "smelter", portId: "input:Desc_OreIron_C" },
+        },
+      ],
+      [
+        node({
+          buildableId: "Build_TruckStation_C",
+          id: "truck",
+          kind: "transport",
+          mode: "load",
+        }),
+        smelter,
+      ],
+      "basic.port.unsupported-medium",
+    ],
+  ])("rejects %s", (_label, materialLinks, nodes, code) => {
+    expect(() => createBasicPlan({ materialLinks, nodes })).toThrowError(
+      expect.objectContaining({ code }),
+    );
+  });
+
+  it("rejects an indirect Descriptor conflict through an unbound Router", () => {
+    expect(() =>
+      createBasicPlan({
+        materialLinks: [
+          {
+            from: { nodeId: "iron", portId: "output:1" },
+            id: "iron-link",
+            to: { nodeId: "merger", portId: "input:1" },
+          },
+          {
+            from: { nodeId: "copper", portId: "output:1" },
+            id: "copper-link",
+            to: { nodeId: "merger", portId: "input:2" },
+          },
+        ],
+        nodes: [
+          node({
+            buildableId: "Build_StorageContainerMk1_C",
+            id: "iron",
+            itemId: "Desc_IronPlate_C",
+            kind: "buffer",
+          }),
+          node({
+            buildableId: "Build_StorageContainerMk1_C",
+            id: "copper",
+            itemId: "Desc_Wire_C",
+            kind: "buffer",
+          }),
+          node({
+            buildableId: "Build_ConveyorAttachmentMerger_C",
+            id: "merger",
+            kind: "router",
+          }),
+        ],
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "basic.link.descriptor-conflict" }),
+    );
+  });
 });

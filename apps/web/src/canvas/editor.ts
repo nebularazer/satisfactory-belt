@@ -302,11 +302,14 @@ export function createCanvasEditor(
     selectedIds: readonly string[],
     entry: HistoryEntry,
     selectedLinkIds: readonly string[] = state.selectedLinkIds,
+    validateTopology = true,
   ) => {
-    createBasicPlan({
-      materialLinks: document.materialLinks,
-      nodes: document.nodes.map(({ configuration }) => configuration),
-    });
+    if (validateTopology) {
+      createBasicPlan({
+        materialLinks: document.materialLinks,
+        nodes: document.nodes.map(({ configuration }) => configuration),
+      });
+    }
     past.push(entry);
     if (past.length > HISTORY_LIMIT) past.shift();
     future.length = 0;
@@ -589,12 +592,18 @@ export function createCanvasEditor(
         };
         const before = [{ index, node: beforeNode }];
         const after = [{ index, node: afterNode }];
-        commit(applyPatch(state.document, before, after), state.selectedIds, {
-          after,
-          afterSelection: state.selectedIds,
-          before,
-          beforeSelection: state.selectedIds,
-        });
+        commit(
+          applyPatch(state.document, before, after),
+          state.selectedIds,
+          {
+            after,
+            afterSelection: state.selectedIds,
+            before,
+            beforeSelection: state.selectedIds,
+          },
+          state.selectedLinkIds,
+          false,
+        );
         return;
       }
 
@@ -614,12 +623,18 @@ export function createCanvasEditor(
         };
         const before = [{ index, node: beforeNode }];
         const after = [{ index, node: afterNode }];
-        commit(applyPatch(state.document, before, after), state.selectedIds, {
-          after,
-          afterSelection: state.selectedIds,
-          before,
-          beforeSelection: state.selectedIds,
-        });
+        commit(
+          applyPatch(state.document, before, after),
+          state.selectedIds,
+          {
+            after,
+            afterSelection: state.selectedIds,
+            before,
+            beforeSelection: state.selectedIds,
+          },
+          state.selectedLinkIds,
+          false,
+        );
         return;
       }
 
@@ -639,12 +654,18 @@ export function createCanvasEditor(
         };
         const before = [{ index, node: beforeNode }];
         const after = [{ index, node: afterNode }];
-        commit(applyPatch(state.document, before, after), state.selectedIds, {
-          after,
-          afterSelection: state.selectedIds,
-          before,
-          beforeSelection: state.selectedIds,
-        });
+        commit(
+          applyPatch(state.document, before, after),
+          state.selectedIds,
+          {
+            after,
+            afterSelection: state.selectedIds,
+            before,
+            beforeSelection: state.selectedIds,
+          },
+          state.selectedLinkIds,
+          false,
+        );
         return;
       }
 
@@ -918,12 +939,18 @@ export function createCanvasEditor(
           },
         }));
         const document = applyPatch(state.document, transaction.before, after);
-        commit(document, state.selectedIds, {
-          after,
-          afterSelection: state.selectedIds,
-          before: transaction.before,
-          beforeSelection: transaction.selectionBefore,
-        });
+        commit(
+          document,
+          state.selectedIds,
+          {
+            after,
+            afterSelection: state.selectedIds,
+            before: transaction.before,
+            beforeSelection: transaction.selectionBefore,
+          },
+          state.selectedLinkIds,
+          false,
+        );
         return;
       }
 

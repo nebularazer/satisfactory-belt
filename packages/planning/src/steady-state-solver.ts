@@ -17,12 +17,14 @@ import type {
 const TOLERANCE = 1e-8;
 
 type ProcessProfile = Readonly<{
+  alternate: boolean;
   buildableId: string;
   inputs: readonly RequestedOutput[];
   outputs: readonly RequestedOutput[];
   powerConsumedMw: number;
   powerProducedMw: number;
-  process: ProductionProcess;
+  processId: string;
+  processName: string;
 }>;
 
 function round(value: number) {
@@ -50,6 +52,10 @@ function profileFor(
   if (node.kind !== "process" || node.profile.materials.kind !== "calculated")
     return undefined;
   return {
+    alternate:
+      process.kind === "recipe"
+        ? Boolean(findRecipe(process.recipeId)?.alternate)
+        : false,
     buildableId,
     inputs: node.profile.materials.inputs.map(({ itemId, ratePerMinute }) => ({
       itemId,
@@ -60,7 +66,8 @@ function profileFor(
     ),
     powerConsumedMw: node.profile.power.consumed.maximumMw,
     powerProducedMw: node.profile.power.produced.minimumMw,
-    process,
+    processId: process.id,
+    processName: process.name,
   };
 }
 
@@ -74,6 +81,31 @@ function orderedCandidates(request: PlanningRequest) {
   const explicitOrder = new Map(
     request.allowedProcessIds?.map((id, index) => [id, index]) ?? [],
   );
+  if (request.processes) {
+    return request.processes
+      .filter(
+        (process) =>
+          (!allowedProcesses || allowedProcesses.has(process.id)) &&
+          (!allowedBuildables || allowedBuildables.has(process.buildableId)),
+      )
+      .map((process) => ({
+        alternate: false,
+        buildableId: process.buildableId,
+        inputs: process.inputs,
+        outputs: process.outputs,
+        powerConsumedMw: process.powerConsumedMw ?? 0,
+        powerProducedMw: process.powerProducedMw ?? 0,
+        processId: process.id,
+        processName: process.name ?? process.id,
+      }))
+      .toSorted(
+        (left, right) =>
+          (explicitOrder.get(left.processId) ?? Number.MAX_SAFE_INTEGER) -
+            (explicitOrder.get(right.processId) ?? Number.MAX_SAFE_INTEGER) ||
+          left.processName.localeCompare(right.processName) ||
+          left.processId.localeCompare(right.processId),
+      );
+  }
   return listProductionProcesses()
     .filter((process) => !allowedProcesses || allowedProcesses.has(process.id))
     .flatMap((process) => {
@@ -82,21 +114,13 @@ function orderedCandidates(request: PlanningRequest) {
     })
     .toSorted((left, right) => {
       const explicit =
-        (explicitOrder.get(left.process.id) ?? Number.MAX_SAFE_INTEGER) -
-        (explicitOrder.get(right.process.id) ?? Number.MAX_SAFE_INTEGER);
+        (explicitOrder.get(left.processId) ?? Number.MAX_SAFE_INTEGER) -
+        (explicitOrder.get(right.processId) ?? Number.MAX_SAFE_INTEGER);
       if (explicit) return explicit;
-      const leftAlternate =
-        left.process.kind === "recipe"
-          ? Number(findRecipe(left.process.recipeId)?.alternate ?? false)
-          : 0;
-      const rightAlternate =
-        right.process.kind === "recipe"
-          ? Number(findRecipe(right.process.recipeId)?.alternate ?? false)
-          : 0;
       return (
-        leftAlternate - rightAlternate ||
-        left.process.name.localeCompare(right.process.name) ||
-        left.process.id.localeCompare(right.process.id)
+        Number(left.alternate) - Number(right.alternate) ||
+        left.processName.localeCompare(right.processName) ||
+        left.processId.localeCompare(right.processId)
       );
     });
 }
@@ -160,10 +184,21 @@ function solveLinear(
     return { status: "infeasible", values: [] };
   }
   if (pivots.length < variableCount) {
+    const pivotColumns = new Set(pivots);
+    const freeColumns = Array.from(
+      { length: variableCount },
+      (_, index) => index,
+    ).filter((column) => !pivotColumns.has(column));
+    const hasNonNegativeNullDirection = freeColumns.some((freeColumn) => {
+      const direction = Array.from({ length: variableCount }, () => 0);
+      direction[freeColumn] = 1;
+      for (let row = 0; row < pivots.length; row += 1) {
+        direction[pivots[row]!] = -rows[row]![freeColumn]!;
+      }
+      return direction.every((value) => value >= -TOLERANCE);
+    });
     return {
-      status: rightHandSide.every((value) => Math.abs(value) <= TOLERANCE)
-        ? "unbounded"
-        : "underdetermined",
+      status: hasNonNegativeNullDirection ? "unbounded" : "underdetermined",
       values: values.map((value) => Math.max(0, value)),
     };
   }
@@ -264,10 +299,14 @@ export function solveSteadyState(
     ]) ?? [],
   );
   const producerByItem = new Map<string, ProcessProfile>();
+  const producersByItem = new Map<string, ProcessProfile[]>();
   for (const candidate of candidates) {
     for (const output of candidate.outputs) {
       if (!producerByItem.has(output.itemId))
         producerByItem.set(output.itemId, candidate);
+      const producers = producersByItem.get(output.itemId) ?? [];
+      producers.push(candidate);
+      producersByItem.set(output.itemId, producers);
     }
   }
   const selected = new Map<string, ProcessProfile>();
@@ -275,21 +314,27 @@ export function solveSteadyState(
   const visiting = new Set<string>();
   const includeItem = (itemId: string) => {
     if (available.has(itemId) || visiting.has(itemId)) return;
-    const producer = producerByItem.get(itemId);
-    if (!producer) {
+    const producers = request.processes
+      ? (producersByItem.get(itemId) ?? [])
+      : [producerByItem.get(itemId)].filter(
+          (producer): producer is ProcessProfile => Boolean(producer),
+        );
+    if (!producers.length) {
       unresolved.add(itemId);
       return;
     }
-    if (selected.has(producer.process.id)) return;
     visiting.add(itemId);
-    selected.set(producer.process.id, producer);
-    for (const input of producer.inputs) includeItem(input.itemId);
+    for (const producer of producers) {
+      if (selected.has(producer.processId)) continue;
+      selected.set(producer.processId, producer);
+      for (const input of producer.inputs) includeItem(input.itemId);
+    }
     visiting.delete(itemId);
   };
   for (const itemId of demand.keys()) includeItem(itemId);
 
   const profiles = [...selected.values()].toSorted((left, right) =>
-    left.process.id.localeCompare(right.process.id),
+    left.processId.localeCompare(right.processId),
   );
   const balancedItems = [
     ...new Set(
@@ -330,7 +375,7 @@ export function solveSteadyState(
         })),
         powerConsumedMw: round(profile.powerConsumedMw * activity),
         powerProducedMw: round(profile.powerProducedMw * activity),
-        processId: profile.process.id,
+        processId: profile.processId,
       };
     })
     .filter(({ activity }) => activity > TOLERANCE);

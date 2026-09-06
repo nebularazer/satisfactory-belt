@@ -1,5 +1,6 @@
 import {
   createDetailedPlan,
+  parseDetailedPlan,
   type DetailedNode,
   type DetailedPlan,
   type LogisticsTier,
@@ -81,6 +82,12 @@ export function validateDetailedCanvasDocument(
       configuration: parseNodeConfiguration(nodeValue.configuration),
       height: nodeValue.height,
       label: nodeValue.label,
+      ...(Array.isArray(nodeValue.routingRules)
+        ? {
+            routingRules:
+              nodeValue.routingRules as DetailedNode["routingRules"],
+          }
+        : {}),
       width: nodeValue.width,
       x: nodeValue.x,
       y: nodeValue.y,
@@ -93,10 +100,16 @@ export function validateDetailedCanvasDocument(
     tiers: value.tiers,
     version: 1 as const,
   };
-  const plan = detailedPlanFromCanvas(candidate as DetailedCanvasDocument);
+  const plan = parseDetailedPlan(candidate);
   return {
     ...candidate,
     connections: plan.connections,
+    nodes: nodes.map((node, index) => ({
+      ...node,
+      ...(plan.nodes[index]?.routingRules
+        ? { routingRules: plan.nodes[index].routingRules }
+        : {}),
+    })),
     tiers: plan.tiers,
   };
 }
