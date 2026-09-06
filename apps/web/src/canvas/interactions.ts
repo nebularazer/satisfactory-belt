@@ -6,6 +6,8 @@ import { screenToWorld, ZOOM_STEP, type Viewport } from "./viewport";
 
 const MOUSE_DRAG_THRESHOLD = 4;
 const TOUCH_DRAG_THRESHOLD = 10;
+const EDGE_PAN_MARGIN = 56;
+const EDGE_PAN_MAX_STEP = 14;
 
 type Interaction =
   | {
@@ -71,6 +73,28 @@ function passedDragThreshold(
   const threshold =
     pointerType === "touch" ? TOUCH_DRAG_THRESHOLD : MOUSE_DRAG_THRESHOLD;
   return Math.hypot(current.x - start.x, current.y - start.y) >= threshold;
+}
+
+function edgePanDelta(
+  point: Point,
+  movement: Point,
+  size: Readonly<{ height: number; width: number }>,
+) {
+  const axis = (value: number, direction: number, length: number) => {
+    if (value < EDGE_PAN_MARGIN && direction < 0) {
+      return EDGE_PAN_MAX_STEP * (1 - Math.max(0, value) / EDGE_PAN_MARGIN);
+    }
+    if (value > length - EDGE_PAN_MARGIN && direction > 0) {
+      return (
+        -EDGE_PAN_MAX_STEP * (1 - Math.max(0, length - value) / EDGE_PAN_MARGIN)
+      );
+    }
+    return 0;
+  };
+  return {
+    x: axis(point.x, movement.x, size.width),
+    y: axis(point.y, movement.y, size.height),
+  };
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -462,6 +486,19 @@ export function attachCanvasInteractions(
       ) {
         interaction.moved = true;
       }
+      if (interaction.moved) {
+        const bounds = canvas.getBoundingClientRect();
+        host.panBy(
+          edgePanDelta(
+            screen,
+            {
+              x: screen.x - interaction.startScreen.x,
+              y: screen.y - interaction.startScreen.y,
+            },
+            bounds,
+          ),
+        );
+      }
       const worldPoint = screenToWorld(screen, host.getViewport());
       const hitPort = editor.hitTestPort(
         worldPoint,
@@ -509,6 +546,17 @@ export function attachCanvasInteractions(
         return;
       }
       interaction.moved = true;
+      const bounds = canvas.getBoundingClientRect();
+      host.panBy(
+        edgePanDelta(
+          screen,
+          {
+            x: screen.x - interaction.startScreen.x,
+            y: screen.y - interaction.startScreen.y,
+          },
+          bounds,
+        ),
+      );
       if (!interaction.started) {
         if (!editor.getState().selectedIds.includes(interaction.nodeId)) {
           editor.dispatch({

@@ -42,15 +42,16 @@ export function CanvasBuildBar({
         <>
           <Button className="h-9 px-3" onClick={onAddNode} variant="ghost">
             <Plus aria-hidden="true" />
-            Add node
+            <span className="hidden min-[360px]:inline">Add node</span>
+            <span className="min-[360px]:hidden">Add</span>
           </Button>
           <Button className="h-9 px-3" onClick={onAddSplitter} variant="ghost">
             <GitFork aria-hidden="true" />
-            Splitter
+            <span className="hidden sm:inline">Splitter</span>
           </Button>
           <Button className="h-9 px-3" onClick={onAddMerger} variant="ghost">
             <Combine aria-hidden="true" />
-            Merger
+            <span className="hidden sm:inline">Merger</span>
           </Button>
         </>
       )}

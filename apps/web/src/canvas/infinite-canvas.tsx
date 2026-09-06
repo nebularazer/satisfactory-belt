@@ -1512,6 +1512,7 @@ export const InfiniteCanvas = forwardRef<
               imageScaleTierRef.current,
               requestImage,
             );
+            syncVisibleScene();
             textureCache.retain(
               visibleImageUrls(
                 nodeDisplaysRef.current,

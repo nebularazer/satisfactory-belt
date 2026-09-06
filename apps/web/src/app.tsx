@@ -49,6 +49,7 @@ import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
 import type { NodePickerSelection } from "@/components/node-picker";
+import { NodeSelectionBar } from "@/components/node-selection-bar";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
 import {
@@ -136,6 +137,10 @@ function CanvasWorkspace({
       nodeCount: initialState.document.nodes.length,
       selectedCount:
         initialState.selectedIds.length + initialState.selectedLinkIds.length,
+      selectedNodeId:
+        initialState.selectedIds.length === 1
+          ? initialState.selectedIds[0]
+          : undefined,
       selectedNodeCount: initialState.selectedIds.length,
       snapToGrid: initialState.snapToGrid,
     };
@@ -146,11 +151,14 @@ function CanvasWorkspace({
       const selectedCount =
         state.selectedIds.length + state.selectedLinkIds.length;
       const selectedNodeCount = state.selectedIds.length;
+      const selectedNodeId =
+        state.selectedIds.length === 1 ? state.selectedIds[0] : undefined;
       if (
         cached.canRedo !== state.canRedo ||
         cached.canUndo !== state.canUndo ||
         cached.nodeCount !== nodeCount ||
         cached.selectedCount !== selectedCount ||
+        cached.selectedNodeId !== selectedNodeId ||
         cached.selectedNodeCount !== selectedNodeCount ||
         cached.snapToGrid !== state.snapToGrid
       ) {
@@ -159,6 +167,7 @@ function CanvasWorkspace({
           canUndo: state.canUndo,
           nodeCount,
           selectedCount,
+          selectedNodeId,
           selectedNodeCount,
           snapToGrid: state.snapToGrid,
         };
@@ -190,6 +199,7 @@ function CanvasWorkspace({
     null,
   );
   const [placement, setPlacement] = useState<NodePickerSelection | null>(null);
+  const [mobileNodeInspectorOpen, setMobileNodeInspectorOpen] = useState(false);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
@@ -236,6 +246,10 @@ function CanvasWorkspace({
   useEffect(() => {
     if (connectionError) toast.error(connectionError.message);
   }, [connectionError]);
+
+  useEffect(() => {
+    setMobileNodeInspectorOpen(false);
+  }, [editorState.selectedNodeId]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -583,9 +597,16 @@ function CanvasWorkspace({
         )}
 
         <Suspense fallback={null}>
-          <NodeInspector editor={editor} />
+          <NodeInspector editor={editor} mobileOpen={mobileNodeInspectorOpen} />
           <MaterialLinkInspector editor={editor} />
         </Suspense>
+
+        {!mobileNodeInspectorOpen && (
+          <NodeSelectionBar
+            editor={editor}
+            onEdit={() => setMobileNodeInspectorOpen(true)}
+          />
+        )}
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
           <CanvasControls

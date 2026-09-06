@@ -391,6 +391,20 @@ describe("canvas interactions", () => {
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 42 });
   });
 
+  it("auto-pans while moving a node near a canvas edge", () => {
+    const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+
+    pointer("pointerdown", 20, 80);
+    pointer("pointermove", 995, 400);
+
+    expect(viewport().x).toBeLessThan(0);
+  });
+
   it("applies snapping in world coordinates at a transformed zoom", () => {
     const { editor, pointer } = createHarness({
       viewport: { x: 100, y: 50, zoom: 2 },
