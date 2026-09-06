@@ -99,6 +99,14 @@ test("connects material ports and persists the Material Link", async ({
     .getByRole("button", { name: "Close Material Link details" })
     .click();
 
+  await canvas.hover({ position: { x: 512, y: 360 } });
+  await page.mouse.down();
+  await page.mouse.move(640, 500, { steps: 4 });
+  await page.mouse.up();
+  await expect(
+    page.getByRole("dialog", { name: "Add compatible node" }),
+  ).toBeHidden();
+
   await page.getByRole("button", { name: "Open canvas menu" }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByText("Export JSON", { exact: true }).click();

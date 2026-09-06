@@ -1,4 +1,7 @@
-import { canvasNodeId } from "./document";
+import type { MaterialEndpoint } from "@satisfactory-belt/planning";
+
+import { canvasConnectionTargets } from "./connection-compatibility";
+import { canvasNodeId, type CanvasDocument } from "./document";
 import type { CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
@@ -9,15 +12,29 @@ const TOUCH_DRAG_THRESHOLD = 10;
 const EDGE_PAN_MARGIN = 56;
 const EDGE_PAN_MAX_STEP = 14;
 
+type ConnectionIntent = Readonly<{
+  compatibleTargets: ReadonlySet<string>;
+  from: MaterialEndpoint;
+}>;
+
 type Interaction =
-  | {
+  | (ConnectionIntent & {
       current: Point;
-      from: Readonly<{ nodeId: string; portId: string }>;
+      dropOnEmpty: boolean;
+      hovered?: MaterialEndpoint;
       kind: "connection";
       moved: boolean;
       pointerId: number;
       startScreen: Point;
-      target?: Readonly<{ nodeId: string; portId: string }>;
+      target?: MaterialEndpoint;
+    })
+  | {
+      additive: boolean;
+      kind: "link";
+      linkId: string;
+      moved: boolean;
+      pointerId: number;
+      startScreen: Point;
     }
   | {
       clearSelectionOnClick: boolean;
@@ -26,7 +43,6 @@ type Interaction =
       moved: boolean;
       pointerId: number;
       selectNodeOnTap?: string;
-      selectLinkOnTap?: string;
       startScreen: Point;
     }
   | {
@@ -47,6 +63,43 @@ type Interaction =
       pointerId: number;
       startScreen: Point;
     };
+
+function endpointKey(endpoint: MaterialEndpoint) {
+  return `${endpoint.nodeId}\u0000${endpoint.portId}`;
+}
+
+function connectionIntent(
+  document: CanvasDocument,
+  from: MaterialEndpoint,
+): ConnectionIntent {
+  return {
+    compatibleTargets: new Set(
+      canvasConnectionTargets(document, from)
+        .filter(({ status }) => status === "compatible")
+        .map(({ endpoint }) => endpointKey(endpoint)),
+    ),
+    from,
+  };
+}
+
+function connectedLinkAtEndpoint(
+  document: CanvasDocument,
+  endpoint: MaterialEndpoint,
+) {
+  const key = endpointKey(endpoint);
+  return document.materialLinks.find(
+    ({ from, to }) => endpointKey(from) === key || endpointKey(to) === key,
+  );
+}
+
+function compatibleTarget(
+  intent: ConnectionIntent,
+  hovered: MaterialEndpoint | undefined,
+) {
+  return hovered && intent.compatibleTargets.has(endpointKey(hovered))
+    ? hovered
+    : undefined;
+}
 
 export type CanvasInteractionHost = Readonly<{
   cancelPlacement: () => void;
@@ -114,8 +167,7 @@ export function attachCanvasInteractions(
   host: CanvasInteractionHost,
 ) {
   let interaction: Interaction | null = null;
-  let armedConnection: Readonly<{ nodeId: string; portId: string }> | null =
-    null;
+  let armedConnection: ConnectionIntent | null = null;
   let lastPointerScreen: Point | null = null;
   let spacePressed = false;
   const touches = new Map<number, Point>();
@@ -200,10 +252,15 @@ export function attachCanvasInteractions(
         });
         cancelConnection();
       } else if (!cancelled && interaction.moved) {
-        host.requestNode(interaction.current, interaction.from);
+        if (interaction.dropOnEmpty) {
+          host.requestNode(interaction.current, interaction.from);
+        }
         cancelConnection();
       } else if (!cancelled) {
-        armedConnection = interaction.from;
+        armedConnection = {
+          compatibleTargets: interaction.compatibleTargets,
+          from: interaction.from,
+        };
         editor.dispatch({
           type: "link.preview",
           current: interaction.current,
@@ -212,6 +269,14 @@ export function attachCanvasInteractions(
       } else {
         cancelConnection();
       }
+    }
+
+    if (interaction.kind === "link" && !cancelled && !interaction.moved) {
+      editor.dispatch({
+        type: "selection.link",
+        additive: interaction.additive,
+        id: interaction.linkId,
+      });
     }
 
     if (interaction.kind === "select") {
@@ -233,12 +298,6 @@ export function attachCanvasInteractions(
           type: "selection.node",
           additive: false,
           id: interaction.selectNodeOnTap,
-        });
-      } else if (interaction.selectLinkOnTap) {
-        editor.dispatch({
-          type: "selection.link",
-          additive: false,
-          id: interaction.selectLinkOnTap,
         });
       } else if (interaction.clearSelectionOnClick) {
         editor.dispatch({ type: "selection.clear" });
@@ -320,14 +379,18 @@ export function attachCanvasInteractions(
     if (hitPort) {
       const from = { nodeId: hitPort.nodeId, portId: hitPort.port.id };
       if (armedConnection) {
+        const target = compatibleTarget(armedConnection, from);
         if (
-          from.nodeId !== armedConnection.nodeId ||
-          from.portId !== armedConnection.portId
+          !connectedLinkAtEndpoint(
+            editor.getState().document,
+            armedConnection.from,
+          ) &&
+          target
         ) {
           editor.dispatch({
             type: "link.create",
-            from: armedConnection,
-            to: from,
+            from: armedConnection.from,
+            to: target,
           });
         }
         cancelConnection();
@@ -335,9 +398,27 @@ export function attachCanvasInteractions(
         canvas.dataset.cursor = "grab";
         return;
       }
-      interaction = {
-        current: worldPoint,
+      const connectedLink = connectedLinkAtEndpoint(
+        editor.getState().document,
         from,
+      );
+      if (connectedLink) {
+        interaction = {
+          additive: selectionModifier,
+          kind: "link",
+          linkId: connectedLink.id,
+          moved: false,
+          pointerId: event.pointerId,
+          startScreen: screen,
+        };
+        canvas.dataset.cursor = "pointer";
+        return;
+      }
+      const intent = connectionIntent(editor.getState().document, from);
+      interaction = {
+        ...intent,
+        current: worldPoint,
+        dropOnEmpty: false,
         kind: "connection",
         moved: false,
         pointerId: event.pointerId,
@@ -402,15 +483,14 @@ export function attachCanvasInteractions(
 
     if (hitLink) {
       interaction = {
-        clearSelectionOnClick: false,
-        kind: "pan",
-        lastScreen: screen,
+        additive: false,
+        kind: "link",
+        linkId: hitLink.id,
         moved: false,
         pointerId: event.pointerId,
-        selectLinkOnTap: hitLink.id,
         startScreen: screen,
       };
-      canvas.dataset.cursor = "grabbing";
+      canvas.dataset.cursor = "pointer";
       return;
     }
 
@@ -453,29 +533,47 @@ export function attachCanvasInteractions(
           worldPoint,
           (event.pointerType === "touch" ? 24 : 14) / host.getViewport().zoom,
         );
-        const target =
-          hitPort &&
-          (hitPort.nodeId !== armedConnection.nodeId ||
-            hitPort.port.id !== armedConnection.portId)
-            ? { nodeId: hitPort.nodeId, portId: hitPort.port.id }
-            : undefined;
+        const hovered = hitPort
+          ? { nodeId: hitPort.nodeId, portId: hitPort.port.id }
+          : undefined;
         editor.dispatch({
           type: "link.preview",
           current: worldPoint,
-          from: armedConnection,
-          ...(target ? { target } : {}),
+          from: armedConnection.from,
+          ...(hovered ? { target: hovered } : {}),
         });
         canvas.dataset.cursor = "crosshair";
         return;
       }
       const selectionModifier = event.ctrlKey || event.metaKey;
+      const worldPoint = screenToWorld(screen, host.getViewport());
+      const hoverPort = editor.hitTestPort(
+        worldPoint,
+        (event.pointerType === "touch" ? 24 : 12) / host.getViewport().zoom,
+      );
+      const occupiedPort = hoverPort
+        ? connectedLinkAtEndpoint(editor.getState().document, {
+            nodeId: hoverPort.nodeId,
+            portId: hoverPort.port.id,
+          })
+        : undefined;
       canvas.dataset.cursor = host.isPlacementActive()
         ? "crosshair"
         : selectionModifier
           ? "crosshair"
-          : editor.hitTest(screenToWorld(screen, host.getViewport()))
-            ? "move"
-            : "grab";
+          : hoverPort
+            ? occupiedPort
+              ? "pointer"
+              : "crosshair"
+            : editor.hitTestLink(
+                  worldPoint,
+                  (event.pointerType === "touch" ? 24 : 12) /
+                    host.getViewport().zoom,
+                )
+              ? "pointer"
+              : editor.hitTest(worldPoint)
+                ? "move"
+                : "grab";
       return;
     }
 
@@ -504,20 +602,37 @@ export function attachCanvasInteractions(
         worldPoint,
         (event.pointerType === "touch" ? 24 : 14) / host.getViewport().zoom,
       );
-      const target =
-        hitPort &&
-        (hitPort.nodeId !== interaction.from.nodeId ||
-          hitPort.port.id !== interaction.from.portId)
-          ? { nodeId: hitPort.nodeId, portId: hitPort.port.id }
-          : undefined;
+      const hovered = hitPort
+        ? { nodeId: hitPort.nodeId, portId: hitPort.port.id }
+        : undefined;
+      const target = compatibleTarget(interaction, hovered);
       interaction.current = worldPoint;
+      interaction.dropOnEmpty = Boolean(
+        !hovered &&
+        !editor.hitTest(worldPoint) &&
+        !editor.hitTestLink(
+          worldPoint,
+          (event.pointerType === "touch" ? 24 : 14) / host.getViewport().zoom,
+        ),
+      );
+      interaction.hovered = hovered;
       interaction.target = target;
       editor.dispatch({
         type: "link.preview",
         current: worldPoint,
         from: interaction.from,
-        ...(target ? { target } : {}),
+        ...(hovered ? { target: hovered } : {}),
       });
+      return;
+    }
+
+    if (interaction.kind === "link") {
+      if (
+        !interaction.moved &&
+        passedDragThreshold(interaction.startScreen, screen, event.pointerType)
+      ) {
+        interaction.moved = true;
+      }
       return;
     }
 
@@ -652,7 +767,12 @@ export function attachCanvasInteractions(
   const doubleClick = (event: MouseEvent) => {
     if (event.button !== 0) return;
     const screen = screenPoint(event);
-    if (!editor.hitTest(screenToWorld(screen, host.getViewport()))) {
+    const worldPoint = screenToWorld(screen, host.getViewport());
+    if (
+      !editor.hitTest(worldPoint) &&
+      !editor.hitTestPort(worldPoint, 12 / host.getViewport().zoom) &&
+      !editor.hitTestLink(worldPoint, 12 / host.getViewport().zoom)
+    ) {
       host.fit("all");
     }
   };
