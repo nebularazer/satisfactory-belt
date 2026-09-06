@@ -113,6 +113,7 @@ type NodeDisplay = {
 type MaterialDisplay = {
   image: Sprite;
   imageVisualKey: string;
+  multipleIcon: Graphics;
   port: Graphics;
   rate: Text;
 };
@@ -252,6 +253,11 @@ const LUCIDE_PATHS = {
   activity:
     "M 22 12 h -2.48 a 2 2 0 0 0 -1.93 1.46 l -2.35 8.36 a 0.25 0.25 0 0 1 -0.48 0 L 9.24 2.18 a 0.25 0.25 0 0 0 -0.48 0 l -2.35 8.36 A 2 2 0 0 1 4.49 12 H 2",
   gauge: ["m 12 14 4 -4", "M 3.34 19 a 10 10 0 1 1 17.32 0"],
+  layers: [
+    "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",
+    "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
+    "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
+  ],
   zap: "M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z",
 } as const;
 
@@ -308,23 +314,29 @@ function updateMaterialVisual(
   const y = nodeCardPortY(layout, index, count);
   const visible = material !== undefined;
   display.image.visible = false;
+  display.multipleIcon.visible = false;
   display.port.visible = visible;
-  display.rate.visible = visible && material?.rate !== undefined;
+  display.rate.visible =
+    visible && (material?.rate !== undefined || (material?.ruleCount ?? 0) > 1);
   if (!visible || !material) return;
 
-  const { displayUrl = "", requestedUrl = "" } = resolveResponsiveImage(
-    material.image,
-    ITEM_IMAGE_SIZE * imageScale,
-    (imageUrl) => Assets.cache.has(imageUrl),
-  );
-  const texture = displayUrl ? cachedTexture(displayUrl) : undefined;
-  if (display.imageVisualKey !== displayUrl) {
-    display.image.texture = texture ?? Texture.EMPTY;
-    display.imageVisualKey = displayUrl;
-  }
-  display.image.visible = Boolean(texture);
-  if (requestedUrl && requestedUrl !== displayUrl) {
-    requestImage(requestedUrl, "normal");
+  if ((material.ruleCount ?? 0) > 1) {
+    display.multipleIcon.visible = true;
+  } else {
+    const { displayUrl = "", requestedUrl = "" } = resolveResponsiveImage(
+      material.image,
+      ITEM_IMAGE_SIZE * imageScale,
+      (imageUrl) => Assets.cache.has(imageUrl),
+    );
+    const texture = displayUrl ? cachedTexture(displayUrl) : undefined;
+    if (display.imageVisualKey !== displayUrl) {
+      display.image.texture = texture ?? Texture.EMPTY;
+      display.imageVisualKey = displayUrl;
+    }
+    display.image.visible = Boolean(texture);
+    if (requestedUrl && requestedUrl !== displayUrl) {
+      requestImage(requestedUrl, "normal");
+    }
   }
 
   display.image.anchor.set(0.5);
@@ -332,9 +344,15 @@ function updateMaterialVisual(
   display.image.setSize(ITEM_IMAGE_SIZE, ITEM_IMAGE_SIZE);
   const contentAlpha = materialContentAlpha(material.connected, dark);
   display.image.alpha = contentAlpha;
+  display.multipleIcon.position.set(
+    side === "left" ? 18 : cardWidth - 38,
+    y - 10,
+  );
+  display.multipleIcon.tint = dark ? 0xa1a1aa : 0x71717a;
+  display.multipleIcon.alpha = contentAlpha;
   display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
   display.rate.position.set(side === "left" ? 46 : cardWidth - 46, y);
-  display.rate.text = material.rate ?? "";
+  display.rate.text = material.rate ?? `${material.ruleCount ?? ""}`;
   display.rate.alpha = contentAlpha;
   display.rate.style = {
     fill: dark ? 0xe4e4e7 : 0x3f3f46,
@@ -584,12 +602,14 @@ function updateNodeVisual(
 
 function createMaterialDisplay(): MaterialDisplay {
   const image = new Sprite(Texture.EMPTY);
+  const multipleIcon = createLucideIcon(LUCIDE_PATHS.layers, 20);
   const port = new Graphics();
   const rate = new Text({ text: "" });
   image.visible = false;
+  multipleIcon.visible = false;
   port.visible = false;
   rate.visible = false;
-  return { image, imageVisualKey: "", port, rate };
+  return { image, imageVisualKey: "", multipleIcon, port, rate };
 }
 
 function createNodeDisplay(node: CanvasNode): NodeDisplay {
@@ -626,8 +646,18 @@ function createNodeDisplay(node: CanvasNode): NodeDisplay {
     machineImage,
     title,
     subtitle,
-    ...leftPorts.flatMap(({ image, port, rate }) => [image, rate, port]),
-    ...rightPorts.flatMap(({ image, port, rate }) => [image, rate, port]),
+    ...leftPorts.flatMap(({ image, multipleIcon, port, rate }) => [
+      image,
+      multipleIcon,
+      rate,
+      port,
+    ]),
+    ...rightPorts.flatMap(({ image, multipleIcon, port, rate }) => [
+      image,
+      multipleIcon,
+      rate,
+      port,
+    ]),
     clockIcon,
     efficiencyIcon,
     powerIcon,

@@ -283,7 +283,7 @@ describe("NodeInspector", () => {
     });
   });
 
-  it("keeps programmable splitter rule pickers open for multiple rules", () => {
+  it("keeps programmable material pickers open and marks selected items", () => {
     const editor = createCanvasEditor();
     editor.dispatch({
       type: "node.create",
@@ -299,19 +299,51 @@ describe("NodeInspector", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Add Top output rule" }),
     );
-    fireEvent.click(screen.getByText("Overflow"));
+    const search = screen.getByPlaceholderText("Search materials…");
+    fireEvent.change(search, { target: { value: "Iron Ore" } });
+    fireEvent.click(screen.getByText("Iron Ore"));
 
-    expect(screen.getByRole("dialog")).toBeVisible();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeVisible();
+    expect(
+      within(dialog).getByText("Iron Ore").closest("[cmdk-item]"),
+    ).toHaveAttribute("data-checked", "true");
+    expect(
+      screen
+        .getByRole("button", { name: "Close" })
+        .closest("[data-slot='input-group-addon']"),
+    ).toHaveAttribute("data-align", "inline-end");
 
-    fireEvent.click(screen.getByText("Any undefined"));
+    fireEvent.change(search, { target: { value: "Copper Ore" } });
+    fireEvent.click(screen.getByText("Copper Ore"));
 
     expect(editor.getState().document.nodes[0]?.routerRules).toMatchObject({
-      "output:1": ["overflow", "any-undefined"],
+      "output:1": ["Desc_OreIron_C", "Desc_OreCopper_C"],
     });
     expect(screen.getByRole("dialog")).toBeVisible();
+    expect(
+      within(dialog).getByText("Copper Ore").closest("[cmdk-item]"),
+    ).toHaveAttribute("data-checked", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add Top output rule" }),
+    );
+    fireEvent.click(screen.getByText("Overflow"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(editor.getState().document.nodes[0]?.routerRules).toMatchObject({
+      "output:1": ["Desc_OreIron_C", "Desc_OreCopper_C", "overflow"],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add Top output rule" }),
+    );
+    fireEvent.click(within(screen.getByRole("dialog")).getByText("Any"));
+    expect(editor.getState().document.nodes[0]?.routerRules).toMatchObject({
+      "output:1": ["any"],
+    });
   });
 
   it("configures each Priority Merger input independently", () => {

@@ -42,6 +42,7 @@ export type NodeCardPort = Readonly<{
   itemName?: string;
   portId: string;
   rate?: string;
+  ruleCount?: number;
   status: NodeCardPortStatus;
 }>;
 
@@ -136,30 +137,30 @@ function connectionDependentPorts(
   routerRules: CanvasNode["routerRules"],
   runtime: NodeCardRuntime | undefined,
 ) {
-  const configuredPort = (port: MaterialPort) => {
-    const itemId = routerRules?.[port.id]?.find((rule) => findDescriptor(rule));
-    return itemId ? { ...port, itemId } : port;
+  const cardPort = (port: MaterialPort): NodeCardPort => {
+    const rules = routerRules?.[port.id] ?? [];
+    if (rules.length > 1) {
+      return {
+        ...runtimePort(port, undefined, runtime),
+        itemName: `${rules.length} routing rules`,
+        ruleCount: rules.length,
+      };
+    }
+    const itemId = rules.find((rule) => findDescriptor(rule));
+    return runtimePort(itemId ? { ...port, itemId } : port, undefined, runtime);
   };
   const leftPorts = ports
     .filter(({ direction }) => direction === "input")
-    .map((port) => runtimePort(configuredPort(port), undefined, runtime));
+    .map(cardPort);
   const rightPorts = ports
     .filter(({ direction }) => direction === "output")
-    .map((port) => runtimePort(configuredPort(port), undefined, runtime));
+    .map(cardPort);
   const bidirectional = ports.filter(
     ({ direction }) => direction === "bidirectional",
   );
   const splitAt = Math.ceil(bidirectional.length / 2);
-  leftPorts.push(
-    ...bidirectional
-      .slice(0, splitAt)
-      .map((port) => runtimePort(configuredPort(port), undefined, runtime)),
-  );
-  rightPorts.push(
-    ...bidirectional
-      .slice(splitAt)
-      .map((port) => runtimePort(configuredPort(port), undefined, runtime)),
-  );
+  leftPorts.push(...bidirectional.slice(0, splitAt).map(cardPort));
+  rightPorts.push(...bidirectional.slice(splitAt).map(cardPort));
   return { leftPorts, rightPorts };
 }
 

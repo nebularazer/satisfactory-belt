@@ -144,17 +144,19 @@ type DescriptorPickerOption = Readonly<{
 function DescriptorPicker({
   allowedForms,
   buttonLabel,
-  closeOnSelect = true,
+  closeOnMaterialSelect = true,
   label,
   onChange,
+  selectedValues,
   specialOptions = [],
   value,
 }: Readonly<{
   allowedForms: readonly Descriptor["form"][];
   buttonLabel?: string;
-  closeOnSelect?: boolean;
+  closeOnMaterialSelect?: boolean;
   label: string;
   onChange: (value: string | undefined) => void;
+  selectedValues?: readonly string[];
   specialOptions?: readonly DescriptorPickerOption[];
   value?: string;
 }>) {
@@ -164,6 +166,10 @@ function DescriptorPicker({
   const special = specialOptions.find((option) => option.value === value);
   const currentLabel =
     buttonLabel ?? descriptor?.name ?? special?.label ?? label;
+  const isSelected = (candidate: string | undefined) =>
+    selectedValues
+      ? candidate !== undefined && selectedValues.includes(candidate)
+      : candidate === value;
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const descriptors = DESCRIPTORS.filter(
     (candidate) =>
@@ -197,7 +203,6 @@ function DescriptorPicker({
         description={`Choose a material or routing rule for ${label}.`}
         onOpenChange={handleOpenChange}
         open={open}
-        showCloseButton
         title={label}
       >
         <Command shouldFilter={false}>
@@ -205,6 +210,7 @@ function DescriptorPicker({
             autoFocus
             onValueChange={setQuery}
             placeholder="Search materials…"
+            showCloseButton
             value={query}
           />
           <CommandList>
@@ -213,11 +219,11 @@ function DescriptorPicker({
               <CommandGroup heading="Rules">
                 {specialOptions.map((option) => (
                   <CommandItem
-                    data-checked={option.value === value}
+                    data-checked={isSelected(option.value)}
                     key={option.value ?? "automatic"}
                     onSelect={() => {
                       onChange(option.value);
-                      if (closeOnSelect) handleOpenChange(false);
+                      handleOpenChange(false);
                     }}
                     value={`rule ${option.label}`}
                   >
@@ -229,11 +235,11 @@ function DescriptorPicker({
             <CommandGroup heading="Materials">
               {descriptors.map((option) => (
                 <CommandItem
-                  data-checked={option.id === value}
+                  data-checked={isSelected(option.id)}
                   key={option.id}
                   onSelect={() => {
                     onChange(option.id);
-                    if (closeOnSelect) handleOpenChange(false);
+                    if (closeOnMaterialSelect) handleOpenChange(false);
                   }}
                   value={`${option.name} ${option.id}`}
                 >
@@ -1074,16 +1080,21 @@ function RouterControls({
                 <DescriptorPicker
                   allowedForms={["solid"]}
                   buttonLabel="Add rule"
-                  closeOnSelect={false}
+                  closeOnMaterialSelect={false}
                   label={`Add ${label} rule`}
                   onChange={(rule) => {
                     if (!rule) return;
+                    if (rule === "any") {
+                      setRules(port.id, [rule]);
+                      return;
+                    }
                     const next =
                       rules.length === 1 && rules[0] === "any"
                         ? [rule]
                         : [...new Set([...rules, rule])];
                     setRules(port.id, next);
                   }}
+                  selectedValues={rules}
                   specialOptions={ROUTER_RULES}
                 />
               </div>

@@ -85,6 +85,30 @@ describe("node card model", () => {
     expect(model.rightPorts[0]).toMatchObject({ itemName: "Iron Ore" });
   });
 
+  it("shows a rule count instead of one material for a multi-rule output", () => {
+    const model = createNodeCardModel({
+      configuration: {
+        buildableId: "Build_ConveyorAttachmentSplitterProgrammable_C",
+        id: "programmable-splitter",
+        kind: "router",
+      },
+      height: 160,
+      label: "Programmable Splitter",
+      routerRules: {
+        "output:1": ["Desc_OreIron_C", "Desc_OreCopper_C", "overflow"],
+      },
+      width: 192,
+      x: 0,
+      y: 0,
+    });
+
+    expect(model.rightPorts[0]).toMatchObject({
+      itemName: "3 routing rules",
+      ruleCount: 3,
+    });
+    expect(model.rightPorts[0]?.image).toBeUndefined();
+  });
+
   it("applies connection, port status, and efficiency runtime state", () => {
     const model = createNodeCardModel(nitroRocketFuelNode(), {
       efficiency: { percent: 68, status: "warning" },
