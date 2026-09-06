@@ -28,6 +28,7 @@ import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL } from "./grid";
 import { stableImageScaleTier } from "./image-scale";
 import { attachCanvasInteractions } from "./interactions";
+import { materialFlowCanvasColor } from "./material-flow-state";
 import {
   createNodeCardModel,
   type NodeCardModel,
@@ -984,10 +985,34 @@ function drawMaterialLinks(
           links.findIndex(({ id }) => id === link.id) === index,
       )
     : visibleLinks;
+  const presentations = new Map(
+    presentMaterialLinks(state.document).map((presentation) => [
+      presentation.id,
+      presentation,
+    ]),
+  );
   for (const link of candidates) {
     const path = materialLinkPath(effectiveDocument, link);
-    if (!path) continue;
+    const presentation = presentations.get(link.id);
+    if (!path || !presentation) continue;
     const isSelected = selected.has(link.id);
+    if (isSelected) {
+      graphics
+        .moveTo(path.from.x, path.from.y)
+        .bezierCurveTo(
+          path.control1.x,
+          path.control1.y,
+          path.control2.x,
+          path.control2.y,
+          path.to.x,
+          path.to.y,
+        )
+        .stroke({
+          alpha: 0.7,
+          color: BLUEPRINT_COLORS.selected,
+          width: 7 / zoom,
+        });
+    }
     graphics
       .moveTo(path.from.x, path.from.y)
       .bezierCurveTo(
@@ -999,50 +1024,31 @@ function drawMaterialLinks(
         path.to.y,
       )
       .stroke({
-        alpha: isSelected ? 1 : 0.82,
-        color: isSelected
-          ? BLUEPRINT_COLORS.selected
-          : dark
-            ? 0x8b9cad
-            : 0x64748b,
-        width: (isSelected ? 5 : 3) / zoom,
+        alpha: isSelected ? 1 : 0.88,
+        color: materialFlowCanvasColor(presentation.state, dark),
+        width: (isSelected ? 4 : 3) / zoom,
       });
   }
 
-  const presentations = new Map(
-    presentMaterialLinks(state.document).map((presentation) => [
-      presentation.id,
-      presentation,
-    ]),
-  );
   for (const link of visibleLinks) {
     const path = materialLinkPath(effectiveDocument, link);
     const presentation = presentations.get(link.id);
     if (!path || !presentation) continue;
     const position = materialLinkPoint(path, 0.5);
     const label = new Container();
+    const stateColor = materialFlowCanvasColor(presentation.state, dark);
     const text = new Text({
       style: {
-        fill: dark ? 0xf4f4f5 : 0x27272a,
+        fill: stateColor,
         fontFamily: "Inter Variable, Inter, sans-serif",
-        fontSize: 12,
-        fontWeight: "600",
+        fontSize: selected.has(link.id) ? 13 : 12,
+        fontWeight: "700",
+        stroke: { color: dark ? 0x111216 : 0xf8fafc, width: 3 },
       },
       text: presentation.label,
     });
     text.anchor.set(0.5);
-    const background = new Graphics()
-      .roundRect(-text.width / 2 - 7, -11, text.width + 14, 22, 8)
-      .fill({ color: dark ? 0x18181b : 0xffffff, alpha: 0.96 })
-      .stroke({
-        color: selected.has(link.id)
-          ? BLUEPRINT_COLORS.selected
-          : dark
-            ? 0x52525b
-            : 0xd4d4d8,
-        width: selected.has(link.id) ? 2 : 1,
-      });
-    label.addChild(background, text);
+    label.addChild(text);
     label.eventMode = "none";
     label.position.set(position.x, position.y);
     label.scale.set(1 / zoom);

@@ -7,7 +7,7 @@ import { MaterialLinkInspector } from "./material-link-inspector";
 
 afterEach(cleanup);
 
-function linkedEditor() {
+function linkedEditor(consumerCount = 1) {
   let id = 0;
   const editor = createCanvasEditor({ idFactory: () => `node-${++id}` });
   editor.dispatch({
@@ -26,6 +26,9 @@ function linkedEditor() {
     label: "Constructor",
     node: {
       buildableId: "Build_ConstructorMk1_C",
+      instances: Array.from({ length: consumerCount }, (_, index) => ({
+        id: `constructor-${index + 1}`,
+      })),
       kind: "process",
       processId: "Recipe_IronPlate_C",
     },
@@ -50,10 +53,25 @@ describe("MaterialLinkInspector", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("30 items/min")).toBeInTheDocument();
-    expect(screen.getByText("Smelter")).toBeInTheDocument();
-    expect(screen.getByText("Constructor")).toBeInTheDocument();
+    expect(screen.getByText("Balanced")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Iron Ingot" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Output · Iron Ingot")).toBeInTheDocument();
+    expect(screen.getByText("Iron Plate")).toBeInTheDocument();
+    expect(screen.getByText("Input · Iron Ingot")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     expect(editor.getState().document.materialLinks).toEqual([]);
+  });
+
+  it("explains an undersupplied link without exposing descriptor ids", () => {
+    render(<MaterialLinkInspector editor={linkedEditor(7)} />);
+
+    expect(screen.getByText("Undersupplied")).toBeInTheDocument();
+    expect(
+      screen.getByText("Demand exceeds available supply by 180 items/min."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Desc_IronIngot_C")).not.toBeInTheDocument();
   });
 });

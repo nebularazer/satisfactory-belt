@@ -2,14 +2,29 @@ import { ArrowRight, TriangleAlert, Trash2, X } from "lucide-react";
 import { useSyncExternalStore } from "react";
 
 import type { CanvasEditor } from "@/canvas/editor";
+import { MATERIAL_FLOW_PALETTE } from "@/canvas/material-flow-state";
 import { presentMaterialLinks } from "@/canvas/material-link-presentation";
 import { Button } from "@/components/ui/button";
 
-function endpointLabel(nodeLabel: string, portId: string) {
-  const port = portId
-    .replace(/^(?:input|output):/, "")
-    .replace(/^port:/, "Port ");
-  return { nodeLabel, port };
+const numberFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 2,
+});
+
+function diagnosticMessage(
+  diagnostic: ReturnType<
+    typeof presentMaterialLinks
+  >[number]["diagnostics"][number],
+  unit: string,
+) {
+  const difference = diagnostic.context?.ratePerMinute;
+  if (typeof difference !== "number") return diagnostic.message;
+  if (diagnostic.code.includes("shortage")) {
+    return `Demand exceeds available supply by ${numberFormatter.format(difference)} ${unit}.`;
+  }
+  if (diagnostic.code.includes("surplus")) {
+    return `Supply exceeds connected demand by ${numberFormatter.format(difference)} ${unit}.`;
+  }
+  return diagnostic.message;
 }
 
 export function MaterialLinkInspector({
@@ -27,8 +42,7 @@ export function MaterialLinkInspector({
     : undefined;
   if (!link) return null;
 
-  const from = endpointLabel(link.from.nodeLabel, link.from.portId);
-  const to = endpointLabel(link.to.nodeLabel, link.to.portId);
+  const palette = MATERIAL_FLOW_PALETTE[link.state];
 
   return (
     <aside
@@ -53,6 +67,16 @@ export function MaterialLinkInspector({
       </header>
 
       <div className="overflow-y-auto p-3">
+        <div
+          className={`mb-3 flex items-center gap-2 rounded-md border px-2.5 py-2 text-xs font-medium ${palette.panelClass}`}
+        >
+          <span
+            aria-hidden="true"
+            className={`size-2 rounded-full ${palette.dotClass}`}
+          />
+          {palette.label}
+        </div>
+
         <div className="mb-4 rounded-lg border border-border bg-muted/35 p-3">
           <div className="text-xs text-muted-foreground">Flow</div>
           <div className="mt-0.5 text-xl font-semibold tabular-nums">
@@ -64,16 +88,20 @@ export function MaterialLinkInspector({
 
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-xs">
           <div className="min-w-0 rounded-md bg-muted/35 p-2">
-            <div className="truncate font-medium">{from.nodeLabel}</div>
-            <div className="truncate text-muted-foreground">{from.port}</div>
+            <div className="truncate font-medium">{link.from.nodeLabel}</div>
+            <div className="truncate text-muted-foreground">
+              {link.from.portLabel}
+            </div>
           </div>
           <ArrowRight
             aria-hidden="true"
             className="size-4 text-muted-foreground"
           />
           <div className="min-w-0 rounded-md bg-muted/35 p-2 text-right">
-            <div className="truncate font-medium">{to.nodeLabel}</div>
-            <div className="truncate text-muted-foreground">{to.port}</div>
+            <div className="truncate font-medium">{link.to.nodeLabel}</div>
+            <div className="truncate text-muted-foreground">
+              {link.to.portLabel}
+            </div>
           </div>
         </div>
 
@@ -81,14 +109,14 @@ export function MaterialLinkInspector({
           <div className="mt-4 space-y-2" aria-label="Flow diagnostics">
             {link.diagnostics.map((diagnostic) => (
               <div
-                className="flex gap-2 rounded-md bg-amber-500/10 p-2 text-xs"
+                className={`flex gap-2 rounded-md border p-2 text-xs ${palette.panelClass}`}
                 key={`${diagnostic.code}:${diagnostic.message}`}
               >
                 <TriangleAlert
                   aria-hidden="true"
-                  className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                  className="mt-0.5 size-3.5 shrink-0 text-current"
                 />
-                <span>{diagnostic.message}</span>
+                <span>{diagnosticMessage(diagnostic, link.unit)}</span>
               </div>
             ))}
           </div>
