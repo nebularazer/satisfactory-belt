@@ -283,6 +283,37 @@ describe("NodeInspector", () => {
     });
   });
 
+  it("keeps programmable splitter rule pickers open for multiple rules", () => {
+    const editor = createCanvasEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Programmable Splitter",
+      node: {
+        buildableId: "Build_ConveyorAttachmentSplitterProgrammable_C",
+        kind: "router",
+      },
+    });
+    render(<NodeInspector editor={editor} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add Top output rule" }),
+    );
+    fireEvent.click(screen.getByText("Overflow"));
+
+    expect(screen.getByRole("dialog")).toBeVisible();
+
+    fireEvent.click(screen.getByText("Any undefined"));
+
+    expect(editor.getState().document.nodes[0]?.routerRules).toMatchObject({
+      "output:1": ["overflow", "any-undefined"],
+    });
+    expect(screen.getByRole("dialog")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("configures each Priority Merger input independently", () => {
     const editor = createCanvasEditor();
     editor.dispatch({

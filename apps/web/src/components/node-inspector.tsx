@@ -144,6 +144,7 @@ type DescriptorPickerOption = Readonly<{
 function DescriptorPicker({
   allowedForms,
   buttonLabel,
+  closeOnSelect = true,
   label,
   onChange,
   specialOptions = [],
@@ -151,6 +152,7 @@ function DescriptorPicker({
 }: Readonly<{
   allowedForms: readonly Descriptor["form"][];
   buttonLabel?: string;
+  closeOnSelect?: boolean;
   label: string;
   onChange: (value: string | undefined) => void;
   specialOptions?: readonly DescriptorPickerOption[];
@@ -215,7 +217,7 @@ function DescriptorPicker({
                     key={option.value ?? "automatic"}
                     onSelect={() => {
                       onChange(option.value);
-                      handleOpenChange(false);
+                      if (closeOnSelect) handleOpenChange(false);
                     }}
                     value={`rule ${option.label}`}
                   >
@@ -231,7 +233,7 @@ function DescriptorPicker({
                   key={option.id}
                   onSelect={() => {
                     onChange(option.id);
-                    handleOpenChange(false);
+                    if (closeOnSelect) handleOpenChange(false);
                   }}
                   value={`${option.name} ${option.id}`}
                 >
@@ -1072,6 +1074,7 @@ function RouterControls({
                 <DescriptorPicker
                   allowedForms={["solid"]}
                   buttonLabel="Add rule"
+                  closeOnSelect={false}
                   label={`Add ${label} rule`}
                   onChange={(rule) => {
                     if (!rule) return;
