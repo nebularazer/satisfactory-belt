@@ -397,23 +397,22 @@ function SegmentedControl<T extends string | number>({
   );
 }
 
-function SomersloopSelect({
-  maximum,
+function ConfigurationSelect<T extends string | number>({
+  label,
+  mixedLabel = "Mixed",
   onChange,
+  options,
   value,
 }: Readonly<{
-  maximum: number;
-  onChange: (value: number) => void;
-  value: number | "mixed";
+  label: string;
+  mixedLabel?: string;
+  onChange: (value: T) => void;
+  options: readonly Readonly<{ label: string; value: T }>[];
+  value: T | "mixed";
 }>) {
-  const options = Array.from({ length: maximum + 1 }, (_, count) => ({
-    label: `${count} / ${maximum}`,
-    value: count,
-  }));
-
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-      <span className="text-xs font-medium">Somersloops</span>
+      <span className="text-xs font-medium">{label}</span>
       <Select
         items={options}
         onValueChange={(next) => {
@@ -421,16 +420,13 @@ function SomersloopSelect({
         }}
         value={value === "mixed" ? null : value}
       >
-        <SelectTrigger
-          aria-label="Somersloops"
-          className="w-[8.5rem]"
-          size="sm"
-        >
+        <SelectTrigger aria-label={label} className="w-[8.5rem]" size="sm">
           <SelectValue>
-            {(selected: number | null) =>
+            {(selected: T | null) =>
               selected === null
-                ? `Mixed / ${maximum}`
-                : `${selected} / ${maximum}`
+                ? mixedLabel
+                : options.find((option) => Object.is(option.value, selected))
+                    ?.label
             }
           </SelectValue>
         </SelectTrigger>
@@ -531,6 +527,17 @@ function ProcessControls({
       id: nodeId,
     });
   };
+  const somersloopOptions = Array.from(
+    { length: maximumSomersloops + 1 },
+    (_, count) => ({
+      label: `${count} / ${maximumSomersloops}`,
+      value: count,
+    }),
+  );
+  const purityOptions = PURITIES.map((purity) => ({
+    label: purity[0]!.toUpperCase() + purity.slice(1),
+    value: purity,
+  }));
 
   return (
     <Section title="Configuration">
@@ -563,14 +570,16 @@ function ProcessControls({
           />
         )}
         {hasSomersloops && (
-          <SomersloopSelect
-            maximum={maximumSomersloops}
+          <ConfigurationSelect
+            label="Somersloops"
+            mixedLabel={`Mixed / ${maximumSomersloops}`}
             onChange={(value) =>
               configureInstances((instance) => ({
                 ...instance,
                 somersloopCount: value,
               }))
             }
+            options={somersloopOptions}
             value={commonValue(
               scopedInstances,
               (instance) => instance.somersloopCount!,
@@ -578,7 +587,7 @@ function ProcessControls({
           />
         )}
         {isMiner && scope === "all" && (
-          <SegmentedControl
+          <ConfigurationSelect
             label="Miner tier"
             onChange={(buildableId) =>
               editor.dispatch({
@@ -592,7 +601,7 @@ function ProcessControls({
           />
         )}
         {hasPurity && (
-          <SegmentedControl
+          <ConfigurationSelect
             label="Resource purity"
             onChange={(value) =>
               configureInstances((instance) => ({
@@ -600,10 +609,7 @@ function ProcessControls({
                 resourcePurity: value,
               }))
             }
-            options={PURITIES.map((purity) => ({
-              label: purity[0]!.toUpperCase() + purity.slice(1),
-              value: purity,
-            }))}
+            options={purityOptions}
             value={commonValue(
               scopedInstances,
               (instance) => instance.resourcePurity!,

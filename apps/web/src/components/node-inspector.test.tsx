@@ -79,6 +79,14 @@ function clockSpeeds(editor: ReturnType<typeof createProcessEditor>) {
   );
 }
 
+function chooseSelectOption(label: string, option: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  const item = screen.getByRole("option", { name: option });
+  fireEvent.pointerDown(item, { button: 0, pointerId: 1 });
+  fireEvent.pointerUp(item, { button: 0, pointerId: 1 });
+  fireEvent.click(item);
+}
+
 describe("NodeInspector", () => {
   it("edits all machines from the aggregate scope", () => {
     const editor = createProcessEditor();
@@ -133,11 +141,7 @@ describe("NodeInspector", () => {
     });
     expect(somersloops).toHaveTextContent("0 / 4");
 
-    fireEvent.click(somersloops);
-    const twoLoops = screen.getByRole("option", { name: "2 / 4" });
-    fireEvent.pointerDown(twoLoops, { button: 0, pointerId: 1 });
-    fireEvent.pointerUp(twoLoops, { button: 0, pointerId: 1 });
-    fireEvent.click(twoLoops);
+    chooseSelectOption("Somersloops", "2 / 4");
 
     const configuration = editor.getState().document.nodes[0]!.configuration;
     if (configuration.kind !== "process") throw new Error("process");
@@ -198,7 +202,7 @@ describe("NodeInspector", () => {
     expect(screen.queryByLabelText("Node details: Iron Plate")).toBeNull();
   });
 
-  it("switches miner tiers without replacing the resource", () => {
+  it("selects miner tiers and purity without replacing the resource", () => {
     const editor = createCanvasEditor();
     editor.dispatch({
       type: "node.create",
@@ -212,10 +216,19 @@ describe("NodeInspector", () => {
     });
     render(<NodeInspector editor={editor} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mk.2" }));
+    expect(
+      screen.getByRole("combobox", { name: "Miner tier" }),
+    ).toHaveTextContent("Mk.1");
+    expect(
+      screen.getByRole("combobox", { name: "Resource purity" }),
+    ).toHaveTextContent("Normal");
+
+    chooseSelectOption("Miner tier", "Mk.2");
+    chooseSelectOption("Resource purity", "Pure");
 
     expect(editor.getState().document.nodes[0]?.configuration).toMatchObject({
       buildableId: "Build_MinerMk2_C",
+      instances: [expect.objectContaining({ resourcePurity: "pure" })],
       processId: "extraction:Desc_OreIron_C",
     });
     expect(screen.queryByText("Rates")).toBeNull();
