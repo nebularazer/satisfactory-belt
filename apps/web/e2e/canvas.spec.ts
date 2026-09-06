@@ -122,6 +122,41 @@ test("connects material ports and persists the Material Link", async ({
   ]);
 });
 
+test("shows inferred flow through a terminal Splitter", async ({ page }) => {
+  await page.goto("/");
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const search = page.getByPlaceholder("Search buildings or recipes...");
+
+  await page.getByRole("button", { name: "Add your first node" }).click();
+  await search.fill("iron ingot");
+  await page
+    .getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ })
+    .click();
+  await canvas.click({ position: { x: 640, y: 360 } });
+  await page.getByRole("button", { name: "Close node details" }).click();
+
+  await canvas.hover({ position: { x: 640, y: 296 } });
+  await page.mouse.down();
+  await page.mouse.move(320, 296, { steps: 4 });
+  await page.mouse.up();
+
+  await page.getByRole("button", { name: "Splitter" }).click();
+  await canvas.click({ position: { x: 640, y: 360 } });
+  await page.getByRole("button", { name: "Close node details" }).click();
+
+  await canvas.hover({ position: { x: 448, y: 360 } });
+  await page.mouse.down();
+  await page.mouse.move(544, 392, { steps: 4 });
+  await page.mouse.up();
+
+  await expect(
+    page.getByRole("complementary", {
+      name: "Material Link details: Iron Ingot",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("30 items/min", { exact: true })).toBeVisible();
+});
+
 test("offers only compatible recipes after a connection is dropped on empty space", async ({
   page,
 }) => {

@@ -34,9 +34,16 @@ export type BasicLinkFlow = Readonly<{
   ratePerMinute?: number;
 }>;
 
+export type BasicPortFlow = Readonly<{
+  endpoint: MaterialEndpoint;
+  itemId?: string;
+  ratePerMinute?: number;
+}>;
+
 export type BasicFlowAnalysis = Readonly<{
   diagnostics: readonly OperationalDiagnostic[];
   linkFlows: readonly BasicLinkFlow[];
+  portFlows: readonly BasicPortFlow[];
 }>;
 
 function endpointKey(endpoint: MaterialEndpoint) {
@@ -271,6 +278,26 @@ function feasibleLinkRates(
   }
   maximizeFlow(graph, source, sink);
 
+  const connectedPortKeys = new Set(
+    component.edges.flatMap(({ from, link, to }) => (link ? [from, to] : [])),
+  );
+  for (const vertex of component.vertices) {
+    if (connectedPortKeys.has(vertex)) continue;
+    const endpoint = endpointFromKey(vertex);
+    const node = nodes.get(endpoint.nodeId);
+    const port = ports.get(vertex);
+    if (
+      !node ||
+      node.kind === "process" ||
+      !port ||
+      (port.direction !== "output" && port.direction !== "bidirectional")
+    ) {
+      continue;
+    }
+    addResidualArc(graph, vertex, sink, capacity);
+  }
+  maximizeFlow(graph, source, sink);
+
   return new Map(
     [...arcByLinkId].map(([linkId, location]) => [
       linkId,
@@ -363,16 +390,79 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
     }
   }
 
+  const linkFlows = validated.materialLinks.map((link) => ({
+    ...(topology.linkItemIds[link.id]
+      ? { itemId: topology.linkItemIds[link.id] }
+      : {}),
+    linkId: link.id,
+    ...(rateByLink.has(link.id)
+      ? { ratePerMinute: rateByLink.get(link.id)! }
+      : {}),
+  }));
+  const rateByPort = new Map<string, number>();
+  for (const link of validated.materialLinks) {
+    const rate = rateByLink.get(link.id);
+    if (rate === undefined) continue;
+    rateByPort.set(endpointKey(link.from), rate);
+    rateByPort.set(endpointKey(link.to), rate);
+  }
+  for (const network of topology.networks) {
+    const networkKeys = new Set(network.portKeys);
+    for (const node of nodes.values()) {
+      if (node.kind === "process") continue;
+      const nodePorts = node.ports
+        .map((port) => ({
+          key: endpointKey({
+            nodeId: node.configuration.id,
+            portId: port.id,
+          }),
+          port,
+        }))
+        .filter(({ key }) => networkKeys.has(key));
+      if (nodePorts.some(({ port }) => port.direction === "bidirectional")) {
+        continue;
+      }
+      const inputs = nodePorts.filter(({ port }) => port.direction === "input");
+      const outputs = nodePorts.filter(
+        ({ port }) => port.direction === "output",
+      );
+      const knownInputRate = inputs.reduce(
+        (sum, { key }) => sum + (rateByPort.get(key) ?? 0),
+        0,
+      );
+      const knownOutputRate = outputs.reduce(
+        (sum, { key }) => sum + (rateByPort.get(key) ?? 0),
+        0,
+      );
+      const openInputs = inputs.filter(({ key }) => !rateByPort.has(key));
+      const openOutputs = outputs.filter(({ key }) => !rateByPort.has(key));
+      if (
+        openOutputs.length > 0 &&
+        inputs.some(({ key }) => rateByPort.has(key))
+      ) {
+        const share =
+          Math.max(0, knownInputRate - knownOutputRate) / openOutputs.length;
+        for (const { key } of openOutputs) rateByPort.set(key, share);
+      } else if (
+        openInputs.length > 0 &&
+        outputs.some(({ key }) => rateByPort.has(key))
+      ) {
+        const share =
+          Math.max(0, knownOutputRate - knownInputRate) / openInputs.length;
+        for (const { key } of openInputs) rateByPort.set(key, share);
+      }
+    }
+  }
+
   return {
     diagnostics: [...topology.diagnostics, ...diagnostics],
-    linkFlows: validated.materialLinks.map((link) => ({
-      ...(topology.linkItemIds[link.id]
-        ? { itemId: topology.linkItemIds[link.id] }
-        : {}),
-      linkId: link.id,
-      ...(rateByLink.has(link.id)
-        ? { ratePerMinute: rateByLink.get(link.id)! }
-        : {}),
-    })),
+    linkFlows,
+    portFlows: topology.networks.flatMap((network) =>
+      network.portKeys.map((key) => ({
+        endpoint: endpointFromKey(key),
+        ...(network.itemId ? { itemId: network.itemId } : {}),
+        ...(rateByPort.has(key) ? { ratePerMinute: rateByPort.get(key)! } : {}),
+      })),
+    ),
   };
 }

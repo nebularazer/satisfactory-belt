@@ -56,7 +56,10 @@ import {
   materialLinkPath,
   materialLinkPoint,
 } from "./material-link-geometry";
-import { presentMaterialLinks } from "./material-link-presentation";
+import {
+  presentMaterialFlow,
+  presentMaterialLinks,
+} from "./material-link-presentation";
 import { materialPortGeometry } from "./material-port-geometry";
 import {
   createTextureLoadQueue,
@@ -376,9 +379,15 @@ function updateMaterialVisual(
   display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
   display.rate.position.set(side === "left" ? 46 : cardWidth - 46, y);
   display.rate.text = material.rate ?? `${material.ruleCount ?? ""}`;
-  display.rate.alpha = contentAlpha;
+  display.rate.alpha = 1;
   display.rate.style = {
-    fill: dark ? 0xe4e4e7 : 0x3f3f46,
+    fill: material.connected
+      ? dark
+        ? 0xf4f4f5
+        : 0x27272a
+      : dark
+        ? 0x71717a
+        : 0xa1a1aa,
     fontFamily: "Inter Variable, Inter, sans-serif",
     fontSize: 12,
     fontWeight: "400",
@@ -796,6 +805,7 @@ function syncDocument(
         ]),
       )
     : undefined;
+  const materialFlow = presentMaterialFlow(state.document);
 
   for (const [id, display] of displays) {
     if (visibleIds.has(id)) continue;
@@ -807,26 +817,15 @@ function syncDocument(
     const id = canvasNodeId(node);
     const selected = selectedIds.has(id);
     const incidentLinks = linksByNodeId.get(id) ?? [];
-    const targetStates = materialPortGeometry(node).flatMap(({ port }) => {
-      const target = connectionTargets?.get(`${id}\u0000${port.id}`);
-      return target ? [`${port.id}:${target.status}`] : [];
-    });
-    const runtimeKey = [
-      ...incidentLinks.map(
-        ({ endpoint, link }) => `${link.id}:${endpoint.portId}`,
-      ),
-      ...targetStates,
-    ]
-      .toSorted()
-      .join("|");
     const connectedPortIds = new Set(
       incidentLinks.map(({ endpoint }) => endpoint.portId),
     );
-    const runtime: NodeCardRuntime = {
-      ports: Object.fromEntries(
+    const runtimePorts: NonNullable<NodeCardRuntime["ports"]> =
+      Object.fromEntries(
         materialPortGeometry(node).map(({ port }) => {
           const target = connectionTargets?.get(`${id}\u0000${port.id}`);
-          const status =
+          const flow = materialFlow.port({ nodeId: id, portId: port.id });
+          const status: NodeCardPortStatus | undefined =
             target?.status === "compatible"
               ? "compatible"
               : target?.status === "source"
@@ -840,12 +839,23 @@ function syncDocument(
             port.id,
             {
               connected: connectedPortIds.has(port.id),
+              ...(flow?.itemId ? { itemId: flow.itemId } : {}),
+              ...(flow?.ratePerMinute === undefined
+                ? {}
+                : { ratePerMinute: flow.ratePerMinute }),
               ...(status ? { status } : {}),
             },
           ];
         }),
-      ),
-    };
+      );
+    const runtimeKey = Object.entries(runtimePorts)
+      .map(
+        ([portId, port]) =>
+          `${portId}:${port.connected}:${port.itemId ?? ""}:${port.ratePerMinute ?? ""}:${port.status ?? ""}`,
+      )
+      .toSorted()
+      .join("|");
+    const runtime: NodeCardRuntime = { ports: runtimePorts };
     let display = displays.get(id);
 
     if (!display) {

@@ -225,6 +225,64 @@ describe("node card model", () => {
     expect(model.rightPorts.every(({ rate }) => rate === undefined)).toBe(true);
   });
 
+  it("shows inferred material and rates on Splitter ports", () => {
+    const model = createNodeCardModel(
+      {
+        configuration: {
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter-1",
+          kind: "router",
+        },
+        height: 256,
+        label: "Conveyor Splitter",
+        width: 256,
+        x: 0,
+        y: 0,
+      },
+      {
+        ports: {
+          "input:1": {
+            connected: true,
+            itemId: "Desc_IronIngot_C",
+            ratePerMinute: 30,
+          },
+          "output:1": {
+            connected: false,
+            itemId: "Desc_IronIngot_C",
+            ratePerMinute: 10,
+          },
+          "output:2": {
+            connected: false,
+            itemId: "Desc_IronIngot_C",
+            ratePerMinute: 10,
+          },
+          "output:3": {
+            connected: false,
+            itemId: "Desc_IronIngot_C",
+            ratePerMinute: 10,
+          },
+        },
+      },
+    );
+
+    expect(model.leftPorts).toEqual([
+      expect.objectContaining({
+        connected: true,
+        itemName: "Iron Ingot",
+        rate: "30",
+      }),
+    ]);
+    expect(model.rightPorts).toEqual(
+      Array.from({ length: 3 }, () =>
+        expect.objectContaining({
+          connected: false,
+          itemName: "Iron Ingot",
+          rate: "10",
+        }),
+      ),
+    );
+  });
+
   it.each([
     ["Build_ConveyorAttachmentSplitter_C", "Conveyor Splitter", "Splitter"],
     ["Build_ConveyorAttachmentMerger_C", "Conveyor Merger", "Merger"],

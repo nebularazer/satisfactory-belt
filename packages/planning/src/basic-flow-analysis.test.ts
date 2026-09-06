@@ -98,6 +98,64 @@ describe("Basic flow analysis", () => {
     ]);
   });
 
+  it("carries process output into a terminal Splitter and infers its ports", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "smelter", portId: "output:Desc_IronIngot_C" },
+          id: "into-splitter",
+          to: { nodeId: "splitter", portId: "input:1" },
+        },
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_SmelterMk1_C",
+          id: "smelter",
+          kind: "process",
+          processId: "Recipe_IngotIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter",
+          kind: "router",
+        }),
+      ],
+    });
+
+    const analysis = analyzeBasicFlows(plan);
+    expect(analysis.linkFlows).toEqual([
+      {
+        itemId: "Desc_IronIngot_C",
+        linkId: "into-splitter",
+        ratePerMinute: 30,
+      },
+    ]);
+    expect(analysis.portFlows).toEqual(
+      expect.arrayContaining([
+        {
+          endpoint: { nodeId: "splitter", portId: "input:1" },
+          itemId: "Desc_IronIngot_C",
+          ratePerMinute: 30,
+        },
+        {
+          endpoint: { nodeId: "splitter", portId: "output:1" },
+          itemId: "Desc_IronIngot_C",
+          ratePerMinute: 10,
+        },
+        {
+          endpoint: { nodeId: "splitter", portId: "output:2" },
+          itemId: "Desc_IronIngot_C",
+          ratePerMinute: 10,
+        },
+        {
+          endpoint: { nodeId: "splitter", portId: "output:3" },
+          itemId: "Desc_IronIngot_C",
+          ratePerMinute: 10,
+        },
+      ]),
+    );
+  });
+
   it("caps a Material Link at the supply available to an undersupplied consumer", () => {
     const plan = createBasicPlan({
       materialLinks: [
@@ -186,8 +244,9 @@ describe("Basic flow analysis", () => {
       ],
     });
 
+    const analysis = analyzeBasicFlows(plan);
     const rates = Object.fromEntries(
-      analyzeBasicFlows(plan).linkFlows.map(({ linkId, ratePerMinute }) => [
+      analysis.linkFlows.map(({ linkId, ratePerMinute }) => [
         linkId,
         ratePerMinute,
       ]),
@@ -200,5 +259,20 @@ describe("Basic flow analysis", () => {
     expect(rates["to-one-smelter"]! + rates["to-three-smelters"]!).toBe(
       rates["into-splitter"],
     );
+    expect(
+      Object.fromEntries(
+        analysis.portFlows
+          .filter(({ endpoint }) => endpoint.nodeId === "splitter")
+          .map(({ endpoint, ratePerMinute }) => [
+            endpoint.portId,
+            ratePerMinute,
+          ]),
+      ),
+    ).toEqual({
+      "input:1": 60,
+      "output:1": 30,
+      "output:2": 0,
+      "output:3": 30,
+    });
   });
 });

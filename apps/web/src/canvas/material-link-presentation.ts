@@ -2,6 +2,7 @@ import { createNode, findDescriptor } from "@satisfactory-belt/production";
 import {
   analyzeBasicFlows,
   createBasicPlan,
+  type MaterialEndpoint,
   type OperationalDiagnostic,
 } from "@satisfactory-belt/planning";
 
@@ -29,6 +30,16 @@ export type MaterialLinkPresentation = Readonly<{
   unit: "items/min" | "m³/min";
 }>;
 
+export type MaterialPortPresentation = Readonly<{
+  itemId?: string;
+  ratePerMinute?: number;
+}>;
+
+export type MaterialFlowPresentation = Readonly<{
+  links: readonly MaterialLinkPresentation[];
+  port: (endpoint: MaterialEndpoint) => MaterialPortPresentation | undefined;
+}>;
+
 function endpointPresentation(
   node: CanvasDocument["nodes"][number] | undefined,
   portId: string,
@@ -49,14 +60,15 @@ function endpointPresentation(
   };
 }
 
-const cache = new WeakMap<
-  CanvasDocument,
-  readonly MaterialLinkPresentation[]
->();
+const cache = new WeakMap<CanvasDocument, MaterialFlowPresentation>();
 
-export function presentMaterialLinks(
+function endpointKey(endpoint: MaterialEndpoint) {
+  return `${endpoint.nodeId}\u0000${endpoint.portId}`;
+}
+
+export function presentMaterialFlow(
   document: CanvasDocument,
-): readonly MaterialLinkPresentation[] {
+): MaterialFlowPresentation {
   const cached = cache.get(document);
   if (cached) return cached;
   const plan = createBasicPlan({
@@ -70,7 +82,7 @@ export function presentMaterialLinks(
   const nodeById = new Map(
     document.nodes.map((node) => [node.configuration.id, node]),
   );
-  const presentations = document.materialLinks.map((link) => {
+  const links = document.materialLinks.map((link) => {
     const flow = flowByLink.get(link.id);
     const descriptor = flow?.itemId ? findDescriptor(flow.itemId) : undefined;
     const diagnostics = analysis.diagnostics.filter(
@@ -106,6 +118,26 @@ export function presentMaterialLinks(
       unit: descriptor?.form === "solid" ? "items/min" : "m³/min",
     } as const;
   });
-  cache.set(document, presentations);
-  return presentations;
+  const portByEndpoint = new Map(
+    analysis.portFlows.map(({ endpoint, itemId, ratePerMinute }) => [
+      endpointKey(endpoint),
+      {
+        ...(itemId ? { itemId } : {}),
+        ...(ratePerMinute === undefined ? {} : { ratePerMinute }),
+      },
+    ]),
+  );
+  const presentation = {
+    links,
+    port: (endpoint: MaterialEndpoint) =>
+      portByEndpoint.get(endpointKey(endpoint)),
+  };
+  cache.set(document, presentation);
+  return presentation;
+}
+
+export function presentMaterialLinks(
+  document: CanvasDocument,
+): readonly MaterialLinkPresentation[] {
+  return presentMaterialFlow(document).links;
 }

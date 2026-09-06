@@ -12,6 +12,7 @@ export {
   analyzeBasicFlows,
   type BasicFlowAnalysis,
   type BasicLinkFlow,
+  type BasicPortFlow,
 } from "./basic-flow-analysis";
 export {
   createDetailedPlan,

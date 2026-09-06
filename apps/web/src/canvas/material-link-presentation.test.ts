@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { CanvasDocument } from "./document";
 import { createCanvasEditor } from "./editor";
-import { presentMaterialLinks } from "./material-link-presentation";
+import {
+  presentMaterialFlow,
+  presentMaterialLinks,
+} from "./material-link-presentation";
 
 describe("Material Link presentation", () => {
   it("formats the implicit per-minute canvas label and inspector details", () => {
@@ -104,5 +107,47 @@ describe("Material Link presentation", () => {
         },
       }),
     ]);
+  });
+
+  it("shares terminal Router inference between links and ports", () => {
+    let id = 0;
+    const editor = createCanvasEditor({ idFactory: () => `node-${++id}` });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 0, y: 0 },
+      node: {
+        buildableId: "Build_SmelterMk1_C",
+        kind: "process",
+        processId: "Recipe_IngotIron_C",
+      },
+    });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 400, y: 0 },
+      node: {
+        buildableId: "Build_ConveyorAttachmentSplitter_C",
+        kind: "router",
+      },
+    });
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_IronIngot_C" },
+      id: "into-splitter",
+      to: { nodeId: "node-2", portId: "input:1" },
+    });
+
+    const presentation = presentMaterialFlow(editor.getState().document);
+    expect(presentation.links[0]).toMatchObject({
+      itemName: "Iron Ingot",
+      label: "30",
+      ratePerMinute: 30,
+    });
+    expect(presentation.port({ nodeId: "node-2", portId: "input:1" })).toEqual({
+      itemId: "Desc_IronIngot_C",
+      ratePerMinute: 30,
+    });
+    expect(presentation.port({ nodeId: "node-2", portId: "output:1" })).toEqual(
+      { itemId: "Desc_IronIngot_C", ratePerMinute: 10 },
+    );
   });
 });
