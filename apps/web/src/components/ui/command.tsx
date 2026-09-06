@@ -4,13 +4,18 @@ import { Command as CommandPrimitive } from "cmdk";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
-import { SearchIcon, CheckIcon } from "lucide-react";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
+import { CheckIcon, SearchIcon, XIcon } from "lucide-react";
 
 function Command({
   className,
@@ -66,8 +71,11 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  showCloseButton = false,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & {
+  showCloseButton?: boolean;
+}) {
   return (
     <div data-slot="command-input-wrapper" className="p-1 pb-0">
       <InputGroup className="h-8! bg-input/20 dark:bg-input/30">
@@ -82,6 +90,21 @@ function CommandInput({
         <InputGroupAddon>
           <SearchIcon className="size-3.5 shrink-0 opacity-50" />
         </InputGroupAddon>
+        {showCloseButton && (
+          <InputGroupAddon align="inline-end">
+            <DialogClose
+              render={
+                <InputGroupButton
+                  aria-label="Close"
+                  size="icon-xs"
+                  variant="ghost"
+                />
+              }
+            >
+              <XIcon aria-hidden="true" />
+            </DialogClose>
+          </InputGroupAddon>
+        )}
       </InputGroup>
     </div>
   );

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { canvasNodeId } from "./document";
-import { createCanvasEditor, HISTORY_LIMIT, SNAP_INTERVAL } from "./editor";
+import { createCanvasEditor, HISTORY_LIMIT } from "./editor";
+import { SNAP_INTERVAL } from "./grid";
 import { TEST_NODE_TEMPLATE, testCanvasNode } from "./test-fixtures";
 
 function createEditor() {
@@ -33,6 +34,42 @@ describe("canvas editor", () => {
     });
   });
 
+  it("updates node configuration as an undoable operation", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      label: "Iron Plate",
+      node: {
+        buildableId: "Build_ConstructorMk1_C",
+        kind: "process",
+        processId: "Recipe_IronPlate_C",
+      },
+    });
+    const node = editor.getState().document.nodes[0]!;
+    if (node.configuration.kind !== "process") throw new Error("process");
+
+    editor.dispatch({
+      type: "node.configure",
+      configuration: {
+        ...node.configuration,
+        instances: node.configuration.instances.map((instance) => ({
+          ...instance,
+          clockSpeedPercent: 150,
+        })),
+      },
+      id: node.configuration.id,
+    });
+
+    expect(editor.getState().document.nodes[0]?.configuration).toMatchObject({
+      instances: [{ clockSpeedPercent: 150 }],
+    });
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.nodes[0]?.configuration).toMatchObject({
+      instances: [{ clockSpeedPercent: 100 }],
+    });
+  });
+
   it("creates snapped nodes and selects by point and marquee", () => {
     const editor = createEditor();
     editor.dispatch({
@@ -49,13 +86,17 @@ describe("canvas editor", () => {
     const [first, second] = editor.getState().document.nodes;
     expect(first).toMatchObject({
       configuration: { id: "node-1" },
+      height: 176,
+      width: 192,
       x: 0,
-      y: 64,
+      y: 16,
     });
     expect(second).toMatchObject({
       configuration: { id: "node-2" },
-      x: 320,
-      y: 256,
+      height: 176,
+      width: 192,
+      x: 304,
+      y: 208,
     });
     expect(canvasNodeId(editor.hitTest({ x: 20, y: 80 })!)).toBe("node-1");
 
@@ -122,11 +163,14 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.move.commit" });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 48, y: 32 });
     editor.dispatch({ type: "history.undo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: 0,
+      y: 16,
+    });
     editor.dispatch({ type: "history.redo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 48, y: 32 });
   });
 
   it("keeps pointer movement transient until the move is committed", () => {
@@ -147,7 +191,7 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getState().document).toBe(document);
-    expect(editor.getState().moveDelta).toEqual({ x: 32, y: 0 });
+    expect(editor.getState().moveDelta).toEqual({ x: 48, y: 16 });
     expect(changes.at(-1)).toMatchObject({ kind: "move" });
 
     editor.dispatch({ type: "selection.move.commit" });
@@ -180,8 +224,8 @@ describe("canvas editor", () => {
     editor.dispatch({ type: "selection.move.commit" });
 
     expect(editor.getState().document.nodes).toMatchObject([
-      { x: 32, y: 32 },
-      { x: 352, y: 224 },
+      { x: 32, y: -16 },
+      { x: 336, y: 176 },
     ]);
   });
 
@@ -203,7 +247,10 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.move.commit" });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 25, y: 69 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: 17,
+      y: 29,
+    });
   });
 
   it("copies, pastes, duplicates, deletes, and restores selections", () => {
@@ -237,9 +284,15 @@ describe("canvas editor", () => {
     });
     editor.dispatch({ type: "selection.nudge", delta: { x: 32, y: -32 } });
 
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 32, y: 32 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: 32,
+      y: -16,
+    });
     editor.dispatch({ type: "history.undo" });
-    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 0, y: 64 });
+    expect(editor.getState().document.nodes[0]).toMatchObject({
+      x: 0,
+      y: 16,
+    });
   });
 
   it("calculates all-node and selection bounds", () => {
@@ -256,16 +309,16 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getBounds("all")).toEqual({
-      height: 288,
+      height: 368,
       width: 496,
       x: 0,
-      y: 64,
+      y: 16,
     });
     expect(editor.getBounds("selection")).toEqual({
-      height: 96,
-      width: 176,
-      x: 320,
-      y: 256,
+      height: 176,
+      width: 192,
+      x: 304,
+      y: 208,
     });
   });
 
@@ -295,6 +348,44 @@ describe("canvas editor", () => {
     expect(canvasNodeId(editor.hitTest({ x: 1_025, y: 1_025 })!)).toBe(
       "imported",
     );
+  });
+
+  it("migrates legacy passive card sizes without changing custom sizes", () => {
+    const editor = createCanvasEditor({
+      document: {
+        nodes: [
+          testCanvasNode("legacy-full", 0, 0, {
+            height: 256,
+            width: 256,
+          }),
+          testCanvasNode("legacy-router", 320, 0, {
+            height: 160,
+            width: 192,
+          }),
+          {
+            configuration: {
+              buildableId: "Build_StorageContainerMk1_C",
+              id: "legacy-buffer",
+              kind: "buffer",
+            },
+            height: 192,
+            label: "Storage Container",
+            width: 256,
+            x: 640,
+            y: 0,
+          },
+          testCanvasNode("custom", 320, 0),
+        ],
+        version: 3,
+      },
+    });
+
+    expect(editor.getState().document.nodes).toMatchObject([
+      { height: 176, width: 192 },
+      { height: 176, width: 192 },
+      { height: 208, width: 256 },
+      { height: 96, width: 176 },
+    ]);
   });
 
   it("resets the document and all transient editing state", () => {

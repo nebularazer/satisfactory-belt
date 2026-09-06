@@ -2,10 +2,24 @@ import type { NodeConfiguration } from "@satisfactory-belt/production";
 
 export const CANVAS_DOCUMENT_VERSION = 3;
 
+export type CanvasPortOrder = Readonly<{
+  input?: readonly string[];
+  output?: readonly string[];
+}>;
+
+export type CanvasRouterRules = Readonly<Record<string, readonly string[]>>;
+
+export type CanvasRouterPriorities = Readonly<
+  Record<string, "high" | "low" | "medium">
+>;
+
 export type CanvasNode = Readonly<{
   configuration: NodeConfiguration;
   height: number;
   label: string;
+  portOrder?: CanvasPortOrder;
+  routerPriorities?: CanvasRouterPriorities;
+  routerRules?: CanvasRouterRules;
   width: number;
   x: number;
   y: number;

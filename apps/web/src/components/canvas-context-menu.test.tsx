@@ -1,9 +1,18 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CanvasContextMenu } from "./canvas-context-menu";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("CanvasContextMenu", () => {
   it("skips the intermediate menu when empty canvas handling takes over", () => {
@@ -14,6 +23,7 @@ describe("CanvasContextMenu", () => {
         onContextMenu={onContextMenu}
         onDelete={() => undefined}
         onDuplicate={() => undefined}
+        onTouchStart={() => false}
       >
         <div>Canvas</div>
       </CanvasContextMenu>,
@@ -36,6 +46,7 @@ describe("CanvasContextMenu", () => {
         onContextMenu={() => true}
         onDelete={() => undefined}
         onDuplicate={() => undefined}
+        onTouchStart={() => true}
       >
         <div>Canvas</div>
       </CanvasContextMenu>,
@@ -48,6 +59,52 @@ describe("CanvasContextMenu", () => {
     });
 
     expect(await screen.findByText("Duplicate selection")).toBeInTheDocument();
+    expect(screen.getByText("Delete selection")).toBeInTheDocument();
+  });
+
+  it("does not open selection actions after an empty-canvas long press", async () => {
+    vi.useFakeTimers();
+
+    render(
+      <CanvasContextMenu
+        onContextMenu={() => false}
+        onDelete={() => undefined}
+        onDuplicate={() => undefined}
+        onTouchStart={() => false}
+      >
+        <div>Canvas</div>
+      </CanvasContextMenu>,
+    );
+
+    fireEvent.touchStart(screen.getByText("Canvas"), {
+      touches: [{ clientX: 120, clientY: 80 }],
+    });
+    await act(() => vi.advanceTimersByTimeAsync(600));
+
+    expect(screen.queryByText("Duplicate selection")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delete selection")).not.toBeInTheDocument();
+  });
+
+  it("keeps selection actions available after a node long press", async () => {
+    vi.useFakeTimers();
+
+    render(
+      <CanvasContextMenu
+        onContextMenu={() => true}
+        onDelete={() => undefined}
+        onDuplicate={() => undefined}
+        onTouchStart={() => true}
+      >
+        <div>Canvas</div>
+      </CanvasContextMenu>,
+    );
+
+    fireEvent.touchStart(screen.getByText("Canvas"), {
+      touches: [{ clientX: 120, clientY: 80 }],
+    });
+    await act(() => vi.advanceTimersByTimeAsync(600));
+
+    expect(screen.getByText("Duplicate selection")).toBeInTheDocument();
     expect(screen.getByText("Delete selection")).toBeInTheDocument();
   });
 });

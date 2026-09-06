@@ -106,6 +106,7 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  overscroll-behavior: none;
   overflow: hidden;
 }
 
@@ -116,12 +117,18 @@ canvas {
 
 .infinite-canvas {
   height: 100%;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+  user-select: none;
   width: 100%;
 }
 
 .infinite-canvas__surface {
+  inset: 0;
   display: block;
   height: 100%;
+  position: absolute;
   width: 100%;
   cursor: default;
   touch-action: none;

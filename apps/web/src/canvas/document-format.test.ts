@@ -24,6 +24,10 @@ const document = {
       },
       height: 96,
       label: "Node 1",
+      portOrder: {
+        input: ["input:Desc_IngotIron_C"],
+        output: ["output:Desc_IronPlate_C"],
+      },
       width: 176,
       x: 0,
       y: 32,
@@ -37,6 +41,35 @@ describe("canvas document format", () => {
     expect(parseCanvasDocument(serializeCanvasDocument(document))).toEqual(
       document,
     );
+  });
+
+  it("round-trips router priorities", () => {
+    const priorityMerger = {
+      nodes: [
+        {
+          configuration: {
+            buildableId: "Build_ConveyorAttachmentMergerPriority_C",
+            id: "priority-merger",
+            kind: "router" as const,
+          },
+          height: 160,
+          label: "Priority Merger",
+          routerPriorities: {
+            "input:1": "high" as const,
+            "input:2": "medium" as const,
+            "input:3": "low" as const,
+          },
+          width: 192,
+          x: 0,
+          y: 0,
+        },
+      ],
+      version: 3 as const,
+    };
+
+    expect(
+      parseCanvasDocument(serializeCanvasDocument(priorityMerger)),
+    ).toEqual(priorityMerger);
   });
 
   it("rejects unknown versions without attempting migration", () => {

@@ -1,9 +1,11 @@
 import { canvasNodeId } from "./document";
-import { SNAP_INTERVAL, type CanvasEditor } from "./editor";
+import type { CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
+import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
 import { screenToWorld, ZOOM_STEP, type Viewport } from "./viewport";
 
-const DRAG_THRESHOLD = 4;
+const MOUSE_DRAG_THRESHOLD = 4;
+const TOUCH_DRAG_THRESHOLD = 10;
 
 type Interaction =
   | {
@@ -12,6 +14,7 @@ type Interaction =
       lastScreen: Point;
       moved: boolean;
       pointerId: number;
+      selectNodeOnTap?: string;
       startScreen: Point;
     }
   | {
@@ -19,6 +22,8 @@ type Interaction =
       moved: boolean;
       nodeId: string;
       pointerId: number;
+      selectionBefore: readonly string[];
+      started: boolean;
       startScreen: Point;
       startWorld: Point;
     }
@@ -42,8 +47,14 @@ export type CanvasInteractionHost = Readonly<{
   zoomAt: (factor: number, anchor: Point) => void;
 }>;
 
-function passedDragThreshold(start: Point, current: Point) {
-  return Math.hypot(current.x - start.x, current.y - start.y) >= DRAG_THRESHOLD;
+function passedDragThreshold(
+  start: Point,
+  current: Point,
+  pointerType: string,
+) {
+  const threshold =
+    pointerType === "touch" ? TOUCH_DRAG_THRESHOLD : MOUSE_DRAG_THRESHOLD;
+  return Math.hypot(current.x - start.x, current.y - start.y) >= threshold;
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -66,6 +77,7 @@ export function attachCanvasInteractions(
   let lastPointerScreen: Point | null = null;
   let spacePressed = false;
   const touches = new Map<number, Point>();
+  let touchSequenceWasMultitouch = false;
   let touchGesture: {
     distance: number;
     midpoint: Point;
@@ -77,6 +89,13 @@ export function attachCanvasInteractions(
   };
 
   const restoreSelection = (ids: readonly string[]) => {
+    const selectedIds = editor.getState().selectedIds;
+    if (
+      selectedIds.length === ids.length &&
+      selectedIds.every((id, index) => id === ids[index])
+    ) {
+      return;
+    }
     editor.dispatch({ type: "selection.clear" });
     for (const id of ids) {
       editor.dispatch({ type: "selection.node", additive: true, id });
@@ -108,12 +127,14 @@ export function attachCanvasInteractions(
     if (!interaction || interaction.pointerId !== event.pointerId) return;
 
     if (interaction.kind === "move") {
-      editor.dispatch({
-        type:
-          cancelled || !interaction.moved
-            ? "selection.move.cancel"
-            : "selection.move.commit",
-      });
+      if (interaction.started) {
+        editor.dispatch({
+          type:
+            cancelled || !interaction.moved
+              ? "selection.move.cancel"
+              : "selection.move.commit",
+        });
+      }
       if (!cancelled && !interaction.moved) {
         editor.dispatch({
           type: "selection.node",
@@ -136,13 +157,16 @@ export function attachCanvasInteractions(
       }
     }
 
-    if (
-      interaction.kind === "pan" &&
-      !cancelled &&
-      !interaction.moved &&
-      interaction.clearSelectionOnClick
-    ) {
-      editor.dispatch({ type: "selection.clear" });
+    if (interaction.kind === "pan" && !cancelled && !interaction.moved) {
+      if (interaction.selectNodeOnTap) {
+        editor.dispatch({
+          type: "selection.node",
+          additive: false,
+          id: interaction.selectNodeOnTap,
+        });
+      } else if (interaction.clearSelectionOnClick) {
+        editor.dispatch({ type: "selection.clear" });
+      }
     }
 
     releasePointer(event.pointerId);
@@ -164,13 +188,21 @@ export function attachCanvasInteractions(
     canvas.setPointerCapture(event.pointerId);
 
     if (event.pointerType === "touch") {
+      if (touches.size === 0) touchSequenceWasMultitouch = false;
       touches.set(event.pointerId, screen);
       if (touches.size >= 2) {
         if (interaction?.kind === "move") {
-          editor.dispatch({ type: "selection.move.cancel" });
+          if (interaction.started) {
+            editor.dispatch({ type: "selection.move.cancel" });
+          }
+          restoreSelection(interaction.selectionBefore);
         }
-        if (interaction?.kind === "select") host.setMarquee();
+        if (interaction?.kind === "select") {
+          host.setMarquee();
+          restoreSelection(interaction.baseIds);
+        }
         interaction = null;
+        touchSequenceWasMultitouch = true;
         touchGesture = touchGeometry() ?? null;
         canvas.dataset.cursor = "grabbing";
         return;
@@ -205,21 +237,32 @@ export function attachCanvasInteractions(
 
     if (hit) {
       const hitId = canvasNodeId(hit);
-      const hitIsSelected = editor.getState().selectedIds.includes(hitId);
-      if (!hitIsSelected) {
-        editor.dispatch({
-          type: "selection.node",
-          additive: false,
-          id: hitId,
-        });
+      const selectionBefore = editor.getState().selectedIds;
+      const canMoveNode = selectionBefore.includes(hitId);
+      if (!canMoveNode) {
+        interaction = {
+          clearSelectionOnClick: false,
+          kind: "pan",
+          lastScreen: screen,
+          moved: false,
+          pointerId: event.pointerId,
+          selectNodeOnTap: hitId,
+          startScreen: screen,
+        };
+        canvas.dataset.cursor = "grabbing";
+        return;
       }
-
-      editor.dispatch({ type: "selection.move.begin" });
+      const started = event.pointerType !== "touch";
+      if (started) {
+        editor.dispatch({ type: "selection.move.begin" });
+      }
       interaction = {
         kind: "move",
         moved: false,
         nodeId: hitId,
         pointerId: event.pointerId,
+        selectionBefore,
+        started,
         startScreen: screen,
         startWorld: worldPoint,
       };
@@ -272,7 +315,7 @@ export function attachCanvasInteractions(
     if (interaction.kind === "pan") {
       if (
         !interaction.moved &&
-        !passedDragThreshold(interaction.startScreen, screen)
+        !passedDragThreshold(interaction.startScreen, screen, event.pointerType)
       ) {
         return;
       }
@@ -289,11 +332,22 @@ export function attachCanvasInteractions(
     if (interaction.kind === "move") {
       if (
         !interaction.moved &&
-        !passedDragThreshold(interaction.startScreen, screen)
+        !passedDragThreshold(interaction.startScreen, screen, event.pointerType)
       ) {
         return;
       }
       interaction.moved = true;
+      if (!interaction.started) {
+        if (!editor.getState().selectedIds.includes(interaction.nodeId)) {
+          editor.dispatch({
+            type: "selection.node",
+            additive: false,
+            id: interaction.nodeId,
+          });
+        }
+        editor.dispatch({ type: "selection.move.begin" });
+        interaction.started = true;
+      }
       const worldPoint = screenToWorld(screen, host.getViewport());
       editor.dispatch({
         type: "selection.move.update",
@@ -307,7 +361,7 @@ export function attachCanvasInteractions(
 
     if (
       !interaction.dragging &&
-      !passedDragThreshold(interaction.startScreen, screen)
+      !passedDragThreshold(interaction.startScreen, screen, event.pointerType)
     ) {
       return;
     }
@@ -342,15 +396,19 @@ export function attachCanvasInteractions(
     }
 
     touches.delete(event.pointerId);
-    if (!touchGesture) {
+    if (!touchSequenceWasMultitouch) {
       finishInteraction(event, cancelled);
       return;
     }
 
     releasePointer(event.pointerId);
-    touchGesture = null;
-    const remaining = touchPair()[0];
-    if (remaining && !cancelled) {
+    if (touches.size >= 2) {
+      interaction = null;
+      touchGesture = touchGeometry() ?? null;
+    } else if (touches.size === 1 && !cancelled) {
+      touchGesture = null;
+      const remaining = touchPair()[0];
+      if (!remaining) return;
       interaction = {
         clearSelectionOnClick: false,
         kind: "pan",
@@ -362,8 +420,10 @@ export function attachCanvasInteractions(
       canvas.dataset.cursor = "grabbing";
     } else {
       interaction = null;
+      touchGesture = null;
       canvas.dataset.cursor = "grab";
     }
+    if (touches.size === 0) touchSequenceWasMultitouch = false;
   };
 
   const pointerUp = (event: PointerEvent) => finishTouch(event);
@@ -434,8 +494,13 @@ export function attachCanvasInteractions(
       const state = editor.getState();
       if (state.selectedIds.length === 0) return;
       event.preventDefault();
-      const step =
-        (state.snapToGrid ? SNAP_INTERVAL : 1) * (event.shiftKey ? 4 : 1);
+      const step = state.snapToGrid
+        ? event.shiftKey
+          ? GRID_INTERVAL
+          : SNAP_INTERVAL
+        : event.shiftKey
+          ? 4
+          : 1;
       editor.dispatch({
         type: "selection.nudge",
         delta: {
@@ -511,6 +576,7 @@ export function attachCanvasInteractions(
     interaction = null;
     spacePressed = false;
     touches.clear();
+    touchSequenceWasMultitouch = false;
     touchGesture = null;
 
     canvas.removeEventListener("pointerdown", pointerDown);

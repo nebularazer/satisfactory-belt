@@ -9,6 +9,7 @@ import {
   useSyncExternalStore,
   type ChangeEvent,
   type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { toast } from "sonner";
 
@@ -30,10 +31,7 @@ import {
   createCanvasLoadFixture,
   loadFixtureNodeCount,
 } from "@/canvas/load-fixture";
-import {
-  InfiniteCanvas,
-  type InfiniteCanvasHandle,
-} from "@/canvas/infinite-canvas";
+import type { InfiniteCanvasHandle } from "@/canvas/infinite-canvas";
 import type { CanvasPerformanceMetrics } from "@/canvas/performance";
 import {
   CANVAS_PREFERENCES,
@@ -62,8 +60,16 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 
 const loadNodePicker = () => import("@/components/node-picker");
+const loadNodeInspector = () => import("@/components/node-inspector");
+const loadInfiniteCanvas = () => import("@/canvas/infinite-canvas");
+const InfiniteCanvas = lazy(async () => ({
+  default: (await loadInfiniteCanvas()).InfiniteCanvas,
+}));
 const NodePicker = lazy(async () => ({
   default: (await loadNodePicker()).NodePicker,
+}));
+const NodeInspector = lazy(async () => ({
+  default: (await loadNodeInspector()).NodeInspector,
 }));
 
 function preloadNodePicker() {
@@ -310,6 +316,24 @@ function CanvasWorkspace({
     return true;
   };
 
+  const handleContextMenuTouchStart = (
+    event: ReactTouchEvent<HTMLDivElement>,
+  ) => {
+    const canvas = canvasRef.current;
+    const touch = event.touches.item(0);
+    if (!canvas || event.touches.length !== 1 || !touch) return false;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return Boolean(
+      editor.hitTest(
+        canvas.screenToWorld({
+          x: touch.clientX - bounds.left,
+          y: touch.clientY - bounds.top,
+        }),
+      ),
+    );
+  };
+
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -347,8 +371,7 @@ function CanvasWorkspace({
   const duplicateSelection = () =>
     editor.dispatch({ type: "selection.duplicate" });
   const requestNodeAtCenter = () => {
-    const center = canvasRef.current?.getViewportCenter();
-    if (center) requestNodeAt(center);
+    requestNodeAt(canvasRef.current?.getViewportCenter() ?? { x: 0, y: 0 });
   };
   const loadDocument = (save: SavedCanvasDocument) => {
     selectActiveSave(save);
@@ -370,23 +393,28 @@ function CanvasWorkspace({
   };
 
   return (
-    <main className="relative h-dvh w-dvw overflow-hidden bg-canvas text-foreground">
+    <main className="relative isolate h-dvh w-dvw touch-none overflow-hidden bg-canvas text-foreground">
       <h1 className="sr-only">Satisfactory Belt canvas</h1>
-      <CanvasContextMenu
-        onContextMenu={handleContextMenu}
-        onDelete={deleteSelection}
-        onDuplicate={duplicateSelection}
-      >
-        <InfiniteCanvas
-          editor={editor}
-          onPerformanceMetricsChange={handlePerformanceMetricsChange}
-          onRequestAddNode={requestNodeAt}
-          onViewportChange={handleViewportChange}
-          performanceMetricsEnabled={showPerformance}
-          ref={canvasRef}
-          showGridDots={showGridDots}
-        />
-      </CanvasContextMenu>
+      <div className="absolute inset-0 z-0">
+        <CanvasContextMenu
+          onContextMenu={handleContextMenu}
+          onDelete={deleteSelection}
+          onDuplicate={duplicateSelection}
+          onTouchStart={handleContextMenuTouchStart}
+        >
+          <Suspense fallback={<div className="infinite-canvas" />}>
+            <InfiniteCanvas
+              editor={editor}
+              onPerformanceMetricsChange={handlePerformanceMetricsChange}
+              onRequestAddNode={requestNodeAt}
+              onViewportChange={handleViewportChange}
+              performanceMetricsEnabled={showPerformance}
+              ref={canvasRef}
+              showGridDots={showGridDots}
+            />
+          </Suspense>
+        </CanvasContextMenu>
+      </div>
 
       <div className="pointer-events-none absolute inset-0 z-10">
         <div className="pointer-events-auto absolute left-3 top-3 sm:left-4 sm:top-4">
@@ -432,6 +460,10 @@ function CanvasWorkspace({
             onManagePlans={() => setManagePlansOpen(true)}
           />
         )}
+
+        <Suspense fallback={null}>
+          <NodeInspector editor={editor} />
+        </Suspense>
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
           <CanvasControls

@@ -1,17 +1,24 @@
-import { createNode, type NodeTemplate } from "@satisfactory-belt/production";
+import {
+  createNode,
+  type NodeConfiguration,
+  type NodeTemplate,
+} from "@satisfactory-belt/production";
 
 import {
   EMPTY_CANVAS_DOCUMENT,
   canvasNodeId,
   type CanvasDocument,
   type CanvasNode,
+  type CanvasRouterPriorities,
+  type CanvasRouterRules,
 } from "./document";
 import type { Point, Rectangle } from "./geometry";
+import { GRID_INTERVAL, SNAP_INTERVAL } from "./grid";
+import { nodeCardLayout } from "./node-card-layout";
 import { createCanvasSpatialIndex } from "./spatial-index";
 
-export const SNAP_INTERVAL = 32;
-export const NODE_WIDTH = 176;
-export const NODE_HEIGHT = 96;
+export const NODE_WIDTH = GRID_INTERVAL * 8;
+export const NODE_HEIGHT = GRID_INTERVAL * 8;
 export const HISTORY_LIMIT = 100;
 
 export type CanvasEditorState = Readonly<{
@@ -36,6 +43,27 @@ export type CanvasEditorChange = Readonly<
 export type CanvasEditorAction =
   | { type: "document.replace"; document: CanvasDocument }
   | { type: "document.reset" }
+  | {
+      type: "node.configure";
+      configuration: NodeConfiguration;
+      id: string;
+    }
+  | {
+      type: "node.ports.reorder";
+      direction: "input" | "output";
+      id: string;
+      portIds: readonly string[];
+    }
+  | {
+      type: "node.router.priorities";
+      id: string;
+      priorities: CanvasRouterPriorities;
+    }
+  | {
+      type: "node.router.rules";
+      id: string;
+      rules: CanvasRouterRules;
+    }
   | {
       type: "node.create";
       at: Point;
@@ -99,6 +127,31 @@ function snap(value: number) {
   return Math.round(value / SNAP_INTERVAL) * SNAP_INTERVAL;
 }
 
+function normalizeLegacyNodeCardSizes(
+  document: CanvasDocument,
+): CanvasDocument {
+  let changed = false;
+  const nodes = document.nodes.map((node) => {
+    const layout = nodeCardLayout(node.configuration);
+    if (layout.width === node.width && layout.height === node.height)
+      return node;
+    const legacyFullSize =
+      node.width === NODE_WIDTH && node.height === NODE_HEIGHT;
+    const legacyPassiveSize =
+      (node.configuration.kind === "router" &&
+        node.width === GRID_INTERVAL * 6 &&
+        node.height === GRID_INTERVAL * 5) ||
+      (node.configuration.kind === "buffer" &&
+        node.width === GRID_INTERVAL * 8 &&
+        node.height === GRID_INTERVAL * 6);
+    if (!legacyFullSize && !legacyPassiveSize) return node;
+
+    changed = true;
+    return { ...node, height: layout.height, width: layout.width };
+  });
+  return changed ? { ...document, nodes } : document;
+}
+
 function applyPatch(
   document: CanvasDocument,
   source: readonly IndexedNode[],
@@ -131,6 +184,9 @@ function boundsFor(nodes: readonly CanvasNode[]): Rectangle | undefined {
 export function createCanvasEditor(
   options: CreateCanvasEditorOptions = {},
 ): CanvasEditor {
+  const initialDocument = normalizeLegacyNodeCardSizes(
+    options.document ?? EMPTY_CANVAS_DOCUMENT,
+  );
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: HistoryEntry[] = [];
@@ -138,11 +194,11 @@ export function createCanvasEditor(
   let clipboard: readonly CanvasNode[] = [];
   let dispatchStartedAt = 0;
   let moveTransaction: MoveTransaction | undefined;
-  let nodeSequence = options.document?.nodes.length ?? 0;
+  let nodeSequence = initialDocument.nodes.length;
   let state: CanvasEditorState = {
     canRedo: false,
     canUndo: false,
-    document: options.document ?? EMPTY_CANVAS_DOCUMENT,
+    document: initialDocument,
     moveDelta: null,
     selectedIds: [],
     snapToGrid: options.snapToGrid ?? true,
@@ -204,18 +260,20 @@ export function createCanvasEditor(
     dispatchStartedAt = performance.now();
 
     switch (action.type) {
-      case "document.replace":
+      case "document.replace": {
+        const document = normalizeLegacyNodeCardSizes(action.document);
         past.length = 0;
         future.length = 0;
         clipboard = [];
         moveTransaction = undefined;
-        nodeSequence = action.document.nodes.length;
-        spatialIndex.replace(action.document);
+        nodeSequence = document.nodes.length;
+        spatialIndex.replace(document);
         publish(
-          { document: action.document, moveDelta: null, selectedIds: [] },
+          { document, moveDelta: null, selectedIds: [] },
           { kind: "document" },
         );
         return;
+      }
 
       case "document.reset":
         past.length = 0;
@@ -237,16 +295,18 @@ export function createCanvasEditor(
       case "node.create": {
         nodeSequence += 1;
         const id = idFactory();
-        const x = action.at.x - NODE_WIDTH / 2;
-        const y = action.at.y - NODE_HEIGHT / 2;
+        const configuration = createNode({
+          ...action.node,
+          id,
+        }).configuration;
+        const layout = nodeCardLayout(configuration);
+        const x = action.at.x - layout.width / 2;
+        const y = action.at.y - layout.height / 2;
         const node: CanvasNode = {
-          configuration: createNode({
-            ...action.node,
-            id,
-          }).configuration,
-          height: NODE_HEIGHT,
+          configuration,
+          height: layout.height,
           label: action.label ?? `Node ${nodeSequence}`,
-          width: NODE_WIDTH,
+          width: layout.width,
           x: state.snapToGrid ? snap(x) : x,
           y: state.snapToGrid ? snap(y) : y,
         };
@@ -262,6 +322,107 @@ export function createCanvasEditor(
             beforeSelection: state.selectedIds,
           },
         );
+        return;
+      }
+
+      case "node.configure": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (
+          !beforeNode ||
+          index === undefined ||
+          action.configuration.id !== action.id
+        ) {
+          return;
+        }
+        const configuration = createNode(action.configuration).configuration;
+        const layout = nodeCardLayout(configuration);
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          configuration,
+          height: layout.height,
+          width: layout.width,
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
+        return;
+      }
+
+      case "node.ports.reorder": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (!beforeNode || index === undefined) return;
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          portOrder: {
+            ...beforeNode.portOrder,
+            [action.direction]: [...action.portIds],
+          },
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
+        return;
+      }
+
+      case "node.router.rules": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (
+          !beforeNode ||
+          index === undefined ||
+          beforeNode.configuration.kind !== "router"
+        ) {
+          return;
+        }
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          routerRules: action.rules,
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
+        return;
+      }
+
+      case "node.router.priorities": {
+        const beforeNode = spatialIndex.get(action.id);
+        const index = spatialIndex.indexOf(action.id);
+        if (
+          !beforeNode ||
+          index === undefined ||
+          beforeNode.configuration.kind !== "router"
+        ) {
+          return;
+        }
+        const afterNode: CanvasNode = {
+          ...beforeNode,
+          routerPriorities: action.priorities,
+        };
+        const before = [{ index, node: beforeNode }];
+        const after = [{ index, node: afterNode }];
+        commit(applyPatch(state.document, before, after), state.selectedIds, {
+          after,
+          afterSelection: state.selectedIds,
+          before,
+          beforeSelection: state.selectedIds,
+        });
         return;
       }
 

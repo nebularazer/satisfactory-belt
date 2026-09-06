@@ -35,11 +35,14 @@ export function PerformanceBar({
   const fps = Math.round(metrics?.fps ?? 0);
   const renderTime = metrics ? metrics.render.averageMs.toFixed(1) : "–";
   const updateTime = metrics ? metrics.update.averageMs.toFixed(1) : "–";
+  const longTaskTime = metrics?.longTasks.supported
+    ? metrics.longTasks.maximumMs.toFixed(0)
+    : "–";
   const nodeLabel = nodeCount === 1 ? "node" : "nodes";
 
   return (
     <div
-      aria-label={`Performance metrics: ${fps} FPS, ${updateTime} milliseconds updating, ${renderTime} milliseconds rendering, ${nodeCount} ${nodeLabel}, ${metrics?.visibleNodes ?? "unknown"} visible, ${selectedCount} selected`}
+      aria-label={`Performance metrics: ${fps} FPS, ${updateTime} milliseconds updating, ${renderTime} milliseconds rendering, ${longTaskTime} milliseconds longest browser stall, ${nodeCount} ${nodeLabel}, ${metrics?.visibleNodes ?? "unknown"} visible, ${selectedCount} selected`}
       className="flex h-[42px] max-w-[calc(100vw-1.5rem)] items-center overflow-x-auto rounded-xl border border-border bg-card px-1 shadow-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       <Metric label="FPS" value={fps} />
@@ -62,6 +65,16 @@ export function PerformanceBar({
             : "CPU render submission time"
         }
         value={renderTime}
+      />
+      <Separator />
+      <Metric
+        label="stall"
+        title={
+          metrics?.longTasks.supported
+            ? `Browser long tasks: ${metrics.longTasks.count} detected, ${metrics.longTasks.averageMs.toFixed(1)} ms average, ${metrics.longTasks.maximumMs.toFixed(1)} ms maximum`
+            : "Browser Long Tasks API unavailable"
+        }
+        value={longTaskTime}
       />
       <Separator />
       <Metric label="nodes" value={nodeCount} />

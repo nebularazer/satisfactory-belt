@@ -14,6 +14,7 @@ type CanvasContextMenuProps = {
   onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => boolean;
   onDelete: () => void;
   onDuplicate: () => void;
+  onTouchStart: (event: React.TouchEvent<HTMLDivElement>) => boolean;
 };
 
 export function CanvasContextMenu({
@@ -21,6 +22,7 @@ export function CanvasContextMenu({
   onContextMenu,
   onDelete,
   onDuplicate,
+  onTouchStart,
 }: CanvasContextMenuProps) {
   return (
     <ContextMenu>
@@ -29,6 +31,10 @@ export function CanvasContextMenu({
         onContextMenu={(event) => {
           if (onContextMenu(event)) return;
           event.preventDefault();
+          event.preventBaseUIHandler();
+        }}
+        onTouchStart={(event) => {
+          if (onTouchStart(event)) return;
           event.preventBaseUIHandler();
         }}
       >

@@ -82,4 +82,11 @@ describe("Node choices", () => {
   it("does not offer an independent Resource Well Extractor Node", () => {
     expect(nodeChoicesForBuildable("Build_FrackingExtractor_C")).toEqual([]);
   });
+
+  it("keeps pipe junction topology out of standalone Node choices", () => {
+    expect(nodeChoicesForBuildable("Build_PipelineJunction_Cross_C")).toEqual(
+      [],
+    );
+    expect(nodeChoicesForBuildable("Build_PipelineJunction_T_C")).toEqual([]);
+  });
 });

@@ -75,3 +75,79 @@ test("keeps recipe search usable in a compact mobile viewport", async ({
     .click();
   await expect(page.getByText("Screws Recipes")).toBeVisible();
 });
+
+test("keeps the canvas and floating controls aligned to a mobile viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 500, width: 320 });
+  await page.goto("/");
+
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const menu = page.getByRole("button", { name: "Open canvas menu" });
+  const controls = page.getByRole("toolbar", { name: "Canvas controls" });
+  await expect(canvas).toBeVisible();
+
+  await page.setViewportSize({ height: 915, width: 412 });
+
+  await expect(menu).toBeInViewport();
+  await expect(controls).toBeInViewport();
+  await expect
+    .poll(() =>
+      canvas.evaluate((element: HTMLCanvasElement) => {
+        const bounds = element.getBoundingClientRect();
+        const resolution = Math.min(window.devicePixelRatio, 2);
+        return {
+          backingHeight: element.height,
+          backingWidth: element.width,
+          expectedHeight: Math.round(bounds.height * resolution),
+          expectedWidth: Math.round(bounds.width * resolution),
+          height: bounds.height,
+          width: bounds.width,
+        };
+      }),
+    )
+    .toEqual({
+      backingHeight: 915,
+      backingWidth: 412,
+      expectedHeight: 915,
+      expectedWidth: 412,
+      height: 915,
+      width: 412,
+    });
+});
+
+test("routes an empty-canvas long press only to the node picker", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 915, width: 412 });
+  await page.goto("/");
+
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  await canvas.evaluate((element) => {
+    const touch = new Touch({
+      clientX: 206,
+      clientY: 458,
+      identifier: 0,
+      target: element,
+    });
+    element.dispatchEvent(
+      new TouchEvent("touchstart", {
+        bubbles: true,
+        cancelable: true,
+        changedTouches: [touch],
+        targetTouches: [touch],
+        touches: [touch],
+      }),
+    );
+  });
+  await page.waitForTimeout(600);
+  await canvas.dispatchEvent("contextmenu", {
+    button: 2,
+    clientX: 206,
+    clientY: 458,
+  });
+
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  await expect(page.getByText("Duplicate selection")).toBeHidden();
+  await expect(page.getByText("Delete selection")).toBeHidden();
+});

@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "build": "pnpm --recursive --if-present build",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm format:check && pnpm lint && pnpm check:assets && pnpm typecheck && pnpm test && pnpm build",
+    "check:assets": "node scripts/verify-web-assets.mjs",
     "dev": "pnpm --filter @satisfactory-belt/web dev",
     "dev:https": "pnpm --filter @satisfactory-belt/web dev:https",
     "extract:production": "node scripts/extract-production-data.mjs",
+    "generate:assets": "node scripts/generate-web-assets.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint --deny-warnings .",
@@ -18,7 +20,8 @@
   "devDependencies": {
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
-    "oxlint-tsgolint": "^7.0.2001"
+    "oxlint-tsgolint": "^7.0.2001",
+    "sharp": "^0.35.4"
   },
   "engines": {
     "node": ">=24"
