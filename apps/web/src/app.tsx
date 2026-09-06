@@ -65,6 +65,8 @@ import { Toaster } from "@/components/ui/sonner";
 
 const loadNodePicker = () => import("@/components/node-picker");
 const loadNodeInspector = () => import("@/components/node-inspector");
+const loadMaterialLinkInspector = () =>
+  import("@/components/material-link-inspector");
 const loadInfiniteCanvas = () => import("@/canvas/infinite-canvas");
 const InfiniteCanvas = lazy(async () => ({
   default: (await loadInfiniteCanvas()).InfiniteCanvas,
@@ -74,6 +76,9 @@ const NodePicker = lazy(async () => ({
 }));
 const NodeInspector = lazy(async () => ({
   default: (await loadNodeInspector()).NodeInspector,
+}));
+const MaterialLinkInspector = lazy(async () => ({
+  default: (await loadMaterialLinkInspector()).MaterialLinkInspector,
 }));
 
 function preloadNodePicker() {
@@ -167,6 +172,11 @@ function CanvasWorkspace({
     getEditorUiState,
     getEditorUiState,
   );
+  const connectionError = useSyncExternalStore(
+    editor.subscribe,
+    () => editor.getState().connectionError,
+    () => editor.getState().connectionError,
+  );
   const [performanceMetrics, setPerformanceMetrics] =
     useState<CanvasPerformanceMetrics | null>(null);
   const [showPerformance, setShowPerformance] = useState(() =>
@@ -222,6 +232,10 @@ function CanvasWorkspace({
       },
     );
   }, [autosaveEnabled, editor, storage]);
+
+  useEffect(() => {
+    if (connectionError) toast.error(connectionError.message);
+  }, [connectionError]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -388,7 +402,7 @@ function CanvasWorkspace({
     });
     const hit = editor.hitTest(at);
     if (!hit) {
-      const link = editor.hitTestLink(at, 8 / zoom);
+      const link = editor.hitTestLink(at, 12 / zoom);
       if (link) {
         if (!editor.getState().selectedLinkIds.includes(link.id)) {
           editor.dispatch({
@@ -421,7 +435,7 @@ function CanvasWorkspace({
       x: touch.clientX - bounds.left,
       y: touch.clientY - bounds.top,
     });
-    return Boolean(editor.hitTest(at) || editor.hitTestLink(at, 8 / zoom));
+    return Boolean(editor.hitTest(at) || editor.hitTestLink(at, 24 / zoom));
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -570,6 +584,7 @@ function CanvasWorkspace({
 
         <Suspense fallback={null}>
           <NodeInspector editor={editor} />
+          <MaterialLinkInspector editor={editor} />
         </Suspense>
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">

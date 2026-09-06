@@ -9,6 +9,11 @@ export {
   type MaterialConnectionTarget,
 } from "./basic-topology";
 export {
+  analyzeBasicFlows,
+  type BasicFlowAnalysis,
+  type BasicLinkFlow,
+} from "./basic-flow-analysis";
+export {
   createDetailedPlan,
   DEFAULT_LOGISTICS_TIERS,
   DetailedPlanError,

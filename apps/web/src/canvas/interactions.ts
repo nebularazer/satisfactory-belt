@@ -239,7 +239,10 @@ export function attachCanvasInteractions(
       worldPoint,
       (coarsePointer ? 24 : 12) / host.getViewport().zoom,
     );
-    const hitLink = editor.hitTestLink(worldPoint, 8 / host.getViewport().zoom);
+    const hitLink = editor.hitTestLink(
+      worldPoint,
+      (coarsePointer ? 24 : 12) / host.getViewport().zoom,
+    );
     const hit = editor.hitTest(worldPoint);
     const selectionModifier = event.ctrlKey || event.metaKey;
 

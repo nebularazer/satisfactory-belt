@@ -84,7 +84,7 @@ export function materialLinkPath(
   return pathFromPoints(link, from, to);
 }
 
-function cubic(path: MaterialLinkPath, t: number): Point {
+export function materialLinkPoint(path: MaterialLinkPath, t: number): Point {
   const inverse = 1 - t;
   return {
     x:
@@ -120,7 +120,7 @@ export function distanceToMaterialLink(path: MaterialLinkPath, point: Point) {
   let distance = Number.POSITIVE_INFINITY;
   let previous = path.from;
   for (let index = 1; index <= 20; index += 1) {
-    const current = cubic(path, index / 20);
+    const current = materialLinkPoint(path, index / 20);
     distance = Math.min(
       distance,
       pointSegmentDistance(point, previous, current),

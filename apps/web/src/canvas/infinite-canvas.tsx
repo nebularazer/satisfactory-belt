@@ -50,7 +50,8 @@ import {
 import { createRenderScheduler } from "./render-scheduler";
 import { resolveResponsiveImage } from "./responsive-image-cache";
 import { createTextureCache } from "./texture-cache";
-import { materialLinkPath } from "./material-link-geometry";
+import { materialLinkPath, materialLinkPoint } from "./material-link-geometry";
+import { presentMaterialLinks } from "./material-link-presentation";
 import { materialPortGeometry } from "./material-port-geometry";
 import {
   createTextureLoadQueue,
@@ -944,6 +945,7 @@ function drawMarquee(graphics: Graphics, rectangle?: Rectangle) {
 
 function drawMaterialLinks(
   graphics: Graphics,
+  labelLayer: Container,
   previewGraphics: Graphics,
   state: CanvasEditorState,
   zoom: number,
@@ -951,6 +953,9 @@ function drawMaterialLinks(
 ) {
   graphics.clear();
   previewGraphics.clear();
+  for (const child of labelLayer.removeChildren()) {
+    child.destroy({ children: true });
+  }
   const selected = new Set(state.selectedLinkIds);
   const moving = state.moveDelta ? new Set(state.selectedIds) : undefined;
   const effectiveDocument = moving
@@ -1002,6 +1007,46 @@ function drawMaterialLinks(
             : 0x64748b,
         width: (isSelected ? 5 : 3) / zoom,
       });
+  }
+
+  const presentations = new Map(
+    presentMaterialLinks(state.document).map((presentation) => [
+      presentation.id,
+      presentation,
+    ]),
+  );
+  for (const link of visibleLinks) {
+    const path = materialLinkPath(effectiveDocument, link);
+    const presentation = presentations.get(link.id);
+    if (!path || !presentation) continue;
+    const position = materialLinkPoint(path, 0.5);
+    const label = new Container();
+    const text = new Text({
+      style: {
+        fill: dark ? 0xf4f4f5 : 0x27272a,
+        fontFamily: "Inter Variable, Inter, sans-serif",
+        fontSize: 12,
+        fontWeight: "600",
+      },
+      text: presentation.label,
+    });
+    text.anchor.set(0.5);
+    const background = new Graphics()
+      .roundRect(-text.width / 2 - 7, -11, text.width + 14, 22, 8)
+      .fill({ color: dark ? 0x18181b : 0xffffff, alpha: 0.96 })
+      .stroke({
+        color: selected.has(link.id)
+          ? BLUEPRINT_COLORS.selected
+          : dark
+            ? 0x52525b
+            : 0xd4d4d8,
+        width: selected.has(link.id) ? 2 : 1,
+      });
+    label.addChild(background, text);
+    label.eventMode = "none";
+    label.position.set(position.x, position.y);
+    label.scale.set(1 / zoom);
+    labelLayer.addChild(label);
   }
 
   const preview = state.connectionPreview;
@@ -1071,6 +1116,7 @@ export const InfiniteCanvas = forwardRef<
   const gridRef = useRef<GridDisplay | null>(null);
   const sceneRef = useRef<Container | null>(null);
   const linkGraphicsRef = useRef<Graphics | null>(null);
+  const linkLabelLayerRef = useRef<Container | null>(null);
   const previewGraphicsRef = useRef<Graphics | null>(null);
   const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
   const nodeDisplayPoolRef = useRef<NodeDisplay[]>([]);
@@ -1113,8 +1159,9 @@ export const InfiniteCanvas = forwardRef<
 
     const state = editor.getState();
     const linkGraphics = linkGraphicsRef.current;
+    const linkLabelLayer = linkLabelLayerRef.current;
     const previewGraphics = previewGraphicsRef.current;
-    if (linkGraphics && previewGraphics) {
+    if (linkGraphics && linkLabelLayer && previewGraphics) {
       const viewport = viewportRef.current;
       const visibleLinks = editor
         .queryLinks({
@@ -1126,6 +1173,7 @@ export const InfiniteCanvas = forwardRef<
         .map(({ link }) => link);
       drawMaterialLinks(
         linkGraphics,
+        linkLabelLayer,
         previewGraphics,
         state,
         viewportRef.current.zoom,
@@ -1360,17 +1408,19 @@ export const InfiniteCanvas = forwardRef<
         grid.sprite.visible = showGridDotsRef.current;
         const world = new Container();
         const linkGraphics = new Graphics();
+        const linkLabelLayer = new Container();
         const scene = new Container();
         const previewGraphics = new Graphics();
         const marquee = new Graphics();
         app.stage.eventMode = "none";
         scene.eventMode = "none";
-        world.addChild(linkGraphics, scene, previewGraphics);
+        world.addChild(linkGraphics, linkLabelLayer, scene, previewGraphics);
         app.stage.addChild(grid.sprite, world, marquee);
         gridRef.current = grid;
         worldRef.current = world;
         sceneRef.current = scene;
         linkGraphicsRef.current = linkGraphics;
+        linkLabelLayerRef.current = linkLabelLayer;
         previewGraphicsRef.current = previewGraphics;
         marqueeRef.current = marquee;
 
@@ -1499,6 +1549,7 @@ export const InfiniteCanvas = forwardRef<
       renderSchedulerRef.current = null;
       sceneRef.current = null;
       linkGraphicsRef.current = null;
+      linkLabelLayerRef.current = null;
       previewGraphicsRef.current = null;
       worldRef.current = null;
       marqueeRef.current = null;
