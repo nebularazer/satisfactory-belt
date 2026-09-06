@@ -24,6 +24,7 @@ type Interaction =
       hovered?: MaterialEndpoint;
       kind: "connection";
       moved: boolean;
+      origin: Point;
       pointerId: number;
       startScreen: Point;
       target?: MaterialEndpoint;
@@ -263,7 +264,7 @@ export function attachCanvasInteractions(
         };
         editor.dispatch({
           type: "link.preview",
-          current: interaction.current,
+          current: interaction.origin,
           from: interaction.from,
         });
       } else {
@@ -421,10 +422,15 @@ export function attachCanvasInteractions(
         dropOnEmpty: false,
         kind: "connection",
         moved: false,
+        origin: hitPort.point,
         pointerId: event.pointerId,
         startScreen: screen,
       };
-      editor.dispatch({ type: "link.preview", current: worldPoint, from });
+      editor.dispatch({
+        type: "link.preview",
+        current: hitPort.point,
+        from,
+      });
       canvas.dataset.cursor = "crosshair";
       return;
     }

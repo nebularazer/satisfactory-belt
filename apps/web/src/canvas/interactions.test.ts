@@ -267,15 +267,26 @@ describe("canvas interactions", () => {
       },
     });
 
-    pointer("pointerdown", 224, 96, { pointerType: "touch" });
-    pointer("pointerup", 224, 96, { pointerType: "touch" });
+    const source = portPoint(editor, "node-1", "output:Desc_OreIron_C");
+    const target = portPoint(editor, "node-2", "input:Desc_OreIron_C");
+    pointer("pointerdown", source.x - 8, source.y + 6, {
+      pointerType: "touch",
+    });
+    pointer("pointerup", source.x - 8, source.y + 6, {
+      pointerType: "touch",
+    });
     expect(editor.getState().connectionPreview?.from).toEqual({
       nodeId: "node-1",
       portId: "output:Desc_OreIron_C",
     });
+    expect(editor.getState().connectionPreview?.current).toEqual(source);
 
-    pointer("pointerdown", 368, 96, { pointerType: "touch" });
-    pointer("pointerup", 368, 96, { pointerType: "touch" });
+    pointer("pointerdown", target.x + 8, target.y + 6, {
+      pointerType: "touch",
+    });
+    pointer("pointerup", target.x + 8, target.y + 6, {
+      pointerType: "touch",
+    });
 
     expect(editor.getState().document.materialLinks).toEqual([
       expect.objectContaining({

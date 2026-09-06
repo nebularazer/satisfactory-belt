@@ -51,7 +51,11 @@ import {
 import { createRenderScheduler } from "./render-scheduler";
 import { resolveResponsiveImage } from "./responsive-image-cache";
 import { createTextureCache } from "./texture-cache";
-import { materialLinkPath, materialLinkPoint } from "./material-link-geometry";
+import {
+  materialConnectionPreviewCurve,
+  materialLinkPath,
+  materialLinkPoint,
+} from "./material-link-geometry";
 import { presentMaterialLinks } from "./material-link-presentation";
 import { materialPortGeometry } from "./material-port-geometry";
 import {
@@ -1084,10 +1088,18 @@ function drawMaterialLinks(
         )?.point
       : preview.current;
   if (!from || !to) return;
-  const bend = Math.max(48, Math.abs(to.x - from.x) * 0.5);
+  const curve = materialConnectionPreviewCurve(from, to, zoom);
+  if (!curve) return;
   previewGraphics
     .moveTo(from.x, from.y)
-    .bezierCurveTo(from.x + bend, from.y, to.x - bend, to.y, to.x, to.y)
+    .bezierCurveTo(
+      curve.control1.x,
+      curve.control1.y,
+      curve.control2.x,
+      curve.control2.y,
+      to.x,
+      to.y,
+    )
     .stroke({
       alpha: 0.9,
       color:

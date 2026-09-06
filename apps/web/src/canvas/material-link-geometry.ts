@@ -13,6 +13,32 @@ export type MaterialLinkPath = Readonly<{
   to: Point;
 }>;
 
+export type MaterialConnectionPreviewCurve = Readonly<{
+  control1: Point;
+  control2: Point;
+}>;
+
+const CONNECTION_PREVIEW_MIN_LENGTH_PX = 10;
+
+export function materialConnectionPreviewCurve(
+  from: Point,
+  to: Point,
+  zoom: number,
+): MaterialConnectionPreviewCurve | undefined {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  if (distance * zoom < CONNECTION_PREVIEW_MIN_LENGTH_PX) {
+    return undefined;
+  }
+  const bend = Math.min(
+    Math.max(48, Math.abs(to.x - from.x) * 0.5),
+    distance * 0.5,
+  );
+  return {
+    control1: { x: from.x + bend, y: from.y },
+    control2: { x: to.x - bend, y: to.y },
+  };
+}
+
 function pathFromPoints(
   link: MaterialLink,
   from: Point,
