@@ -1,6 +1,10 @@
 import type { NodeConfiguration } from "@satisfactory-belt/production";
+import type {
+  GenerationProvenance,
+  MaterialLink,
+} from "@satisfactory-belt/planning";
 
-export const CANVAS_DOCUMENT_VERSION = 3;
+export const CANVAS_DOCUMENT_VERSION = 4;
 
 export type CanvasPortOrder = Readonly<{
   input?: readonly string[];
@@ -18,6 +22,7 @@ export type CanvasNode = Readonly<{
   height: number;
   label: string;
   portOrder?: CanvasPortOrder;
+  provenance?: GenerationProvenance;
   routerPriorities?: CanvasRouterPriorities;
   routerRules?: CanvasRouterRules;
   width: number;
@@ -30,11 +35,17 @@ export function canvasNodeId(node: CanvasNode) {
 }
 
 export type CanvasDocument = Readonly<{
+  kind: "basic";
+  materialLinks: readonly MaterialLink[];
   nodes: readonly CanvasNode[];
   version: typeof CANVAS_DOCUMENT_VERSION;
 }>;
 
 export const EMPTY_CANVAS_DOCUMENT: CanvasDocument = {
+  kind: "basic",
+  materialLinks: [],
   nodes: [],
   version: CANVAS_DOCUMENT_VERSION,
 };
+
+export type CanvasMaterialLink = MaterialLink;

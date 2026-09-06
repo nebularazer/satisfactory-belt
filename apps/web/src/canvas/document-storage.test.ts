@@ -11,6 +11,8 @@ import { createCanvasEditor } from "./editor";
 import { TEST_NODE_TEMPLATE, testCanvasNode } from "./test-fixtures";
 
 const documentWith = (...ids: readonly string[]): CanvasDocument => ({
+  kind: "basic",
+  materialLinks: [],
   nodes: ids.map((id, index) => testCanvasNode(id, index * 32, index * 32)),
   version: CANVAS_DOCUMENT_VERSION,
 });

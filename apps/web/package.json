@@ -15,6 +15,7 @@
   "dependencies": {
     "@base-ui/react": "^1.7.0",
     "@fontsource-variable/inter": "^5.3.0",
+    "@satisfactory-belt/planning": "workspace:*",
     "@satisfactory-belt/production": "workspace:*",
     "@tanstack/react-virtual": "^3.14.10",
     "class-variance-authority": "0.7.1",

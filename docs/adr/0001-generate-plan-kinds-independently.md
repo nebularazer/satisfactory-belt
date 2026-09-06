@@ -1,0 +1,3 @@
+# Generate Plan Kinds independently
+
+Basic and Detailed Plans are distinct user-editable artifacts generated independently from a common Planning Request and shared production calculations. Neither Plan Kind is a canonical intermediate for the other, and the product will not require conversion or synchronization between them; a future Basic-to-Detailed generation feature may create an independent new Detailed Plan if a concrete use case emerges. This preserves the different meanings of aggregate Nodes and individual Buildables without coupling either Plan Kind to the other's editing invariants.

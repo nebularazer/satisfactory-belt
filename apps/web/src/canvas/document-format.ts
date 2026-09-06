@@ -1,4 +1,10 @@
 import { parseNodeConfiguration } from "@satisfactory-belt/production";
+import {
+  createBasicPlan,
+  type GenerationProvenance,
+  type MaterialEndpoint,
+  type MaterialLink,
+} from "@satisfactory-belt/planning";
 
 import {
   CANVAS_DOCUMENT_VERSION,
@@ -69,6 +75,27 @@ function parseRouterPriorities(
   );
 }
 
+function parseProvenance(value: unknown): GenerationProvenance | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.requestOutputItemIds) ||
+    !value.requestOutputItemIds.every(
+      (itemId) => typeof itemId === "string" && itemId.trim(),
+    ) ||
+    (value.processId !== undefined &&
+      (typeof value.processId !== "string" || !value.processId.trim()))
+  ) {
+    throw new Error("Node generation provenance is invalid.");
+  }
+  return {
+    ...(typeof value.processId === "string"
+      ? { processId: value.processId }
+      : {}),
+    requestOutputItemIds: value.requestOutputItemIds,
+  };
+}
+
 function parseNode(value: unknown, index: number): CanvasNode {
   if (!isRecord(value)) throw new Error(`Node ${index + 1} is not an object.`);
   if (typeof value.label !== "string") {
@@ -87,6 +114,7 @@ function parseNode(value: unknown, index: number): CanvasNode {
   }
 
   const portOrder = parsePortOrder(value.portOrder);
+  const provenance = parseProvenance(value.provenance);
   const routerPriorities = parseRouterPriorities(value.routerPriorities);
   const routerRules = parseRouterRules(value.routerRules);
   return {
@@ -94,6 +122,7 @@ function parseNode(value: unknown, index: number): CanvasNode {
     height: value.height,
     label: value.label,
     ...(portOrder ? { portOrder } : {}),
+    ...(provenance ? { provenance } : {}),
     ...(routerPriorities ? { routerPriorities } : {}),
     ...(routerRules ? { routerRules } : {}),
     width: value.width,
@@ -102,10 +131,34 @@ function parseNode(value: unknown, index: number): CanvasNode {
   };
 }
 
+function parseEndpoint(value: unknown, label: string): MaterialEndpoint {
+  if (!isRecord(value)) throw new Error(`${label} must be an object.`);
+  if (typeof value.nodeId !== "string" || !value.nodeId.trim()) {
+    throw new Error(`${label} nodeId must be a non-empty string.`);
+  }
+  if (typeof value.portId !== "string" || !value.portId.trim()) {
+    throw new Error(`${label} portId must be a non-empty string.`);
+  }
+  return { nodeId: value.nodeId, portId: value.portId };
+}
+
+function parseMaterialLink(value: unknown, index: number): MaterialLink {
+  if (!isRecord(value))
+    throw new Error(`Material Link ${index + 1} is not an object.`);
+  if (typeof value.id !== "string" || !value.id.trim()) {
+    throw new Error(`Material Link ${index + 1} has an invalid id.`);
+  }
+  return {
+    from: parseEndpoint(value.from, `Material Link ${index + 1} from endpoint`),
+    id: value.id,
+    to: parseEndpoint(value.to, `Material Link ${index + 1} to endpoint`),
+  };
+}
+
 export function validateCanvasDocument(value: unknown): CanvasDocument {
   if (!isRecord(value))
     throw new Error("The file does not contain a document.");
-  if (value.version !== CANVAS_DOCUMENT_VERSION) {
+  if (value.version !== 3 && value.version !== CANVAS_DOCUMENT_VERSION) {
     throw new Error(`Unsupported document version: ${String(value.version)}.`);
   }
   if (!Array.isArray(value.nodes)) {
@@ -116,7 +169,33 @@ export function validateCanvasDocument(value: unknown): CanvasDocument {
   const ids = new Set(nodes.map(canvasNodeId));
   if (ids.size !== nodes.length) throw new Error("Node ids must be unique.");
 
-  return { nodes, version: CANVAS_DOCUMENT_VERSION };
+  const materialLinks =
+    value.version === 3
+      ? []
+      : Array.isArray(value.materialLinks)
+        ? value.materialLinks.map(parseMaterialLink)
+        : (() => {
+            throw new Error(
+              "The document does not contain a Material Link list.",
+            );
+          })();
+  if (value.version !== 3 && value.kind !== "basic") {
+    throw new Error(`Unsupported Plan Kind: ${String(value.kind)}.`);
+  }
+  createBasicPlan({
+    materialLinks,
+    nodes: nodes.map(({ configuration, provenance }) => ({
+      configuration,
+      ...(provenance ? { provenance } : {}),
+    })),
+  });
+
+  return {
+    kind: "basic",
+    materialLinks,
+    nodes,
+    version: CANVAS_DOCUMENT_VERSION,
+  };
 }
 
 export function parseCanvasDocument(serialized: string): CanvasDocument {

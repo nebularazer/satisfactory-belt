@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 test("edits and restores a canvas in a real browser", async ({ page }) => {
   await page.goto("/");
@@ -46,6 +47,52 @@ test("edits and restores a canvas in a real browser", async ({ page }) => {
   await expect(canvas).toBeVisible();
   await expect(emptyStateAction).toBeHidden();
   await expect(undo).toBeDisabled();
+});
+
+test("connects material ports and persists the Material Link", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const search = page.getByPlaceholder("Search buildings or recipes...");
+
+  await page.getByRole("button", { name: "Add your first node" }).click();
+  await search.fill("miner mk.1");
+  await page.getByRole("option", { name: /^Miner Mk\.1.*10 recipes/ }).click();
+  await page.getByRole("option", { name: "Iron Ore" }).click();
+  await page.getByRole("button", { name: "Close node details" }).click();
+
+  await canvas.hover({ position: { x: 640, y: 296 } });
+  await page.mouse.down();
+  await page.mouse.move(320, 296, { steps: 4 });
+  await page.mouse.up();
+
+  await page.getByRole("button", { name: "Open canvas menu" }).click();
+  await page.getByRole("menuitem", { name: /Add node/ }).click();
+  await search.fill("iron ingot");
+  await page
+    .getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ })
+    .click();
+  await page.getByRole("button", { name: "Close node details" }).click();
+
+  await canvas.hover({ position: { x: 448, y: 360 } });
+  await page.mouse.down();
+  await page.mouse.move(512, 360, { steps: 4 });
+  await page.mouse.up();
+
+  await page.getByRole("button", { name: "Open canvas menu" }).click();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByText("Export JSON", { exact: true }).click();
+  const download = await downloadPromise;
+  const path = await download.path();
+  expect(path).not.toBeNull();
+  const document = JSON.parse(await readFile(path!, "utf8"));
+  expect(document.materialLinks).toEqual([
+    expect.objectContaining({
+      from: expect.objectContaining({ portId: "output:Desc_OreIron_C" }),
+      to: expect.objectContaining({ portId: "input:Desc_OreIron_C" }),
+    }),
+  ]);
 });
 
 test("keeps recipe search usable in a compact mobile viewport", async ({

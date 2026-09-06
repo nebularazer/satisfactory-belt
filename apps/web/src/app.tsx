@@ -113,19 +113,24 @@ function CanvasWorkspace({
       canRedo: initialState.canRedo,
       canUndo: initialState.canUndo,
       nodeCount: initialState.document.nodes.length,
-      selectedCount: initialState.selectedIds.length,
+      selectedCount:
+        initialState.selectedIds.length + initialState.selectedLinkIds.length,
+      selectedNodeCount: initialState.selectedIds.length,
       snapToGrid: initialState.snapToGrid,
     };
 
     return () => {
       const state = editor.getState();
       const nodeCount = state.document.nodes.length;
-      const selectedCount = state.selectedIds.length;
+      const selectedCount =
+        state.selectedIds.length + state.selectedLinkIds.length;
+      const selectedNodeCount = state.selectedIds.length;
       if (
         cached.canRedo !== state.canRedo ||
         cached.canUndo !== state.canUndo ||
         cached.nodeCount !== nodeCount ||
         cached.selectedCount !== selectedCount ||
+        cached.selectedNodeCount !== selectedNodeCount ||
         cached.snapToGrid !== state.snapToGrid
       ) {
         cached = {
@@ -133,6 +138,7 @@ function CanvasWorkspace({
           canUndo: state.canUndo,
           nodeCount,
           selectedCount,
+          selectedNodeCount,
           snapToGrid: state.snapToGrid,
         };
       }
@@ -306,6 +312,17 @@ function CanvasWorkspace({
     });
     const hit = editor.hitTest(at);
     if (!hit) {
+      const link = editor.hitTestLink(at, 8 / zoom);
+      if (link) {
+        if (!editor.getState().selectedLinkIds.includes(link.id)) {
+          editor.dispatch({
+            type: "selection.link",
+            additive: false,
+            id: link.id,
+          });
+        }
+        return true;
+      }
       requestNodeAt(at);
       return false;
     }
@@ -324,14 +341,11 @@ function CanvasWorkspace({
     if (!canvas || event.touches.length !== 1 || !touch) return false;
 
     const bounds = event.currentTarget.getBoundingClientRect();
-    return Boolean(
-      editor.hitTest(
-        canvas.screenToWorld({
-          x: touch.clientX - bounds.left,
-          y: touch.clientY - bounds.top,
-        }),
-      ),
-    );
+    const at = canvas.screenToWorld({
+      x: touch.clientX - bounds.left,
+      y: touch.clientY - bounds.top,
+    });
+    return Boolean(editor.hitTest(at) || editor.hitTestLink(at, 8 / zoom));
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -421,9 +435,9 @@ function CanvasWorkspace({
           <CanvasMenu
             activeSaveName={activeSave?.name}
             canDelete={editorState.selectedCount > 0}
-            canDuplicate={editorState.selectedCount > 0}
+            canDuplicate={editorState.selectedNodeCount > 0}
             canFitAll={editorState.nodeCount > 0}
-            canFitSelection={editorState.selectedCount > 0}
+            canFitSelection={editorState.selectedNodeCount > 0}
             canResetCanvas={
               editorState.nodeCount > 0 ||
               editorState.canUndo ||

@@ -93,15 +93,44 @@ An editable factory model whose calculated material rates and Power Profiles
 reflect its current Nodes and their configuration.
 _Avoid_: Static snapshot, calculation
 
+**Plan Kind**:
+The user-selected level of factory representation: Basic, Detailed, or Layout.
+Plan Kinds describe distinct Plans rather than views of one Plan.
+_Avoid_: Mode, detail level
+
 **Node**:
-A planned factory element. In Basic Mode it may summarize a Machine Allocation;
-in Detailed and Layout Modes it represents one Buildable instance.
+A planned factory element. In a Basic Plan it may summarize a Machine
+Allocation; in Detailed and Layout Plans it represents one Buildable instance.
 _Avoid_: Buildable, graph vertex
 
 **Material Port**:
 A logical input, output, or bidirectional endpoint on a Node, constrained by
 material form and optionally a Descriptor, but independent of any connection.
 _Avoid_: Edge, physical connector, material rate
+
+**Material Link**:
+A single-Descriptor logical flow between two Material Ports in a Basic Plan,
+without a physical tier, capacity, or route.
+_Avoid_: Conveyor, Pipeline, edge
+
+**Conveyor**:
+A physical solid-material connection between two Material Ports in a Detailed
+or Layout Plan.
+_Avoid_: Material Link, belt
+
+**Pipeline**:
+A physical liquid- or gas-material connection between two Material Ports in a
+Detailed or Layout Plan.
+_Avoid_: Material Link, pipe
+
+**Conveyor Flow Profile**:
+The calculated rates of each Descriptor sharing a Conveyor.
+_Avoid_: Conveyor contents, Material Profile
+
+**Sushi Belt**:
+A Conveyor network intentionally carrying multiple Descriptors rather than a
+special Node or connection kind.
+_Avoid_: Mixed-belt Node, connection type
 
 **Material Profile**:
 The material input and output rates of a Node. It is calculated directly when
@@ -124,20 +153,30 @@ A Node that transfers material between remote locations using vehicles, trains,
 or drones.
 _Avoid_: Logistics category, belt, pipe
 
-**Basic Mode**:
+**Basic Plan**:
 A logical production graph that may summarize a Machine Allocation as one Node
 with aggregate material rates and a Power Profile.
-_Avoid_: Physical plan
+_Avoid_: Basic Mode, physical plan
 
-**Detailed Mode**:
+**Detailed Plan**:
 A factory plan that represents every required Buildable instance and its belt,
 pipe, and routing infrastructure explicitly, without using spatial footprints.
-_Avoid_: Basic Mode, Layout Mode
+_Avoid_: Detailed Mode, Basic Plan, Layout Plan
 
-**Layout Mode**:
-A Detailed Mode factory plan that uses actual Buildable footprints to represent
+**Layout Plan**:
+A Detailed Plan that uses actual Buildable footprints to represent
 the factory's spatial requirements.
-_Avoid_: Floor plan
+_Avoid_: Layout Mode, floor plan
+
+**Structural Error**:
+A violation of a Plan's identity, reference, endpoint, or material invariants
+that prevents the document or an edit from being accepted.
+_Avoid_: Warning, operational problem
+
+**Operational Diagnostic**:
+An analyzed shortage, overload, blockage, startup requirement, or reliability
+risk that does not invalidate the Plan document.
+_Avoid_: Structural Error, validation failure
 
 **Power Profile**:
 The power a Node consumes or produces, reported separately from its material
