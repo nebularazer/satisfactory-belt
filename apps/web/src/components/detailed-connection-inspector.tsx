@@ -16,9 +16,9 @@ export function DetailedConnectionInspector({
   editor,
 }: Readonly<{ editor: DetailedCanvasEditor }>) {
   const state = useSyncExternalStore(
-    editor.subscribe,
-    editor.getState,
-    editor.getState,
+    (listener) => editor.subscribe(listener),
+    () => editor.getState(),
+    () => editor.getState(),
   );
   const selectedId =
     state.selectedConnectionIds.length === 1

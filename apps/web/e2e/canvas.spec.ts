@@ -21,6 +21,7 @@ test("edits and restores a canvas in a real browser", async ({ page }) => {
     .getByRole("option", { name: /^Iron Plate.*Iron Ingot.*Constructor/ })
     .click();
   await expect(nodePicker).toBeHidden();
+  await canvas.click({ position: { x: 640, y: 360 } });
   await expect(emptyStateAction).toBeHidden();
 
   const bounds = await canvas.boundingBox();
@@ -60,6 +61,8 @@ test("connects material ports and persists the Material Link", async ({
   await search.fill("miner mk.1");
   await page.getByRole("option", { name: /^Miner Mk\.1.*10 recipes/ }).click();
   await page.getByRole("option", { name: "Iron Ore" }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeHidden();
+  await canvas.click({ position: { x: 640, y: 360 } });
   await page.getByRole("button", { name: "Close node details" }).click();
 
   await canvas.hover({ position: { x: 640, y: 296 } });
@@ -67,18 +70,29 @@ test("connects material ports and persists the Material Link", async ({
   await page.mouse.move(320, 296, { steps: 4 });
   await page.mouse.up();
 
-  await page.getByRole("button", { name: "Open canvas menu" }).click();
-  await page.getByRole("menuitem", { name: /Add node/ }).click();
+  await page.getByRole("button", { name: "Add node" }).click();
   await search.fill("iron ingot");
   await page
     .getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ })
     .click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeHidden();
+  await canvas.click({ position: { x: 640, y: 360 } });
   await page.getByRole("button", { name: "Close node details" }).click();
 
   await canvas.hover({ position: { x: 448, y: 360 } });
   await page.mouse.down();
   await page.mouse.move(512, 360, { steps: 4 });
   await page.mouse.up();
+
+  await expect(
+    page.getByRole("complementary", {
+      name: "Material Link details: Iron Ore",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("60 items/min")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Close Material Link details" })
+    .click();
 
   await page.getByRole("button", { name: "Open canvas menu" }).click();
   const downloadPromise = page.waitForEvent("download");
@@ -93,6 +107,46 @@ test("connects material ports and persists the Material Link", async ({
       to: expect.objectContaining({ portId: "input:Desc_OreIron_C" }),
     }),
   ]);
+});
+
+test("offers only compatible recipes after a connection is dropped on empty space", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const search = page.getByPlaceholder("Search buildings or recipes...");
+
+  await page.getByRole("button", { name: "Add your first node" }).click();
+  await search.fill("miner mk.1");
+  await page.getByRole("option", { name: /^Miner Mk\.1.*10 recipes/ }).click();
+  await page.getByRole("option", { name: "Iron Ore" }).click();
+  await canvas.click({ position: { x: 640, y: 360 } });
+  await page.getByRole("button", { name: "Close node details" }).click();
+
+  await canvas.hover({ position: { x: 768, y: 360 } });
+  await page.mouse.down();
+  await page.mouse.move(900, 450, { steps: 4 });
+  await page.mouse.up();
+
+  await expect(
+    page.getByRole("dialog", { name: "Add compatible node" }),
+  ).toBeVisible();
+  await search.fill("iron plate");
+  await expect(
+    page.getByRole("option", {
+      name: /^Iron Plate.*Iron Ingot.*Constructor/,
+    }),
+  ).toBeHidden();
+  await search.fill("iron ingot");
+  await page
+    .getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ })
+    .click();
+
+  await expect(
+    page.getByRole("complementary", {
+      name: "Material Link details: Iron Ore",
+    }),
+  ).toBeVisible();
 });
 
 test("keeps recipe search usable in a compact mobile viewport", async ({
@@ -132,12 +186,14 @@ test("keeps the canvas and floating controls aligned to a mobile viewport", asyn
   const canvas = page.getByRole("application", { name: "Infinite canvas" });
   const menu = page.getByRole("button", { name: "Open canvas menu" });
   const controls = page.getByRole("toolbar", { name: "Canvas controls" });
+  const buildTools = page.getByRole("toolbar", { name: "Build tools" });
   await expect(canvas).toBeVisible();
 
   await page.setViewportSize({ height: 915, width: 412 });
 
   await expect(menu).toBeInViewport();
   await expect(controls).toBeInViewport();
+  await expect(buildTools).toBeInViewport();
   await expect
     .poll(() =>
       canvas.evaluate((element: HTMLCanvasElement) => {

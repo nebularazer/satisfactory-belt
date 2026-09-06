@@ -1122,7 +1122,11 @@ export const InfiniteCanvas = forwardRef<
   const nodeDisplayPoolRef = useRef<NodeDisplay[]>([]);
   const worldRef = useRef<Container | null>(null);
   const marqueeRef = useRef<Graphics | null>(null);
+  const onCancelPlacementRef = useRef(onCancelPlacement);
   const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
+  const onPlaceNodeRef = useRef(onPlaceNode);
+  const onRequestAddNodeRef = useRef(onRequestAddNode);
+  const onViewportChangeRef = useRef(onViewportChange);
   const performanceSamplerRef = useRef<ReturnType<
     typeof createPerformanceSampler
   > | null>(null);
@@ -1143,7 +1147,11 @@ export const InfiniteCanvas = forwardRef<
   const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
   const showGridDotsRef = useRef(showGridDots);
 
+  onCancelPlacementRef.current = onCancelPlacement;
   onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
+  onPlaceNodeRef.current = onPlaceNode;
+  onRequestAddNodeRef.current = onRequestAddNode;
+  onViewportChangeRef.current = onViewportChange;
   performanceMetricsEnabledRef.current = performanceMetricsEnabled;
   placementActiveRef.current = placementActive;
   showGridDotsRef.current = showGridDots;
@@ -1232,7 +1240,7 @@ export const InfiniteCanvas = forwardRef<
       renderSchedulerRef.current?.request();
     }
 
-    if (previousZoom !== viewport.zoom) onViewportChange(viewport);
+    if (previousZoom !== viewport.zoom) onViewportChangeRef.current(viewport);
   };
 
   const viewportCenter = (): Point => {
@@ -1434,7 +1442,7 @@ export const InfiniteCanvas = forwardRef<
         const canvas = app.canvas;
 
         removeListeners = attachCanvasInteractions(canvas, editor, {
-          cancelPlacement: onCancelPlacement,
+          cancelPlacement: () => onCancelPlacementRef.current(),
           fit,
           getViewport: () => viewportRef.current,
           getViewportCenter: viewportCenter,
@@ -1442,8 +1450,9 @@ export const InfiniteCanvas = forwardRef<
           panBy: (delta) => {
             renderViewport(panViewport(viewportRef.current, delta));
           },
-          placeNode: onPlaceNode,
-          requestNode: onRequestAddNode,
+          placeNode: (at) => onPlaceNodeRef.current(at),
+          requestNode: (at, connectionFrom) =>
+            onRequestAddNodeRef.current(at, connectionFrom),
           resetView,
           setMarquee: (rectangle) => {
             drawMarquee(marquee, rectangle);
@@ -1567,13 +1576,7 @@ export const InfiniteCanvas = forwardRef<
         app.destroy(true, { children: true });
       }
     };
-  }, [
-    editor,
-    onCancelPlacement,
-    onPlaceNode,
-    onRequestAddNode,
-    onViewportChange,
-  ]);
+  }, [editor]);
 
   return <div className="infinite-canvas" ref={hostRef} />;
 });
