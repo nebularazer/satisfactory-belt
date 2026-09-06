@@ -30,10 +30,13 @@ export function detailedPlanFromCanvas(
 ): DetailedPlan {
   return createDetailedPlan({
     connections: document.connections,
-    nodes: document.nodes.map(({ configuration, routingRules }) => ({
-      configuration,
-      ...(routingRules ? { routingRules } : {}),
-    })),
+    nodes: document.nodes.map(
+      ({ configuration, provenance, routingRules }) => ({
+        configuration,
+        ...(provenance ? { provenance } : {}),
+        ...(routingRules ? { routingRules } : {}),
+      }),
+    ),
     tiers: document.tiers,
   });
 }
@@ -82,6 +85,12 @@ export function validateDetailedCanvasDocument(
       configuration: parseNodeConfiguration(nodeValue.configuration),
       height: nodeValue.height,
       label: nodeValue.label,
+      ...(nodeValue.provenance !== undefined
+        ? {
+            provenance:
+              nodeValue.provenance as DetailedCanvasNode["provenance"],
+          }
+        : {}),
       ...(Array.isArray(nodeValue.routingRules)
         ? {
             routingRules:
@@ -106,6 +115,9 @@ export function validateDetailedCanvasDocument(
     connections: plan.connections,
     nodes: nodes.map((node, index) => ({
       ...node,
+      ...(plan.nodes[index]?.provenance
+        ? { provenance: plan.nodes[index].provenance }
+        : {}),
       ...(plan.nodes[index]?.routingRules
         ? { routingRules: plan.nodes[index].routingRules }
         : {}),

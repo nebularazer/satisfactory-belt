@@ -22,6 +22,10 @@ describe("generated Plan canvas adapters", () => {
       document: basicPlanToCanvasDocument(generateBasicPlan(request).plan),
     });
     expect(editor.getState().document.materialLinks.length).toBeGreaterThan(0);
+    expect(
+      editor.getState().document.nodes.filter(({ provenance }) => provenance)
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it("opens a generated Detailed Plan only in the Detailed editor", () => {
@@ -31,5 +35,8 @@ describe("generated Plan canvas adapters", () => {
     expect(createDetailedCanvasEditor(document).getState().document.kind).toBe(
       "detailed",
     );
+    expect(
+      document.nodes.filter(({ provenance }) => provenance).length,
+    ).toBeGreaterThan(0);
   });
 });

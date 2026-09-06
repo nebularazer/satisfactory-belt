@@ -1,5 +1,8 @@
 import type { NodeConfiguration } from "@satisfactory-belt/production";
-import type { MaterialLink } from "@satisfactory-belt/planning";
+import type {
+  GenerationProvenance,
+  MaterialLink,
+} from "@satisfactory-belt/planning";
 
 export const CANVAS_DOCUMENT_VERSION = 4;
 
@@ -19,6 +22,7 @@ export type CanvasNode = Readonly<{
   height: number;
   label: string;
   portOrder?: CanvasPortOrder;
+  provenance?: GenerationProvenance;
   routerPriorities?: CanvasRouterPriorities;
   routerRules?: CanvasRouterRules;
   width: number;

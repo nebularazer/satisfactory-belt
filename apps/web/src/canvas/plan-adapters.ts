@@ -15,6 +15,7 @@ function canvasNode(
   configuration: CanvasNode["configuration"],
   index: number,
   position?: Readonly<{ x: number; y: number }>,
+  provenance?: CanvasNode["provenance"],
 ): CanvasNode {
   const layout = nodeCardLayout(configuration);
   const resolved = createNode(configuration);
@@ -26,6 +27,7 @@ function canvasNode(
         ? resolved.process.name
         : (findBuildable(configuration.buildableId)?.name ??
           `Node ${index + 1}`),
+    ...(provenance ? { provenance } : {}),
     width: layout.width,
     x: position?.x ?? (index % 5) * (layout.width + GRID_INTERVAL * 2),
     y:
@@ -39,7 +41,7 @@ export function basicPlanToCanvasDocument(plan: BasicPlan): CanvasDocument {
     kind: "basic",
     materialLinks: plan.materialLinks,
     nodes: plan.nodes.map((node, index) =>
-      canvasNode(node.configuration, index, node.position),
+      canvasNode(node.configuration, index, node.position, node.provenance),
     ),
     version: CANVAS_DOCUMENT_VERSION,
   };
@@ -52,7 +54,7 @@ export function detailedPlanToCanvasDocument(
     connections: plan.connections,
     kind: "detailed",
     nodes: plan.nodes.map((node, index) => ({
-      ...canvasNode(node.configuration, index),
+      ...canvasNode(node.configuration, index, undefined, node.provenance),
       ...(node.routingRules ? { routingRules: node.routingRules } : {}),
     })),
     tiers: plan.tiers,

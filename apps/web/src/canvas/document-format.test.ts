@@ -45,6 +45,24 @@ describe("canvas document format", () => {
     );
   });
 
+  it("round-trips optional generation provenance", () => {
+    const generated = {
+      ...document,
+      nodes: [
+        {
+          ...document.nodes[0]!,
+          provenance: {
+            processId: "Recipe_IronPlate_C",
+            requestOutputItemIds: ["Desc_IronPlate_C"],
+          },
+        },
+      ],
+    };
+    expect(parseCanvasDocument(serializeCanvasDocument(generated))).toEqual(
+      generated,
+    );
+  });
+
   it("round-trips router priorities", () => {
     const priorityMerger = {
       kind: "basic" as const,

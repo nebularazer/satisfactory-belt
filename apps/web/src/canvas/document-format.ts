@@ -1,6 +1,7 @@
 import { parseNodeConfiguration } from "@satisfactory-belt/production";
 import {
   createBasicPlan,
+  type GenerationProvenance,
   type MaterialEndpoint,
   type MaterialLink,
 } from "@satisfactory-belt/planning";
@@ -74,6 +75,27 @@ function parseRouterPriorities(
   );
 }
 
+function parseProvenance(value: unknown): GenerationProvenance | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.requestOutputItemIds) ||
+    !value.requestOutputItemIds.every(
+      (itemId) => typeof itemId === "string" && itemId.trim(),
+    ) ||
+    (value.processId !== undefined &&
+      (typeof value.processId !== "string" || !value.processId.trim()))
+  ) {
+    throw new Error("Node generation provenance is invalid.");
+  }
+  return {
+    ...(typeof value.processId === "string"
+      ? { processId: value.processId }
+      : {}),
+    requestOutputItemIds: value.requestOutputItemIds,
+  };
+}
+
 function parseNode(value: unknown, index: number): CanvasNode {
   if (!isRecord(value)) throw new Error(`Node ${index + 1} is not an object.`);
   if (typeof value.label !== "string") {
@@ -92,6 +114,7 @@ function parseNode(value: unknown, index: number): CanvasNode {
   }
 
   const portOrder = parsePortOrder(value.portOrder);
+  const provenance = parseProvenance(value.provenance);
   const routerPriorities = parseRouterPriorities(value.routerPriorities);
   const routerRules = parseRouterRules(value.routerRules);
   return {
@@ -99,6 +122,7 @@ function parseNode(value: unknown, index: number): CanvasNode {
     height: value.height,
     label: value.label,
     ...(portOrder ? { portOrder } : {}),
+    ...(provenance ? { provenance } : {}),
     ...(routerPriorities ? { routerPriorities } : {}),
     ...(routerRules ? { routerRules } : {}),
     width: value.width,
@@ -160,7 +184,10 @@ export function validateCanvasDocument(value: unknown): CanvasDocument {
   }
   createBasicPlan({
     materialLinks,
-    nodes: nodes.map(({ configuration }) => configuration),
+    nodes: nodes.map(({ configuration, provenance }) => ({
+      configuration,
+      ...(provenance ? { provenance } : {}),
+    })),
   });
 
   return {
