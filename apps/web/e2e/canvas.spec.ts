@@ -89,7 +89,7 @@ test("connects material ports and persists the Material Link", async ({
       name: "Material Link details: Iron Ore",
     }),
   ).toBeVisible();
-  await expect(page.getByText("60 items/min")).toBeVisible();
+  await expect(page.getByText("30 items/min")).toBeVisible();
   await page
     .getByRole("button", { name: "Close Material Link details" })
     .click();

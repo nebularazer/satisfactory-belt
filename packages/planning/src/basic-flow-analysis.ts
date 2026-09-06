@@ -21,6 +21,13 @@ type Edge = Readonly<{
   to: string;
 }>;
 
+type ResidualArc = {
+  capacity: number;
+  flow: number;
+  reverseIndex: number;
+  to: string;
+};
+
 export type BasicLinkFlow = Readonly<{
   itemId?: string;
   linkId: string;
@@ -39,6 +46,66 @@ function endpointKey(endpoint: MaterialEndpoint) {
 function endpointFromKey(key: string): MaterialEndpoint {
   const [nodeId = "", portId = ""] = key.split("\u0000");
   return { nodeId, portId };
+}
+
+function addResidualArc(
+  graph: Map<string, ResidualArc[]>,
+  from: string,
+  to: string,
+  capacity: number,
+) {
+  const fromArcs = graph.get(from) ?? [];
+  const toArcs = graph.get(to) ?? [];
+  const index = fromArcs.length;
+  fromArcs.push({
+    capacity,
+    flow: 0,
+    reverseIndex: toArcs.length,
+    to,
+  });
+  toArcs.push({ capacity: 0, flow: 0, reverseIndex: index, to: from });
+  graph.set(from, fromArcs);
+  graph.set(to, toArcs);
+  return { from, index };
+}
+
+function maximizeFlow(
+  graph: Map<string, ResidualArc[]>,
+  source: string,
+  sink: string,
+) {
+  while (true) {
+    const parent = new Map<string, { from: string; index: number }>();
+    const queue = [source];
+    parent.set(source, { from: source, index: -1 });
+    for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
+      const from = queue[queueIndex]!;
+      for (const [index, arc] of (graph.get(from) ?? []).entries()) {
+        if (parent.has(arc.to) || arc.capacity - arc.flow <= TOLERANCE) {
+          continue;
+        }
+        parent.set(arc.to, { from, index });
+        queue.push(arc.to);
+      }
+      if (parent.has(sink)) break;
+    }
+    if (!parent.has(sink)) return;
+
+    let amount = Number.POSITIVE_INFINITY;
+    for (let vertex = sink; vertex !== source;) {
+      const relation = parent.get(vertex)!;
+      const arc = graph.get(relation.from)![relation.index]!;
+      amount = Math.min(amount, arc.capacity - arc.flow);
+      vertex = relation.from;
+    }
+    for (let vertex = sink; vertex !== source;) {
+      const relation = parent.get(vertex)!;
+      const arc = graph.get(relation.from)![relation.index]!;
+      arc.flow += amount;
+      graph.get(vertex)![arc.reverseIndex]!.flow -= amount;
+      vertex = relation.from;
+    }
+  }
 }
 
 function processRate(node: Node, port: MaterialPort) {
@@ -123,6 +190,95 @@ function connectedComponents(edges: readonly Edge[]) {
   return components;
 }
 
+function feasibleLinkRates(
+  component: Readonly<{ edges: readonly Edge[]; vertices: readonly string[] }>,
+  itemId: string,
+  nodes: ReadonlyMap<string, Node>,
+  ports: ReadonlyMap<string, MaterialPort>,
+) {
+  const source = "\u0001basic-flow-source";
+  const sink = "\u0001basic-flow-sink";
+  const rates = component.vertices.map((vertex) => {
+    const endpoint = endpointFromKey(vertex);
+    const node = nodes.get(endpoint.nodeId);
+    const port = ports.get(vertex);
+    return {
+      rate:
+        node && port && port.itemId === itemId ? processRate(node, port) : 0,
+      vertex,
+    };
+  });
+  const totalSupply = rates.reduce(
+    (sum, { rate }) => sum + Math.max(0, rate),
+    0,
+  );
+  const totalDemand = rates.reduce(
+    (sum, { rate }) => sum + Math.max(0, -rate),
+    0,
+  );
+  const capacity = Math.max(totalSupply, totalDemand, 1);
+  const graph = new Map<string, ResidualArc[]>();
+  const arcByLinkId = new Map<string, { from: string; index: number }>();
+
+  for (const edge of component.edges) {
+    if (!edge.link) continue;
+    arcByLinkId.set(
+      edge.link.id,
+      addResidualArc(graph, edge.from, edge.to, capacity),
+    );
+  }
+
+  const vertices = new Set(component.vertices);
+  for (const node of [...nodes.values()].toSorted((left, right) =>
+    left.configuration.id.localeCompare(right.configuration.id),
+  )) {
+    if (node.kind === "process") continue;
+    const byMedium = Map.groupBy(
+      node.ports.filter(({ purpose }) => purpose !== "fuel"),
+      ({ medium }) => medium,
+    );
+    for (const [medium, materialPorts] of byMedium) {
+      if (medium !== "conveyor" && medium !== "pipeline") continue;
+      const inputs = materialPorts.filter(
+        ({ direction }) =>
+          direction === "input" || direction === "bidirectional",
+      );
+      const outputs = materialPorts.filter(
+        ({ direction }) =>
+          direction === "output" || direction === "bidirectional",
+      );
+      for (const input of inputs) {
+        const from = endpointKey({
+          nodeId: node.configuration.id,
+          portId: input.id,
+        });
+        if (!vertices.has(from)) continue;
+        for (const output of outputs) {
+          if (input.id === output.id) continue;
+          const to = endpointKey({
+            nodeId: node.configuration.id,
+            portId: output.id,
+          });
+          if (vertices.has(to)) addResidualArc(graph, from, to, capacity);
+        }
+      }
+    }
+  }
+
+  for (const { rate, vertex } of rates) {
+    if (rate > TOLERANCE) addResidualArc(graph, source, vertex, rate);
+    if (rate < -TOLERANCE) addResidualArc(graph, vertex, sink, -rate);
+  }
+  maximizeFlow(graph, source, sink);
+
+  return new Map(
+    [...arcByLinkId].map(([linkId, location]) => [
+      linkId,
+      Math.max(0, graph.get(location.from)![location.index]!.flow),
+    ]),
+  );
+}
+
 export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
   const validated = createBasicPlan(plan);
   const topology = analyzeBasicPlan(validated);
@@ -159,40 +315,15 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
     const itemId = itemIds[0];
     if (!itemId) continue;
 
-    const root = component.vertices[0];
-    if (!root) continue;
-    const adjacency = new Map<string, Edge[]>();
-    for (const edge of component.edges) {
-      for (const key of [edge.from, edge.to]) {
-        const values = adjacency.get(key) ?? [];
-        values.push(edge);
-        adjacency.set(key, values);
-      }
-    }
-    const parent = new Map<string, { edge: Edge; vertex: string }>();
-    const order = [root];
-    for (let index = 0; index < order.length; index += 1) {
-      const vertex = order[index]!;
-      for (const edge of (adjacency.get(vertex) ?? []).toSorted((a, b) =>
-        a.id.localeCompare(b.id),
-      )) {
-        const other = edge.from === vertex ? edge.to : edge.from;
-        if (other === root || parent.has(other)) continue;
-        parent.set(other, { edge, vertex });
-        order.push(other);
-      }
-    }
-    const balance = new Map<string, number>();
-    for (const vertex of order) {
+    const balance = component.vertices.map((vertex) => {
       const endpoint = endpointFromKey(vertex);
       const node = nodes.get(endpoint.nodeId);
       const port = ports.get(vertex);
-      balance.set(
-        vertex,
-        node && port && port.itemId === itemId ? processRate(node, port) : 0,
-      );
-    }
-    const total = [...balance.values()].reduce((sum, value) => sum + value, 0);
+      return node && port && port.itemId === itemId
+        ? processRate(node, port)
+        : 0;
+    });
+    const total = balance.reduce((sum, value) => sum + value, 0);
     if (Math.abs(total) > TOLERANCE) {
       for (const link of links) {
         diagnostics.push({
@@ -207,18 +338,6 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
           severity: "warning",
         });
       }
-      balance.set(root, (balance.get(root) ?? 0) - total);
-    }
-    for (const vertex of [...order].reverse()) {
-      const relation = parent.get(vertex);
-      if (!relation) continue;
-      const subtree = balance.get(vertex) ?? 0;
-      balance.set(
-        relation.vertex,
-        (balance.get(relation.vertex) ?? 0) + subtree,
-      );
-      if (!relation.edge.link) continue;
-      rateByLink.set(relation.edge.link.id, Math.abs(subtree));
     }
     if (component.edges.length >= component.vertices.length) {
       for (const link of links) {
@@ -232,6 +351,15 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
         });
       }
       for (const link of links) rateByLink.delete(link.id);
+    } else {
+      for (const [linkId, rate] of feasibleLinkRates(
+        component,
+        itemId,
+        nodes,
+        ports,
+      )) {
+        rateByLink.set(linkId, rate);
+      }
     }
   }
 
