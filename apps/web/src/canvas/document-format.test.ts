@@ -7,6 +7,8 @@ import {
 } from "./document-format";
 
 const document = {
+  kind: "basic" as const,
+  materialLinks: [],
   nodes: [
     {
       configuration: {
@@ -33,7 +35,7 @@ const document = {
       y: 32,
     },
   ],
-  version: 3 as const,
+  version: 4 as const,
 };
 
 describe("canvas document format", () => {
@@ -45,6 +47,8 @@ describe("canvas document format", () => {
 
   it("round-trips router priorities", () => {
     const priorityMerger = {
+      kind: "basic" as const,
+      materialLinks: [],
       nodes: [
         {
           configuration: {
@@ -64,7 +68,7 @@ describe("canvas document format", () => {
           y: 0,
         },
       ],
-      version: 3 as const,
+      version: 4 as const,
     };
 
     expect(
@@ -72,9 +76,86 @@ describe("canvas document format", () => {
     ).toEqual(priorityMerger);
   });
 
+  it("round-trips Material Links and validates their endpoints", () => {
+    const linked = {
+      kind: "basic" as const,
+      materialLinks: [
+        {
+          from: {
+            nodeId: "miner",
+            portId: "output:Desc_OreIron_C",
+          },
+          id: "ore-link",
+          to: {
+            nodeId: "smelter",
+            portId: "input:Desc_OreIron_C",
+          },
+        },
+      ],
+      nodes: [
+        {
+          configuration: {
+            buildableId: "Build_MinerMk1_C",
+            id: "miner",
+            instances: [
+              {
+                clockSpeedPercent: 100,
+                id: "miner:instance-1",
+                resourcePurity: "normal" as const,
+              },
+            ],
+            kind: "process" as const,
+            processId: "extraction:Desc_OreIron_C",
+          },
+          height: 176,
+          label: "Miner",
+          width: 192,
+          x: 0,
+          y: 0,
+        },
+        {
+          ...document.nodes[0]!,
+          configuration: {
+            buildableId: "Build_SmelterMk1_C",
+            id: "smelter",
+            instances: [
+              {
+                clockSpeedPercent: 100,
+                id: "smelter:instance-1",
+                somersloopCount: 0,
+              },
+            ],
+            kind: "process" as const,
+            processId: "Recipe_IngotIron_C",
+          },
+        },
+      ],
+      version: 4 as const,
+    };
+    expect(parseCanvasDocument(serializeCanvasDocument(linked))).toEqual(
+      linked,
+    );
+    expect(() =>
+      validateCanvasDocument({
+        ...linked,
+        materialLinks: [
+          {
+            ...linked.materialLinks[0],
+            to: { nodeId: "missing", portId: "input:ore" },
+          },
+        ],
+      }),
+    ).toThrow("does not exist");
+  });
+
+  it("migrates version 3 documents with an empty Material Link collection", () => {
+    const { kind: _kind, materialLinks: _materialLinks, ...legacy } = document;
+    expect(validateCanvasDocument({ ...legacy, version: 3 })).toEqual(document);
+  });
+
   it("rejects unknown versions without attempting migration", () => {
-    expect(() => validateCanvasDocument({ ...document, version: 4 })).toThrow(
-      "Unsupported document version: 4.",
+    expect(() => validateCanvasDocument({ ...document, version: 5 })).toThrow(
+      "Unsupported document version: 5.",
     );
     expect(() => validateCanvasDocument({ ...document, version: 1 })).toThrow(
       "Unsupported document version: 1.",
@@ -82,19 +163,19 @@ describe("canvas document format", () => {
   });
 
   it("rejects malformed and duplicate nodes", () => {
-    expect(() => validateCanvasDocument({ nodes: [{}], version: 3 })).toThrow(
+    expect(() => validateCanvasDocument({ nodes: [{}], version: 4 })).toThrow(
       "invalid label",
     );
     expect(() =>
       validateCanvasDocument({
         nodes: [{ ...document.nodes[0], configuration: null }],
-        version: 3,
+        version: 4,
       }),
     ).toThrow("Node configuration must be an object");
     expect(() =>
       validateCanvasDocument({
         nodes: [document.nodes[0], document.nodes[0]],
-        version: 3,
+        version: 4,
       }),
     ).toThrow("Node ids must be unique.");
   });

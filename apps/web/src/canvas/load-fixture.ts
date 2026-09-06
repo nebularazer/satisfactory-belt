@@ -23,6 +23,8 @@ export function createCanvasLoadFixture(nodeCount: number): CanvasDocument {
   const originY = -((rows - 1) * verticalStep) / 2;
 
   return {
+    kind: "basic",
+    materialLinks: [],
     nodes: Array.from({ length: count }, (_, index) => ({
       configuration: {
         ...configuration,

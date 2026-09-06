@@ -29,6 +29,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.3.0
         version: 5.3.0
+      '@satisfactory-belt/planning':
+        specifier: workspace:*
+        version: link:../../packages/planning
       '@satisfactory-belt/production':
         specifier: workspace:*
         version: link:../../packages/production

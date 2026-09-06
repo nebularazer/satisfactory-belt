@@ -21,8 +21,14 @@ function state(
   return {
     canRedo: false,
     canUndo: false,
-    document: { nodes, version: CANVAS_DOCUMENT_VERSION },
+    document: {
+      kind: "basic",
+      materialLinks: [],
+      nodes,
+      version: CANVAS_DOCUMENT_VERSION,
+    },
     moveDelta: null,
+    selectedLinkIds: [],
     selectedIds: [],
     snapToGrid: true,
     ...options,

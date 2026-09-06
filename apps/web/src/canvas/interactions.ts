@@ -9,12 +9,20 @@ const TOUCH_DRAG_THRESHOLD = 10;
 
 type Interaction =
   | {
+      current: Point;
+      from: Readonly<{ nodeId: string; portId: string }>;
+      kind: "connection";
+      pointerId: number;
+      target?: Readonly<{ nodeId: string; portId: string }>;
+    }
+  | {
       clearSelectionOnClick: boolean;
       kind: "pan";
       lastScreen: Point;
       moved: boolean;
       pointerId: number;
       selectNodeOnTap?: string;
+      selectLinkOnTap?: string;
       startScreen: Point;
     }
   | {
@@ -144,6 +152,17 @@ export function attachCanvasInteractions(
       }
     }
 
+    if (interaction.kind === "connection") {
+      if (!cancelled && interaction.target) {
+        editor.dispatch({
+          type: "link.create",
+          from: interaction.from,
+          to: interaction.target,
+        });
+      }
+      editor.dispatch({ type: "link.preview.cancel" });
+    }
+
     if (interaction.kind === "select") {
       host.setMarquee();
       if (cancelled) {
@@ -164,6 +183,12 @@ export function attachCanvasInteractions(
           additive: false,
           id: interaction.selectNodeOnTap,
         });
+      } else if (interaction.selectLinkOnTap) {
+        editor.dispatch({
+          type: "selection.link",
+          additive: false,
+          id: interaction.selectLinkOnTap,
+        });
       } else if (interaction.clearSelectionOnClick) {
         editor.dispatch({ type: "selection.clear" });
       }
@@ -182,6 +207,11 @@ export function attachCanvasInteractions(
     const screen = screenPoint(event);
     lastPointerScreen = screen;
     const worldPoint = screenToWorld(screen, host.getViewport());
+    const hitPort = editor.hitTestPort(
+      worldPoint,
+      12 / host.getViewport().zoom,
+    );
+    const hitLink = editor.hitTestLink(worldPoint, 8 / host.getViewport().zoom);
     const hit = editor.hitTest(worldPoint);
     const selectionModifier = event.ctrlKey || event.metaKey;
 
@@ -222,7 +252,29 @@ export function attachCanvasInteractions(
       return;
     }
 
+    if (hitPort) {
+      const from = { nodeId: hitPort.nodeId, portId: hitPort.port.id };
+      interaction = {
+        current: worldPoint,
+        from,
+        kind: "connection",
+        pointerId: event.pointerId,
+      };
+      editor.dispatch({ type: "link.preview", current: worldPoint, from });
+      canvas.dataset.cursor = "crosshair";
+      return;
+    }
+
     if (selectionModifier) {
+      if (hitLink) {
+        editor.dispatch({
+          type: "selection.link",
+          additive: true,
+          id: hitLink.id,
+        });
+        releasePointer(event.pointerId);
+        return;
+      }
       interaction = {
         baseIds: editor.getState().selectedIds,
         dragging: false,
@@ -270,6 +322,20 @@ export function attachCanvasInteractions(
       return;
     }
 
+    if (hitLink) {
+      interaction = {
+        clearSelectionOnClick: false,
+        kind: "pan",
+        lastScreen: screen,
+        moved: false,
+        pointerId: event.pointerId,
+        selectLinkOnTap: hitLink.id,
+        startScreen: screen,
+      };
+      canvas.dataset.cursor = "grabbing";
+      return;
+    }
+
     interaction = {
       clearSelectionOnClick: true,
       kind: "pan",
@@ -309,6 +375,29 @@ export function attachCanvasInteractions(
         : editor.hitTest(screenToWorld(screen, host.getViewport()))
           ? "move"
           : "grab";
+      return;
+    }
+
+    if (interaction.kind === "connection") {
+      const worldPoint = screenToWorld(screen, host.getViewport());
+      const hitPort = editor.hitTestPort(
+        worldPoint,
+        14 / host.getViewport().zoom,
+      );
+      const target =
+        hitPort &&
+        (hitPort.nodeId !== interaction.from.nodeId ||
+          hitPort.port.id !== interaction.from.portId)
+          ? { nodeId: hitPort.nodeId, portId: hitPort.port.id }
+          : undefined;
+      interaction.current = worldPoint;
+      interaction.target = target;
+      editor.dispatch({
+        type: "link.preview",
+        current: worldPoint,
+        from: interaction.from,
+        ...(target ? { target } : {}),
+      });
       return;
     }
 
@@ -482,6 +571,9 @@ export function attachCanvasInteractions(
       if (interaction?.kind === "move") {
         editor.dispatch({ type: "selection.move.cancel" });
       }
+      if (interaction?.kind === "connection") {
+        editor.dispatch({ type: "link.preview.cancel" });
+      }
       if (interaction?.kind === "select") host.setMarquee();
       if (interaction) {
         releasePointer(interaction.pointerId);
@@ -570,6 +662,9 @@ export function attachCanvasInteractions(
   return () => {
     if (interaction?.kind === "move") {
       editor.dispatch({ type: "selection.move.cancel" });
+    }
+    if (interaction?.kind === "connection") {
+      editor.dispatch({ type: "link.preview.cancel" });
     }
     if (interaction?.kind === "select") host.setMarquee();
     if (interaction) releasePointer(interaction.pointerId);

@@ -11,6 +11,102 @@ function createEditor() {
 }
 
 describe("canvas editor", () => {
+  const connectableEditor = () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 500, y: 100 },
+      node: {
+        buildableId: "Build_SmelterMk1_C",
+        kind: "process",
+        processId: "Recipe_IngotIron_C",
+      },
+    });
+    return editor;
+  };
+
+  it("creates and selects one undoable Material Link", () => {
+    const editor = connectableEditor();
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      id: "ore-link",
+      to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+    });
+    expect(editor.getState().document.materialLinks).toHaveLength(1);
+    expect(editor.getState().selectedLinkIds).toEqual(["ore-link"]);
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.materialLinks).toEqual([]);
+    editor.dispatch({ type: "history.redo" });
+    expect(editor.getState().document.materialLinks[0]?.id).toBe("ore-link");
+  });
+
+  it("cascades Node deletion to links and restores both atomically", () => {
+    const editor = connectableEditor();
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      id: "ore-link",
+      to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+    });
+    editor.dispatch({ type: "selection.node", additive: false, id: "node-1" });
+    editor.dispatch({ type: "selection.delete" });
+    expect(editor.getState().document).toMatchObject({
+      materialLinks: [],
+      nodes: [{ configuration: { id: "node-2" } }],
+    });
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.materialLinks[0]?.id).toBe("ore-link");
+    expect(editor.getState().document.nodes.map(canvasNodeId)).toEqual([
+      "node-1",
+      "node-2",
+    ]);
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+  });
+
+  it("duplicates only links internal to the selected Nodes", () => {
+    const editor = connectableEditor();
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      id: "ore-link",
+      to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+    });
+    editor.dispatch({ type: "selection.node", additive: false, id: "node-1" });
+    editor.dispatch({ type: "selection.node", additive: true, id: "node-2" });
+    editor.dispatch({ type: "selection.duplicate" });
+    expect(editor.getState().document.nodes).toHaveLength(4);
+    expect(editor.getState().document.materialLinks).toHaveLength(2);
+    expect(editor.getState().document.materialLinks[1]).toMatchObject({
+      from: { nodeId: "node-3" },
+      to: { nodeId: "node-4" },
+    });
+  });
+
+  it("rejects invalid Material Links without adding history", () => {
+    const editor = connectableEditor();
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      to: { nodeId: "node-2", portId: "output:Desc_IronIngot_C" },
+    });
+    expect(editor.getState().document.materialLinks).toEqual([]);
+    expect(editor.getState().connectionError?.code).toBe(
+      "basic.endpoint.direction",
+    );
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.nodes).toHaveLength(1);
+  });
+
   it("creates a machine with its selected recipe", () => {
     const editor = createEditor();
     editor.dispatch({
@@ -332,6 +428,8 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "document.replace",
       document: {
+        kind: "basic",
+        materialLinks: [],
         nodes: [
           {
             ...testCanvasNode("imported", 1_000, 1_000),
@@ -340,7 +438,7 @@ describe("canvas editor", () => {
             width: 50,
           },
         ],
-        version: 3,
+        version: 4,
       },
     });
 
@@ -353,6 +451,8 @@ describe("canvas editor", () => {
   it("migrates legacy passive card sizes without changing custom sizes", () => {
     const editor = createCanvasEditor({
       document: {
+        kind: "basic",
+        materialLinks: [],
         nodes: [
           testCanvasNode("legacy-full", 0, 0, {
             height: 256,
@@ -376,7 +476,7 @@ describe("canvas editor", () => {
           },
           testCanvasNode("custom", 320, 0),
         ],
-        version: 3,
+        version: 4,
       },
     });
 
@@ -404,7 +504,7 @@ describe("canvas editor", () => {
     expect(editor.getState()).toMatchObject({
       canRedo: false,
       canUndo: false,
-      document: { nodes: [], version: 3 },
+      document: { kind: "basic", materialLinks: [], nodes: [], version: 4 },
       moveDelta: null,
       selectedIds: [],
     });

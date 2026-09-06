@@ -13,6 +13,8 @@ const node = (id: string, x: number, y: number): CanvasNode =>
   testCanvasNode(id, x, y, { height: 100, width: 100 });
 
 const document = (nodes: readonly CanvasNode[]): CanvasDocument => ({
+  kind: "basic",
+  materialLinks: [],
   nodes,
   version: CANVAS_DOCUMENT_VERSION,
 });

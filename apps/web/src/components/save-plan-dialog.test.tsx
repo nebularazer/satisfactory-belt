@@ -16,7 +16,12 @@ import type { CanvasDocument } from "@/canvas/document";
 
 import { SavePlanDialog } from "./save-plan-dialog";
 
-const document: CanvasDocument = { nodes: [], version: 3 };
+const document: CanvasDocument = {
+  kind: "basic",
+  materialLinks: [],
+  nodes: [],
+  version: 4,
+};
 const existingSave: SavedCanvasDocument = {
   document,
   id: "existing-id",

@@ -143,6 +143,57 @@ function createHarness(
 }
 
 describe("canvas interactions", () => {
+  it("creates a Material Link by dragging between ports", () => {
+    const { editor, pointer } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 500, y: 100 },
+      node: {
+        buildableId: "Build_SmelterMk1_C",
+        kind: "process",
+        processId: "Recipe_IngotIron_C",
+      },
+    });
+
+    pointer("pointerdown", 224, 96);
+    pointer("pointermove", 368, 96);
+    pointer("pointerup", 368, 96);
+
+    expect(editor.getState().document.materialLinks).toEqual([
+      expect.objectContaining({
+        from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+        to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+      }),
+    ]);
+  });
+
+  it("cancels a Material Link preview without changing history", () => {
+    const { editor, key, pointer } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    pointer("pointerdown", 224, 96);
+    pointer("pointermove", 300, 200);
+    key("Escape");
+    expect(editor.getState().connectionPreview).toBeUndefined();
+    expect(editor.getState().document.materialLinks).toEqual([]);
+  });
+
   it("selects with primary click and toggles with Ctrl/Cmd-click", () => {
     const { editor, pointer } = createHarness();
     editor.dispatch({
