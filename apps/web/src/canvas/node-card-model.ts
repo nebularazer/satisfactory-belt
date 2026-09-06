@@ -15,7 +15,12 @@ import {
 
 import type { CanvasNode } from "./document";
 
-export type NodeCardPortStatus = "blocked" | "neutral" | "warning";
+export type NodeCardPortStatus =
+  | "blocked"
+  | "compatible"
+  | "neutral"
+  | "source"
+  | "warning";
 export type NodeCardPortDirection = "bidirectional" | "input" | "output";
 
 export type NodeCardRuntime = Readonly<{

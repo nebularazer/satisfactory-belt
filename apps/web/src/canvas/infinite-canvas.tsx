@@ -18,6 +18,7 @@ import type {
   CanvasEditorChange,
   CanvasEditorState,
 } from "./editor";
+import { canvasConnectionTargets } from "./connection-compatibility";
 import {
   canvasNodeId,
   type CanvasMaterialLink,
@@ -86,10 +87,16 @@ export type InfiniteCanvasHandle = {
 
 type InfiniteCanvasProps = {
   editor: CanvasEditor;
+  onCancelPlacement: () => void;
   onPerformanceMetricsChange: (metrics: CanvasPerformanceMetrics) => void;
-  onRequestAddNode: (at: Point) => void;
+  onPlaceNode: (at: Point) => void;
+  onRequestAddNode: (
+    at: Point,
+    connectionFrom?: Readonly<{ nodeId: string; portId: string }>,
+  ) => void;
   onViewportChange: (viewport: Viewport) => void;
   performanceMetricsEnabled: boolean;
+  placementActive: boolean;
   showGridDots: boolean;
 };
 
@@ -248,6 +255,8 @@ function renderedImageUrl(
 function statusColor(status: NodeCardPortStatus) {
   if (status === "warning") return BLUEPRINT_COLORS.warning;
   if (status === "blocked") return BLUEPRINT_COLORS.blocked;
+  if (status === "compatible") return BLUEPRINT_COLORS.output;
+  if (status === "source") return BLUEPRINT_COLORS.selected;
   return undefined;
 }
 
@@ -770,6 +779,17 @@ function syncDocument(
     ]),
     ({ endpoint }) => endpoint.nodeId,
   );
+  const connectionTargets = state.connectionPreview
+    ? new Map(
+        canvasConnectionTargets(
+          state.document,
+          state.connectionPreview.from,
+        ).map((target) => [
+          `${target.endpoint.nodeId}\u0000${target.endpoint.portId}`,
+          target,
+        ]),
+      )
+    : undefined;
 
   for (const [id, display] of displays) {
     if (visibleIds.has(id)) continue;
@@ -781,16 +801,43 @@ function syncDocument(
     const id = canvasNodeId(node);
     const selected = selectedIds.has(id);
     const incidentLinks = linksByNodeId.get(id) ?? [];
-    const runtimeKey = incidentLinks
-      .map(({ endpoint, link }) => `${link.id}:${endpoint.portId}`)
+    const targetStates = materialPortGeometry(node).flatMap(({ port }) => {
+      const target = connectionTargets?.get(`${id}\u0000${port.id}`);
+      return target ? [`${port.id}:${target.status}`] : [];
+    });
+    const runtimeKey = [
+      ...incidentLinks.map(
+        ({ endpoint, link }) => `${link.id}:${endpoint.portId}`,
+      ),
+      ...targetStates,
+    ]
       .toSorted()
       .join("|");
+    const connectedPortIds = new Set(
+      incidentLinks.map(({ endpoint }) => endpoint.portId),
+    );
     const runtime: NodeCardRuntime = {
       ports: Object.fromEntries(
-        incidentLinks.map(({ endpoint }) => [
-          endpoint.portId,
-          { connected: true },
-        ]),
+        materialPortGeometry(node).map(({ port }) => {
+          const target = connectionTargets?.get(`${id}\u0000${port.id}`);
+          const status =
+            target?.status === "compatible"
+              ? "compatible"
+              : target?.status === "source"
+                ? "source"
+                : target?.status === "occupied"
+                  ? "blocked"
+                  : target?.status === "invalid"
+                    ? "warning"
+                    : undefined;
+          return [
+            port.id,
+            {
+              connected: connectedPortIds.has(port.id),
+              ...(status ? { status } : {}),
+            },
+          ];
+        }),
       ),
     };
     let display = displays.get(id);
@@ -959,6 +1006,13 @@ function drawMaterialLinks(
 
   const preview = state.connectionPreview;
   if (!preview) return;
+  const previewTargetStatus = preview.target
+    ? canvasConnectionTargets(state.document, preview.from).find(
+        ({ endpoint }) =>
+          endpoint.nodeId === preview.target?.nodeId &&
+          endpoint.portId === preview.target.portId,
+      )?.status
+    : undefined;
   const fromNode = effectiveDocument.nodes.find(
     ({ configuration }) => configuration.id === preview.from.nodeId,
   );
@@ -985,9 +1039,12 @@ function drawMaterialLinks(
     .bezierCurveTo(from.x + bend, from.y, to.x - bend, to.y, to.x, to.y)
     .stroke({
       alpha: 0.9,
-      color: preview.target
-        ? BLUEPRINT_COLORS.output
-        : BLUEPRINT_COLORS.warning,
+      color:
+        previewTargetStatus === "compatible"
+          ? BLUEPRINT_COLORS.output
+          : previewTargetStatus === "occupied"
+            ? BLUEPRINT_COLORS.blocked
+            : BLUEPRINT_COLORS.warning,
       width: 3 / zoom,
     });
 }
@@ -998,10 +1055,13 @@ export const InfiniteCanvas = forwardRef<
 >(function InfiniteCanvas(
   {
     editor,
+    onCancelPlacement,
     onPerformanceMetricsChange,
+    onPlaceNode,
     onRequestAddNode,
     onViewportChange,
     performanceMetricsEnabled,
+    placementActive,
     showGridDots,
   },
   ref,
@@ -1021,6 +1081,7 @@ export const InfiniteCanvas = forwardRef<
     typeof createPerformanceSampler
   > | null>(null);
   const performanceMetricsEnabledRef = useRef(performanceMetricsEnabled);
+  const placementActiveRef = useRef(placementActive);
   const renderSchedulerRef = useRef<ReturnType<
     typeof createRenderScheduler
   > | null>(null);
@@ -1038,6 +1099,7 @@ export const InfiniteCanvas = forwardRef<
 
   onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
   performanceMetricsEnabledRef.current = performanceMetricsEnabled;
+  placementActiveRef.current = placementActive;
   showGridDotsRef.current = showGridDots;
 
   const requestImage: RequestImage = (imageUrl, priority) => {
@@ -1322,12 +1384,15 @@ export const InfiniteCanvas = forwardRef<
         const canvas = app.canvas;
 
         removeListeners = attachCanvasInteractions(canvas, editor, {
+          cancelPlacement: onCancelPlacement,
           fit,
           getViewport: () => viewportRef.current,
           getViewportCenter: viewportCenter,
+          isPlacementActive: () => placementActiveRef.current,
           panBy: (delta) => {
             renderViewport(panViewport(viewportRef.current, delta));
           },
+          placeNode: onPlaceNode,
           requestNode: onRequestAddNode,
           resetView,
           setMarquee: (rectangle) => {
@@ -1383,7 +1448,7 @@ export const InfiniteCanvas = forwardRef<
         unsubscribeEditor = editor.subscribe((change) => {
           const updateStartedAt = performance.now();
           let needsRender: boolean;
-          if (change.kind === "document") {
+          if (change.kind === "document" || change.kind === "settings") {
             syncVisibleScene();
             needsRender = true;
           } else {
@@ -1450,7 +1515,13 @@ export const InfiniteCanvas = forwardRef<
         app.destroy(true, { children: true });
       }
     };
-  }, [editor, onRequestAddNode, onViewportChange]);
+  }, [
+    editor,
+    onCancelPlacement,
+    onPlaceNode,
+    onRequestAddNode,
+    onViewportChange,
+  ]);
 
   return <div className="infinite-canvas" ref={hostRef} />;
 });

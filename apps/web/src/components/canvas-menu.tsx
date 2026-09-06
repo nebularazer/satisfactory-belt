@@ -11,7 +11,6 @@ import {
   Menu,
   Monitor,
   Moon,
-  Plus,
   RotateCcw,
   Save,
   SaveAll,
@@ -43,7 +42,6 @@ type CanvasMenuProps = {
   canFitAll: boolean;
   canFitSelection: boolean;
   canResetCanvas: boolean;
-  onAddNode: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onExport: () => void;
@@ -70,7 +68,6 @@ export function CanvasMenu({
   canFitAll,
   canFitSelection,
   canResetCanvas,
-  onAddNode,
   onDelete,
   onDuplicate,
   onExport,
@@ -112,11 +109,6 @@ export function CanvasMenu({
       >
         <DropdownMenuGroup>
           <DropdownMenuLabel>Canvas</DropdownMenuLabel>
-          <DropdownMenuItem onClick={onAddNode}>
-            <Plus aria-hidden="true" />
-            Add node
-            <DropdownMenuShortcut>N</DropdownMenuShortcut>
-          </DropdownMenuItem>
           <DropdownMenuItem disabled={!canDuplicate} onClick={onDuplicate}>
             <CopyPlus aria-hidden="true" />
             Duplicate selection
@@ -244,13 +236,15 @@ export function CanvasMenu({
         <div className="px-2 py-1.5 text-xs leading-5 text-muted-foreground">
           Drag empty space to pan · Scroll to zoom
           <br />
-          Click a node to select · Drag it to move
+          Drag a node to select and move it
           <br />
           Ctrl/Cmd + click toggles selection
           <br />
           Ctrl/Cmd + drag creates a selection box
           <br />
           Arrow keys move selected nodes · 1/2 fits content
+          <br />
+          Tap or drag between Material Ports to connect
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

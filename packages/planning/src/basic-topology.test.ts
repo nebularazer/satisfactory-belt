@@ -7,6 +7,7 @@ import {
   connectMaterialPorts,
   createBasicPlan,
   disconnectMaterialLink,
+  inspectMaterialConnectionTargets,
 } from "./index";
 
 function node(configuration: Parameters<typeof createNode>[0]) {
@@ -27,6 +28,38 @@ const smelter = node({
 });
 
 describe("Basic topology", () => {
+  it("classifies deliberate connection targets with stable reasons", () => {
+    const plan = createBasicPlan({ nodes: [miner, smelter] });
+    const targets = inspectMaterialConnectionTargets(plan, {
+      nodeId: "miner",
+      portId: "output:Desc_OreIron_C",
+    });
+
+    expect(
+      targets.find(
+        ({ endpoint }) =>
+          endpoint.nodeId === "smelter" &&
+          endpoint.portId === "input:Desc_OreIron_C",
+      ),
+    ).toEqual({
+      endpoint: {
+        nodeId: "smelter",
+        portId: "input:Desc_OreIron_C",
+      },
+      status: "compatible",
+    });
+    expect(
+      targets.find(
+        ({ endpoint }) =>
+          endpoint.nodeId === "smelter" &&
+          endpoint.portId === "output:Desc_IronIngot_C",
+      ),
+    ).toMatchObject({
+      error: { code: "basic.endpoint.direction" },
+      status: "invalid",
+    });
+  });
+
   it("connects, analyzes, and disconnects Material Ports through one interface", () => {
     const empty = createBasicPlan({ nodes: [miner, smelter] });
     const connected = connectMaterialPorts(empty, {

@@ -4,7 +4,9 @@ export {
   connectMaterialPorts,
   createBasicPlan,
   disconnectMaterialLink,
+  inspectMaterialConnectionTargets,
   type BasicPlanErrorCode,
+  type MaterialConnectionTarget,
 } from "./basic-topology";
 export {
   createDetailedPlan,

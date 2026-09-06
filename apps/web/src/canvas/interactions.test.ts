@@ -41,6 +41,8 @@ function createHarness(
     at: Point;
     connectionFrom?: Readonly<{ nodeId: string; portId: string }>;
   }> = [];
+  let placementActive = false;
+  const placements: Point[] = [];
   const zooms: Array<{ anchor: Point; factor: number }> = [];
 
   canvas.tabIndex = 0;
@@ -75,11 +77,19 @@ function createHarness(
   });
 
   const host: CanvasInteractionHost = {
+    cancelPlacement: () => {
+      placementActive = false;
+    },
     fit: (scope) => fits.push(scope),
     getViewport: () => viewport,
     getViewportCenter: () => ({ x: 500, y: 400 }),
+    isPlacementActive: () => placementActive,
     panBy: (delta) => {
       viewport = panViewport(viewport, delta);
+    },
+    placeNode: (at) => {
+      placements.push(at);
+      placementActive = false;
     },
     requestNode: (at, connectionFrom) =>
       nodeRequests.push({
@@ -144,6 +154,10 @@ function createHarness(
     marquees,
     nodeRequests,
     pointer,
+    placements,
+    setPlacementActive: (active: boolean) => {
+      placementActive = active;
+    },
     viewport: () => viewport,
     zooms,
   };
@@ -451,6 +465,18 @@ describe("canvas interactions", () => {
     key("n");
 
     expect(nodeRequests).toEqual([{ at: { x: 100, y: 100 } }]);
+  });
+
+  it("places a pending node with the next deliberate canvas tap", () => {
+    const { placements, pointer, setPlacementActive } = createHarness({
+      viewport: { x: 100, y: 50, zoom: 2 },
+    });
+    setPlacementActive(true);
+
+    pointer("pointerdown", 300, 250, { pointerType: "touch" });
+    pointer("pointerup", 300, 250, { pointerType: "touch" });
+
+    expect(placements).toEqual([{ x: 100, y: 100 }]);
   });
 
   it("fits all nodes when empty space is double-clicked", () => {

@@ -12,8 +12,11 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { toast } from "sonner";
+import { nodeChoicesForBuildable } from "@satisfactory-belt/production";
+import type { MaterialEndpoint } from "@satisfactory-belt/planning";
 
 import { runCanvasBenchmark } from "@/canvas/benchmark";
+import { compatibleTemplatePortIds } from "@/canvas/connection-compatibility";
 import {
   parseCanvasDocument,
   serializeCanvasDocument,
@@ -40,6 +43,7 @@ import {
 } from "@/canvas/preferences";
 import type { Viewport } from "@/canvas/viewport";
 import { CanvasContextMenu } from "@/components/canvas-context-menu";
+import { CanvasBuildBar } from "@/components/canvas-build-bar";
 import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
@@ -90,6 +94,18 @@ type CanvasWorkspaceProps = {
   initialDocument?: CanvasDocument;
   storage: CanvasDocumentStorage;
 };
+
+type PendingNodeRequest = Readonly<{
+  at?: Point;
+  connectionFrom?: MaterialEndpoint;
+  placementAfterPick: boolean;
+}>;
+
+function quickBuildSelection(buildableId: string): NodePickerSelection {
+  const choice = nodeChoicesForBuildable(buildableId)[0];
+  if (!choice) throw new Error(`No Node choice exists for ${buildableId}.`);
+  return { label: choice.label, node: choice.template };
+}
 
 function CanvasWorkspace({
   autosaveEnabled,
@@ -160,7 +176,10 @@ function CanvasWorkspace({
     readBooleanPreference(CANVAS_PREFERENCES.showGridDots, true),
   );
   const [zoom, setZoom] = useState(1);
-  const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
+  const [pendingNode, setPendingNode] = useState<PendingNodeRequest | null>(
+    null,
+  );
+  const [placement, setPlacement] = useState<NodePickerSelection | null>(null);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
@@ -236,9 +255,20 @@ function CanvasWorkspace({
     setShowGridDots(enabled);
     writeBooleanPreference(CANVAS_PREFERENCES.showGridDots, enabled);
   };
-  const requestNodeAt = useCallback((at: Point) => {
+  const requestNodeAt = useCallback(
+    (at: Point, connectionFrom?: MaterialEndpoint) => {
+      preloadNodePicker();
+      setPendingNode({
+        at,
+        ...(connectionFrom ? { connectionFrom } : {}),
+        placementAfterPick: false,
+      });
+    },
+    [],
+  );
+  const requestNodePlacement = useCallback(() => {
     preloadNodePicker();
-    setPendingNode({ at });
+    setPendingNode({ placementAfterPick: true });
   }, []);
 
   const openSavePlan = useCallback(() => {
@@ -293,14 +323,60 @@ function CanvasWorkspace({
 
   const addPendingNode = (selection: NodePickerSelection) => {
     if (!pendingNode) return;
+    if (pendingNode.placementAfterPick) {
+      setPlacement(selection);
+      setPendingNode(null);
+      return;
+    }
+    if (!pendingNode.at) return;
+    const compatiblePortIds = pendingNode.connectionFrom
+      ? compatibleTemplatePortIds(
+          editor.getState().document,
+          pendingNode.connectionFrom,
+          selection.node,
+        )
+      : [];
     editor.dispatch({
       type: "node.create",
       at: pendingNode.at,
       label: selection.label,
       node: selection.node,
     });
+    const createdNodeId = editor.getState().selectedIds[0];
+    if (pendingNode.connectionFrom && createdNodeId && compatiblePortIds[0]) {
+      editor.dispatch({
+        type: "link.create",
+        from: pendingNode.connectionFrom,
+        to: { nodeId: createdNodeId, portId: compatiblePortIds[0] },
+      });
+    }
     setPendingNode(null);
   };
+
+  const allowPendingSelection = useCallback(
+    (selection: NodePickerSelection) =>
+      !pendingNode?.connectionFrom ||
+      compatibleTemplatePortIds(
+        editor.getState().document,
+        pendingNode.connectionFrom,
+        selection.node,
+      ).length > 0,
+    [editor, pendingNode?.connectionFrom],
+  );
+
+  const placePendingNode = useCallback(
+    (at: Point) => {
+      if (!placement) return;
+      editor.dispatch({
+        type: "node.create",
+        at,
+        label: placement.label,
+        node: placement.node,
+      });
+      setPlacement(null);
+    },
+    [editor, placement],
+  );
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const canvas = canvasRef.current;
@@ -384,9 +460,6 @@ function CanvasWorkspace({
   const deleteSelection = () => editor.dispatch({ type: "selection.delete" });
   const duplicateSelection = () =>
     editor.dispatch({ type: "selection.duplicate" });
-  const requestNodeAtCenter = () => {
-    requestNodeAt(canvasRef.current?.getViewportCenter() ?? { x: 0, y: 0 });
-  };
   const loadDocument = (save: SavedCanvasDocument) => {
     selectActiveSave(save);
     editor.dispatch({ type: "document.replace", document: save.document });
@@ -419,10 +492,13 @@ function CanvasWorkspace({
           <Suspense fallback={<div className="infinite-canvas" />}>
             <InfiniteCanvas
               editor={editor}
+              onCancelPlacement={() => setPlacement(null)}
               onPerformanceMetricsChange={handlePerformanceMetricsChange}
+              onPlaceNode={placePendingNode}
               onRequestAddNode={requestNodeAt}
               onViewportChange={handleViewportChange}
               performanceMetricsEnabled={showPerformance}
+              placementActive={placement !== null}
               ref={canvasRef}
               showGridDots={showGridDots}
             />
@@ -443,7 +519,6 @@ function CanvasWorkspace({
               editorState.canUndo ||
               editorState.canRedo
             }
-            onAddNode={requestNodeAtCenter}
             onDelete={deleteSelection}
             onDuplicate={duplicateSelection}
             onExport={exportDocument}
@@ -467,9 +542,27 @@ function CanvasWorkspace({
           />
         </div>
 
+        <div className="pointer-events-auto absolute top-3 left-1/2 max-w-[calc(100vw-5.5rem)] -translate-x-1/2 sm:top-4">
+          <CanvasBuildBar
+            onAddMerger={() =>
+              setPlacement(
+                quickBuildSelection("Build_ConveyorAttachmentMerger_C"),
+              )
+            }
+            onAddNode={requestNodePlacement}
+            onAddSplitter={() =>
+              setPlacement(
+                quickBuildSelection("Build_ConveyorAttachmentSplitter_C"),
+              )
+            }
+            onCancelPlacement={() => setPlacement(null)}
+            placementLabel={placement?.label}
+          />
+        </div>
+
         {editorState.nodeCount === 0 && (
           <CanvasEmptyState
-            onAddNode={requestNodeAtCenter}
+            onAddNode={requestNodePlacement}
             onImport={() => importInputRef.current?.click()}
             onManagePlans={() => setManagePlansOpen(true)}
           />
@@ -513,6 +606,9 @@ function CanvasWorkspace({
       />
       <Suspense fallback={null}>
         <NodePicker
+          allowSelection={
+            pendingNode?.connectionFrom ? allowPendingSelection : undefined
+          }
           onOpenChange={(open) => {
             if (!open) setPendingNode(null);
           }}

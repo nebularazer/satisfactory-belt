@@ -35,6 +35,34 @@ afterEach(cleanup);
 beforeEach(() => localStorage.clear());
 
 describe("NodePicker", () => {
+  it("limits a dropped Material Link picker to compatible selections", () => {
+    render(
+      <NodePicker
+        allowSelection={(selection) =>
+          selection.node.kind === "process" &&
+          selection.node.processId === "Recipe_IngotIron_C"
+        }
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Add compatible node" }),
+    ).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "iron ingot" } },
+    );
+    expect(
+      screen.getByRole("option", { name: /^Iron Ingot/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /^Pure Iron Ingot/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps recipes out of the initial building browser", () => {
     render(
       <NodePicker

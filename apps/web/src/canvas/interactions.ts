@@ -47,10 +47,13 @@ type Interaction =
     };
 
 export type CanvasInteractionHost = Readonly<{
+  cancelPlacement: () => void;
   fit: (scope: "all" | "selection") => void;
   getViewport: () => Viewport;
   getViewportCenter: () => Point;
+  isPlacementActive: () => boolean;
   panBy: (delta: Point) => void;
+  placeNode: (at: Point) => void;
   requestNode: (
     at: Point,
     connectionFrom?: Readonly<{ nodeId: string; portId: string }>,
@@ -280,6 +283,13 @@ export function attachCanvasInteractions(
       return;
     }
 
+    if (host.isPlacementActive()) {
+      host.placeNode(worldPoint);
+      releasePointer(event.pointerId);
+      canvas.dataset.cursor = "grab";
+      return;
+    }
+
     if (hitPort) {
       const from = { nodeId: hitPort.nodeId, portId: hitPort.port.id };
       if (armedConnection) {
@@ -414,8 +424,7 @@ export function attachCanvasInteractions(
         const worldPoint = screenToWorld(screen, host.getViewport());
         const hitPort = editor.hitTestPort(
           worldPoint,
-          (event.pointerType === "touch" ? 24 : 14) /
-            host.getViewport().zoom,
+          (event.pointerType === "touch" ? 24 : 14) / host.getViewport().zoom,
         );
         const target =
           hitPort &&
@@ -433,30 +442,27 @@ export function attachCanvasInteractions(
         return;
       }
       const selectionModifier = event.ctrlKey || event.metaKey;
-      canvas.dataset.cursor = selectionModifier
+      canvas.dataset.cursor = host.isPlacementActive()
         ? "crosshair"
-        : editor.hitTest(screenToWorld(screen, host.getViewport()))
-          ? "move"
-          : "grab";
+        : selectionModifier
+          ? "crosshair"
+          : editor.hitTest(screenToWorld(screen, host.getViewport()))
+            ? "move"
+            : "grab";
       return;
     }
 
     if (interaction.kind === "connection") {
       if (
         !interaction.moved &&
-        passedDragThreshold(
-          interaction.startScreen,
-          screen,
-          event.pointerType,
-        )
+        passedDragThreshold(interaction.startScreen, screen, event.pointerType)
       ) {
         interaction.moved = true;
       }
       const worldPoint = screenToWorld(screen, host.getViewport());
       const hitPort = editor.hitTestPort(
         worldPoint,
-        (event.pointerType === "touch" ? 24 : 14) /
-          host.getViewport().zoom,
+        (event.pointerType === "touch" ? 24 : 14) / host.getViewport().zoom,
       );
       const target =
         hitPort &&
@@ -657,6 +663,11 @@ export function attachCanvasInteractions(
       }
       if (armedConnection) {
         cancelConnection();
+        canvas.dataset.cursor = "grab";
+        return;
+      }
+      if (host.isPlacementActive()) {
+        host.cancelPlacement();
         canvas.dataset.cursor = "grab";
         return;
       }
