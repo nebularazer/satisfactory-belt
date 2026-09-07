@@ -1254,11 +1254,40 @@ export function NodePicker({
     );
   };
 
+  const moveActiveRecipe = (direction: -1 | 1) => {
+    const recipeEntries = selectableEntries.filter(
+      ({ option }) =>
+        option.type === "recipe" || option.type === "extractor-resource",
+    );
+    if (recipeEntries.length === 0) return false;
+    const currentIndex = recipeEntries.findIndex(
+      ({ option }) => option.key === activeKey,
+    );
+    const targetIndex =
+      currentIndex < 0
+        ? direction > 0
+          ? 0
+          : recipeEntries.length - 1
+        : Math.min(
+            recipeEntries.length - 1,
+            Math.max(0, currentIndex + direction),
+          );
+    const target = recipeEntries[targetIndex];
+    if (!target) return false;
+    activateOption(selectableEntries.indexOf(target));
+    return true;
+  };
+
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       moveActive(event.key === "ArrowDown" ? 1 : -1);
+    } else if (
+      (event.key === "ArrowRight" || event.key === "ArrowLeft") &&
+      moveActiveRecipe(event.key === "ArrowRight" ? 1 : -1)
+    ) {
+      event.preventDefault();
     } else if (event.key === "Enter" && activeOption) {
       event.preventDefault();
       selectOption(activeOption);

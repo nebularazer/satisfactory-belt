@@ -473,6 +473,31 @@ describe("NodePicker", () => {
     ).toBeInTheDocument();
   });
 
+  it("moves between available recipes with the horizontal arrow keys", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("option", { name: /Constructor 48 recipes/ }),
+    );
+    const search = screen.getByPlaceholderText("Search Constructor recipes...");
+    const firstRecipe = search.getAttribute("aria-activedescendant");
+    expect(firstRecipe).toContain("recipe-");
+
+    fireEvent.keyDown(search, { key: "ArrowRight" });
+    const secondRecipe = search.getAttribute("aria-activedescendant");
+    expect(secondRecipe).toContain("recipe-");
+    expect(secondRecipe).not.toBe(firstRecipe);
+
+    fireEvent.keyDown(search, { key: "ArrowLeft" });
+    expect(search).toHaveAttribute("aria-activedescendant", firstRecipe);
+  });
+
   it("shows logistics as a quick-add grid", () => {
     render(
       <NodePicker
