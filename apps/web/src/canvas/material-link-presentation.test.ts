@@ -150,4 +150,82 @@ describe("Material Link presentation", () => {
       { itemId: "Desc_IronIngot_C", ratePerMinute: 10 },
     );
   });
+
+  it("presents parallel Splitter-to-Merger links as resolved", () => {
+    let id = 0;
+    const editor = createCanvasEditor({ idFactory: () => `node-${++id}` });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 0, y: 0 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 400, y: 0 },
+      node: {
+        buildableId: "Build_ConveyorAttachmentSplitter_C",
+        kind: "router",
+      },
+    });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 800, y: 0 },
+      node: {
+        buildableId: "Build_ConveyorAttachmentMerger_C",
+        kind: "router",
+      },
+    });
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      id: "into-splitter",
+      to: { nodeId: "node-2", portId: "input:1" },
+    });
+    for (const index of [1, 2, 3]) {
+      editor.dispatch({
+        type: "link.create",
+        from: { nodeId: "node-2", portId: `output:${index}` },
+        id: `parallel-${index}`,
+        to: { nodeId: "node-3", portId: `input:${index}` },
+      });
+    }
+
+    const presentation = presentMaterialFlow(editor.getState().document);
+    expect(
+      presentation.links
+        .filter(({ id }) => id.startsWith("parallel-"))
+        .map(({ diagnostics, label, ratePerMinute, state }) => ({
+          diagnostics: diagnostics.map(({ code }) => code),
+          label,
+          ratePerMinute,
+          state,
+        })),
+    ).toEqual([
+      {
+        diagnostics: ["basic.network.surplus"],
+        label: "20",
+        ratePerMinute: 20,
+        state: "surplus",
+      },
+      {
+        diagnostics: ["basic.network.surplus"],
+        label: "20",
+        ratePerMinute: 20,
+        state: "surplus",
+      },
+      {
+        diagnostics: ["basic.network.surplus"],
+        label: "20",
+        ratePerMinute: 20,
+        state: "surplus",
+      },
+    ]);
+    expect(presentation.port({ nodeId: "node-3", portId: "output:1" })).toEqual(
+      { itemId: "Desc_OreIron_C", ratePerMinute: 60 },
+    );
+  });
 });

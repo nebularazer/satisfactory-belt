@@ -351,6 +351,128 @@ describe("Basic flow analysis", () => {
     });
   });
 
+  it("resolves parallel Splitter-to-Merger links without calling them feedback", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
+          id: "into-splitter",
+          to: { nodeId: "splitter", portId: "input:1" },
+        },
+        ...[1, 2, 3].map((index) => ({
+          from: { nodeId: "splitter", portId: `output:${index}` },
+          id: `parallel-${index}`,
+          to: { nodeId: "merger", portId: `input:${index}` },
+        })),
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_MinerMk1_C",
+          id: "miner",
+          kind: "process",
+          processId: "extraction:Desc_OreIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentMerger_C",
+          id: "merger",
+          kind: "router",
+        }),
+      ],
+    });
+
+    const analysis = analyzeBasicFlows(plan);
+    expect(
+      Object.fromEntries(
+        analysis.linkFlows.map(({ linkId, ratePerMinute }) => [
+          linkId,
+          ratePerMinute,
+        ]),
+      ),
+    ).toEqual({
+      "into-splitter": 60,
+      "parallel-1": 20,
+      "parallel-2": 20,
+      "parallel-3": 20,
+    });
+    expect(
+      Object.fromEntries(
+        analysis.portFlows
+          .filter(({ endpoint }) => endpoint.nodeId === "splitter")
+          .map(({ endpoint, ratePerMinute }) => [
+            endpoint.portId,
+            ratePerMinute,
+          ]),
+      ),
+    ).toEqual({
+      "input:1": 60,
+      "output:1": 20,
+      "output:2": 20,
+      "output:3": 20,
+    });
+    expect(
+      analysis.portFlows.find(
+        ({ endpoint }) =>
+          endpoint.nodeId === "merger" && endpoint.portId === "output:1",
+      )?.ratePerMinute,
+    ).toBe(60);
+    expect(
+      analysis.diagnostics.some(
+        ({ code }) => code === "basic.network.feedback",
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps actual directed feedback unresolved", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "splitter", portId: "output:1" },
+          id: "forward",
+          to: { nodeId: "merger", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "merger", portId: "output:1" },
+          id: "feedback",
+          to: { nodeId: "splitter", portId: "input:1" },
+        },
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter",
+          itemId: "Desc_OreIron_C",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentMerger_C",
+          id: "merger",
+          itemId: "Desc_OreIron_C",
+          kind: "router",
+        }),
+      ],
+    });
+
+    const analysis = analyzeBasicFlows(plan);
+    expect(analysis.linkFlows).toEqual([
+      {
+        itemId: "Desc_OreIron_C",
+        linkId: "forward",
+      },
+      {
+        itemId: "Desc_OreIron_C",
+        linkId: "feedback",
+      },
+    ]);
+    expect(analysis.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "basic.network.feedback" }),
+    );
+  });
+
   it("caps a Material Link at the supply available to an undersupplied consumer", () => {
     const plan = createBasicPlan({
       materialLinks: [

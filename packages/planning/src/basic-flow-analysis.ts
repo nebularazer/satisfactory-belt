@@ -215,6 +215,51 @@ function connectedComponents(edges: readonly Edge[]) {
   return components;
 }
 
+function hasDirectedNodeCycle(links: readonly MaterialLink[]) {
+  const adjacency = new Map<string, Set<string>>();
+  for (const link of links) {
+    const targets = adjacency.get(link.from.nodeId) ?? new Set<string>();
+    targets.add(link.to.nodeId);
+    adjacency.set(link.from.nodeId, targets);
+    if (!adjacency.has(link.to.nodeId)) {
+      adjacency.set(link.to.nodeId, new Set());
+    }
+  }
+  const state = new Map<string, "visiting" | "visited">();
+  const visit = (nodeId: string): boolean => {
+    const current = state.get(nodeId);
+    if (current === "visiting") return true;
+    if (current === "visited") return false;
+    state.set(nodeId, "visiting");
+    for (const target of adjacency.get(nodeId) ?? []) {
+      if (visit(target)) return true;
+    }
+    state.set(nodeId, "visited");
+    return false;
+  };
+  return [...adjacency.keys()].some(visit);
+}
+
+function balanceParallelLinkRates(
+  links: readonly MaterialLink[],
+  rates: ReadonlyMap<string, number>,
+) {
+  const balanced = new Map(rates);
+  const bundles = Map.groupBy(
+    links,
+    ({ from, to }) => `${from.nodeId}\u0000${to.nodeId}`,
+  );
+  for (const bundle of bundles.values()) {
+    if (bundle.length < 2) continue;
+    const total = bundle.reduce(
+      (sum, link) => sum + (rates.get(link.id) ?? 0),
+      0,
+    );
+    for (const link of bundle) balanced.set(link.id, total / bundle.length);
+  }
+  return balanced;
+}
+
 function feasibleLinkRates(
   component: Readonly<{ edges: readonly Edge[]; vertices: readonly string[] }>,
   itemId: string,
@@ -405,7 +450,7 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
         });
       }
     }
-    if (component.edges.length >= component.vertices.length) {
+    if (hasDirectedNodeCycle(links)) {
       for (const link of links) {
         diagnostics.push({
           code: "basic.network.feedback",
@@ -418,11 +463,10 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
       }
       for (const link of links) rateByLink.delete(link.id);
     } else {
-      for (const [linkId, rate] of feasibleLinkRates(
-        component,
-        itemId,
-        nodes,
-        ports,
+      const feasibleRates = feasibleLinkRates(component, itemId, nodes, ports);
+      for (const [linkId, rate] of balanceParallelLinkRates(
+        links,
+        feasibleRates,
       )) {
         rateByLink.set(linkId, rate);
       }
