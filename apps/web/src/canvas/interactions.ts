@@ -32,7 +32,6 @@ type Interaction =
       reconnect?: Readonly<{
         additive: boolean;
         linkId: string;
-        tapFrom?: MaterialEndpoint;
       }>;
       startScreen: Point;
       target?: MaterialEndpoint;
@@ -92,10 +91,11 @@ function connectionIntent(
   };
 }
 
-function connectedLinkAtEndpoint(
+function reconnectableLinkAtEndpoint(
   document: CanvasDocument,
   endpoint: MaterialEndpoint,
   topology: CanvasEditor["topology"],
+  selectedLinkIds: readonly string[],
 ) {
   const node = document.nodes.find(
     ({ configuration }) => configuration.id === endpoint.nodeId,
@@ -104,12 +104,14 @@ function connectedLinkAtEndpoint(
   const links = document.materialLinks.filter(
     ({ from, to }) => endpointKey(from) === key || endpointKey(to) === key,
   );
-  if (
-    topology === "aggregate" &&
-    node?.configuration.kind === "process" &&
-    links.length > 1
-  ) {
-    return undefined;
+  if (topology === "aggregate" && node?.configuration.kind === "process") {
+    const selectedLinks = new Set(selectedLinkIds);
+    const selectedIncidentLinks = links.filter(({ id }) =>
+      selectedLinks.has(id),
+    );
+    return selectedIncidentLinks.length === 1
+      ? selectedIncidentLinks[0]
+      : undefined;
   }
   return links[0];
 }
@@ -282,28 +284,13 @@ export function attachCanvasInteractions(
             replacingLinkId: interaction.reconnect.linkId,
           });
         } else if (!cancelled && !interaction.moved) {
-          if (interaction.reconnect.tapFrom) {
-            armedConnection = connectionIntent(
-              editor.getState().document,
-              interaction.reconnect.tapFrom,
-              editor.topology,
-            );
-            editor.dispatch({
-              type: "link.preview",
-              current: interaction.origin,
-              from: interaction.reconnect.tapFrom,
-            });
-          } else {
-            editor.dispatch({
-              type: "selection.link",
-              additive: interaction.reconnect.additive,
-              id: interaction.reconnect.linkId,
-            });
-          }
+          editor.dispatch({
+            type: "selection.link",
+            additive: interaction.reconnect.additive,
+            id: interaction.reconnect.linkId,
+          });
         }
-        if (!interaction.reconnect.tapFrom || interaction.moved || cancelled) {
-          cancelConnection();
-        }
+        cancelConnection();
       } else if (!cancelled && interaction.target) {
         editor.dispatch({
           type: "link.create",
@@ -450,10 +437,11 @@ export function attachCanvasInteractions(
             )?.configuration.kind === "process";
         if (
           (armedSourceIsAggregate ||
-            !connectedLinkAtEndpoint(
+            !reconnectableLinkAtEndpoint(
               editor.getState().document,
               armedConnection.from,
               editor.topology,
+              [],
             )) &&
           target
         ) {
@@ -468,19 +456,13 @@ export function attachCanvasInteractions(
         canvas.dataset.cursor = "grab";
         return;
       }
-      const connectedLink = connectedLinkAtEndpoint(
+      const connectedLink = reconnectableLinkAtEndpoint(
         editor.getState().document,
         from,
         editor.topology,
+        editor.getState().selectedLinkIds,
       );
       if (connectedLink) {
-        const aggregateProcessPort =
-          editor.topology === "aggregate" &&
-          editor
-            .getState()
-            .document.nodes.find(
-              ({ configuration }) => configuration.id === from.nodeId,
-            )?.configuration.kind === "process";
         const fixedEndpoint =
           endpointKey(connectedLink.from) === endpointKey(from)
             ? connectedLink.to
@@ -505,7 +487,6 @@ export function attachCanvasInteractions(
           reconnect: {
             additive: selectionModifier,
             linkId: connectedLink.id,
-            ...(aggregateProcessPort ? { tapFrom: from } : {}),
           },
           startScreen: screen,
         };
@@ -665,13 +646,14 @@ export function attachCanvasInteractions(
         (event.pointerType === "touch" ? 24 : 12) / host.getViewport().zoom,
       );
       const occupiedPort = hoverPort
-        ? connectedLinkAtEndpoint(
+        ? reconnectableLinkAtEndpoint(
             editor.getState().document,
             {
               nodeId: hoverPort.nodeId,
               portId: hoverPort.port.id,
             },
             editor.topology,
+            editor.getState().selectedLinkIds,
           )
         : undefined;
       canvas.dataset.cursor = host.isPlacementActive()
