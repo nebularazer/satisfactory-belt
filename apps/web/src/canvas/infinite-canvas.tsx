@@ -909,43 +909,25 @@ function syncDocument(
 }
 
 function syncEditorChange(
-  state: CanvasEditorState,
   displays: Map<string, NodeDisplay>,
   change: CanvasEditorChange,
-  textResolution: number,
-  zoom: number,
-  imageScale: number,
-  imageScaleTier: number,
-  requestImage: RequestImage,
 ) {
   if (change.kind === "document" || change.kind === "settings") return false;
 
-  const dark = document.documentElement.classList.contains("dark");
-  const selectedIds =
-    change.kind === "selection" ? new Set(state.selectedIds) : undefined;
+  // Selection visuals depend on the complete per-port runtime. Let the
+  // following syncVisibleScene call rebuild them instead of taking the move
+  // fast path without runtime data. That used to clear inferred Router items
+  // and make connected Process rates look disconnected until another update.
+  if (change.kind !== "move") return true;
 
   for (const id of change.nodeIds) {
     const display = displays.get(id);
     if (!display) continue;
 
-    if (change.kind === "move") {
-      display.container.position.set(
-        display.baseX + change.delta.x,
-        display.baseY + change.delta.y,
-      );
-    } else {
-      updateNodeVisual(
-        display,
-        display.node,
-        dark,
-        selectedIds?.has(id) ?? false,
-        textResolution,
-        zoom,
-        imageScale,
-        imageScaleTier,
-        requestImage,
-      );
-    }
+    display.container.position.set(
+      display.baseX + change.delta.x,
+      display.baseY + change.delta.y,
+    );
   }
 
   return true;
@@ -1563,16 +1545,7 @@ export const InfiniteCanvas = forwardRef<
             syncVisibleScene();
             needsRender = true;
           } else {
-            needsRender = syncEditorChange(
-              editor.getState(),
-              nodeDisplaysRef.current,
-              change,
-              textResolutionRef.current,
-              viewportRef.current.zoom,
-              viewportRef.current.zoom * app.renderer.resolution,
-              imageScaleTierRef.current,
-              requestImage,
-            );
+            needsRender = syncEditorChange(nodeDisplaysRef.current, change);
             syncVisibleScene();
             textureCache.retain(
               visibleImageUrls(
