@@ -63,6 +63,27 @@ describe("NodePicker", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows compatible recipe counts and can cancel link placement", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <NodePicker
+        allowSelection={(selection) =>
+          selection.node.kind === "process" &&
+          selection.node.processId === "Recipe_IngotIron_C"
+        }
+        onOpenChange={onOpenChange}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    expect(
+      screen.getByRole("option", { name: /^Smelter 1 recipe/ }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel adding node" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it("keeps recipes out of the initial building browser", () => {
     render(
       <NodePicker

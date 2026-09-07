@@ -156,6 +156,201 @@ describe("Basic flow analysis", () => {
     );
   });
 
+  it("carries surplus through connected routers before open ports", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "smelter", portId: "output:Desc_IronIngot_C" },
+          id: "into-splitter",
+          to: { nodeId: "splitter", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter", portId: "output:3" },
+          id: "into-merger",
+          to: { nodeId: "merger", portId: "input:1" },
+        },
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_SmelterMk1_C",
+          id: "smelter",
+          kind: "process",
+          processId: "Recipe_IngotIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentMerger_C",
+          id: "merger",
+          kind: "router",
+        }),
+      ],
+    });
+
+    const analysis = analyzeBasicFlows(plan);
+    expect(
+      Object.fromEntries(
+        analysis.linkFlows.map(({ linkId, ratePerMinute }) => [
+          linkId,
+          ratePerMinute,
+        ]),
+      ),
+    ).toEqual({ "into-merger": 30, "into-splitter": 30 });
+    expect(
+      Object.fromEntries(
+        analysis.portFlows
+          .filter(({ endpoint }) => endpoint.nodeId === "splitter")
+          .map(({ endpoint, ratePerMinute }) => [
+            endpoint.portId,
+            ratePerMinute,
+          ]),
+      ),
+    ).toEqual({
+      "input:1": 30,
+      "output:1": 0,
+      "output:2": 0,
+      "output:3": 30,
+    });
+    expect(
+      Object.fromEntries(
+        analysis.portFlows
+          .filter(({ endpoint }) => endpoint.nodeId === "merger")
+          .map(({ endpoint, ratePerMinute }) => [
+            endpoint.portId,
+            ratePerMinute,
+          ]),
+      ),
+    ).toEqual({
+      "input:1": 30,
+      "input:2": undefined,
+      "input:3": undefined,
+      "output:1": 30,
+    });
+  });
+
+  it("sums connected inputs at a terminal Merger", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: {
+            nodeId: "smelter-one",
+            portId: "output:Desc_IronIngot_C",
+          },
+          id: "one-into-merger",
+          to: { nodeId: "merger", portId: "input:1" },
+        },
+        {
+          from: {
+            nodeId: "smelter-two",
+            portId: "output:Desc_IronIngot_C",
+          },
+          id: "two-into-merger",
+          to: { nodeId: "merger", portId: "input:2" },
+        },
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_SmelterMk1_C",
+          id: "smelter-one",
+          kind: "process",
+          processId: "Recipe_IngotIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_SmelterMk1_C",
+          id: "smelter-two",
+          kind: "process",
+          processId: "Recipe_IngotIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentMerger_C",
+          id: "merger",
+          kind: "router",
+        }),
+      ],
+    });
+
+    const analysis = analyzeBasicFlows(plan);
+    expect(
+      Object.fromEntries(
+        analysis.linkFlows.map(({ linkId, ratePerMinute }) => [
+          linkId,
+          ratePerMinute,
+        ]),
+      ),
+    ).toEqual({ "one-into-merger": 30, "two-into-merger": 30 });
+    expect(
+      analysis.portFlows.find(
+        ({ endpoint }) =>
+          endpoint.nodeId === "merger" && endpoint.portId === "output:1",
+      ),
+    ).toEqual({
+      endpoint: { nodeId: "merger", portId: "output:1" },
+      itemId: "Desc_IronIngot_C",
+      ratePerMinute: 60,
+    });
+  });
+
+  it("splits surplus evenly across equivalent connected branches", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "smelter", portId: "output:Desc_IronIngot_C" },
+          id: "into-splitter",
+          to: { nodeId: "splitter", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter", portId: "output:1" },
+          id: "branch-one",
+          to: { nodeId: "merger-one", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter", portId: "output:2" },
+          id: "branch-two",
+          to: { nodeId: "merger-two", portId: "input:1" },
+        },
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_SmelterMk1_C",
+          id: "smelter",
+          kind: "process",
+          processId: "Recipe_IngotIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentMerger_C",
+          id: "merger-one",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentMerger_C",
+          id: "merger-two",
+          kind: "router",
+        }),
+      ],
+    });
+
+    expect(
+      Object.fromEntries(
+        analyzeBasicFlows(plan).linkFlows.map(({ linkId, ratePerMinute }) => [
+          linkId,
+          ratePerMinute,
+        ]),
+      ),
+    ).toEqual({
+      "branch-one": 15,
+      "branch-two": 15,
+      "into-splitter": 30,
+    });
+  });
+
   it("caps a Material Link at the supply available to an undersupplied consumer", () => {
     const plan = createBasicPlan({
       materialLinks: [

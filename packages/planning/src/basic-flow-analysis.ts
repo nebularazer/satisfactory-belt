@@ -115,6 +115,24 @@ function maximizeFlow(
   }
 }
 
+function forwardDistances(
+  graph: ReadonlyMap<string, readonly ResidualArc[]>,
+  source: string,
+) {
+  const distances = new Map([[source, 0]]);
+  const queue = [source];
+  for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
+    const from = queue[queueIndex]!;
+    const distance = distances.get(from)!;
+    for (const arc of graph.get(from) ?? []) {
+      if (arc.capacity <= TOLERANCE || distances.has(arc.to)) continue;
+      distances.set(arc.to, distance + 1);
+      queue.push(arc.to);
+    }
+  }
+  return distances;
+}
+
 function processRate(node: Node, port: MaterialPort) {
   if (node.profile.materials.kind !== "calculated" || !port.itemId) return 0;
   const rates =
@@ -278,9 +296,16 @@ function feasibleLinkRates(
   }
   maximizeFlow(graph, source, sink);
 
+  // Demand is authoritative. Once it is satisfied, carry any remaining supply
+  // through the already-built network before projecting it onto nearer open
+  // router ports. Otherwise an open Splitter output can steal all flow from a
+  // connected downstream Merger simply because its residual arc was visited
+  // first.
   const connectedPortKeys = new Set(
     component.edges.flatMap(({ from, link, to }) => (link ? [from, to] : [])),
   );
+  const distances = forwardDistances(graph, source);
+  const terminalPorts: Array<{ depth: number; vertex: string }> = [];
   for (const vertex of component.vertices) {
     if (connectedPortKeys.has(vertex)) continue;
     const endpoint = endpointFromKey(vertex);
@@ -294,9 +319,23 @@ function feasibleLinkRates(
     ) {
       continue;
     }
-    addResidualArc(graph, vertex, sink, capacity);
+    terminalPorts.push({ depth: distances.get(vertex) ?? -1, vertex });
   }
-  maximizeFlow(graph, source, sink);
+  const terminalPortsByDepth = Map.groupBy(terminalPorts, ({ depth }) => depth);
+  for (const depth of [...terminalPortsByDepth.keys()].toSorted(
+    (left, right) => right - left,
+  )) {
+    const portsAtDepth = terminalPortsByDepth.get(depth) ?? [];
+    const remainingSupply = (graph.get(source) ?? []).reduce(
+      (sum, arc) => sum + Math.max(0, arc.capacity - arc.flow),
+      0,
+    );
+    const fairShare = remainingSupply / Math.max(portsAtDepth.length, 1);
+    for (const { vertex } of portsAtDepth) {
+      addResidualArc(graph, vertex, sink, fairShare);
+    }
+    maximizeFlow(graph, source, sink);
+  }
 
   return new Map(
     [...arcByLinkId].map(([linkId, location]) => [

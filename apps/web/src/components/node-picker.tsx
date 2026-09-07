@@ -21,7 +21,6 @@ import {
   findResourceExtractor,
   findResourceWellPressurizer,
   nodeChoicesForBuildable,
-  recipeCountForMachine,
   recipesProducing,
   searchBuffers,
   searchExtractors,
@@ -42,10 +41,14 @@ import {
   type NodeRequest,
   type NodeTemplate,
 } from "@satisfactory-belt/production";
-import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, SearchIcon, XIcon } from "lucide-react";
 
 import { CommandDialog } from "@/components/ui/command";
-import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
 import {
   buildableImage,
   descriptorImage,
@@ -1044,6 +1047,21 @@ export function NodePicker({
       ),
     [rows],
   );
+  const selectionCountByKey = useMemo(
+    () =>
+      new Map(
+        selectableEntries.map(({ option }) => {
+          const selections = selectionsForOption(option);
+          return [
+            option.key,
+            allowSelection
+              ? selections.filter(allowSelection).length
+              : selections.length,
+          ] as const;
+        }),
+      ),
+    [allowSelection, selectableEntries],
+  );
   const selectablePositionByKey = useMemo(
     () =>
       new Map(
@@ -1341,6 +1359,16 @@ export function NodePicker({
             <InputGroupAddon>
               <SearchIcon className="size-3.5 shrink-0 opacity-50" />
             </InputGroupAddon>
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                aria-label="Cancel adding node"
+                onClick={() => setOpen(false)}
+                size="icon-xs"
+                title="Cancel"
+              >
+                <XIcon aria-hidden="true" />
+              </InputGroupButton>
+            </InputGroupAddon>
           </InputGroup>
         </div>
         <div
@@ -1443,8 +1471,8 @@ export function NodePicker({
                             />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
-                            {recipeCountForMachine(row.machine.id)}{" "}
-                            {recipeCountForMachine(row.machine.id) === 1
+                            {selectionCountByKey.get(row.key) ?? 0}{" "}
+                            {(selectionCountByKey.get(row.key) ?? 0) === 1
                               ? "recipe"
                               : "recipes"}
                           </div>
@@ -1484,8 +1512,8 @@ export function NodePicker({
                             />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
-                            {row.extractor.resourceItemIds.length}{" "}
-                            {row.extractor.resourceItemIds.length === 1
+                            {selectionCountByKey.get(row.key) ?? 0}{" "}
+                            {(selectionCountByKey.get(row.key) ?? 0) === 1
                               ? "recipe"
                               : "recipes"}
                           </div>

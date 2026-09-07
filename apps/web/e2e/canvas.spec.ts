@@ -179,6 +179,19 @@ test("offers only compatible recipes after a connection is dropped on empty spac
   await expect(
     page.getByRole("dialog", { name: "Add compatible node" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /^Smelter 1 recipe/ }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel adding node" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Add compatible node" }),
+  ).toBeHidden();
+
+  await canvas.hover({ position: { x: 768, y: 360 } });
+  await page.mouse.down();
+  await page.mouse.move(900, 450, { steps: 4 });
+  await page.mouse.up();
+
   await search.fill("iron plate");
   await expect(
     page.getByRole("option", {
