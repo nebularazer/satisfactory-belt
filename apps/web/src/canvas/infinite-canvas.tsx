@@ -18,6 +18,7 @@ import type {
   CanvasEditorChange,
   CanvasEditorState,
 } from "./editor";
+import { canvasConnectionTargets } from "./connection-compatibility";
 import {
   canvasNodeId,
   type CanvasMaterialLink,
@@ -27,6 +28,7 @@ import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL } from "./grid";
 import { stableImageScaleTier } from "./image-scale";
 import { attachCanvasInteractions } from "./interactions";
+import { materialFlowCanvasColor } from "./material-flow-state";
 import {
   createNodeCardModel,
   type NodeCardModel,
@@ -49,7 +51,15 @@ import {
 import { createRenderScheduler } from "./render-scheduler";
 import { resolveResponsiveImage } from "./responsive-image-cache";
 import { createTextureCache } from "./texture-cache";
-import { materialLinkPath } from "./material-link-geometry";
+import {
+  materialConnectionPreviewCurve,
+  materialLinkPath,
+  materialLinkPoint,
+} from "./material-link-geometry";
+import {
+  presentMaterialFlow,
+  presentMaterialLinks,
+} from "./material-link-presentation";
 import { materialPortGeometry } from "./material-port-geometry";
 import {
   createTextureLoadQueue,
@@ -86,10 +96,16 @@ export type InfiniteCanvasHandle = {
 
 type InfiniteCanvasProps = {
   editor: CanvasEditor;
+  onCancelPlacement: () => void;
   onPerformanceMetricsChange: (metrics: CanvasPerformanceMetrics) => void;
-  onRequestAddNode: (at: Point) => void;
+  onPlaceNode: (at: Point) => void;
+  onRequestAddNode: (
+    at: Point,
+    connectionFrom?: Readonly<{ nodeId: string; portId: string }>,
+  ) => void;
   onViewportChange: (viewport: Viewport) => void;
   performanceMetricsEnabled: boolean;
+  placementActive: boolean;
   showGridDots: boolean;
 };
 
@@ -248,6 +264,8 @@ function renderedImageUrl(
 function statusColor(status: NodeCardPortStatus) {
   if (status === "warning") return BLUEPRINT_COLORS.warning;
   if (status === "blocked") return BLUEPRINT_COLORS.blocked;
+  if (status === "compatible") return BLUEPRINT_COLORS.output;
+  if (status === "source") return BLUEPRINT_COLORS.selected;
   return undefined;
 }
 
@@ -361,9 +379,15 @@ function updateMaterialVisual(
   display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
   display.rate.position.set(side === "left" ? 46 : cardWidth - 46, y);
   display.rate.text = material.rate ?? `${material.ruleCount ?? ""}`;
-  display.rate.alpha = contentAlpha;
+  display.rate.alpha = 1;
   display.rate.style = {
-    fill: dark ? 0xe4e4e7 : 0x3f3f46,
+    fill: material.connected
+      ? dark
+        ? 0xf4f4f5
+        : 0x27272a
+      : dark
+        ? 0x71717a
+        : 0xa1a1aa,
     fontFamily: "Inter Variable, Inter, sans-serif",
     fontSize: 12,
     fontWeight: "400",
@@ -770,6 +794,18 @@ function syncDocument(
     ]),
     ({ endpoint }) => endpoint.nodeId,
   );
+  const connectionTargets = state.connectionPreview
+    ? new Map(
+        canvasConnectionTargets(
+          state.document,
+          state.connectionPreview.from,
+        ).map((target) => [
+          `${target.endpoint.nodeId}\u0000${target.endpoint.portId}`,
+          target,
+        ]),
+      )
+    : undefined;
+  const materialFlow = presentMaterialFlow(state.document);
 
   for (const [id, display] of displays) {
     if (visibleIds.has(id)) continue;
@@ -781,18 +817,45 @@ function syncDocument(
     const id = canvasNodeId(node);
     const selected = selectedIds.has(id);
     const incidentLinks = linksByNodeId.get(id) ?? [];
-    const runtimeKey = incidentLinks
-      .map(({ endpoint, link }) => `${link.id}:${endpoint.portId}`)
+    const connectedPortIds = new Set(
+      incidentLinks.map(({ endpoint }) => endpoint.portId),
+    );
+    const runtimePorts: NonNullable<NodeCardRuntime["ports"]> =
+      Object.fromEntries(
+        materialPortGeometry(node).map(({ port }) => {
+          const target = connectionTargets?.get(`${id}\u0000${port.id}`);
+          const flow = materialFlow.port({ nodeId: id, portId: port.id });
+          const status: NodeCardPortStatus | undefined =
+            target?.status === "compatible"
+              ? "compatible"
+              : target?.status === "source"
+                ? "source"
+                : target?.status === "occupied"
+                  ? "blocked"
+                  : target?.status === "invalid"
+                    ? "warning"
+                    : undefined;
+          return [
+            port.id,
+            {
+              connected: connectedPortIds.has(port.id),
+              ...(flow?.itemId ? { itemId: flow.itemId } : {}),
+              ...(flow?.ratePerMinute === undefined
+                ? {}
+                : { ratePerMinute: flow.ratePerMinute }),
+              ...(status ? { status } : {}),
+            },
+          ];
+        }),
+      );
+    const runtimeKey = Object.entries(runtimePorts)
+      .map(
+        ([portId, port]) =>
+          `${portId}:${port.connected}:${port.itemId ?? ""}:${port.ratePerMinute ?? ""}:${port.status ?? ""}`,
+      )
       .toSorted()
       .join("|");
-    const runtime: NodeCardRuntime = {
-      ports: Object.fromEntries(
-        incidentLinks.map(({ endpoint }) => [
-          endpoint.portId,
-          { connected: true },
-        ]),
-      ),
-    };
+    const runtime: NodeCardRuntime = { ports: runtimePorts };
     let display = displays.get(id);
 
     if (!display) {
@@ -897,6 +960,7 @@ function drawMarquee(graphics: Graphics, rectangle?: Rectangle) {
 
 function drawMaterialLinks(
   graphics: Graphics,
+  labelLayer: Container,
   previewGraphics: Graphics,
   state: CanvasEditorState,
   zoom: number,
@@ -904,6 +968,9 @@ function drawMaterialLinks(
 ) {
   graphics.clear();
   previewGraphics.clear();
+  for (const child of labelLayer.removeChildren()) {
+    child.destroy({ children: true });
+  }
   const selected = new Set(state.selectedLinkIds);
   const moving = state.moveDelta ? new Set(state.selectedIds) : undefined;
   const effectiveDocument = moving
@@ -932,10 +999,34 @@ function drawMaterialLinks(
           links.findIndex(({ id }) => id === link.id) === index,
       )
     : visibleLinks;
+  const presentations = new Map(
+    presentMaterialLinks(state.document).map((presentation) => [
+      presentation.id,
+      presentation,
+    ]),
+  );
   for (const link of candidates) {
     const path = materialLinkPath(effectiveDocument, link);
-    if (!path) continue;
+    const presentation = presentations.get(link.id);
+    if (!path || !presentation) continue;
     const isSelected = selected.has(link.id);
+    if (isSelected) {
+      graphics
+        .moveTo(path.from.x, path.from.y)
+        .bezierCurveTo(
+          path.control1.x,
+          path.control1.y,
+          path.control2.x,
+          path.control2.y,
+          path.to.x,
+          path.to.y,
+        )
+        .stroke({
+          alpha: 0.7,
+          color: BLUEPRINT_COLORS.selected,
+          width: 7 / zoom,
+        });
+    }
     graphics
       .moveTo(path.from.x, path.from.y)
       .bezierCurveTo(
@@ -947,18 +1038,46 @@ function drawMaterialLinks(
         path.to.y,
       )
       .stroke({
-        alpha: isSelected ? 1 : 0.82,
-        color: isSelected
-          ? BLUEPRINT_COLORS.selected
-          : dark
-            ? 0x8b9cad
-            : 0x64748b,
-        width: (isSelected ? 5 : 3) / zoom,
+        alpha: isSelected ? 1 : 0.88,
+        color: materialFlowCanvasColor(presentation.state, dark),
+        width: (isSelected ? 4 : 3) / zoom,
       });
+  }
+
+  for (const link of visibleLinks) {
+    const path = materialLinkPath(effectiveDocument, link);
+    const presentation = presentations.get(link.id);
+    if (!path || !presentation) continue;
+    const position = materialLinkPoint(path, 0.5);
+    const label = new Container();
+    const stateColor = materialFlowCanvasColor(presentation.state, dark);
+    const text = new Text({
+      style: {
+        fill: stateColor,
+        fontFamily: "Inter Variable, Inter, sans-serif",
+        fontSize: selected.has(link.id) ? 13 : 12,
+        fontWeight: "700",
+        stroke: { color: dark ? 0x111216 : 0xf8fafc, width: 3 },
+      },
+      text: presentation.label,
+    });
+    text.anchor.set(0.5);
+    label.addChild(text);
+    label.eventMode = "none";
+    label.position.set(position.x, position.y);
+    label.scale.set(1 / zoom);
+    labelLayer.addChild(label);
   }
 
   const preview = state.connectionPreview;
   if (!preview) return;
+  const previewTargetStatus = preview.target
+    ? canvasConnectionTargets(state.document, preview.from).find(
+        ({ endpoint }) =>
+          endpoint.nodeId === preview.target?.nodeId &&
+          endpoint.portId === preview.target.portId,
+      )?.status
+    : undefined;
   const fromNode = effectiveDocument.nodes.find(
     ({ configuration }) => configuration.id === preview.from.nodeId,
   );
@@ -979,15 +1098,26 @@ function drawMaterialLinks(
         )?.point
       : preview.current;
   if (!from || !to) return;
-  const bend = Math.max(48, Math.abs(to.x - from.x) * 0.5);
+  const curve = materialConnectionPreviewCurve(from, to, zoom);
+  if (!curve) return;
   previewGraphics
     .moveTo(from.x, from.y)
-    .bezierCurveTo(from.x + bend, from.y, to.x - bend, to.y, to.x, to.y)
+    .bezierCurveTo(
+      curve.control1.x,
+      curve.control1.y,
+      curve.control2.x,
+      curve.control2.y,
+      to.x,
+      to.y,
+    )
     .stroke({
       alpha: 0.9,
-      color: preview.target
-        ? BLUEPRINT_COLORS.output
-        : BLUEPRINT_COLORS.warning,
+      color:
+        previewTargetStatus === "compatible"
+          ? BLUEPRINT_COLORS.output
+          : previewTargetStatus === "occupied"
+            ? BLUEPRINT_COLORS.blocked
+            : BLUEPRINT_COLORS.warning,
       width: 3 / zoom,
     });
 }
@@ -998,10 +1128,13 @@ export const InfiniteCanvas = forwardRef<
 >(function InfiniteCanvas(
   {
     editor,
+    onCancelPlacement,
     onPerformanceMetricsChange,
+    onPlaceNode,
     onRequestAddNode,
     onViewportChange,
     performanceMetricsEnabled,
+    placementActive,
     showGridDots,
   },
   ref,
@@ -1011,16 +1144,22 @@ export const InfiniteCanvas = forwardRef<
   const gridRef = useRef<GridDisplay | null>(null);
   const sceneRef = useRef<Container | null>(null);
   const linkGraphicsRef = useRef<Graphics | null>(null);
+  const linkLabelLayerRef = useRef<Container | null>(null);
   const previewGraphicsRef = useRef<Graphics | null>(null);
   const nodeDisplaysRef = useRef(new Map<string, NodeDisplay>());
   const nodeDisplayPoolRef = useRef<NodeDisplay[]>([]);
   const worldRef = useRef<Container | null>(null);
   const marqueeRef = useRef<Graphics | null>(null);
+  const onCancelPlacementRef = useRef(onCancelPlacement);
   const onPerformanceMetricsChangeRef = useRef(onPerformanceMetricsChange);
+  const onPlaceNodeRef = useRef(onPlaceNode);
+  const onRequestAddNodeRef = useRef(onRequestAddNode);
+  const onViewportChangeRef = useRef(onViewportChange);
   const performanceSamplerRef = useRef<ReturnType<
     typeof createPerformanceSampler
   > | null>(null);
   const performanceMetricsEnabledRef = useRef(performanceMetricsEnabled);
+  const placementActiveRef = useRef(placementActive);
   const renderSchedulerRef = useRef<ReturnType<
     typeof createRenderScheduler
   > | null>(null);
@@ -1036,8 +1175,13 @@ export const InfiniteCanvas = forwardRef<
   const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
   const showGridDotsRef = useRef(showGridDots);
 
+  onCancelPlacementRef.current = onCancelPlacement;
   onPerformanceMetricsChangeRef.current = onPerformanceMetricsChange;
+  onPlaceNodeRef.current = onPlaceNode;
+  onRequestAddNodeRef.current = onRequestAddNode;
+  onViewportChangeRef.current = onViewportChange;
   performanceMetricsEnabledRef.current = performanceMetricsEnabled;
+  placementActiveRef.current = placementActive;
   showGridDotsRef.current = showGridDots;
 
   const requestImage: RequestImage = (imageUrl, priority) => {
@@ -1051,8 +1195,9 @@ export const InfiniteCanvas = forwardRef<
 
     const state = editor.getState();
     const linkGraphics = linkGraphicsRef.current;
+    const linkLabelLayer = linkLabelLayerRef.current;
     const previewGraphics = previewGraphicsRef.current;
-    if (linkGraphics && previewGraphics) {
+    if (linkGraphics && linkLabelLayer && previewGraphics) {
       const viewport = viewportRef.current;
       const visibleLinks = editor
         .queryLinks({
@@ -1064,6 +1209,7 @@ export const InfiniteCanvas = forwardRef<
         .map(({ link }) => link);
       drawMaterialLinks(
         linkGraphics,
+        linkLabelLayer,
         previewGraphics,
         state,
         viewportRef.current.zoom,
@@ -1122,7 +1268,7 @@ export const InfiniteCanvas = forwardRef<
       renderSchedulerRef.current?.request();
     }
 
-    if (previousZoom !== viewport.zoom) onViewportChange(viewport);
+    if (previousZoom !== viewport.zoom) onViewportChangeRef.current(viewport);
   };
 
   const viewportCenter = (): Point => {
@@ -1298,17 +1444,19 @@ export const InfiniteCanvas = forwardRef<
         grid.sprite.visible = showGridDotsRef.current;
         const world = new Container();
         const linkGraphics = new Graphics();
+        const linkLabelLayer = new Container();
         const scene = new Container();
         const previewGraphics = new Graphics();
         const marquee = new Graphics();
         app.stage.eventMode = "none";
         scene.eventMode = "none";
-        world.addChild(linkGraphics, scene, previewGraphics);
+        world.addChild(linkGraphics, linkLabelLayer, scene, previewGraphics);
         app.stage.addChild(grid.sprite, world, marquee);
         gridRef.current = grid;
         worldRef.current = world;
         sceneRef.current = scene;
         linkGraphicsRef.current = linkGraphics;
+        linkLabelLayerRef.current = linkLabelLayer;
         previewGraphicsRef.current = previewGraphics;
         marqueeRef.current = marquee;
 
@@ -1322,13 +1470,17 @@ export const InfiniteCanvas = forwardRef<
         const canvas = app.canvas;
 
         removeListeners = attachCanvasInteractions(canvas, editor, {
+          cancelPlacement: () => onCancelPlacementRef.current(),
           fit,
           getViewport: () => viewportRef.current,
           getViewportCenter: viewportCenter,
+          isPlacementActive: () => placementActiveRef.current,
           panBy: (delta) => {
             renderViewport(panViewport(viewportRef.current, delta));
           },
-          requestNode: onRequestAddNode,
+          placeNode: (at) => onPlaceNodeRef.current(at),
+          requestNode: (at, connectionFrom) =>
+            onRequestAddNodeRef.current(at, connectionFrom),
           resetView,
           setMarquee: (rectangle) => {
             drawMarquee(marquee, rectangle);
@@ -1383,7 +1535,7 @@ export const InfiniteCanvas = forwardRef<
         unsubscribeEditor = editor.subscribe((change) => {
           const updateStartedAt = performance.now();
           let needsRender: boolean;
-          if (change.kind === "document") {
+          if (change.kind === "document" || change.kind === "settings") {
             syncVisibleScene();
             needsRender = true;
           } else {
@@ -1397,6 +1549,7 @@ export const InfiniteCanvas = forwardRef<
               imageScaleTierRef.current,
               requestImage,
             );
+            syncVisibleScene();
             textureCache.retain(
               visibleImageUrls(
                 nodeDisplaysRef.current,
@@ -1434,6 +1587,7 @@ export const InfiniteCanvas = forwardRef<
       renderSchedulerRef.current = null;
       sceneRef.current = null;
       linkGraphicsRef.current = null;
+      linkLabelLayerRef.current = null;
       previewGraphicsRef.current = null;
       worldRef.current = null;
       marqueeRef.current = null;
@@ -1450,7 +1604,7 @@ export const InfiniteCanvas = forwardRef<
         app.destroy(true, { children: true });
       }
     };
-  }, [editor, onRequestAddNode, onViewportChange]);
+  }, [editor]);
 
   return <div className="infinite-canvas" ref={hostRef} />;
 });

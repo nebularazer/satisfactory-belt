@@ -21,7 +21,6 @@ import {
   findResourceExtractor,
   findResourceWellPressurizer,
   nodeChoicesForBuildable,
-  recipeCountForMachine,
   recipesProducing,
   searchBuffers,
   searchExtractors,
@@ -42,10 +41,14 @@ import {
   type NodeRequest,
   type NodeTemplate,
 } from "@satisfactory-belt/production";
-import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, SearchIcon, XIcon } from "lucide-react";
 
 import { CommandDialog } from "@/components/ui/command";
-import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
 import {
   buildableImage,
   descriptorImage,
@@ -61,6 +64,7 @@ export type NodePickerSelection = Readonly<{
 }>;
 
 type NodePickerProps = {
+  allowSelection?: (selection: NodePickerSelection) => boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (selection: NodePickerSelection) => void;
   open: boolean;
@@ -435,6 +439,57 @@ function optionsForRow(row: PickerRow): readonly PickerOption[] {
   return row.type === "grid" ? row.options : [row];
 }
 
+function selectionsForOption(option: PickerOption) {
+  if (option.type === "recent" || option.type === "configuration") {
+    return [option.selection];
+  }
+  if (option.type === "recipe") {
+    const selection = selectionsForBuildable(option.machine).find(
+      ({ node }) =>
+        node.kind === "process" && node.processId === option.recipe.id,
+    );
+    return selection ? [selection] : [];
+  }
+  if (option.type === "extractor-resource") {
+    return selectionsForBuildable(option.extractor).filter(({ node }) => {
+      if (node.kind !== "process") return false;
+      const process = findProductionProcess(node.processId);
+      return (
+        (process?.kind === "extraction" || process?.kind === "resource-well") &&
+        process.outputItemIds.includes(option.resource.id)
+      );
+    });
+  }
+  const buildable =
+    option.type === "machine"
+      ? option.machine
+      : option.type === "extractor"
+        ? option.extractor
+        : option.buildable;
+  return selectionsForBuildable(buildable);
+}
+
+function filterPickerRows(
+  rows: readonly PickerRow[],
+  allowSelection: (selection: NodePickerSelection) => boolean,
+) {
+  const filtered = rows.flatMap((row): PickerRow[] => {
+    if (row.type === "heading") return [row];
+    if (row.type === "grid") {
+      const options = row.options.filter((option) =>
+        selectionsForOption(option).some(allowSelection),
+      );
+      return options.length > 0 ? [{ ...row, options }] : [];
+    }
+    return selectionsForOption(row).some(allowSelection) ? [row] : [];
+  });
+  return filtered.filter((row, index) => {
+    if (row.type !== "heading") return true;
+    const next = filtered[index + 1];
+    return Boolean(next && next.type !== "heading");
+  });
+}
+
 function estimatedRowHeight(row: PickerRow) {
   if (row.type === "heading") return 30;
   if (row.type === "grid") return row.layout === "recent" ? 100 : 200;
@@ -684,7 +739,12 @@ function RecipeRow({
   );
 }
 
-export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
+export function NodePicker({
+  allowSelection,
+  onOpenChange,
+  onSelect,
+  open,
+}: NodePickerProps) {
   const [scope, setScope] = useState<PickerScope>({ type: "root" });
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -813,7 +873,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     );
   }, [open, query, selectedConfigurableBuildable]);
 
-  const rows = useMemo(() => {
+  const unfilteredRows = useMemo(() => {
     const nextRows: PickerRow[] = [];
     const addHeading = (key: string, label: string) =>
       nextRows.push({ key: `heading:${key}`, label, type: "heading" });
@@ -972,12 +1032,35 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     selectedMachine,
   ]);
 
+  const rows = useMemo(
+    () =>
+      allowSelection
+        ? filterPickerRows(unfilteredRows, allowSelection)
+        : unfilteredRows,
+    [allowSelection, unfilteredRows],
+  );
+
   const selectableEntries = useMemo(
     () =>
       rows.flatMap((row, rowIndex) =>
         optionsForRow(row).map((option) => ({ option, rowIndex })),
       ),
     [rows],
+  );
+  const selectionCountByKey = useMemo(
+    () =>
+      new Map(
+        selectableEntries.map(({ option }) => {
+          const selections = selectionsForOption(option);
+          return [
+            option.key,
+            allowSelection
+              ? selections.filter(allowSelection).length
+              : selections.length,
+          ] as const;
+        }),
+      ),
+    [allowSelection, selectableEntries],
   );
   const selectablePositionByKey = useMemo(
     () =>
@@ -1204,11 +1287,15 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   return (
     <CommandDialog
       className="top-2 bottom-2 h-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none translate-y-0 sm:top-1/2 sm:bottom-auto sm:h-auto sm:w-full sm:max-w-2xl sm:-translate-y-1/2"
-      description="Search production buildings and recipes"
+      description={
+        allowSelection
+          ? "Choose a building or recipe compatible with the Material Link"
+          : "Search production buildings and recipes"
+      }
       initialFocus={autoFocusSearch ? undefined : false}
       onOpenChange={setOpen}
       open={open}
-      title="Add node"
+      title={allowSelection ? "Add compatible node" : "Add node"}
     >
       <div className="flex size-full min-h-0 flex-col gap-3 overflow-hidden rounded-xl bg-popover p-1 text-popover-foreground">
         {heading && (
@@ -1271,6 +1358,16 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
             />
             <InputGroupAddon>
               <SearchIcon className="size-3.5 shrink-0 opacity-50" />
+            </InputGroupAddon>
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                aria-label="Cancel adding node"
+                onClick={() => setOpen(false)}
+                size="icon-xs"
+                title="Cancel"
+              >
+                <XIcon aria-hidden="true" />
+              </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
         </div>
@@ -1374,8 +1471,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
-                            {recipeCountForMachine(row.machine.id)}{" "}
-                            {recipeCountForMachine(row.machine.id) === 1
+                            {selectionCountByKey.get(row.key) ?? 0}{" "}
+                            {(selectionCountByKey.get(row.key) ?? 0) === 1
                               ? "recipe"
                               : "recipes"}
                           </div>
@@ -1415,8 +1512,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
-                            {row.extractor.resourceItemIds.length}{" "}
-                            {row.extractor.resourceItemIds.length === 1
+                            {selectionCountByKey.get(row.key) ?? 0}{" "}
+                            {(selectionCountByKey.get(row.key) ?? 0) === 1
                               ? "recipe"
                               : "recipes"}
                           </div>

@@ -432,6 +432,10 @@ export function createDetailedCanvasEditor(
   };
 }
 
+export type DetailedCanvasEditor = ReturnType<
+  typeof createDetailedCanvasEditor
+>;
+
 export type DetailedConnectionPresentation = Readonly<{
   descriptorRates: readonly Readonly<{
     itemId: string;

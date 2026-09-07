@@ -7,6 +7,8 @@ import {
 } from "./interactions";
 import { panViewport, zoomViewportAt, type Viewport } from "./viewport";
 import type { Point } from "./geometry";
+import { materialLinkPath, materialLinkPoint } from "./material-link-geometry";
+import { materialPortGeometry } from "./material-port-geometry";
 import { TEST_NODE_TEMPLATE } from "./test-fixtures";
 
 type PointerOptions = MouseEventInit & {
@@ -15,6 +17,53 @@ type PointerOptions = MouseEventInit & {
 };
 
 const destroyers: Array<() => void> = [];
+const IRON_MINER = {
+  buildableId: "Build_MinerMk1_C",
+  kind: "process",
+  processId: "extraction:Desc_OreIron_C",
+} as const;
+const IRON_SMELTER = {
+  buildableId: "Build_SmelterMk1_C",
+  kind: "process",
+  processId: "Recipe_IngotIron_C",
+} as const;
+
+function createIronPair(editor: ReturnType<typeof createCanvasEditor>) {
+  editor.dispatch({
+    type: "node.create",
+    at: { x: 100, y: 100 },
+    node: IRON_MINER,
+  });
+  editor.dispatch({
+    type: "node.create",
+    at: { x: 500, y: 100 },
+    node: IRON_SMELTER,
+  });
+}
+
+function connectIronPair(editor: ReturnType<typeof createCanvasEditor>) {
+  editor.dispatch({
+    type: "link.create",
+    from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+    id: "ore-link",
+    to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+  });
+}
+
+function portPoint(
+  editor: ReturnType<typeof createCanvasEditor>,
+  nodeId: string,
+  portId: string,
+) {
+  const node = editor
+    .getState()
+    .document.nodes.find(({ configuration }) => configuration.id === nodeId);
+  const point = node
+    ? materialPortGeometry(node).find(({ port }) => port.id === portId)?.point
+    : undefined;
+  if (!point) throw new Error(`Missing test port ${nodeId}:${portId}.`);
+  return point;
+}
 
 afterEach(() => {
   for (const destroy of destroyers.splice(0)) destroy();
@@ -37,7 +86,12 @@ function createHarness(
   const fits: Array<"all" | "selection"> = [];
   const marquees: Array<Parameters<CanvasInteractionHost["setMarquee"]>[0]> =
     [];
-  const nodeRequests: Point[] = [];
+  const nodeRequests: Array<{
+    at: Point;
+    connectionFrom?: Readonly<{ nodeId: string; portId: string }>;
+  }> = [];
+  let placementActive = false;
+  const placements: Point[] = [];
   const zooms: Array<{ anchor: Point; factor: number }> = [];
 
   canvas.tabIndex = 0;
@@ -72,13 +126,25 @@ function createHarness(
   });
 
   const host: CanvasInteractionHost = {
+    cancelPlacement: () => {
+      placementActive = false;
+    },
     fit: (scope) => fits.push(scope),
     getViewport: () => viewport,
     getViewportCenter: () => ({ x: 500, y: 400 }),
+    isPlacementActive: () => placementActive,
     panBy: (delta) => {
       viewport = panViewport(viewport, delta);
     },
-    requestNode: (at) => nodeRequests.push(at),
+    placeNode: (at) => {
+      placements.push(at);
+      placementActive = false;
+    },
+    requestNode: (at, connectionFrom) =>
+      nodeRequests.push({
+        at,
+        ...(connectionFrom ? { connectionFrom } : {}),
+      }),
     resetView: () => {
       viewport = { x: 500, y: 400, zoom: 1 };
     },
@@ -137,6 +203,10 @@ function createHarness(
     marquees,
     nodeRequests,
     pointer,
+    placements,
+    setPlacementActive: (active: boolean) => {
+      placementActive = active;
+    },
     viewport: () => viewport,
     zooms,
   };
@@ -174,6 +244,182 @@ describe("canvas interactions", () => {
         to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
       }),
     ]);
+  });
+
+  it("creates a Material Link by tapping two touch ports", () => {
+    const { editor, pointer } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 500, y: 100 },
+      node: {
+        buildableId: "Build_SmelterMk1_C",
+        kind: "process",
+        processId: "Recipe_IngotIron_C",
+      },
+    });
+
+    const source = portPoint(editor, "node-1", "output:Desc_OreIron_C");
+    const target = portPoint(editor, "node-2", "input:Desc_OreIron_C");
+    pointer("pointerdown", source.x - 8, source.y + 6, {
+      pointerType: "touch",
+    });
+    pointer("pointerup", source.x - 8, source.y + 6, {
+      pointerType: "touch",
+    });
+    expect(editor.getState().connectionPreview?.from).toEqual({
+      nodeId: "node-1",
+      portId: "output:Desc_OreIron_C",
+    });
+    expect(editor.getState().connectionPreview?.current).toEqual(source);
+
+    pointer("pointerdown", target.x + 8, target.y + 6, {
+      pointerType: "touch",
+    });
+    pointer("pointerup", target.x + 8, target.y + 6, {
+      pointerType: "touch",
+    });
+
+    expect(editor.getState().document.materialLinks).toEqual([
+      expect.objectContaining({
+        from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+        to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+      }),
+    ]);
+    expect(editor.getState().connectionPreview).toBeUndefined();
+  });
+
+  it("requests a compatible node after dropping a connection on empty space", () => {
+    const { editor, nodeRequests, pointer } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+
+    pointer("pointerdown", 224, 96, { pointerType: "touch" });
+    pointer("pointermove", 320, 220, { pointerType: "touch" });
+    pointer("pointerup", 320, 220, { pointerType: "touch" });
+
+    expect(nodeRequests).toEqual([
+      {
+        at: { x: 320, y: 220 },
+        connectionFrom: {
+          nodeId: "node-1",
+          portId: "output:Desc_OreIron_C",
+        },
+      },
+    ]);
+  });
+
+  it("never starts a connection from an occupied port", () => {
+    const { editor, nodeRequests, pointer, viewport } = createHarness();
+    createIronPair(editor);
+    connectIronPair(editor);
+    editor.dispatch({ type: "selection.clear" });
+    const occupied = portPoint(editor, "node-2", "input:Desc_OreIron_C");
+
+    pointer("pointerdown", occupied.x, occupied.y, { pointerType: "touch" });
+    pointer("pointermove", occupied.x - 80, occupied.y + 160, {
+      pointerType: "touch",
+    });
+    pointer("pointerup", occupied.x - 80, occupied.y + 160, {
+      pointerType: "touch",
+    });
+
+    expect(editor.getState().connectionPreview).toBeUndefined();
+    expect(editor.getState().document.materialLinks).toHaveLength(1);
+    expect(editor.getState().selectedLinkIds).toEqual([]);
+    expect(nodeRequests).toEqual([]);
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+  });
+
+  it("selects an occupied port's link on tap", () => {
+    const { editor, pointer } = createHarness();
+    createIronPair(editor);
+    connectIronPair(editor);
+    editor.dispatch({ type: "selection.clear" });
+    const occupied = portPoint(editor, "node-2", "input:Desc_OreIron_C");
+
+    pointer("pointerdown", occupied.x, occupied.y, { pointerType: "touch" });
+    pointer("pointerup", occupied.x, occupied.y, { pointerType: "touch" });
+
+    expect(editor.getState().selectedLinkIds).toEqual(["ore-link"]);
+    expect(editor.getState().connectionPreview).toBeUndefined();
+  });
+
+  it("rejects occupied, incompatible, and source-port drops without opening the picker", () => {
+    const { editor, nodeRequests, pointer } = createHarness();
+    createIronPair(editor);
+    connectIronPair(editor);
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 400 },
+      node: IRON_MINER,
+    });
+    const source = portPoint(editor, "node-3", "output:Desc_OreIron_C");
+    const occupied = portPoint(editor, "node-2", "input:Desc_OreIron_C");
+    const incompatible = portPoint(editor, "node-2", "output:Desc_IronIngot_C");
+
+    for (const destination of [source, occupied, incompatible]) {
+      pointer("pointerdown", source.x, source.y);
+      pointer("pointermove", source.x + 60, source.y + 60);
+      pointer("pointermove", destination.x, destination.y);
+      pointer("pointerup", destination.x, destination.y);
+    }
+
+    expect(editor.getState().document.materialLinks).toHaveLength(1);
+    expect(editor.getState().connectionPreview).toBeUndefined();
+    expect(editor.getState().connectionError).toBeUndefined();
+    expect(nodeRequests).toEqual([]);
+  });
+
+  it("only opens the compatible-node picker over empty canvas", () => {
+    const { editor, nodeRequests, pointer } = createHarness();
+    createIronPair(editor);
+    const source = portPoint(editor, "node-1", "output:Desc_OreIron_C");
+
+    pointer("pointerdown", source.x, source.y);
+    pointer("pointermove", 500, 150);
+    pointer("pointerup", 500, 150);
+
+    expect(nodeRequests).toEqual([]);
+    expect(editor.getState().connectionPreview).toBeUndefined();
+  });
+
+  it("does not pan or move anything when an existing link is dragged", () => {
+    const { editor, pointer, viewport } = createHarness();
+    createIronPair(editor);
+    connectIronPair(editor);
+    editor.dispatch({ type: "selection.clear" });
+    const document = editor.getState().document;
+    const path = materialLinkPath(document, document.materialLinks[0]!);
+    if (!path) throw new Error("Missing test Material Link path.");
+    const midpoint = materialLinkPoint(path, 0.5);
+
+    pointer("pointerdown", midpoint.x, midpoint.y, { pointerType: "touch" });
+    pointer("pointermove", midpoint.x + 80, midpoint.y + 100, {
+      pointerType: "touch",
+    });
+    pointer("pointerup", midpoint.x + 80, midpoint.y + 100, {
+      pointerType: "touch",
+    });
+
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(editor.getState().document).toEqual(document);
+    expect(editor.getState().selectedLinkIds).toEqual([]);
   });
 
   it("cancels a Material Link preview without changing history", () => {
@@ -241,7 +487,7 @@ describe("canvas interactions", () => {
     expect(editor.getState().selectedIds).toEqual([]);
   });
 
-  it("pans over an unselected node without selecting it", () => {
+  it("selects and moves an unselected node in one drag", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
@@ -259,9 +505,10 @@ describe("canvas interactions", () => {
     pointer("pointermove", 50, 100);
     pointer("pointerup", 50, 100);
 
-    expect(viewport()).toEqual({ x: 30, y: 20, zoom: 1 });
-    expect(editor.getState().selectedIds).toEqual(["node-2"]);
-    expect(editor.getState().document).toEqual(original);
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().document).not.toEqual(original);
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 34, y: 32 });
   });
 
   it("does not turn small pointer movement into a drag", () => {
@@ -300,6 +547,20 @@ describe("canvas interactions", () => {
     pointer("pointerup", 200, 250);
 
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 42 });
+  });
+
+  it("auto-pans while moving a node near a canvas edge", () => {
+    const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
+    editor.dispatch({
+      type: "node.create",
+      node: TEST_NODE_TEMPLATE,
+      at: { x: 100, y: 100 },
+    });
+
+    pointer("pointerdown", 20, 80);
+    pointer("pointermove", 995, 400);
+
+    expect(viewport().x).toBeLessThan(0);
   });
 
   it("applies snapping in world coordinates at a transformed zoom", () => {
@@ -375,7 +636,19 @@ describe("canvas interactions", () => {
     pointer("pointermove", 300, 250, { buttons: 0 });
     key("n");
 
-    expect(nodeRequests).toEqual([{ x: 100, y: 100 }]);
+    expect(nodeRequests).toEqual([{ at: { x: 100, y: 100 } }]);
+  });
+
+  it("places a pending node with the next deliberate canvas tap", () => {
+    const { placements, pointer, setPlacementActive } = createHarness({
+      viewport: { x: 100, y: 50, zoom: 2 },
+    });
+    setPlacementActive(true);
+
+    pointer("pointerdown", 300, 250, { pointerType: "touch" });
+    pointer("pointerup", 300, 250, { pointerType: "touch" });
+
+    expect(placements).toEqual([{ x: 100, y: 100 }]);
   });
 
   it("fits all nodes when empty space is double-clicked", () => {
@@ -391,6 +664,32 @@ describe("canvas interactions", () => {
     );
 
     expect(fits).toEqual(["all"]);
+  });
+
+  it("does not treat a double-clicked port as empty canvas", () => {
+    const { canvas, editor, fits } = createHarness();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_MinerMk1_C",
+        kind: "process",
+        processId: "extraction:Desc_OreIron_C",
+      },
+    });
+    const output = portPoint(editor, "node-1", "output:Desc_OreIron_C");
+
+    canvas.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: output.x,
+        clientY: output.y,
+      }),
+    );
+
+    expect(fits).toEqual([]);
   });
 
   it("cancels an active move with Escape", () => {
@@ -521,7 +820,7 @@ describe("canvas interactions", () => {
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
-  it("pans when a single-touch drag starts on an unselected node body", () => {
+  it("moves when a single-touch drag starts on an unselected node body", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
@@ -548,12 +847,13 @@ describe("canvas interactions", () => {
       pointerType: "touch",
     });
 
-    expect(viewport()).toEqual({ x: 20, y: 20, zoom: 1 });
-    expect(editor.getState().selectedIds).toEqual(["node-2"]);
-    expect(editor.getState().document).toEqual(original);
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().document).not.toEqual(original);
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
-  it("pans when a single-touch drag starts on an unselected node header", () => {
+  it("moves when a single-touch drag starts on an unselected node header", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
@@ -580,9 +880,10 @@ describe("canvas interactions", () => {
       pointerType: "touch",
     });
 
-    expect(viewport()).toEqual({ x: 20, y: 20, zoom: 1 });
-    expect(editor.getState().selectedIds).toEqual(["node-2"]);
-    expect(editor.getState().document).toEqual(original);
+    expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(editor.getState().selectedIds).toEqual(["node-1"]);
+    expect(editor.getState().document).not.toEqual(original);
+    expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
   it("does not change selection when a pinch starts on a node", () => {
