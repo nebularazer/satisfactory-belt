@@ -1,5 +1,6 @@
 import {
   analyzeDetailedPlan,
+  assertDetailedNodeConfiguration,
   type DetailedFlowAnalysis,
   type LogisticsTier,
   type PhysicalConnection,
@@ -29,6 +30,11 @@ export type DetailedCanvasEditorAction =
   | { type: "connection.tier"; id: string; tierId: string }
   | { type: "history.redo" }
   | { type: "history.undo" }
+  | {
+      type: "node.configure";
+      configuration: DetailedCanvasDocument["nodes"][number]["configuration"];
+      id: string;
+    }
   | { type: "node.create"; node: DetailedCanvasDocument["nodes"][number] }
   | { type: "node.delete"; id: string }
   | { type: "node.move"; delta: Point; ids: readonly string[] }
@@ -148,6 +154,7 @@ export function createDetailedCanvasEditor(
               ),
             }
           : { ...node.configuration, id };
+      assertDetailedNodeConfiguration(configuration);
       return {
         ...node,
         configuration,
@@ -228,6 +235,27 @@ export function createDetailedCanvasEditor(
           { nodeIds: [action.node.configuration.id] },
         );
         return;
+      case "node.configure": {
+        const node = state.document.nodes.find(
+          ({ configuration }) => configuration.id === action.id,
+        );
+        if (!node) return;
+        const configuration = { ...action.configuration, id: action.id };
+        assertDetailedNodeConfiguration(configuration);
+        commit(
+          {
+            ...state.document,
+            nodes: state.document.nodes.map((candidate) =>
+              candidate.configuration.id === action.id
+                ? { ...candidate, configuration }
+                : candidate,
+            ),
+          },
+          true,
+          { nodeIds: [action.id] },
+        );
+        return;
+      }
       case "node.delete": {
         const connectionIds = state.document.connections
           .filter(
@@ -431,6 +459,10 @@ export function createDetailedCanvasEditor(
     },
   };
 }
+
+export type DetailedCanvasEditor = ReturnType<
+  typeof createDetailedCanvasEditor
+>;
 
 export type DetailedConnectionPresentation = Readonly<{
   descriptorRates: readonly Readonly<{

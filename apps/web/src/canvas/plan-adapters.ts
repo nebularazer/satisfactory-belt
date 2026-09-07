@@ -11,12 +11,12 @@ import {
 import { GRID_INTERVAL } from "./grid";
 import { nodeCardLayout } from "./node-card-layout";
 
-function canvasNode(
-  configuration: CanvasNode["configuration"],
+function canvasNode<Configuration extends CanvasNode["configuration"]>(
+  configuration: Configuration,
   index: number,
   position?: Readonly<{ x: number; y: number }>,
   provenance?: CanvasNode["provenance"],
-): CanvasNode {
+): CanvasNode & Readonly<{ configuration: Configuration }> {
   const layout = nodeCardLayout(configuration);
   const resolved = createNode(configuration);
   return {

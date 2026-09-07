@@ -34,7 +34,7 @@ describe("canvas editor", () => {
     return editor;
   };
 
-  it("creates and selects one undoable Material Link", () => {
+  it("creates one unselected undoable Material Link", () => {
     const editor = connectableEditor();
     editor.dispatch({
       type: "link.create",
@@ -43,11 +43,55 @@ describe("canvas editor", () => {
       to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
     });
     expect(editor.getState().document.materialLinks).toHaveLength(1);
-    expect(editor.getState().selectedLinkIds).toEqual(["ore-link"]);
+    expect(editor.getState().selectedLinkIds).toEqual([]);
     editor.dispatch({ type: "history.undo" });
     expect(editor.getState().document.materialLinks).toEqual([]);
     editor.dispatch({ type: "history.redo" });
     expect(editor.getState().document.materialLinks[0]?.id).toBe("ore-link");
+    expect(editor.getState().selectedLinkIds).toEqual([]);
+  });
+
+  it("reconnects one Material Link endpoint as an undoable operation", () => {
+    const editor = connectableEditor();
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 900, y: 100 },
+      node: {
+        buildableId: "Build_SmelterMk1_C",
+        kind: "process",
+        processId: "Recipe_IngotIron_C",
+      },
+    });
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      id: "ore-link",
+      to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+    });
+
+    editor.dispatch({
+      type: "link.reconnect",
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      id: "ore-link",
+      to: { nodeId: "node-3", portId: "input:Desc_OreIron_C" },
+    });
+
+    expect(editor.getState().document.materialLinks).toEqual([
+      {
+        from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+        id: "ore-link",
+        to: { nodeId: "node-3", portId: "input:Desc_OreIron_C" },
+      },
+    ]);
+    expect(editor.getState().selectedLinkIds).toEqual(["ore-link"]);
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.materialLinks[0]?.to.nodeId).toBe(
+      "node-2",
+    );
+    editor.dispatch({ type: "history.redo" });
+    expect(editor.getState().document.materialLinks[0]?.to.nodeId).toBe(
+      "node-3",
+    );
   });
 
   it("cascades Node deletion to links and restores both atomically", () => {

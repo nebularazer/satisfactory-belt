@@ -12,12 +12,13 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { toast } from "sonner";
+import { nodeChoicesForBuildable } from "@satisfactory-belt/production";
 
 import { runCanvasBenchmark } from "@/canvas/benchmark";
 import {
-  parseCanvasDocument,
-  serializeCanvasDocument,
-} from "@/canvas/document-format";
+  canvasDocumentForConnection,
+  compatibleTemplatePortIds,
+} from "@/canvas/connection-compatibility";
 import {
   attachCanvasAutosave,
   createIndexedDbDocumentStorage,
@@ -25,8 +26,15 @@ import {
   type SavedCanvasDocument,
 } from "@/canvas/document-storage";
 import { createCanvasEditor } from "@/canvas/editor";
-import { canvasNodeId, type CanvasDocument } from "@/canvas/document";
+import {
+  detailedDocumentFromEditor,
+  detailedDocumentToEditor,
+  materializeDetailedCanvas,
+  type CanvasEditorMode,
+} from "@/canvas/editor-mode";
+import { canvasNodeId } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
+import type { CanvasConnectionRequest } from "@/canvas/interactions";
 import {
   createCanvasLoadFixture,
   loadFixtureNodeCount,
@@ -34,17 +42,24 @@ import {
 import type { InfiniteCanvasHandle } from "@/canvas/infinite-canvas";
 import type { CanvasPerformanceMetrics } from "@/canvas/performance";
 import {
+  parseCanvasPlanDocument,
+  serializeCanvasPlanDocument,
+  type CanvasPlanDocument,
+} from "@/canvas/plan-document-format";
+import {
   CANVAS_PREFERENCES,
   readBooleanPreference,
   writeBooleanPreference,
 } from "@/canvas/preferences";
 import type { Viewport } from "@/canvas/viewport";
 import { CanvasContextMenu } from "@/components/canvas-context-menu";
+import { CanvasBuildBar } from "@/components/canvas-build-bar";
 import { CanvasControls } from "@/components/canvas-controls";
 import { CanvasEmptyState } from "@/components/canvas-empty-state";
 import { CanvasMenu } from "@/components/canvas-menu";
 import { ManagePlansDialog } from "@/components/manage-plans-dialog";
 import type { NodePickerSelection } from "@/components/node-picker";
+import { NodeSelectionBar } from "@/components/node-selection-bar";
 import { PerformanceBar } from "@/components/performance-bar";
 import { SavePlanDialog } from "@/components/save-plan-dialog";
 import {
@@ -61,6 +76,8 @@ import { Toaster } from "@/components/ui/sonner";
 
 const loadNodePicker = () => import("@/components/node-picker");
 const loadNodeInspector = () => import("@/components/node-inspector");
+const loadMaterialLinkInspector = () =>
+  import("@/components/material-link-inspector");
 const loadInfiniteCanvas = () => import("@/canvas/infinite-canvas");
 const InfiniteCanvas = lazy(async () => ({
   default: (await loadInfiniteCanvas()).InfiniteCanvas,
@@ -71,6 +88,9 @@ const NodePicker = lazy(async () => ({
 const NodeInspector = lazy(async () => ({
   default: (await loadNodeInspector()).NodeInspector,
 }));
+const MaterialLinkInspector = lazy(async () => ({
+  default: (await loadMaterialLinkInspector()).MaterialLinkInspector,
+}));
 
 function preloadNodePicker() {
   void loadNodePicker();
@@ -80,16 +100,40 @@ type BootstrapState =
   | { ready: false }
   | {
       activeSave: SavedCanvasDocument | null;
-      document?: CanvasDocument;
+      document?: CanvasPlanDocument;
       ready: true;
     };
 
 type CanvasWorkspaceProps = {
   autosaveEnabled: boolean;
   initialActiveSave: SavedCanvasDocument | null;
-  initialDocument?: CanvasDocument;
+  initialDocument?: CanvasPlanDocument;
   storage: CanvasDocumentStorage;
 };
+
+type PendingNodeRequest = Readonly<{
+  at?: Point;
+  connection?: CanvasConnectionRequest;
+  placementAfterPick: boolean;
+}>;
+
+function quickBuildSelection(buildableId: string): NodePickerSelection {
+  const choice = nodeChoicesForBuildable(buildableId)[0];
+  if (!choice) throw new Error(`No Node choice exists for ${buildableId}.`);
+  return { label: choice.label, node: choice.template };
+}
+
+function availableDetailedPlanName(
+  sourceName: string,
+  saves: readonly SavedCanvasDocument[],
+) {
+  const base = `${sourceName} — Detailed`;
+  const names = new Set(saves.map(({ name }) => name.toLocaleLowerCase()));
+  if (!names.has(base.toLocaleLowerCase())) return base;
+  let suffix = 2;
+  while (names.has(`${base} ${suffix}`.toLocaleLowerCase())) suffix += 1;
+  return `${base} ${suffix}`;
+}
 
 function CanvasWorkspace({
   autosaveEnabled,
@@ -99,13 +143,25 @@ function CanvasWorkspace({
 }: CanvasWorkspaceProps) {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const editor = useMemo(
-    () =>
-      createCanvasEditor({
-        document: initialDocument,
-        snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
-      }),
-    [initialDocument],
+  const initialMode: CanvasEditorMode =
+    initialDocument?.kind === "detailed" ? "detailed" : "basic";
+  const detailedTiersRef = useRef(
+    initialDocument?.kind === "detailed" ? initialDocument.tiers : [],
+  );
+  const [editorMode, setEditorMode] = useState<CanvasEditorMode>(initialMode);
+  const [editor, setEditor] = useState(() =>
+    createCanvasEditor({
+      ...(initialDocument
+        ? {
+            document:
+              initialDocument.kind === "detailed"
+                ? detailedDocumentToEditor(initialDocument)
+                : initialDocument,
+          }
+        : {}),
+      snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
+      topology: initialMode === "detailed" ? "physical" : "aggregate",
+    }),
   );
   const getEditorUiState = useMemo(() => {
     const initialState = editor.getState();
@@ -115,6 +171,10 @@ function CanvasWorkspace({
       nodeCount: initialState.document.nodes.length,
       selectedCount:
         initialState.selectedIds.length + initialState.selectedLinkIds.length,
+      selectedNodeId:
+        initialState.selectedIds.length === 1
+          ? initialState.selectedIds[0]
+          : undefined,
       selectedNodeCount: initialState.selectedIds.length,
       snapToGrid: initialState.snapToGrid,
     };
@@ -125,11 +185,14 @@ function CanvasWorkspace({
       const selectedCount =
         state.selectedIds.length + state.selectedLinkIds.length;
       const selectedNodeCount = state.selectedIds.length;
+      const selectedNodeId =
+        state.selectedIds.length === 1 ? state.selectedIds[0] : undefined;
       if (
         cached.canRedo !== state.canRedo ||
         cached.canUndo !== state.canUndo ||
         cached.nodeCount !== nodeCount ||
         cached.selectedCount !== selectedCount ||
+        cached.selectedNodeId !== selectedNodeId ||
         cached.selectedNodeCount !== selectedNodeCount ||
         cached.snapToGrid !== state.snapToGrid
       ) {
@@ -138,6 +201,7 @@ function CanvasWorkspace({
           canUndo: state.canUndo,
           nodeCount,
           selectedCount,
+          selectedNodeId,
           selectedNodeCount,
           snapToGrid: state.snapToGrid,
         };
@@ -151,6 +215,11 @@ function CanvasWorkspace({
     getEditorUiState,
     getEditorUiState,
   );
+  const connectionError = useSyncExternalStore(
+    editor.subscribe,
+    () => editor.getState().connectionError,
+    () => editor.getState().connectionError,
+  );
   const [performanceMetrics, setPerformanceMetrics] =
     useState<CanvasPerformanceMetrics | null>(null);
   const [showPerformance, setShowPerformance] = useState(() =>
@@ -160,10 +229,15 @@ function CanvasWorkspace({
     readBooleanPreference(CANVAS_PREFERENCES.showGridDots, true),
   );
   const [zoom, setZoom] = useState(1);
-  const [pendingNode, setPendingNode] = useState<{ at: Point } | null>(null);
+  const [pendingNode, setPendingNode] = useState<PendingNodeRequest | null>(
+    null,
+  );
+  const [placement, setPlacement] = useState<NodePickerSelection | null>(null);
+  const [mobileNodeInspectorOpen, setMobileNodeInspectorOpen] = useState(false);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
+  const [convertAfterSave, setConvertAfterSave] = useState(false);
   const [activeSave, setActiveSave] = useState<SavedCanvasDocument | null>(
     initialActiveSave,
   );
@@ -172,6 +246,41 @@ function CanvasWorkspace({
     activeSaveRef.current = save;
     setActiveSave(save);
   }, []);
+  const currentPlanDocument = useCallback(
+    (): CanvasPlanDocument =>
+      editorMode === "detailed"
+        ? detailedDocumentFromEditor(
+            editor.getState().document,
+            detailedTiersRef.current,
+          )
+        : editor.getState().document,
+    [editor, editorMode],
+  );
+  const activateDocument = useCallback((document: CanvasPlanDocument) => {
+    const mode = document.kind;
+    if (mode === "detailed") detailedTiersRef.current = document.tiers;
+    setEditor(
+      createCanvasEditor({
+        document:
+          mode === "detailed" ? detailedDocumentToEditor(document) : document,
+        snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
+        topology: mode === "detailed" ? "physical" : "aggregate",
+      }),
+    );
+    setEditorMode(mode);
+  }, []);
+  const activateSave = useCallback(
+    (save: SavedCanvasDocument) => {
+      selectActiveSave(save);
+      activateDocument(save.document);
+      if (autosaveEnabled) {
+        void storage.saveWorkspace(save.document, save.id).catch(() => {
+          toast.error("The current saved plan could not be remembered.");
+        });
+      }
+    },
+    [activateDocument, autosaveEnabled, selectActiveSave, storage],
+  );
 
   useEffect(() => {
     const idleWindow = window as Window & {
@@ -201,8 +310,114 @@ function CanvasWorkspace({
       () => {
         toast.error("The plan could not be saved in this browser.");
       },
+      currentPlanDocument,
     );
-  }, [autosaveEnabled, editor, storage]);
+  }, [autosaveEnabled, currentPlanDocument, editor, storage]);
+
+  useEffect(() => {
+    if (connectionError) toast.error(connectionError.message);
+  }, [connectionError]);
+
+  useEffect(() => {
+    setMobileNodeInspectorOpen(false);
+  }, [editorState.selectedNodeId]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => canvasRef.current?.fitContent());
+    return () => cancelAnimationFrame(frame);
+  }, [editor]);
+
+  const openDetailedPlan = useCallback(
+    async (source: SavedCanvasDocument) => {
+      try {
+        const current = currentPlanDocument();
+        if (current.kind !== "basic") {
+          throw new Error("Only a Basic plan can create a Detailed plan.");
+        }
+        const savedSource = await storage.saveNamed({
+          document: current,
+          id: source.id,
+        });
+        const saves = await storage.listNamed();
+        const existing = saves.find(
+          (save) =>
+            save.document.kind === "detailed" &&
+            save.sourceSaveId === savedSource.id,
+        );
+        if (existing) {
+          activateSave(existing);
+          toast.success(`Opened “${existing.name}”.`);
+          return;
+        }
+        const detailed = await storage.saveNamed({
+          document: materializeDetailedCanvas(current),
+          name: availableDetailedPlanName(savedSource.name, saves),
+          sourceSaveId: savedSource.id,
+        });
+        activateSave(detailed);
+        toast.success(`Created “${detailed.name}” as a separate plan.`);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "The Detailed plan could not be created.",
+        );
+      }
+    },
+    [activateSave, currentPlanDocument, storage],
+  );
+
+  const changeEditorMode = useCallback(
+    (mode: CanvasEditorMode) => {
+      if (mode === editorMode) return;
+      setPendingNode(null);
+      setPlacement(null);
+      setMobileNodeInspectorOpen(false);
+
+      if (mode === "detailed") {
+        const source = activeSaveRef.current;
+        if (!source || source.document.kind !== "basic") {
+          setConvertAfterSave(true);
+          setSavePlanOpen(true);
+          toast.info("Save the Basic plan before creating its Detailed copy.");
+          return;
+        }
+        void openDetailedPlan(source);
+        return;
+      }
+
+      const detailed = activeSaveRef.current;
+      if (!detailed || detailed.document.kind !== "detailed") return;
+      if (!detailed.sourceSaveId) {
+        toast.error("This Detailed plan has no linked Basic source.");
+        return;
+      }
+      void (async () => {
+        try {
+          const savedDetailed = await storage.saveNamed({
+            document: currentPlanDocument(),
+            id: detailed.id,
+            sourceSaveId: detailed.sourceSaveId,
+          });
+          const source = (await storage.listNamed()).find(
+            ({ id }) => id === savedDetailed.sourceSaveId,
+          );
+          if (!source || source.document.kind !== "basic") {
+            throw new Error("The linked Basic plan could not be found.");
+          }
+          activateSave(source);
+          toast.success(`Opened “${source.name}”.`);
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "The Basic plan could not be opened.",
+          );
+        }
+      })();
+    },
+    [activateSave, currentPlanDocument, editorMode, openDetailedPlan, storage],
+  );
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -236,9 +451,20 @@ function CanvasWorkspace({
     setShowGridDots(enabled);
     writeBooleanPreference(CANVAS_PREFERENCES.showGridDots, enabled);
   };
-  const requestNodeAt = useCallback((at: Point) => {
+  const requestNodeAt = useCallback(
+    (at: Point, connection?: CanvasConnectionRequest) => {
+      preloadNodePicker();
+      setPendingNode({
+        at,
+        ...(connection ? { connection } : {}),
+        placementAfterPick: false,
+      });
+    },
+    [],
+  );
+  const requestNodePlacement = useCallback(() => {
     preloadNodePicker();
-    setPendingNode({ at });
+    setPendingNode({ placementAfterPick: true });
   }, []);
 
   const openSavePlan = useCallback(() => {
@@ -257,8 +483,9 @@ function CanvasWorkspace({
 
     try {
       const saved = await storage.saveNamed({
-        document: editor.getState().document,
+        document: currentPlanDocument(),
         id: current.id,
+        sourceSaveId: current.sourceSaveId,
       });
       selectActiveSave(saved);
       toast.success(`Updated “${saved.name}”.`);
@@ -269,7 +496,7 @@ function CanvasWorkspace({
           : "The current plan could not be updated.",
       );
     }
-  }, [editor, openSavePlan, selectActiveSave, storage]);
+  }, [currentPlanDocument, openSavePlan, selectActiveSave, storage]);
 
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
@@ -293,14 +520,79 @@ function CanvasWorkspace({
 
   const addPendingNode = (selection: NodePickerSelection) => {
     if (!pendingNode) return;
+    if (pendingNode.placementAfterPick) {
+      setPlacement(selection);
+      setPendingNode(null);
+      return;
+    }
+    if (!pendingNode.at) return;
+    const connectionDocument = canvasDocumentForConnection(
+      editor.getState().document,
+      pendingNode.connection?.replacingLinkId,
+    );
+    const compatiblePortIds = pendingNode.connection
+      ? compatibleTemplatePortIds(
+          connectionDocument,
+          pendingNode.connection.from,
+          selection.node,
+          editor.topology,
+        )
+      : [];
     editor.dispatch({
       type: "node.create",
       at: pendingNode.at,
       label: selection.label,
       node: selection.node,
     });
+    const createdNodeId = editor.getState().selectedIds[0];
+    if (pendingNode.connection && createdNodeId && compatiblePortIds[0]) {
+      const to = { nodeId: createdNodeId, portId: compatiblePortIds[0] };
+      if (pendingNode.connection.replacingLinkId) {
+        editor.dispatch({
+          type: "link.reconnect",
+          from: pendingNode.connection.from,
+          id: pendingNode.connection.replacingLinkId,
+          to,
+        });
+      } else {
+        editor.dispatch({
+          type: "link.create",
+          from: pendingNode.connection.from,
+          to,
+        });
+      }
+    }
     setPendingNode(null);
   };
+
+  const allowPendingSelection = useCallback(
+    (selection: NodePickerSelection) =>
+      !pendingNode?.connection ||
+      compatibleTemplatePortIds(
+        canvasDocumentForConnection(
+          editor.getState().document,
+          pendingNode.connection.replacingLinkId,
+        ),
+        pendingNode.connection.from,
+        selection.node,
+        editor.topology,
+      ).length > 0,
+    [editor, pendingNode?.connection],
+  );
+
+  const placePendingNode = useCallback(
+    (at: Point) => {
+      if (!placement) return;
+      editor.dispatch({
+        type: "node.create",
+        at,
+        label: placement.label,
+        node: placement.node,
+      });
+      setPlacement(null);
+    },
+    [editor, placement],
+  );
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const canvas = canvasRef.current;
@@ -312,7 +604,7 @@ function CanvasWorkspace({
     });
     const hit = editor.hitTest(at);
     if (!hit) {
-      const link = editor.hitTestLink(at, 8 / zoom);
+      const link = editor.hitTestLink(at, 12 / zoom);
       if (link) {
         if (!editor.getState().selectedLinkIds.includes(link.id)) {
           editor.dispatch({
@@ -345,7 +637,7 @@ function CanvasWorkspace({
       x: touch.clientX - bounds.left,
       y: touch.clientY - bounds.top,
     });
-    return Boolean(editor.hitTest(at) || editor.hitTestLink(at, 8 / zoom));
+    return Boolean(editor.hitTest(at) || editor.hitTestLink(at, 24 / zoom));
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -354,9 +646,9 @@ function CanvasWorkspace({
     if (!file) return;
 
     try {
-      const document = parseCanvasDocument(await file.text());
+      const document = parseCanvasPlanDocument(await file.text());
       selectActiveSave(null);
-      editor.dispatch({ type: "document.replace", document });
+      activateDocument(document);
       requestAnimationFrame(() => canvasRef.current?.fitContent());
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
@@ -369,7 +661,7 @@ function CanvasWorkspace({
   };
 
   const exportDocument = () => {
-    const serialized = serializeCanvasDocument(editor.getState().document);
+    const serialized = serializeCanvasPlanDocument(currentPlanDocument());
     const url = URL.createObjectURL(
       new Blob([serialized], { type: "application/json" }),
     );
@@ -384,18 +676,9 @@ function CanvasWorkspace({
   const deleteSelection = () => editor.dispatch({ type: "selection.delete" });
   const duplicateSelection = () =>
     editor.dispatch({ type: "selection.duplicate" });
-  const requestNodeAtCenter = () => {
-    requestNodeAt(canvasRef.current?.getViewportCenter() ?? { x: 0, y: 0 });
-  };
   const loadDocument = (save: SavedCanvasDocument) => {
-    selectActiveSave(save);
-    editor.dispatch({ type: "document.replace", document: save.document });
+    activateSave(save);
     requestAnimationFrame(() => canvasRef.current?.fitContent());
-    if (autosaveEnabled) {
-      void storage.saveWorkspace(save.document, save.id).catch(() => {
-        toast.error("The current saved plan could not be remembered.");
-      });
-    }
     toast.success(`Loaded “${save.name}”.`);
   };
   const resetCanvas = () => {
@@ -419,10 +702,13 @@ function CanvasWorkspace({
           <Suspense fallback={<div className="infinite-canvas" />}>
             <InfiniteCanvas
               editor={editor}
+              onCancelPlacement={() => setPlacement(null)}
               onPerformanceMetricsChange={handlePerformanceMetricsChange}
+              onPlaceNode={placePendingNode}
               onRequestAddNode={requestNodeAt}
               onViewportChange={handleViewportChange}
               performanceMetricsEnabled={showPerformance}
+              placementActive={placement !== null}
               ref={canvasRef}
               showGridDots={showGridDots}
             />
@@ -443,7 +729,6 @@ function CanvasWorkspace({
               editorState.canUndo ||
               editorState.canRedo
             }
-            onAddNode={requestNodeAtCenter}
             onDelete={deleteSelection}
             onDuplicate={duplicateSelection}
             onExport={exportDocument}
@@ -467,17 +752,49 @@ function CanvasWorkspace({
           />
         </div>
 
+        <div className="pointer-events-auto absolute top-3 left-1/2 max-w-[calc(100vw-5.5rem)] -translate-x-1/2 sm:top-4">
+          <CanvasBuildBar
+            mode={editorMode}
+            onAddMerger={() =>
+              setPlacement(
+                quickBuildSelection("Build_ConveyorAttachmentMerger_C"),
+              )
+            }
+            onAddNode={requestNodePlacement}
+            onAddSplitter={() =>
+              setPlacement(
+                quickBuildSelection("Build_ConveyorAttachmentSplitter_C"),
+              )
+            }
+            onCancelPlacement={() => setPlacement(null)}
+            onModeChange={changeEditorMode}
+            placementLabel={placement?.label}
+          />
+        </div>
+
         {editorState.nodeCount === 0 && (
           <CanvasEmptyState
-            onAddNode={requestNodeAtCenter}
+            onAddNode={requestNodePlacement}
             onImport={() => importInputRef.current?.click()}
             onManagePlans={() => setManagePlansOpen(true)}
           />
         )}
 
         <Suspense fallback={null}>
-          <NodeInspector editor={editor} />
+          <NodeInspector
+            editor={editor}
+            mode={editorMode}
+            mobileOpen={mobileNodeInspectorOpen}
+          />
+          <MaterialLinkInspector editor={editor} mode={editorMode} />
         </Suspense>
+
+        {!mobileNodeInspectorOpen && (
+          <NodeSelectionBar
+            editor={editor}
+            onEdit={() => setMobileNodeInspectorOpen(true)}
+          />
+        )}
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
           <CanvasControls
@@ -513,6 +830,10 @@ function CanvasWorkspace({
       />
       <Suspense fallback={null}>
         <NodePicker
+          allowSelection={
+            pendingNode?.connection ? allowPendingSelection : undefined
+          }
+          replaceMachinesWithRecipes={Boolean(pendingNode?.connection)}
           onOpenChange={(open) => {
             if (!open) setPendingNode(null);
           }}
@@ -527,7 +848,7 @@ function CanvasWorkspace({
           selectActiveSave(null);
           if (autosaveEnabled) {
             void storage
-              .saveWorkspace(editor.getState().document, null)
+              .saveWorkspace(currentPlanDocument(), null)
               .catch(() => {
                 toast.error("The current saved plan could not be cleared.");
               });
@@ -540,10 +861,20 @@ function CanvasWorkspace({
       />
       <SavePlanDialog
         activeSave={activeSave}
-        currentDocument={editor.getState().document}
-        onOpenChange={setSavePlanOpen}
-        onSaved={selectActiveSave}
+        currentDocument={currentPlanDocument()}
+        onOpenChange={(open) => {
+          setSavePlanOpen(open);
+          if (!open) setConvertAfterSave(false);
+        }}
+        onSaved={(save) => {
+          selectActiveSave(save);
+          if (convertAfterSave && save.document.kind === "basic") {
+            setConvertAfterSave(false);
+            void openDetailedPlan(save);
+          }
+        }}
         open={savePlanOpen}
+        sourceSaveId={activeSave?.sourceSaveId}
         storage={storage}
       />
       <AlertDialog onOpenChange={setResetCanvasOpen} open={resetCanvasOpen}>

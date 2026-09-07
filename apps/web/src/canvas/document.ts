@@ -36,7 +36,7 @@ export function canvasNodeId(node: CanvasNode) {
 
 export type CanvasDocument = Readonly<{
   kind: "basic";
-  materialLinks: readonly MaterialLink[];
+  materialLinks: readonly CanvasMaterialLink[];
   nodes: readonly CanvasNode[];
   version: typeof CANVAS_DOCUMENT_VERSION;
 }>;
@@ -48,4 +48,10 @@ export const EMPTY_CANVAS_DOCUMENT: CanvasDocument = {
   version: CANVAS_DOCUMENT_VERSION,
 };
 
-export type CanvasMaterialLink = MaterialLink;
+export type CanvasMaterialLink = MaterialLink &
+  Readonly<{
+    logistics?: Readonly<{
+      kind: "conveyor" | "pipeline";
+      tierId: string;
+    }>;
+  }>;

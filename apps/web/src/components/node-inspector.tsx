@@ -34,6 +34,7 @@ import {
 } from "react";
 
 import type { CanvasEditor } from "@/canvas/editor";
+import type { CanvasEditorMode } from "@/canvas/editor-mode";
 import type { CanvasNode } from "@/canvas/document";
 import { Button } from "@/components/ui/button";
 import {
@@ -482,11 +483,13 @@ function cloneInstance(instance: InspectorInstance): InspectorInstance {
 function ProcessControls({
   configuration,
   editor,
+  mode,
   nodeId,
   scope,
 }: Readonly<{
   configuration: ProcessNodeConfiguration;
   editor: CanvasEditor;
+  mode: CanvasEditorMode;
   nodeId: string;
   scope: InspectorScope;
 }>) {
@@ -550,7 +553,7 @@ function ProcessControls({
   return (
     <Section title="Configuration">
       <div className="grid gap-3">
-        {scope === "all" && (
+        {mode === "basic" && scope === "all" && (
           <NumberStepper
             label="Machine count"
             maximum={MAX_INSTANCE_COUNT}
@@ -1139,6 +1142,7 @@ function RouterControls({
 function InspectorContent({
   editor,
   keyboardEditing,
+  mode,
   node,
   onSheetHandlePointerCancel,
   onSheetHandlePointerDown,
@@ -1147,6 +1151,7 @@ function InspectorContent({
 }: Readonly<{
   editor: CanvasEditor;
   keyboardEditing: boolean;
+  mode: CanvasEditorMode;
   node: CanvasNode;
   onSheetHandlePointerCancel: (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -1207,7 +1212,7 @@ function InspectorContent({
           <X aria-hidden="true" />
         </Button>
       </header>
-      {configuration.kind === "process" && (
+      {configuration.kind === "process" && mode === "basic" && (
         <ScopeSelector
           count={instances.length}
           onChange={setScope}
@@ -1219,6 +1224,7 @@ function InspectorContent({
           <ProcessControls
             configuration={configuration}
             editor={editor}
+            mode={mode}
             nodeId={configuration.id}
             scope={safeScope}
           />
@@ -1261,7 +1267,15 @@ function InspectorContent({
   );
 }
 
-export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
+export function NodeInspector({
+  editor,
+  mode = "basic",
+  mobileOpen = true,
+}: Readonly<{
+  editor: CanvasEditor;
+  mode?: CanvasEditorMode;
+  mobileOpen?: boolean;
+}>) {
   const state = useSyncExternalStore(
     editor.subscribe,
     editor.getState,
@@ -1333,6 +1347,7 @@ export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
       aria-label={`Node details: ${node.label}`}
       className={cn(
         "pointer-events-auto absolute right-0 bottom-0 left-0 z-20 flex flex-col overflow-hidden rounded-t-2xl border border-x-0 border-b-0 border-border bg-card text-card-foreground shadow-2xl lg:top-4 lg:right-4 lg:bottom-auto lg:left-auto lg:z-auto lg:max-h-[calc(100dvh-2rem)] lg:w-[22rem] lg:rounded-xl lg:border-x lg:border-b lg:shadow-xl",
+        !mobileOpen && "hidden lg:flex",
         keyboardEditing ? "max-h-[100dvh]" : "max-h-[82dvh]",
       )}
       onBlurCapture={(event) => {
@@ -1362,6 +1377,7 @@ export function NodeInspector({ editor }: Readonly<{ editor: CanvasEditor }>) {
       <InspectorContent
         editor={editor}
         keyboardEditing={keyboardEditing}
+        mode={mode}
         node={node}
         onSheetHandlePointerCancel={(event) => finishSheetDrag(event, true)}
         onSheetHandlePointerDown={handleSheetPointerDown}

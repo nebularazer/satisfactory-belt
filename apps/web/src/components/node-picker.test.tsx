@@ -35,6 +35,94 @@ afterEach(cleanup);
 beforeEach(() => localStorage.clear());
 
 describe("NodePicker", () => {
+  it("limits a dropped Material Link picker to compatible selections", () => {
+    render(
+      <NodePicker
+        allowSelection={(selection) =>
+          selection.node.kind === "process" &&
+          selection.node.processId === "Recipe_IngotIron_C"
+        }
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+        replaceMachinesWithRecipes
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Add compatible node" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Production")).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "iron ingot" } },
+    );
+    expect(
+      screen.getByRole("option", { name: /^Iron Ingot/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /^Pure Iron Ingot/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows compatible recipes directly and can cancel link placement", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <NodePicker
+        allowSelection={(selection) =>
+          selection.node.kind === "process" &&
+          selection.node.processId === "Recipe_IngotIron_C"
+        }
+        onOpenChange={onOpenChange}
+        onSelect={() => undefined}
+        open
+        replaceMachinesWithRecipes
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: /^Iron Ingot/ })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /^Smelter 1 recipe/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel adding node" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps compatible logistics, transport, and special choices", () => {
+    const allowedBuildables = new Set([
+      "Build_ConveyorAttachmentSplitter_C",
+      "Build_ResourceSink_C",
+      "Build_TruckStation_C",
+    ]);
+    render(
+      <NodePicker
+        allowSelection={(selection) =>
+          allowedBuildables.has(selection.node.buildableId) ||
+          (selection.node.kind === "process" &&
+            selection.node.processId === "Recipe_IngotIron_C")
+        }
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+        replaceMachinesWithRecipes
+      />,
+    );
+
+    expect(screen.getByText("Logistics")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Conveyor Splitter" }),
+    ).toBeVisible();
+    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /^Iron Ingot/ })).toBeVisible();
+    expect(screen.getByText("Transport")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Truck Station" })).toBeVisible();
+    expect(screen.getByText("Special")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "AWESOME Sink" })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /^Smelter 1 recipe/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps recipes out of the initial building browser", () => {
     render(
       <NodePicker
@@ -328,6 +416,30 @@ describe("NodePicker", () => {
     });
   });
 
+  it("opens and leaves the active recipe route with horizontal arrows", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    const search = screen.getByPlaceholderText(
+      "Search buildings or recipes...",
+    );
+    fireEvent.change(search, { target: { value: "screws" } });
+    expect(screen.getAllByRole("option")[0]).toHaveAccessibleName(/^Screws/);
+
+    fireEvent.keyDown(search, { key: "ArrowRight" });
+    const routeSearch = screen.getByPlaceholderText("Search Screws recipes...");
+
+    fireEvent.keyDown(routeSearch, { key: "ArrowLeft" });
+    expect(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+    ).toHaveValue("screws");
+  });
+
   it("narrows recipes after selecting a machine", () => {
     const onSelect = vi.fn();
     render(
@@ -422,6 +534,35 @@ describe("NodePicker", () => {
     expect(
       screen.getByPlaceholderText("Search Constructor recipes..."),
     ).toBeInTheDocument();
+  });
+
+  it("moves between picker layers with the horizontal arrow keys", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    const search = screen.getByPlaceholderText(
+      "Search buildings or recipes...",
+    );
+    fireEvent.change(search, { target: { value: "constructor" } });
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      expect.stringContaining("machine-Build_ConstructorMk1_C"),
+    );
+
+    fireEvent.keyDown(search, { key: "ArrowRight" });
+    const recipeSearch = screen.getByPlaceholderText(
+      "Search Constructor recipes...",
+    );
+
+    fireEvent.keyDown(recipeSearch, { key: "ArrowLeft" });
+    expect(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+    ).toHaveValue("constructor");
   });
 
   it("shows logistics as a quick-add grid", () => {

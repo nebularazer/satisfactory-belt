@@ -2,7 +2,7 @@ import {
   generateDetailedPlan,
   type DetailedPlan,
 } from "@satisfactory-belt/planning";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { detailedPlanToCanvasDocument } from "@/canvas/plan-adapters";
 
@@ -19,6 +19,59 @@ function generatedEditor() {
 }
 
 describe("Detailed canvas editor", () => {
+  it("configures one physical machine without an aggregate-count operation", () => {
+    const editor = generatedEditor();
+    const node = editor
+      .getState()
+      .document.nodes.find(
+        ({ configuration }) => configuration.kind === "process",
+      );
+    if (!node || node.configuration.kind !== "process") {
+      throw new Error("Expected a generated process Node.");
+    }
+    const beforeRevision = editor.getState().analysisRevision;
+    const instance = node.configuration.instances[0];
+    expectTypeOf(node.configuration.instances).toMatchTypeOf<
+      readonly [unknown]
+    >();
+
+    editor.dispatch({
+      type: "node.configure",
+      configuration: {
+        ...node.configuration,
+        instances: [
+          {
+            ...instance,
+            ...(instance && "clockSpeedPercent" in instance
+              ? { clockSpeedPercent: 75 }
+              : {}),
+          },
+        ],
+      },
+      id: node.configuration.id,
+    });
+
+    const configured = editor
+      .getState()
+      .document.nodes.find(
+        ({ configuration }) => configuration.id === node.configuration.id,
+      )?.configuration;
+    expect(configured?.kind).toBe("process");
+    if (configured?.kind === "process") {
+      expect(configured.instances).toHaveLength(1);
+      expect(configured.instances[0]).toMatchObject({ clockSpeedPercent: 75 });
+    }
+    expect(editor.getState().analysisRevision).toBe(beforeRevision + 1);
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document).toEqual(
+      detailedPlanToCanvasDocument(
+        generateDetailedPlan({
+          outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 20 }],
+        }).plan,
+      ),
+    );
+  });
+
   it("keeps geometry-only movement off the analysis path", () => {
     const editor = generatedEditor();
     const before = editor.getState();

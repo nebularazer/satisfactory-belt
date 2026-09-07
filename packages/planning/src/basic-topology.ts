@@ -29,6 +29,12 @@ export type BasicPlanErrorCode =
   | "basic.node.empty-id"
   | "basic.port.unsupported-medium";
 
+export type MaterialConnectionTarget = Readonly<{
+  endpoint: MaterialEndpoint;
+  error?: Readonly<{ code: BasicPlanErrorCode; message: string }>;
+  status: "compatible" | "invalid" | "occupied" | "source";
+}>;
+
 export class BasicPlanError extends Error {
   override readonly name = "BasicPlanError";
 
@@ -150,6 +156,10 @@ function directionsCompatible(left: MaterialPort, right: MaterialPort) {
   );
 }
 
+function hasAggregatePortCapacity(resolved: ResolvedPort) {
+  return resolved.node.kind === "process";
+}
+
 function canonicalLink(
   link: MaterialLink,
   from: ResolvedPort,
@@ -201,10 +211,13 @@ function validateLinks(
 
     const from = resolveEndpoint(nodes, link.from);
     const to = resolveEndpoint(nodes, link.to);
-    for (const endpoint of [link.from, link.to]) {
+    for (const [endpoint, resolved] of [
+      [link.from, from],
+      [link.to, to],
+    ] as const) {
       const key = portKey(endpoint);
       const existingLinkId = occupied.get(key);
-      if (existingLinkId) {
+      if (existingLinkId && !hasAggregatePortCapacity(resolved)) {
         throw new BasicPlanError(
           "basic.endpoint.occupied",
           `Material Port ${endpoint.nodeId}:${endpoint.portId} is already occupied.`,
@@ -216,7 +229,7 @@ function validateLinks(
           },
         );
       }
-      occupied.set(key, link.id);
+      if (!hasAggregatePortCapacity(resolved)) occupied.set(key, link.id);
     }
     if (!directionsCompatible(from.port, to.port)) {
       throw new BasicPlanError(
@@ -372,6 +385,127 @@ export function disconnectMaterialLink(
     materialLinks: plan.materialLinks.filter(({ id }) => id !== linkId),
     nodes: plan.nodes,
   });
+}
+
+/** Classifies every Material Port against the same rules as a committed link. */
+export function inspectMaterialConnectionTargets(
+  plan: BasicPlan,
+  source: MaterialEndpoint,
+): readonly MaterialConnectionTarget[] {
+  const validated = createBasicPlan(plan);
+  const nodes = resolveNodes(validated.nodes);
+  const sourceResolved = resolveEndpoint(nodes, source);
+  const occupied = new Map<string, string>();
+  for (const link of validated.materialLinks) {
+    occupied.set(portKey(link.from), link.id);
+    occupied.set(portKey(link.to), link.id);
+  }
+  const itemByPort = new Map<string, string>();
+  for (const network of connectedNetworks(validated, nodes)) {
+    if (!network.itemId) continue;
+    for (const key of network.portKeys) itemByPort.set(key, network.itemId);
+  }
+  for (const node of nodes.values()) {
+    for (const port of node.ports) {
+      if (port.itemId) {
+        itemByPort.set(
+          portKey({ nodeId: node.configuration.id, portId: port.id }),
+          port.itemId,
+        );
+      }
+    }
+  }
+
+  const sourceKey = portKey(source);
+  const sourceItemId = itemByPort.get(sourceKey);
+  const invalid = (
+    endpoint: MaterialEndpoint,
+    code: BasicPlanErrorCode,
+    message: string,
+    status: MaterialConnectionTarget["status"] = "invalid",
+  ): MaterialConnectionTarget => ({
+    endpoint,
+    error: { code, message },
+    status,
+  });
+
+  return [...nodes.values()].flatMap((node) =>
+    node.ports.map((port) => {
+      const endpoint = { nodeId: node.configuration.id, portId: port.id };
+      const key = portKey(endpoint);
+      if (key === sourceKey) return { endpoint, status: "source" } as const;
+      if (
+        occupied.has(sourceKey) &&
+        !hasAggregatePortCapacity(sourceResolved)
+      ) {
+        return invalid(
+          endpoint,
+          "basic.endpoint.occupied",
+          "The source Material Port is already connected.",
+          "occupied",
+        );
+      }
+      if (occupied.has(key) && !hasAggregatePortCapacity({ node, port })) {
+        return invalid(
+          endpoint,
+          "basic.endpoint.occupied",
+          "This Material Port is already connected.",
+          "occupied",
+        );
+      }
+      if (endpoint.nodeId === source.nodeId) {
+        return invalid(
+          endpoint,
+          "basic.link.self",
+          "A Material Link cannot connect a Node to itself.",
+        );
+      }
+      if (
+        !supportedMedia.has(sourceResolved.port.medium) ||
+        !supportedMedia.has(port.medium) ||
+        sourceResolved.port.purpose === "fuel" ||
+        port.purpose === "fuel"
+      ) {
+        return invalid(
+          endpoint,
+          "basic.port.unsupported-medium",
+          "This Material Port cannot carry a Material Link.",
+        );
+      }
+      if (!directionsCompatible(sourceResolved.port, port)) {
+        return invalid(
+          endpoint,
+          "basic.endpoint.direction",
+          "Connect an output to an input.",
+        );
+      }
+      if (sourceResolved.port.medium !== port.medium) {
+        return invalid(
+          endpoint,
+          "basic.endpoint.medium",
+          "Conveyor and Pipeline Material Ports cannot be mixed.",
+        );
+      }
+      if (
+        !sourceResolved.port.forms.some((form) => port.forms.includes(form))
+      ) {
+        return invalid(
+          endpoint,
+          "basic.endpoint.form",
+          "These Material Ports carry incompatible material forms.",
+        );
+      }
+      const targetItemId = itemByPort.get(key);
+      if (sourceItemId && targetItemId && sourceItemId !== targetItemId) {
+        return invalid(
+          endpoint,
+          "basic.link.descriptor-conflict",
+          "These Material Ports carry different materials.",
+        );
+      }
+      return { endpoint, status: "compatible" } as const;
+    }),
+  );
 }
 
 export function analyzeBasicPlan(plan: BasicPlan): BasicPlanAnalysis {

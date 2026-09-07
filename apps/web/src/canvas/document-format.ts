@@ -3,13 +3,13 @@ import {
   createBasicPlan,
   type GenerationProvenance,
   type MaterialEndpoint,
-  type MaterialLink,
 } from "@satisfactory-belt/planning";
 
 import {
   CANVAS_DOCUMENT_VERSION,
   canvasNodeId,
   type CanvasDocument,
+  type CanvasMaterialLink,
   type CanvasNode,
   type CanvasPortOrder,
   type CanvasRouterPriorities,
@@ -142,15 +142,33 @@ function parseEndpoint(value: unknown, label: string): MaterialEndpoint {
   return { nodeId: value.nodeId, portId: value.portId };
 }
 
-function parseMaterialLink(value: unknown, index: number): MaterialLink {
+function parseMaterialLink(value: unknown, index: number): CanvasMaterialLink {
   if (!isRecord(value))
     throw new Error(`Material Link ${index + 1} is not an object.`);
   if (typeof value.id !== "string" || !value.id.trim()) {
     throw new Error(`Material Link ${index + 1} has an invalid id.`);
   }
+  const logistics = value.logistics;
+  if (
+    logistics !== undefined &&
+    (!isRecord(logistics) ||
+      (logistics.kind !== "conveyor" && logistics.kind !== "pipeline") ||
+      typeof logistics.tierId !== "string" ||
+      !logistics.tierId.trim())
+  ) {
+    throw new Error(`Material Link ${index + 1} has invalid logistics.`);
+  }
   return {
     from: parseEndpoint(value.from, `Material Link ${index + 1} from endpoint`),
     id: value.id,
+    ...(isRecord(logistics)
+      ? {
+          logistics: {
+            kind: logistics.kind as "conveyor" | "pipeline",
+            tierId: logistics.tierId as string,
+          },
+        }
+      : {}),
     to: parseEndpoint(value.to, `Material Link ${index + 1} to endpoint`),
   };
 }

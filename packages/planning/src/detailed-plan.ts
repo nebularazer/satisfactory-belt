@@ -3,10 +3,12 @@ import {
   findDescriptor,
   type MaterialPort,
   type Node,
+  type NodeConfiguration,
 } from "@satisfactory-belt/production";
 
 import type {
   DetailedNode,
+  DetailedNodeConfiguration,
   DetailedPlan,
   LogisticsTier,
   MaterialEndpoint,
@@ -62,6 +64,21 @@ export type ResolvedDetailedPlan = Readonly<{
 
 export function endpointKey(endpoint: MaterialEndpoint) {
   return `${endpoint.nodeId}\u0000${endpoint.portId}`;
+}
+
+export function assertDetailedNodeConfiguration(
+  configuration: NodeConfiguration,
+): asserts configuration is DetailedNodeConfiguration {
+  if (
+    configuration.kind === "process" &&
+    configuration.instances.length !== 1
+  ) {
+    throw new DetailedPlanError(
+      "detailed.node.aggregate",
+      `Detailed Node ${configuration.id} must represent exactly one Buildable instance.`,
+      { nodeId: configuration.id },
+    );
+  }
 }
 
 function directionsCompatible(left: MaterialPort, right: MaterialPort) {
@@ -121,13 +138,7 @@ export function resolveDetailedPlan(plan: DetailedPlan): ResolvedDetailedPlan {
       );
     }
     const node = createNode(detailedNode.configuration);
-    if (node.kind === "process" && node.configuration.instances.length !== 1) {
-      throw new DetailedPlanError(
-        "detailed.node.aggregate",
-        `Detailed Node ${id} must represent exactly one Buildable instance.`,
-        { nodeId: id },
-      );
-    }
+    assertDetailedNodeConfiguration(node.configuration);
     nodes.set(id, node);
     for (const port of node.ports)
       ports.set(endpointKey({ nodeId: id, portId: port.id }), port);

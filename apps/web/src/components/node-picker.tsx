@@ -21,7 +21,6 @@ import {
   findResourceExtractor,
   findResourceWellPressurizer,
   nodeChoicesForBuildable,
-  recipeCountForMachine,
   recipesProducing,
   searchBuffers,
   searchExtractors,
@@ -42,10 +41,14 @@ import {
   type NodeRequest,
   type NodeTemplate,
 } from "@satisfactory-belt/production";
-import { ArrowLeft, ArrowRight, SearchIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, SearchIcon, XIcon } from "lucide-react";
 
 import { CommandDialog } from "@/components/ui/command";
-import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
 import {
   buildableImage,
   descriptorImage,
@@ -61,9 +64,11 @@ export type NodePickerSelection = Readonly<{
 }>;
 
 type NodePickerProps = {
+  allowSelection?: (selection: NodePickerSelection) => boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (selection: NodePickerSelection) => void;
   open: boolean;
+  replaceMachinesWithRecipes?: boolean;
 };
 
 type PickerScope =
@@ -435,6 +440,57 @@ function optionsForRow(row: PickerRow): readonly PickerOption[] {
   return row.type === "grid" ? row.options : [row];
 }
 
+function selectionsForOption(option: PickerOption) {
+  if (option.type === "recent" || option.type === "configuration") {
+    return [option.selection];
+  }
+  if (option.type === "recipe") {
+    const selection = selectionsForBuildable(option.machine).find(
+      ({ node }) =>
+        node.kind === "process" && node.processId === option.recipe.id,
+    );
+    return selection ? [selection] : [];
+  }
+  if (option.type === "extractor-resource") {
+    return selectionsForBuildable(option.extractor).filter(({ node }) => {
+      if (node.kind !== "process") return false;
+      const process = findProductionProcess(node.processId);
+      return (
+        (process?.kind === "extraction" || process?.kind === "resource-well") &&
+        process.outputItemIds.includes(option.resource.id)
+      );
+    });
+  }
+  const buildable =
+    option.type === "machine"
+      ? option.machine
+      : option.type === "extractor"
+        ? option.extractor
+        : option.buildable;
+  return selectionsForBuildable(buildable);
+}
+
+function filterPickerRows(
+  rows: readonly PickerRow[],
+  allowSelection: (selection: NodePickerSelection) => boolean,
+) {
+  const filtered = rows.flatMap((row): PickerRow[] => {
+    if (row.type === "heading") return [row];
+    if (row.type === "grid") {
+      const options = row.options.filter((option) =>
+        selectionsForOption(option).some(allowSelection),
+      );
+      return options.length > 0 ? [{ ...row, options }] : [];
+    }
+    return selectionsForOption(row).some(allowSelection) ? [row] : [];
+  });
+  return filtered.filter((row, index) => {
+    if (row.type !== "heading") return true;
+    const next = filtered[index + 1];
+    return Boolean(next && next.type !== "heading");
+  });
+}
+
 function estimatedRowHeight(row: PickerRow) {
   if (row.type === "heading") return 30;
   if (row.type === "grid") return row.layout === "recent" ? 100 : 200;
@@ -474,7 +530,7 @@ function PickerTile({
       data-active={active}
       id={domId}
       onClick={onSelect}
-      onMouseEnter={onActivate}
+      onMouseMove={onActivate}
       role="option"
     >
       <ResponsiveCatalogImage
@@ -570,7 +626,7 @@ function RecipeRow({
     <div
       className="flex items-stretch rounded-md data-[active=true]:bg-muted"
       data-active={active}
-      onMouseEnter={onActivate}
+      onMouseMove={onActivate}
     >
       <div
         aria-posinset={position}
@@ -684,12 +740,19 @@ function RecipeRow({
   );
 }
 
-export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
+export function NodePicker({
+  allowSelection,
+  onOpenChange,
+  onSelect,
+  open,
+  replaceMachinesWithRecipes = false,
+}: NodePickerProps) {
   const [scope, setScope] = useState<PickerScope>({ type: "root" });
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [recentSelections, setRecentSelections] =
     useState(readRecentSelections);
+  const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<PickerHistoryEntry[]>([]);
   const restoreScrollTopRef = useRef<number | null>(null);
@@ -717,7 +780,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       !open ||
       scope.type === "extractor" ||
       scope.type === "configuration" ||
-      (rootScope && !rootQueryActive)
+      (rootScope && !rootQueryActive && !replaceMachinesWithRecipes)
     ) {
       return [];
     }
@@ -727,6 +790,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     });
   }, [
     open,
+    replaceMachinesWithRecipes,
     query,
     rootQueryActive,
     rootScope,
@@ -813,7 +877,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     );
   }, [open, query, selectedConfigurableBuildable]);
 
-  const rows = useMemo(() => {
+  const unfilteredRows = useMemo(() => {
     const nextRows: PickerRow[] = [];
     const addHeading = (key: string, label: string) =>
       nextRows.push({ key: `heading:${key}`, label, type: "heading" });
@@ -848,11 +912,26 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       });
     }
 
-    if (matchingMachines.length > 0 || matchingExtractors.length > 0) {
+    if (
+      replaceMachinesWithRecipes
+        ? matchingRecipes.length > 0
+        : matchingMachines.length > 0 || matchingExtractors.length > 0
+    ) {
       addHeading("production", "Production");
     }
 
-    if (matchingMachines.length > 0) {
+    if (replaceMachinesWithRecipes) {
+      matchingRecipes.forEach((recipe) => {
+        const machine = findProductionMachine(recipe.machineIds[0]);
+        if (!machine) return;
+        nextRows.push({
+          key: `recipe:${machine.id}:${recipe.id}`,
+          machine,
+          recipe,
+          type: "recipe",
+        });
+      });
+    } else if (matchingMachines.length > 0) {
       matchingMachines.forEach((machine) =>
         nextRows.push({
           key: `machine:${machine.id}`,
@@ -862,7 +941,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       );
     }
 
-    if (matchingExtractors.length > 0) {
+    if (!replaceMachinesWithRecipes && matchingExtractors.length > 0) {
       matchingExtractors.forEach((extractor) =>
         nextRows.push({
           extractor,
@@ -939,7 +1018,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
       );
     }
 
-    if (matchingRecipes.length > 0) {
+    if (!replaceMachinesWithRecipes && matchingRecipes.length > 0) {
       addHeading("recipes", "Recipes");
       matchingRecipes.forEach((recipe) => {
         const machine =
@@ -956,6 +1035,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
 
     return nextRows;
   }, [
+    replaceMachinesWithRecipes,
     matchingBuffers,
     matchingConfigurations,
     matchingExtractors,
@@ -972,12 +1052,35 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     selectedMachine,
   ]);
 
+  const rows = useMemo(
+    () =>
+      allowSelection
+        ? filterPickerRows(unfilteredRows, allowSelection)
+        : unfilteredRows,
+    [allowSelection, unfilteredRows],
+  );
+
   const selectableEntries = useMemo(
     () =>
       rows.flatMap((row, rowIndex) =>
         optionsForRow(row).map((option) => ({ option, rowIndex })),
       ),
     [rows],
+  );
+  const selectionCountByKey = useMemo(
+    () =>
+      new Map(
+        selectableEntries.map(({ option }) => {
+          const selections = selectionsForOption(option);
+          return [
+            option.key,
+            allowSelection
+              ? selections.filter(allowSelection).length
+              : selections.length,
+          ] as const;
+        }),
+      ),
+    [allowSelection, selectableEntries],
   );
   const selectablePositionByKey = useMemo(
     () =>
@@ -1029,6 +1132,14 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   const autoFocusSearch =
     typeof window !== "undefined" &&
     window.matchMedia?.("(min-width: 640px) and (pointer: fine)").matches;
+
+  useEffect(() => {
+    if (!open || !autoFocusSearch) return;
+    const frame = requestAnimationFrame(() => {
+      searchRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocusSearch, open, scope]);
 
   useEffect(() => {
     if (!activeOption) {
@@ -1171,11 +1282,44 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
     );
   };
 
+  const enterActiveLayer = () => {
+    if (!activeOption) return false;
+    if (activeOption.type === "machine") {
+      enterScope({ machineId: activeOption.machine.id, type: "machine" });
+      return true;
+    }
+    if (activeOption.type === "extractor") {
+      const resources = resourcesForSource(activeOption.extractor);
+      if (resources.length <= 1) return false;
+      enterScope({ extractorId: activeOption.extractor.id, type: "extractor" });
+      return true;
+    }
+    if (activeOption.type === "configurable-buildable") {
+      enterScope({
+        buildableId: activeOption.buildable.id,
+        type: "configuration",
+      });
+      return true;
+    }
+    if (activeOption.type === "recipe" && scope.type !== "routes") {
+      const output = routeOutput(activeOption.recipe, query);
+      if (!output || recipesProducing(output.itemId).length <= 1) return false;
+      enterScope({ itemId: output.itemId, type: "routes" });
+      return true;
+    }
+    return false;
+  };
+
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       moveActive(event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "ArrowLeft" && historyRef.current.length > 0) {
+      event.preventDefault();
+      returnToPreviousResults();
+    } else if (event.key === "ArrowRight" && enterActiveLayer()) {
+      event.preventDefault();
     } else if (event.key === "Enter" && activeOption) {
       event.preventDefault();
       selectOption(activeOption);
@@ -1204,11 +1348,15 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
   return (
     <CommandDialog
       className="top-2 bottom-2 h-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none translate-y-0 sm:top-1/2 sm:bottom-auto sm:h-auto sm:w-full sm:max-w-2xl sm:-translate-y-1/2"
-      description="Search production buildings and recipes"
+      description={
+        allowSelection
+          ? "Choose a building or recipe compatible with the Material Link"
+          : "Search production buildings and recipes"
+      }
       initialFocus={autoFocusSearch ? undefined : false}
       onOpenChange={setOpen}
       open={open}
-      title="Add node"
+      title={allowSelection ? "Add compatible node" : "Add node"}
     >
       <div className="flex size-full min-h-0 flex-col gap-3 overflow-hidden rounded-xl bg-popover p-1 text-popover-foreground">
         {heading && (
@@ -1266,11 +1414,22 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         ? `Search ${routeItem.name} recipes...`
                         : "Search buildings or recipes..."
               }
+              ref={searchRef}
               role="combobox"
               value={query}
             />
             <InputGroupAddon>
               <SearchIcon className="size-3.5 shrink-0 opacity-50" />
+            </InputGroupAddon>
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                aria-label="Cancel adding node"
+                onClick={() => setOpen(false)}
+                size="icon-xs"
+                title="Cancel"
+              >
+                <XIcon aria-hidden="true" />
+              </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
         </div>
@@ -1358,7 +1517,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1374,8 +1533,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
-                            {recipeCountForMachine(row.machine.id)}{" "}
-                            {recipeCountForMachine(row.machine.id) === 1
+                            {selectionCountByKey.get(row.key) ?? 0}{" "}
+                            {(selectionCountByKey.get(row.key) ?? 0) === 1
                               ? "recipe"
                               : "recipes"}
                           </div>
@@ -1399,7 +1558,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1415,8 +1574,8 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                             />
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground">
-                            {row.extractor.resourceItemIds.length}{" "}
-                            {row.extractor.resourceItemIds.length === 1
+                            {selectionCountByKey.get(row.key) ?? 0}{" "}
+                            {(selectionCountByKey.get(row.key) ?? 0) === 1
                               ? "recipe"
                               : "recipes"}
                           </div>
@@ -1435,7 +1594,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1460,7 +1619,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1493,7 +1652,7 @@ export function NodePicker({ onOpenChange, onSelect, open }: NodePickerProps) {
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage

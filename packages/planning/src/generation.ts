@@ -5,7 +5,11 @@ import {
 } from "@satisfactory-belt/production";
 
 import { createBasicPlan } from "./basic-topology";
-import { createDetailedPlan, DEFAULT_LOGISTICS_TIERS } from "./detailed-plan";
+import {
+  assertDetailedNodeConfiguration,
+  createDetailedPlan,
+  DEFAULT_LOGISTICS_TIERS,
+} from "./detailed-plan";
 import { solveSteadyState } from "./steady-state-solver";
 import type {
   BasicGenerationOptions,
@@ -304,6 +308,10 @@ export function generateDetailedPlan(
         : { from, id, kind: "pipeline", tierId: tier.id, to };
     },
   );
-  const nodes: DetailedNode[] = topology.nodes.map((node) => ({ ...node }));
+  const nodes: DetailedNode[] = topology.nodes.map((node) => {
+    const configuration = node.configuration;
+    assertDetailedNodeConfiguration(configuration);
+    return { ...node, configuration };
+  });
   return { plan: createDetailedPlan({ connections, nodes, tiers }), solution };
 }

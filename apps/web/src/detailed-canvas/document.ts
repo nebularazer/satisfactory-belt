@@ -1,4 +1,5 @@
 import {
+  assertDetailedNodeConfiguration,
   createDetailedPlan,
   parseDetailedPlan,
   type DetailedNode,
@@ -8,12 +9,18 @@ import {
 } from "@satisfactory-belt/planning";
 import { parseNodeConfiguration } from "@satisfactory-belt/production";
 
-import type { CanvasNode } from "@/canvas/document";
+import type {
+  CanvasNode,
+  CanvasPortOrder,
+  CanvasRouterPriorities,
+  CanvasRouterRules,
+} from "@/canvas/document";
 
 export const DETAILED_CANVAS_DOCUMENT_VERSION = 1;
 
-export type DetailedCanvasNode = CanvasNode &
+export type DetailedCanvasNode = Omit<CanvasNode, "configuration"> &
   Readonly<{
+    configuration: DetailedNode["configuration"];
     routingRules?: DetailedNode["routingRules"];
   }>;
 
@@ -49,6 +56,57 @@ function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function stringArray(value: unknown, label: string) {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    !value.every((entry) => typeof entry === "string")
+  ) {
+    throw new Error(`${label} must be an array of strings.`);
+  }
+  return value;
+}
+
+function parsePortOrder(value: unknown): CanvasPortOrder | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("Node portOrder must be an object.");
+  const input = stringArray(value.input, "Node input port order");
+  const output = stringArray(value.output, "Node output port order");
+  return {
+    ...(input ? { input } : {}),
+    ...(output ? { output } : {}),
+  };
+}
+
+function parseRouterPriorities(
+  value: unknown,
+): CanvasRouterPriorities | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error("Node routerPriorities must be an object.");
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([portId, priority]) => {
+      if (priority !== "low" && priority !== "medium" && priority !== "high") {
+        throw new Error(`Priority for ${portId} is invalid.`);
+      }
+      return [portId, priority];
+    }),
+  );
+}
+
+function parseRouterRules(value: unknown): CanvasRouterRules | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("Node routerRules must be an object.");
+  return Object.fromEntries(
+    Object.entries(value).map(([portId, rules]) => {
+      const parsed = stringArray(rules, `Rules for ${portId}`);
+      if (!parsed) throw new Error(`Rules for ${portId} are required.`);
+      return [portId, parsed];
+    }),
+  );
+}
+
 export function validateDetailedCanvasDocument(
   value: unknown,
 ): DetailedCanvasDocument {
@@ -81,10 +139,16 @@ export function validateDetailedCanvasDocument(
     ) {
       throw new Error(`Detailed Node ${index + 1} has invalid geometry.`);
     }
+    const configuration = parseNodeConfiguration(nodeValue.configuration);
+    assertDetailedNodeConfiguration(configuration);
+    const portOrder = parsePortOrder(nodeValue.portOrder);
+    const routerPriorities = parseRouterPriorities(nodeValue.routerPriorities);
+    const routerRules = parseRouterRules(nodeValue.routerRules);
     return {
-      configuration: parseNodeConfiguration(nodeValue.configuration),
+      configuration,
       height: nodeValue.height,
       label: nodeValue.label,
+      ...(portOrder ? { portOrder } : {}),
       ...(nodeValue.provenance !== undefined
         ? {
             provenance:
@@ -97,6 +161,8 @@ export function validateDetailedCanvasDocument(
               nodeValue.routingRules as DetailedNode["routingRules"],
           }
         : {}),
+      ...(routerPriorities ? { routerPriorities } : {}),
+      ...(routerRules ? { routerRules } : {}),
       width: nodeValue.width,
       x: nodeValue.x,
       y: nodeValue.y,

@@ -151,6 +151,10 @@ canvas {
   cursor: crosshair;
 }
 
+.infinite-canvas__surface[data-cursor="pointer"] {
+  cursor: pointer;
+}
+
 .dark {
   color-scheme: dark;
   --canvas: oklch(0.17 0.006 264);

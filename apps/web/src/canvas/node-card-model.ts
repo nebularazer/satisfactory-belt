@@ -15,7 +15,12 @@ import {
 
 import type { CanvasNode } from "./document";
 
-export type NodeCardPortStatus = "blocked" | "neutral" | "warning";
+export type NodeCardPortStatus =
+  | "blocked"
+  | "compatible"
+  | "neutral"
+  | "source"
+  | "warning";
 export type NodeCardPortDirection = "bidirectional" | "input" | "output";
 
 export type NodeCardRuntime = Readonly<{
@@ -29,6 +34,8 @@ export type NodeCardRuntime = Readonly<{
       Readonly<{
         connected: boolean;
         direction?: "input" | "output";
+        itemId?: string;
+        ratePerMinute?: number;
         status?: NodeCardPortStatus;
       }>
     >
@@ -91,9 +98,10 @@ function runtimePort(
   rate: MaterialRate | undefined,
   runtime: NodeCardRuntime | undefined,
 ): NodeCardPort {
-  const itemId = rate?.itemId ?? port.itemId;
-  const item = itemId ? findDescriptor(itemId) : undefined;
   const state = runtime?.ports?.[port.id];
+  const itemId = rate?.itemId ?? state?.itemId ?? port.itemId;
+  const item = itemId ? findDescriptor(itemId) : undefined;
+  const ratePerMinute = rate?.ratePerMinute ?? state?.ratePerMinute;
   return {
     connected: state?.connected ?? false,
     direction:
@@ -103,7 +111,9 @@ function runtimePort(
     ...(itemId ? { image: descriptorImage(itemId) } : {}),
     ...(item ? { itemName: item.name } : {}),
     portId: port.id,
-    ...(rate ? { rate: formatNumber(rate.ratePerMinute) } : {}),
+    ...(ratePerMinute === undefined
+      ? {}
+      : { rate: formatNumber(ratePerMinute) }),
     status: state?.status ?? "neutral",
   };
 }

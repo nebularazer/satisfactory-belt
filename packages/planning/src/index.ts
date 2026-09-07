@@ -4,9 +4,18 @@ export {
   connectMaterialPorts,
   createBasicPlan,
   disconnectMaterialLink,
+  inspectMaterialConnectionTargets,
   type BasicPlanErrorCode,
+  type MaterialConnectionTarget,
 } from "./basic-topology";
 export {
+  analyzeBasicFlows,
+  type BasicFlowAnalysis,
+  type BasicLinkFlow,
+  type BasicPortFlow,
+} from "./basic-flow-analysis";
+export {
+  assertDetailedNodeConfiguration,
   createDetailedPlan,
   DEFAULT_LOGISTICS_TIERS,
   DetailedPlanError,

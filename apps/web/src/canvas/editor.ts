@@ -6,6 +6,7 @@ import {
 import {
   BasicPlanError,
   createBasicPlan,
+  DEFAULT_LOGISTICS_TIERS,
   type MaterialEndpoint,
   type MaterialLink,
 } from "@satisfactory-belt/planning";
@@ -14,6 +15,7 @@ import {
   EMPTY_CANVAS_DOCUMENT,
   canvasNodeId,
   type CanvasDocument,
+  type CanvasMaterialLink,
   type CanvasNode,
   type CanvasRouterPriorities,
   type CanvasRouterRules,
@@ -46,6 +48,7 @@ export type CanvasEditorState = Readonly<{
   connectionPreview?: Readonly<{
     current: Point;
     from: MaterialEndpoint;
+    replacingLinkId?: string;
     target?: MaterialEndpoint;
   }>;
   snapToGrid: boolean;
@@ -70,11 +73,19 @@ export type CanvasEditorAction =
       id?: string;
       to: MaterialEndpoint;
     }
+  | {
+      type: "link.reconnect";
+      from: MaterialEndpoint;
+      id: string;
+      to: MaterialEndpoint;
+    }
   | { type: "link.delete"; id: string }
+  | { type: "link.tier"; id: string; tierId: string }
   | {
       type: "link.preview";
       current: Point;
       from: MaterialEndpoint;
+      replacingLinkId?: string;
       target?: MaterialEndpoint;
     }
   | { type: "link.preview.cancel" }
@@ -136,6 +147,7 @@ export type CanvasEditor = Readonly<{
   query: (rectangle: Rectangle) => readonly CanvasNode[];
   queryLinks: (rectangle: Rectangle) => readonly MaterialLinkPath[];
   subscribe: (listener: (change: CanvasEditorChange) => void) => () => void;
+  topology: "aggregate" | "physical";
 }>;
 
 type IndexedNode = Readonly<{
@@ -169,7 +181,70 @@ type CreateCanvasEditorOptions = {
   document?: CanvasDocument;
   idFactory?: () => string;
   snapToGrid?: boolean;
+  topology?: "aggregate" | "physical";
 };
+
+function validateDocument(
+  document: CanvasDocument,
+  topology: "aggregate" | "physical",
+) {
+  const plan = createBasicPlan({
+    materialLinks: document.materialLinks,
+    nodes: document.nodes.map(({ configuration }) => configuration),
+  });
+  if (topology === "aggregate") return plan;
+
+  const occupied = new Map<string, string>();
+  for (const node of document.nodes) {
+    if (
+      node.configuration.kind === "process" &&
+      node.configuration.instances.length !== 1
+    ) {
+      throw new BasicPlanError(
+        "basic.endpoint.occupied",
+        "A physical canvas Process Node must represent exactly one machine.",
+        { nodeId: node.configuration.id },
+      );
+    }
+  }
+  for (const link of plan.materialLinks) {
+    for (const endpoint of [link.from, link.to]) {
+      const key = `${endpoint.nodeId}\u0000${endpoint.portId}`;
+      const existingLinkId = occupied.get(key);
+      if (existingLinkId) {
+        throw new BasicPlanError(
+          "basic.endpoint.occupied",
+          `Physical Material Port ${endpoint.nodeId}:${endpoint.portId} is already occupied.`,
+          { existingLinkId, linkId: link.id },
+        );
+      }
+      occupied.set(key, link.id);
+    }
+  }
+  return plan;
+}
+
+function defaultLogistics(
+  document: CanvasDocument,
+  endpoint: MaterialEndpoint,
+): CanvasMaterialLink["logistics"] {
+  const node = document.nodes.find(
+    ({ configuration }) => configuration.id === endpoint.nodeId,
+  );
+  const port = node
+    ? createNode(node.configuration).ports.find(
+        ({ id }) => id === endpoint.portId,
+      )
+    : undefined;
+  const kind: "conveyor" | "pipeline" =
+    port?.medium === "pipeline" ? "pipeline" : "conveyor";
+  const tier = DEFAULT_LOGISTICS_TIERS.filter(
+    ({ medium }) => medium === kind,
+  ).toSorted(
+    (left, right) => right.capacityPerMinute - left.capacityPerMinute,
+  )[0];
+  return tier ? { kind, tierId: tier.id } : undefined;
+}
 
 function snap(value: number) {
   return Math.round(value / SNAP_INTERVAL) * SNAP_INTERVAL;
@@ -254,6 +329,7 @@ export function createCanvasEditor(
     options.document ?? EMPTY_CANVAS_DOCUMENT,
   );
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
+  const topology = options.topology ?? "aggregate";
   const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: HistoryEntry[] = [];
   const future: HistoryEntry[] = [];
@@ -305,10 +381,7 @@ export function createCanvasEditor(
     validateTopology = true,
   ) => {
     if (validateTopology) {
-      createBasicPlan({
-        materialLinks: document.materialLinks,
-        nodes: document.nodes.map(({ configuration }) => configuration),
-      });
+      validateDocument(document, topology);
     }
     past.push(entry);
     if (past.length > HISTORY_LIMIT) past.shift();
@@ -413,9 +486,12 @@ export function createCanvasEditor(
         return;
 
       case "link.create": {
-        const link: MaterialLink = {
+        const link: CanvasMaterialLink = {
           from: action.from,
           id: action.id ?? idFactory(),
+          ...(topology === "physical"
+            ? { logistics: defaultLogistics(state.document, action.from) }
+            : {}),
           to: action.to,
         };
         const index = state.document.materialLinks.length;
@@ -424,10 +500,7 @@ export function createCanvasEditor(
             ...state.document,
             materialLinks: [...state.document.materialLinks, link],
           };
-          const normalized = createBasicPlan({
-            materialLinks: document.materialLinks,
-            nodes: document.nodes.map(({ configuration }) => configuration),
-          });
+          const normalized = validateDocument(document, topology);
           const canonicalLink = normalized.materialLinks.at(-1)!;
           commit(
             {
@@ -441,9 +514,74 @@ export function createCanvasEditor(
             {
               after: [],
               afterLinks: [{ index, link: canonicalLink }],
+              afterLinkSelection: [],
+              afterSelection: [],
+              before: [],
+              beforeLinkSelection: state.selectedLinkIds,
+              beforeSelection: state.selectedIds,
+            },
+            [],
+          );
+        } catch (error) {
+          const failure =
+            error instanceof BasicPlanError
+              ? { code: error.code, message: error.message }
+              : {
+                  code: "basic.link.invalid",
+                  message:
+                    error instanceof Error
+                      ? error.message
+                      : "The Material Link is invalid.",
+                };
+          publish({ connectionError: failure }, { kind: "settings" });
+        }
+        return;
+      }
+
+      case "link.reconnect": {
+        const index = state.document.materialLinks.findIndex(
+          ({ id }) => id === action.id,
+        );
+        const previousLink = state.document.materialLinks[index];
+        if (!previousLink) return;
+        const replacement: CanvasMaterialLink = {
+          ...previousLink,
+          from: action.from,
+          id: action.id,
+          to: action.to,
+        };
+        try {
+          const materialLinks = state.document.materialLinks.map(
+            (link, linkIndex) => (linkIndex === index ? replacement : link),
+          );
+          const normalized = validateDocument(
+            { ...state.document, materialLinks },
+            topology,
+          );
+          const canonicalLink = normalized.materialLinks[index]!;
+          if (
+            canonicalLink.from.nodeId === previousLink.from.nodeId &&
+            canonicalLink.from.portId === previousLink.from.portId &&
+            canonicalLink.to.nodeId === previousLink.to.nodeId &&
+            canonicalLink.to.portId === previousLink.to.portId
+          ) {
+            dispatch({
+              type: "selection.link",
+              additive: false,
+              id: previousLink.id,
+            });
+            return;
+          }
+          commit(
+            { ...state.document, materialLinks: normalized.materialLinks },
+            [],
+            {
+              after: [],
+              afterLinks: [{ index, link: canonicalLink }],
               afterLinkSelection: [canonicalLink.id],
               afterSelection: [],
               before: [],
+              beforeLinks: [{ index, link: previousLink }],
               beforeLinkSelection: state.selectedLinkIds,
               beforeSelection: state.selectedIds,
             },
@@ -472,6 +610,9 @@ export function createCanvasEditor(
             connectionPreview: {
               current: action.current,
               from: action.from,
+              ...(action.replacingLinkId
+                ? { replacingLinkId: action.replacingLinkId }
+                : {}),
               ...(action.target ? { target: action.target } : {}),
             },
           },
@@ -513,6 +654,45 @@ export function createCanvasEditor(
             beforeSelection: state.selectedIds,
           },
           selectedLinkIds,
+        );
+        return;
+      }
+
+      case "link.tier": {
+        const index = state.document.materialLinks.findIndex(
+          ({ id }) => id === action.id,
+        );
+        const link = state.document.materialLinks[index];
+        const tier = DEFAULT_LOGISTICS_TIERS.find(
+          ({ id }) => id === action.tierId,
+        );
+        if (!link?.logistics || !tier || tier.medium !== link.logistics.kind) {
+          return;
+        }
+        const replacement: CanvasMaterialLink = {
+          ...link,
+          logistics: { ...link.logistics, tierId: tier.id },
+        };
+        commit(
+          {
+            ...state.document,
+            materialLinks: state.document.materialLinks.map((candidate) =>
+              candidate.id === link.id ? replacement : candidate,
+            ),
+          },
+          state.selectedIds,
+          {
+            after: [],
+            afterLinks: [{ index, link: replacement }],
+            afterLinkSelection: state.selectedLinkIds,
+            afterSelection: state.selectedIds,
+            before: [],
+            beforeLinks: [{ index, link }],
+            beforeLinkSelection: state.selectedLinkIds,
+            beforeSelection: state.selectedIds,
+          },
+          state.selectedLinkIds,
+          false,
         );
         return;
       }
@@ -1094,5 +1274,6 @@ export function createCanvasEditor(
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    topology,
   };
 }
