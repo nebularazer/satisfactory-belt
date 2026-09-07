@@ -1,10 +1,19 @@
 import { ArrowRight, TriangleAlert, Trash2, X } from "lucide-react";
 import { useSyncExternalStore } from "react";
+import { DEFAULT_LOGISTICS_TIERS } from "@satisfactory-belt/planning";
 
 import type { CanvasEditor } from "@/canvas/editor";
+import type { CanvasEditorMode } from "@/canvas/editor-mode";
 import { MATERIAL_FLOW_PALETTE } from "@/canvas/material-flow-state";
 import { presentMaterialLinks } from "@/canvas/material-link-presentation";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const numberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
@@ -29,7 +38,8 @@ function diagnosticMessage(
 
 export function MaterialLinkInspector({
   editor,
-}: Readonly<{ editor: CanvasEditor }>) {
+  mode = "basic",
+}: Readonly<{ editor: CanvasEditor; mode?: CanvasEditorMode }>) {
   const state = useSyncExternalStore(
     editor.subscribe,
     editor.getState,
@@ -41,6 +51,13 @@ export function MaterialLinkInspector({
     ? presentMaterialLinks(state.document).find(({ id }) => id === selectedId)
     : undefined;
   if (!link) return null;
+  const documentLink = state.document.materialLinks.find(
+    ({ id }) => id === selectedId,
+  );
+  const logistics = documentLink?.logistics;
+  const tiers = logistics
+    ? DEFAULT_LOGISTICS_TIERS.filter(({ medium }) => medium === logistics.kind)
+    : [];
 
   const palette = MATERIAL_FLOW_PALETTE[link.state];
 
@@ -51,7 +68,13 @@ export function MaterialLinkInspector({
     >
       <header className="flex items-start gap-3 border-b border-border p-3">
         <div className="min-w-0 flex-1">
-          <div className="text-xs text-muted-foreground">Material Link</div>
+          <div className="text-xs text-muted-foreground">
+            {mode === "detailed" && logistics
+              ? logistics.kind === "conveyor"
+                ? "Conveyor Belt"
+                : "Pipeline"
+              : "Material Link"}
+          </div>
           <h2 className="truncate font-heading text-base font-semibold">
             {link.itemName}
           </h2>
@@ -85,6 +108,40 @@ export function MaterialLinkInspector({
               : `${link.label} ${link.unit}`}
           </div>
         </div>
+
+        {mode === "detailed" && logistics && (
+          <div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-border p-3">
+            <div>
+              <div className="text-xs font-medium">Logistics tier</div>
+              <div className="text-[0.625rem] text-muted-foreground">
+                Sets the physical throughput limit.
+              </div>
+            </div>
+            <Select
+              items={tiers.map((tier) => ({
+                label: `${tier.id.replace(/^(?:conveyor|pipeline)-/, "").toUpperCase()} · ${numberFormatter.format(tier.capacityPerMinute)}`,
+                value: tier.id,
+              }))}
+              onValueChange={(tierId) => {
+                if (tierId) {
+                  editor.dispatch({ type: "link.tier", id: link.id, tierId });
+                }
+              }}
+              value={logistics.tierId}
+            >
+              <SelectTrigger aria-label="Logistics tier" className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {tiers.map((tier) => (
+                  <SelectItem key={tier.id} value={tier.id}>
+                    {`${tier.id.replace(/^(?:conveyor|pipeline)-/, "").toUpperCase()} · ${numberFormatter.format(tier.capacityPerMinute)}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-xs">
           <div className="min-w-0 rounded-md bg-muted/35 p-2">

@@ -34,6 +34,7 @@ import {
 } from "react";
 
 import type { CanvasEditor } from "@/canvas/editor";
+import type { CanvasEditorMode } from "@/canvas/editor-mode";
 import type { CanvasNode } from "@/canvas/document";
 import { Button } from "@/components/ui/button";
 import {
@@ -482,11 +483,13 @@ function cloneInstance(instance: InspectorInstance): InspectorInstance {
 function ProcessControls({
   configuration,
   editor,
+  mode,
   nodeId,
   scope,
 }: Readonly<{
   configuration: ProcessNodeConfiguration;
   editor: CanvasEditor;
+  mode: CanvasEditorMode;
   nodeId: string;
   scope: InspectorScope;
 }>) {
@@ -550,7 +553,7 @@ function ProcessControls({
   return (
     <Section title="Configuration">
       <div className="grid gap-3">
-        {scope === "all" && (
+        {mode === "basic" && scope === "all" && (
           <NumberStepper
             label="Machine count"
             maximum={MAX_INSTANCE_COUNT}
@@ -1139,6 +1142,7 @@ function RouterControls({
 function InspectorContent({
   editor,
   keyboardEditing,
+  mode,
   node,
   onSheetHandlePointerCancel,
   onSheetHandlePointerDown,
@@ -1147,6 +1151,7 @@ function InspectorContent({
 }: Readonly<{
   editor: CanvasEditor;
   keyboardEditing: boolean;
+  mode: CanvasEditorMode;
   node: CanvasNode;
   onSheetHandlePointerCancel: (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -1207,7 +1212,7 @@ function InspectorContent({
           <X aria-hidden="true" />
         </Button>
       </header>
-      {configuration.kind === "process" && (
+      {configuration.kind === "process" && mode === "basic" && (
         <ScopeSelector
           count={instances.length}
           onChange={setScope}
@@ -1219,6 +1224,7 @@ function InspectorContent({
           <ProcessControls
             configuration={configuration}
             editor={editor}
+            mode={mode}
             nodeId={configuration.id}
             scope={safeScope}
           />
@@ -1263,8 +1269,13 @@ function InspectorContent({
 
 export function NodeInspector({
   editor,
+  mode = "basic",
   mobileOpen = true,
-}: Readonly<{ editor: CanvasEditor; mobileOpen?: boolean }>) {
+}: Readonly<{
+  editor: CanvasEditor;
+  mode?: CanvasEditorMode;
+  mobileOpen?: boolean;
+}>) {
   const state = useSyncExternalStore(
     editor.subscribe,
     editor.getState,
@@ -1366,6 +1377,7 @@ export function NodeInspector({
       <InspectorContent
         editor={editor}
         keyboardEditing={keyboardEditing}
+        mode={mode}
         node={node}
         onSheetHandlePointerCancel={(event) => finishSheetDrag(event, true)}
         onSheetHandlePointerDown={handleSheetPointerDown}

@@ -1,20 +1,25 @@
 import { Combine, GitFork, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { CanvasEditorMode } from "@/canvas/editor-mode";
 
 type CanvasBuildBarProps = Readonly<{
+  mode: CanvasEditorMode;
   onAddMerger: () => void;
   onAddNode: () => void;
   onAddSplitter: () => void;
   onCancelPlacement: () => void;
+  onModeChange: (mode: CanvasEditorMode) => void;
   placementLabel?: string;
 }>;
 
 export function CanvasBuildBar({
+  mode,
   onAddMerger,
   onAddNode,
   onAddSplitter,
   onCancelPlacement,
+  onModeChange,
   placementLabel,
 }: CanvasBuildBarProps) {
   return (
@@ -40,6 +45,25 @@ export function CanvasBuildBar({
         </>
       ) : (
         <>
+          <div
+            className="flex items-center gap-0.5"
+            role="group"
+            aria-label="Editor mode"
+          >
+            {(["basic", "detailed"] as const).map((option) => (
+              <Button
+                aria-label={`${option === "basic" ? "Basic" : "Detailed"} editor`}
+                aria-pressed={mode === option}
+                className="h-9 px-2.5"
+                key={option}
+                onClick={() => onModeChange(option)}
+                variant={mode === option ? "secondary" : "ghost"}
+              >
+                {option === "basic" ? "Basic" : "Detailed"}
+              </Button>
+            ))}
+          </div>
+          <div aria-hidden="true" className="mx-0.5 h-6 w-px bg-border" />
           <Button className="h-9 px-3" onClick={onAddNode} variant="ghost">
             <Plus aria-hidden="true" />
             <span className="hidden min-[360px]:inline">Add node</span>

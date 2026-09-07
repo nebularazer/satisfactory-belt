@@ -30,6 +30,10 @@ import {
   type SavedCanvasDocument,
 } from "@/canvas/document-storage";
 import { createCanvasEditor } from "@/canvas/editor";
+import {
+  materializeDetailedCanvas,
+  type CanvasEditorMode,
+} from "@/canvas/editor-mode";
 import { canvasNodeId, type CanvasDocument } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
 import type { CanvasConnectionRequest } from "@/canvas/interactions";
@@ -124,7 +128,7 @@ function CanvasWorkspace({
 }: CanvasWorkspaceProps) {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const editor = useMemo(
+  const basicEditor = useMemo(
     () =>
       createCanvasEditor({
         document: initialDocument,
@@ -133,6 +137,13 @@ function CanvasWorkspace({
       }),
     [initialDocument],
   );
+  const [editorMode, setEditorMode] = useState<CanvasEditorMode>("basic");
+  const [detailedEditor, setDetailedEditor] = useState<ReturnType<
+    typeof createCanvasEditor
+  > | null>(null);
+  const detailedSourceRef = useRef<CanvasDocument | null>(null);
+  const editor =
+    editorMode === "detailed" && detailedEditor ? detailedEditor : basicEditor;
   const getEditorUiState = useMemo(() => {
     const initialState = editor.getState();
     let cached = {
@@ -237,7 +248,7 @@ function CanvasWorkspace({
   useEffect(() => {
     if (!autosaveEnabled) return;
     return attachCanvasAutosave(
-      editor,
+      basicEditor,
       storage,
       () => activeSaveRef.current?.id ?? null,
       300,
@@ -245,7 +256,7 @@ function CanvasWorkspace({
         toast.error("The plan could not be saved in this browser.");
       },
     );
-  }, [autosaveEnabled, editor, storage]);
+  }, [autosaveEnabled, basicEditor, storage]);
 
   useEffect(() => {
     if (connectionError) toast.error(connectionError.message);
@@ -254,6 +265,47 @@ function CanvasWorkspace({
   useEffect(() => {
     setMobileNodeInspectorOpen(false);
   }, [editorState.selectedNodeId]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => canvasRef.current?.fitContent());
+    return () => cancelAnimationFrame(frame);
+  }, [editor]);
+
+  const changeEditorMode = useCallback(
+    (mode: CanvasEditorMode) => {
+      if (mode === editorMode) return;
+      setPendingNode(null);
+      setPlacement(null);
+      setMobileNodeInspectorOpen(false);
+      if (mode === "basic") {
+        setEditorMode("basic");
+        return;
+      }
+
+      try {
+        const source = basicEditor.getState().document;
+        if (!detailedEditor || detailedSourceRef.current !== source) {
+          const materialized = materializeDetailedCanvas(source);
+          setDetailedEditor(
+            createCanvasEditor({
+              document: materialized,
+              snapToGrid: basicEditor.getState().snapToGrid,
+              topology: "physical",
+            }),
+          );
+          detailedSourceRef.current = source;
+        }
+        setEditorMode("detailed");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "The Detailed editor could not be created.",
+        );
+      }
+    },
+    [basicEditor, detailedEditor, editorMode],
+  );
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -319,7 +371,7 @@ function CanvasWorkspace({
 
     try {
       const saved = await storage.saveNamed({
-        document: editor.getState().document,
+        document: basicEditor.getState().document,
         id: current.id,
       });
       selectActiveSave(saved);
@@ -331,7 +383,7 @@ function CanvasWorkspace({
           : "The current plan could not be updated.",
       );
     }
-  }, [editor, openSavePlan, selectActiveSave, storage]);
+  }, [basicEditor, openSavePlan, selectActiveSave, storage]);
 
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
@@ -483,7 +535,10 @@ function CanvasWorkspace({
     try {
       const document = parseCanvasDocument(await file.text());
       selectActiveSave(null);
-      editor.dispatch({ type: "document.replace", document });
+      basicEditor.dispatch({ type: "document.replace", document });
+      detailedSourceRef.current = null;
+      setDetailedEditor(null);
+      setEditorMode("basic");
       requestAnimationFrame(() => canvasRef.current?.fitContent());
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
@@ -513,7 +568,10 @@ function CanvasWorkspace({
     editor.dispatch({ type: "selection.duplicate" });
   const loadDocument = (save: SavedCanvasDocument) => {
     selectActiveSave(save);
-    editor.dispatch({ type: "document.replace", document: save.document });
+    basicEditor.dispatch({ type: "document.replace", document: save.document });
+    detailedSourceRef.current = null;
+    setDetailedEditor(null);
+    setEditorMode("basic");
     requestAnimationFrame(() => canvasRef.current?.fitContent());
     if (autosaveEnabled) {
       void storage.saveWorkspace(save.document, save.id).catch(() => {
@@ -595,6 +653,7 @@ function CanvasWorkspace({
 
         <div className="pointer-events-auto absolute top-3 left-1/2 max-w-[calc(100vw-5.5rem)] -translate-x-1/2 sm:top-4">
           <CanvasBuildBar
+            mode={editorMode}
             onAddMerger={() =>
               setPlacement(
                 quickBuildSelection("Build_ConveyorAttachmentMerger_C"),
@@ -607,6 +666,7 @@ function CanvasWorkspace({
               )
             }
             onCancelPlacement={() => setPlacement(null)}
+            onModeChange={changeEditorMode}
             placementLabel={placement?.label}
           />
         </div>
@@ -620,8 +680,12 @@ function CanvasWorkspace({
         )}
 
         <Suspense fallback={null}>
-          <NodeInspector editor={editor} mobileOpen={mobileNodeInspectorOpen} />
-          <MaterialLinkInspector editor={editor} />
+          <NodeInspector
+            editor={editor}
+            mode={editorMode}
+            mobileOpen={mobileNodeInspectorOpen}
+          />
+          <MaterialLinkInspector editor={editor} mode={editorMode} />
         </Suspense>
 
         {!mobileNodeInspectorOpen && (
@@ -683,7 +747,7 @@ function CanvasWorkspace({
           selectActiveSave(null);
           if (autosaveEnabled) {
             void storage
-              .saveWorkspace(editor.getState().document, null)
+              .saveWorkspace(basicEditor.getState().document, null)
               .catch(() => {
                 toast.error("The current saved plan could not be cleared.");
               });
@@ -696,7 +760,7 @@ function CanvasWorkspace({
       />
       <SavePlanDialog
         activeSave={activeSave}
-        currentDocument={editor.getState().document}
+        currentDocument={basicEditor.getState().document}
         onOpenChange={setSavePlanOpen}
         onSaved={selectActiveSave}
         open={savePlanOpen}

@@ -6,6 +6,7 @@ import {
 import {
   BasicPlanError,
   createBasicPlan,
+  DEFAULT_LOGISTICS_TIERS,
   type MaterialEndpoint,
   type MaterialLink,
 } from "@satisfactory-belt/planning";
@@ -14,6 +15,7 @@ import {
   EMPTY_CANVAS_DOCUMENT,
   canvasNodeId,
   type CanvasDocument,
+  type CanvasMaterialLink,
   type CanvasNode,
   type CanvasRouterPriorities,
   type CanvasRouterRules,
@@ -78,6 +80,7 @@ export type CanvasEditorAction =
       to: MaterialEndpoint;
     }
   | { type: "link.delete"; id: string }
+  | { type: "link.tier"; id: string; tierId: string }
   | {
       type: "link.preview";
       current: Point;
@@ -219,6 +222,28 @@ function validateDocument(
     }
   }
   return plan;
+}
+
+function defaultLogistics(
+  document: CanvasDocument,
+  endpoint: MaterialEndpoint,
+): CanvasMaterialLink["logistics"] {
+  const node = document.nodes.find(
+    ({ configuration }) => configuration.id === endpoint.nodeId,
+  );
+  const port = node
+    ? createNode(node.configuration).ports.find(
+        ({ id }) => id === endpoint.portId,
+      )
+    : undefined;
+  const kind: "conveyor" | "pipeline" =
+    port?.medium === "pipeline" ? "pipeline" : "conveyor";
+  const tier = DEFAULT_LOGISTICS_TIERS.filter(
+    ({ medium }) => medium === kind,
+  ).toSorted(
+    (left, right) => right.capacityPerMinute - left.capacityPerMinute,
+  )[0];
+  return tier ? { kind, tierId: tier.id } : undefined;
 }
 
 function snap(value: number) {
@@ -461,9 +486,12 @@ export function createCanvasEditor(
         return;
 
       case "link.create": {
-        const link: MaterialLink = {
+        const link: CanvasMaterialLink = {
           from: action.from,
           id: action.id ?? idFactory(),
+          ...(topology === "physical"
+            ? { logistics: defaultLogistics(state.document, action.from) }
+            : {}),
           to: action.to,
         };
         const index = state.document.materialLinks.length;
@@ -516,7 +544,8 @@ export function createCanvasEditor(
         );
         const previousLink = state.document.materialLinks[index];
         if (!previousLink) return;
-        const replacement: MaterialLink = {
+        const replacement: CanvasMaterialLink = {
+          ...previousLink,
           from: action.from,
           id: action.id,
           to: action.to,
@@ -625,6 +654,45 @@ export function createCanvasEditor(
             beforeSelection: state.selectedIds,
           },
           selectedLinkIds,
+        );
+        return;
+      }
+
+      case "link.tier": {
+        const index = state.document.materialLinks.findIndex(
+          ({ id }) => id === action.id,
+        );
+        const link = state.document.materialLinks[index];
+        const tier = DEFAULT_LOGISTICS_TIERS.find(
+          ({ id }) => id === action.tierId,
+        );
+        if (!link?.logistics || !tier || tier.medium !== link.logistics.kind) {
+          return;
+        }
+        const replacement: CanvasMaterialLink = {
+          ...link,
+          logistics: { ...link.logistics, tierId: tier.id },
+        };
+        commit(
+          {
+            ...state.document,
+            materialLinks: state.document.materialLinks.map((candidate) =>
+              candidate.id === link.id ? replacement : candidate,
+            ),
+          },
+          state.selectedIds,
+          {
+            after: [],
+            afterLinks: [{ index, link: replacement }],
+            afterLinkSelection: state.selectedLinkIds,
+            afterSelection: state.selectedIds,
+            before: [],
+            beforeLinks: [{ index, link }],
+            beforeLinkSelection: state.selectedLinkIds,
+            beforeSelection: state.selectedIds,
+          },
+          state.selectedLinkIds,
+          false,
         );
         return;
       }

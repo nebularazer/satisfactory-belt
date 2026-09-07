@@ -436,6 +436,7 @@ describe("canvas interactions", () => {
       {
         from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
         id: "ore-link",
+        logistics: { kind: "conveyor", tierId: "conveyor-mk6" },
         to: { nodeId: "node-3", portId: "input:Desc_OreIron_C" },
       },
     ]);
@@ -469,6 +470,7 @@ describe("canvas interactions", () => {
       {
         from: { nodeId: "node-3", portId: "output:Desc_OreIron_C" },
         id: "ore-link",
+        logistics: { kind: "conveyor", tierId: "conveyor-mk6" },
         to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
       },
     ]);
