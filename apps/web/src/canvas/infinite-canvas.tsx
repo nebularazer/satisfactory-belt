@@ -782,6 +782,7 @@ function syncDocument(
   imageScale: number,
   imageScaleTier: number,
   requestImage: RequestImage,
+  topology: CanvasEditor["topology"],
   forceVisualUpdate = false,
 ) {
   const dark = document.documentElement.classList.contains("dark");
@@ -807,6 +808,7 @@ function syncDocument(
         canvasConnectionTargets(
           connectionDocument,
           state.connectionPreview.from,
+          topology,
         ).map((target) => [
           `${target.endpoint.nodeId}\u0000${target.endpoint.portId}`,
           target,
@@ -955,6 +957,7 @@ function drawMaterialLinks(
   state: CanvasEditorState,
   zoom: number,
   visibleLinks: readonly CanvasMaterialLink[],
+  topology: CanvasEditor["topology"],
 ) {
   graphics.clear();
   previewGraphics.clear();
@@ -1072,7 +1075,7 @@ function drawMaterialLinks(
       }
     : state.document;
   const previewTargetStatus = preview.target
-    ? canvasConnectionTargets(connectionDocument, preview.from).find(
+    ? canvasConnectionTargets(connectionDocument, preview.from, topology).find(
         ({ endpoint }) =>
           endpoint.nodeId === preview.target?.nodeId &&
           endpoint.portId === preview.target.portId,
@@ -1220,6 +1223,7 @@ export const InfiniteCanvas = forwardRef<
         state,
         viewportRef.current.zoom,
         visibleLinks,
+        editor.topology,
       );
     }
     const imageScale = viewportRef.current.zoom * app.renderer.resolution;
@@ -1234,6 +1238,7 @@ export const InfiniteCanvas = forwardRef<
       imageScale,
       imageScaleTierRef.current,
       requestImage,
+      editor.topology,
       forceVisualUpdate,
     );
     textureCacheRef.current?.retain(

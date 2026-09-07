@@ -587,8 +587,10 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
   for (const link of validated.materialLinks) {
     const rate = rateByLink.get(link.id);
     if (rate === undefined) continue;
-    rateByPort.set(endpointKey(link.from), rate);
-    rateByPort.set(endpointKey(link.to), rate);
+    for (const endpoint of [link.from, link.to]) {
+      const key = endpointKey(endpoint);
+      rateByPort.set(key, (rateByPort.get(key) ?? 0) + rate);
+    }
   }
   for (const network of topology.networks) {
     const networkKeys = new Set(network.portKeys);

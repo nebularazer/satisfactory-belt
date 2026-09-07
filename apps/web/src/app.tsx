@@ -129,6 +129,7 @@ function CanvasWorkspace({
       createCanvasEditor({
         document: initialDocument,
         snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
+        topology: "aggregate",
       }),
     [initialDocument],
   );
@@ -369,6 +370,7 @@ function CanvasWorkspace({
           connectionDocument,
           pendingNode.connection.from,
           selection.node,
+          editor.topology,
         )
       : [];
     editor.dispatch({
@@ -408,6 +410,7 @@ function CanvasWorkspace({
         ),
         pendingNode.connection.from,
         selection.node,
+        editor.topology,
       ).length > 0,
     [editor, pendingNode?.connection],
   );

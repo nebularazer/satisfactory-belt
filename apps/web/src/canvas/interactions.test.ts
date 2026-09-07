@@ -72,6 +72,7 @@ afterEach(() => {
 function createHarness(
   options: {
     snapToGrid?: boolean;
+    topology?: "aggregate" | "physical";
     viewport?: Viewport;
   } = {},
 ) {
@@ -81,6 +82,7 @@ function createHarness(
   const editor = createCanvasEditor({
     idFactory: () => `node-${++id}`,
     snapToGrid: options.snapToGrid,
+    topology: options.topology ?? "physical",
   });
   const canvas = document.createElement("canvas");
   const fits: Array<"all" | "selection"> = [];
@@ -295,6 +297,54 @@ describe("canvas interactions", () => {
       }),
     ]);
     expect(editor.getState().connectionPreview).toBeUndefined();
+  });
+
+  it("adds another Basic link by tapping an occupied aggregate Process port", () => {
+    const { editor, pointer } = createHarness({ topology: "aggregate" });
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 100 },
+      node: {
+        buildableId: "Build_SmelterMk1_C",
+        kind: "process",
+        processId: "Recipe_IngotIron_C",
+      },
+    });
+    for (const x of [500, 900]) {
+      editor.dispatch({
+        type: "node.create",
+        at: { x, y: 100 },
+        node: {
+          buildableId: "Build_ConstructorMk1_C",
+          kind: "process",
+          processId: "Recipe_IronPlate_C",
+        },
+      });
+    }
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:Desc_IronIngot_C" },
+      id: "first-plate",
+      to: { nodeId: "node-2", portId: "input:Desc_IronIngot_C" },
+    });
+
+    const source = portPoint(editor, "node-1", "output:Desc_IronIngot_C");
+    const target = portPoint(editor, "node-3", "input:Desc_IronIngot_C");
+    pointer("pointerdown", source.x, source.y, { pointerType: "touch" });
+    pointer("pointerup", source.x, source.y, { pointerType: "touch" });
+    pointer("pointerdown", target.x, target.y, { pointerType: "touch" });
+    pointer("pointerup", target.x, target.y, { pointerType: "touch" });
+
+    expect(editor.getState().document.materialLinks).toEqual([
+      expect.objectContaining({ id: "first-plate" }),
+      expect.objectContaining({
+        from: {
+          nodeId: "node-1",
+          portId: "output:Desc_IronIngot_C",
+        },
+        to: { nodeId: "node-3", portId: "input:Desc_IronIngot_C" },
+      }),
+    ]);
   });
 
   it("requests a compatible node after dropping a connection on empty space", () => {

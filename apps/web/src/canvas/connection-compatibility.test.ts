@@ -112,7 +112,9 @@ describe("canvas connection compatibility", () => {
       processId: "Recipe_IngotIron_C",
     };
 
-    expect(compatibleTemplatePortIds(document, source, candidate)).toEqual([]);
+    expect(compatibleTemplatePortIds(document, source, candidate)).toEqual([
+      "input:Desc_OreIron_C",
+    ]);
     expect(
       compatibleTemplatePortIds(
         canvasDocumentForConnection(document, linkId),

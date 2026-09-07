@@ -115,22 +115,6 @@ describe("Basic topology", () => {
 
   it.each([
     [
-      "occupied",
-      [
-        {
-          from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
-          id: "one",
-          to: { nodeId: "smelter", portId: "input:Desc_OreIron_C" },
-        },
-        {
-          from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
-          id: "two",
-          to: { nodeId: "smelter", portId: "output:Desc_IronIngot_C" },
-        },
-      ],
-      "basic.endpoint.occupied",
-    ],
-    [
       "direction",
       [
         {
@@ -153,6 +137,82 @@ describe("Basic topology", () => {
       }
     },
   );
+
+  it("allows aggregate Process ports to fan out without an explicit Splitter", () => {
+    const first = node({
+      buildableId: "Build_ConstructorMk1_C",
+      id: "first",
+      kind: "process",
+      processId: "Recipe_IronPlate_C",
+    });
+    const second = {
+      ...first,
+      configuration: { ...first.configuration, id: "second" },
+    };
+    const source = node({
+      buildableId: "Build_SmelterMk1_C",
+      id: "source",
+      kind: "process",
+      processId: "Recipe_IngotIron_C",
+    });
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "source", portId: "output:Desc_IronIngot_C" },
+          id: "first",
+          to: { nodeId: "first", portId: "input:Desc_IronIngot_C" },
+        },
+        {
+          from: { nodeId: "source", portId: "output:Desc_IronIngot_C" },
+          id: "second",
+          to: { nodeId: "second", portId: "input:Desc_IronIngot_C" },
+        },
+      ],
+      nodes: [source, first, second],
+    });
+
+    expect(plan.materialLinks).toHaveLength(2);
+    expect(
+      inspectMaterialConnectionTargets(plan, {
+        nodeId: "source",
+        portId: "output:Desc_IronIngot_C",
+      }).find(
+        ({ endpoint }) =>
+          endpoint.nodeId === "first" &&
+          endpoint.portId === "input:Desc_IronIngot_C",
+      )?.status,
+    ).toBe("compatible");
+  });
+
+  it("still rejects multiple links on a physical Router port", () => {
+    const secondMiner = {
+      ...miner,
+      configuration: { ...miner.configuration, id: "miner-2" },
+    };
+    const splitter = node({
+      buildableId: "Build_ConveyorAttachmentSplitter_C",
+      id: "splitter",
+      kind: "router",
+    });
+
+    expect(() =>
+      createBasicPlan({
+        materialLinks: [
+          {
+            from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
+            id: "one",
+            to: { nodeId: "splitter", portId: "input:1" },
+          },
+          {
+            from: { nodeId: "miner-2", portId: "output:Desc_OreIron_C" },
+            id: "two",
+            to: { nodeId: "splitter", portId: "input:1" },
+          },
+        ],
+        nodes: [miner, secondMiner, splitter],
+      }),
+    ).toThrow(expect.objectContaining({ code: "basic.endpoint.occupied" }));
+  });
 
   it("normalizes equivalent input order", () => {
     const request = {

@@ -51,6 +51,60 @@ describe("Basic flow analysis", () => {
     ]);
   });
 
+  it("reports the total rate on a shared aggregate Process port", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "smelter", portId: "output:Desc_IronIngot_C" },
+          id: "plates-a",
+          to: { nodeId: "constructor-a", portId: "input:Desc_IronIngot_C" },
+        },
+        {
+          from: { nodeId: "smelter", portId: "output:Desc_IronIngot_C" },
+          id: "plates-b",
+          to: { nodeId: "constructor-b", portId: "input:Desc_IronIngot_C" },
+        },
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_SmelterMk1_C",
+          id: "smelter",
+          instances: instances("smelter", 3),
+          kind: "process",
+          processId: "Recipe_IngotIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConstructorMk1_C",
+          id: "constructor-a",
+          kind: "process",
+          processId: "Recipe_IronPlate_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConstructorMk1_C",
+          id: "constructor-b",
+          instances: instances("constructor-b", 2),
+          kind: "process",
+          processId: "Recipe_IronPlate_C",
+        }),
+      ],
+    });
+
+    expect(
+      analyzeBasicFlows(plan).portFlows.find(
+        ({ endpoint }) =>
+          endpoint.nodeId === "smelter" &&
+          endpoint.portId === "output:Desc_IronIngot_C",
+      ),
+    ).toEqual({
+      endpoint: {
+        nodeId: "smelter",
+        portId: "output:Desc_IronIngot_C",
+      },
+      itemId: "Desc_IronIngot_C",
+      ratePerMinute: 90,
+    });
+  });
+
   it("routes branch amounts through a Splitter", () => {
     const plan = createBasicPlan({
       materialLinks: [

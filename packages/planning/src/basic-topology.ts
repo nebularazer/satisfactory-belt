@@ -156,6 +156,10 @@ function directionsCompatible(left: MaterialPort, right: MaterialPort) {
   );
 }
 
+function hasAggregatePortCapacity(resolved: ResolvedPort) {
+  return resolved.node.kind === "process";
+}
+
 function canonicalLink(
   link: MaterialLink,
   from: ResolvedPort,
@@ -207,10 +211,13 @@ function validateLinks(
 
     const from = resolveEndpoint(nodes, link.from);
     const to = resolveEndpoint(nodes, link.to);
-    for (const endpoint of [link.from, link.to]) {
+    for (const [endpoint, resolved] of [
+      [link.from, from],
+      [link.to, to],
+    ] as const) {
       const key = portKey(endpoint);
       const existingLinkId = occupied.get(key);
-      if (existingLinkId) {
+      if (existingLinkId && !hasAggregatePortCapacity(resolved)) {
         throw new BasicPlanError(
           "basic.endpoint.occupied",
           `Material Port ${endpoint.nodeId}:${endpoint.portId} is already occupied.`,
@@ -222,7 +229,7 @@ function validateLinks(
           },
         );
       }
-      occupied.set(key, link.id);
+      if (!hasAggregatePortCapacity(resolved)) occupied.set(key, link.id);
     }
     if (!directionsCompatible(from.port, to.port)) {
       throw new BasicPlanError(
@@ -427,7 +434,10 @@ export function inspectMaterialConnectionTargets(
       const endpoint = { nodeId: node.configuration.id, portId: port.id };
       const key = portKey(endpoint);
       if (key === sourceKey) return { endpoint, status: "source" } as const;
-      if (occupied.has(sourceKey)) {
+      if (
+        occupied.has(sourceKey) &&
+        !hasAggregatePortCapacity(sourceResolved)
+      ) {
         return invalid(
           endpoint,
           "basic.endpoint.occupied",
@@ -435,7 +445,7 @@ export function inspectMaterialConnectionTargets(
           "occupied",
         );
       }
-      if (occupied.has(key)) {
+      if (occupied.has(key) && !hasAggregatePortCapacity({ node, port })) {
         return invalid(
           endpoint,
           "basic.endpoint.occupied",

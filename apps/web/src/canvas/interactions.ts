@@ -29,7 +29,11 @@ type Interaction =
       moved: boolean;
       origin: Point;
       pointerId: number;
-      reconnect?: Readonly<{ additive: boolean; linkId: string }>;
+      reconnect?: Readonly<{
+        additive: boolean;
+        linkId: string;
+        tapFrom?: MaterialEndpoint;
+      }>;
       startScreen: Point;
       target?: MaterialEndpoint;
     })
@@ -76,10 +80,11 @@ function endpointKey(endpoint: MaterialEndpoint) {
 function connectionIntent(
   document: CanvasDocument,
   from: MaterialEndpoint,
+  topology: CanvasEditor["topology"],
 ): ConnectionIntent {
   return {
     compatibleTargets: new Set(
-      canvasConnectionTargets(document, from)
+      canvasConnectionTargets(document, from, topology)
         .filter(({ status }) => status === "compatible")
         .map(({ endpoint }) => endpointKey(endpoint)),
     ),
@@ -90,11 +95,23 @@ function connectionIntent(
 function connectedLinkAtEndpoint(
   document: CanvasDocument,
   endpoint: MaterialEndpoint,
+  topology: CanvasEditor["topology"],
 ) {
+  const node = document.nodes.find(
+    ({ configuration }) => configuration.id === endpoint.nodeId,
+  );
   const key = endpointKey(endpoint);
-  return document.materialLinks.find(
+  const links = document.materialLinks.filter(
     ({ from, to }) => endpointKey(from) === key || endpointKey(to) === key,
   );
+  if (
+    topology === "aggregate" &&
+    node?.configuration.kind === "process" &&
+    links.length > 1
+  ) {
+    return undefined;
+  }
+  return links[0];
 }
 
 function compatibleTarget(
@@ -265,13 +282,28 @@ export function attachCanvasInteractions(
             replacingLinkId: interaction.reconnect.linkId,
           });
         } else if (!cancelled && !interaction.moved) {
-          editor.dispatch({
-            type: "selection.link",
-            additive: interaction.reconnect.additive,
-            id: interaction.reconnect.linkId,
-          });
+          if (interaction.reconnect.tapFrom) {
+            armedConnection = connectionIntent(
+              editor.getState().document,
+              interaction.reconnect.tapFrom,
+              editor.topology,
+            );
+            editor.dispatch({
+              type: "link.preview",
+              current: interaction.origin,
+              from: interaction.reconnect.tapFrom,
+            });
+          } else {
+            editor.dispatch({
+              type: "selection.link",
+              additive: interaction.reconnect.additive,
+              id: interaction.reconnect.linkId,
+            });
+          }
         }
-        cancelConnection();
+        if (!interaction.reconnect.tapFrom || interaction.moved || cancelled) {
+          cancelConnection();
+        }
       } else if (!cancelled && interaction.target) {
         editor.dispatch({
           type: "link.create",
@@ -408,11 +440,21 @@ export function attachCanvasInteractions(
       const from = { nodeId: hitPort.nodeId, portId: hitPort.port.id };
       if (armedConnection) {
         const target = compatibleTarget(armedConnection, from);
+        const armedSourceIsAggregate =
+          editor.topology === "aggregate" &&
+          editor
+            .getState()
+            .document.nodes.find(
+              ({ configuration }) =>
+                configuration.id === armedConnection?.from.nodeId,
+            )?.configuration.kind === "process";
         if (
-          !connectedLinkAtEndpoint(
-            editor.getState().document,
-            armedConnection.from,
-          ) &&
+          (armedSourceIsAggregate ||
+            !connectedLinkAtEndpoint(
+              editor.getState().document,
+              armedConnection.from,
+              editor.topology,
+            )) &&
           target
         ) {
           editor.dispatch({
@@ -429,8 +471,16 @@ export function attachCanvasInteractions(
       const connectedLink = connectedLinkAtEndpoint(
         editor.getState().document,
         from,
+        editor.topology,
       );
       if (connectedLink) {
+        const aggregateProcessPort =
+          editor.topology === "aggregate" &&
+          editor
+            .getState()
+            .document.nodes.find(
+              ({ configuration }) => configuration.id === from.nodeId,
+            )?.configuration.kind === "process";
         const fixedEndpoint =
           endpointKey(connectedLink.from) === endpointKey(from)
             ? connectedLink.to
@@ -439,7 +489,11 @@ export function attachCanvasInteractions(
           editor.getState().document,
           connectedLink.id,
         );
-        const intent = connectionIntent(documentWithoutLink, fixedEndpoint);
+        const intent = connectionIntent(
+          documentWithoutLink,
+          fixedEndpoint,
+          editor.topology,
+        );
         interaction = {
           ...intent,
           current: worldPoint,
@@ -451,6 +505,7 @@ export function attachCanvasInteractions(
           reconnect: {
             additive: selectionModifier,
             linkId: connectedLink.id,
+            ...(aggregateProcessPort ? { tapFrom: from } : {}),
           },
           startScreen: screen,
         };
@@ -463,7 +518,11 @@ export function attachCanvasInteractions(
         canvas.dataset.cursor = "crosshair";
         return;
       }
-      const intent = connectionIntent(editor.getState().document, from);
+      const intent = connectionIntent(
+        editor.getState().document,
+        from,
+        editor.topology,
+      );
       interaction = {
         ...intent,
         current: worldPoint,
@@ -606,10 +665,14 @@ export function attachCanvasInteractions(
         (event.pointerType === "touch" ? 24 : 12) / host.getViewport().zoom,
       );
       const occupiedPort = hoverPort
-        ? connectedLinkAtEndpoint(editor.getState().document, {
-            nodeId: hoverPort.nodeId,
-            portId: hoverPort.port.id,
-          })
+        ? connectedLinkAtEndpoint(
+            editor.getState().document,
+            {
+              nodeId: hoverPort.nodeId,
+              portId: hoverPort.port.id,
+            },
+            editor.topology,
+          )
         : undefined;
       canvas.dataset.cursor = host.isPlacementActive()
         ? "crosshair"

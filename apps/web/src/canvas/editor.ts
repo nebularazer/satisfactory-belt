@@ -144,6 +144,7 @@ export type CanvasEditor = Readonly<{
   query: (rectangle: Rectangle) => readonly CanvasNode[];
   queryLinks: (rectangle: Rectangle) => readonly MaterialLinkPath[];
   subscribe: (listener: (change: CanvasEditorChange) => void) => () => void;
+  topology: "aggregate" | "physical";
 }>;
 
 type IndexedNode = Readonly<{
@@ -177,7 +178,48 @@ type CreateCanvasEditorOptions = {
   document?: CanvasDocument;
   idFactory?: () => string;
   snapToGrid?: boolean;
+  topology?: "aggregate" | "physical";
 };
+
+function validateDocument(
+  document: CanvasDocument,
+  topology: "aggregate" | "physical",
+) {
+  const plan = createBasicPlan({
+    materialLinks: document.materialLinks,
+    nodes: document.nodes.map(({ configuration }) => configuration),
+  });
+  if (topology === "aggregate") return plan;
+
+  const occupied = new Map<string, string>();
+  for (const node of document.nodes) {
+    if (
+      node.configuration.kind === "process" &&
+      node.configuration.instances.length !== 1
+    ) {
+      throw new BasicPlanError(
+        "basic.endpoint.occupied",
+        "A physical canvas Process Node must represent exactly one machine.",
+        { nodeId: node.configuration.id },
+      );
+    }
+  }
+  for (const link of plan.materialLinks) {
+    for (const endpoint of [link.from, link.to]) {
+      const key = `${endpoint.nodeId}\u0000${endpoint.portId}`;
+      const existingLinkId = occupied.get(key);
+      if (existingLinkId) {
+        throw new BasicPlanError(
+          "basic.endpoint.occupied",
+          `Physical Material Port ${endpoint.nodeId}:${endpoint.portId} is already occupied.`,
+          { existingLinkId, linkId: link.id },
+        );
+      }
+      occupied.set(key, link.id);
+    }
+  }
+  return plan;
+}
 
 function snap(value: number) {
   return Math.round(value / SNAP_INTERVAL) * SNAP_INTERVAL;
@@ -262,6 +304,7 @@ export function createCanvasEditor(
     options.document ?? EMPTY_CANVAS_DOCUMENT,
   );
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
+  const topology = options.topology ?? "aggregate";
   const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: HistoryEntry[] = [];
   const future: HistoryEntry[] = [];
@@ -313,10 +356,7 @@ export function createCanvasEditor(
     validateTopology = true,
   ) => {
     if (validateTopology) {
-      createBasicPlan({
-        materialLinks: document.materialLinks,
-        nodes: document.nodes.map(({ configuration }) => configuration),
-      });
+      validateDocument(document, topology);
     }
     past.push(entry);
     if (past.length > HISTORY_LIMIT) past.shift();
@@ -432,10 +472,7 @@ export function createCanvasEditor(
             ...state.document,
             materialLinks: [...state.document.materialLinks, link],
           };
-          const normalized = createBasicPlan({
-            materialLinks: document.materialLinks,
-            nodes: document.nodes.map(({ configuration }) => configuration),
-          });
+          const normalized = validateDocument(document, topology);
           const canonicalLink = normalized.materialLinks.at(-1)!;
           commit(
             {
@@ -488,12 +525,10 @@ export function createCanvasEditor(
           const materialLinks = state.document.materialLinks.map(
             (link, linkIndex) => (linkIndex === index ? replacement : link),
           );
-          const normalized = createBasicPlan({
-            materialLinks,
-            nodes: state.document.nodes.map(
-              ({ configuration }) => configuration,
-            ),
-          });
+          const normalized = validateDocument(
+            { ...state.document, materialLinks },
+            topology,
+          );
           const canonicalLink = normalized.materialLinks[index]!;
           if (
             canonicalLink.from.nodeId === previousLink.from.nodeId &&
@@ -1171,5 +1206,6 @@ export function createCanvasEditor(
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    topology,
   };
 }
