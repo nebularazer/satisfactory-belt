@@ -99,6 +99,12 @@ test("connects material ports and persists the Material Link", async ({
     .getByRole("button", { name: "Close Material Link details" })
     .click();
 
+  await canvas.click({ position: { x: 480, y: 360 } });
+  await expect(
+    page.getByRole("complementary", {
+      name: "Material Link details: Iron Ore",
+    }),
+  ).toBeVisible();
   await canvas.hover({ position: { x: 512, y: 360 } });
   await page.mouse.down();
   await page.mouse.move(640, 500, { steps: 4 });
