@@ -173,9 +173,6 @@ test("offers only compatible recipes after a connection is dropped on empty spac
   await page.goto("/");
   const canvas = page.getByRole("application", { name: "Infinite canvas" });
   const search = page.getByPlaceholder("Search buildings or recipes...");
-  const compatibleSearch = page.getByPlaceholder(
-    "Search compatible recipes...",
-  );
 
   await page.getByRole("button", { name: "Add your first node" }).click();
   await search.fill("miner mk.1");
@@ -195,7 +192,10 @@ test("offers only compatible recipes after a connection is dropped on empty spac
   await expect(
     page.getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ }),
   ).toBeVisible();
-  await expect(page.getByText("Production", { exact: true })).toBeHidden();
+  await expect(page.getByText("Production", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: "Conveyor Splitter" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Cancel adding node" }).click();
   await expect(
     page.getByRole("dialog", { name: "Add compatible node" }),
@@ -206,13 +206,13 @@ test("offers only compatible recipes after a connection is dropped on empty spac
   await page.mouse.move(900, 450, { steps: 4 });
   await page.mouse.up();
 
-  await compatibleSearch.fill("iron plate");
+  await search.fill("iron plate");
   await expect(
     page.getByRole("option", {
       name: /^Iron Plate.*Iron Ingot.*Constructor/,
     }),
   ).toBeHidden();
-  await compatibleSearch.fill("iron ingot");
+  await search.fill("iron ingot");
   await page
     .getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ })
     .click();

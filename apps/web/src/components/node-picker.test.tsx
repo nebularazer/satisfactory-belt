@@ -42,19 +42,19 @@ describe("NodePicker", () => {
           selection.node.kind === "process" &&
           selection.node.processId === "Recipe_IngotIron_C"
         }
-        directRecipesOnly
         onOpenChange={() => undefined}
         onSelect={() => undefined}
         open
+        replaceMachinesWithRecipes
       />,
     );
 
     expect(
       screen.getByRole("dialog", { name: "Add compatible node" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Production")).not.toBeInTheDocument();
+    expect(screen.getByText("Production")).toBeInTheDocument();
     fireEvent.change(
-      screen.getByPlaceholderText("Search compatible recipes..."),
+      screen.getByPlaceholderText("Search buildings or recipes..."),
       { target: { value: "iron ingot" } },
     );
     expect(
@@ -73,10 +73,10 @@ describe("NodePicker", () => {
           selection.node.kind === "process" &&
           selection.node.processId === "Recipe_IngotIron_C"
         }
-        directRecipesOnly
         onOpenChange={onOpenChange}
         onSelect={() => undefined}
         open
+        replaceMachinesWithRecipes
       />,
     );
 
@@ -86,6 +86,41 @@ describe("NodePicker", () => {
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel adding node" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps compatible logistics, transport, and special choices", () => {
+    const allowedBuildables = new Set([
+      "Build_ConveyorAttachmentSplitter_C",
+      "Build_ResourceSink_C",
+      "Build_TruckStation_C",
+    ]);
+    render(
+      <NodePicker
+        allowSelection={(selection) =>
+          allowedBuildables.has(selection.node.buildableId) ||
+          (selection.node.kind === "process" &&
+            selection.node.processId === "Recipe_IngotIron_C")
+        }
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+        replaceMachinesWithRecipes
+      />,
+    );
+
+    expect(screen.getByText("Logistics")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Conveyor Splitter" }),
+    ).toBeVisible();
+    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /^Iron Ingot/ })).toBeVisible();
+    expect(screen.getByText("Transport")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Truck Station" })).toBeVisible();
+    expect(screen.getByText("Special")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "AWESOME Sink" })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /^Smelter 1 recipe/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps recipes out of the initial building browser", () => {

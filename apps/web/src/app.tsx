@@ -665,7 +665,7 @@ function CanvasWorkspace({
           allowSelection={
             pendingNode?.connection ? allowPendingSelection : undefined
           }
-          directRecipesOnly={Boolean(pendingNode?.connection)}
+          replaceMachinesWithRecipes={Boolean(pendingNode?.connection)}
           onOpenChange={(open) => {
             if (!open) setPendingNode(null);
           }}
