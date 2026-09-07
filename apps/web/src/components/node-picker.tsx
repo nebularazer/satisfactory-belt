@@ -1263,28 +1263,32 @@ export function NodePicker({
     );
   };
 
-  const moveActiveRecipe = (direction: -1 | 1) => {
-    const recipeEntries = selectableEntries.filter(
-      ({ option }) =>
-        option.type === "recipe" || option.type === "extractor-resource",
-    );
-    if (recipeEntries.length === 0) return false;
-    const currentIndex = recipeEntries.findIndex(
-      ({ option }) => option.key === activeOption?.key,
-    );
-    const targetIndex =
-      currentIndex < 0
-        ? direction > 0
-          ? 0
-          : recipeEntries.length - 1
-        : Math.min(
-            recipeEntries.length - 1,
-            Math.max(0, currentIndex + direction),
-          );
-    const target = recipeEntries[targetIndex];
-    if (!target) return false;
-    activateOption(selectableEntries.indexOf(target));
-    return true;
+  const enterActiveLayer = () => {
+    if (!activeOption) return false;
+    if (activeOption.type === "machine") {
+      enterScope({ machineId: activeOption.machine.id, type: "machine" });
+      return true;
+    }
+    if (activeOption.type === "extractor") {
+      const resources = resourcesForSource(activeOption.extractor);
+      if (resources.length <= 1) return false;
+      enterScope({ extractorId: activeOption.extractor.id, type: "extractor" });
+      return true;
+    }
+    if (activeOption.type === "configurable-buildable") {
+      enterScope({
+        buildableId: activeOption.buildable.id,
+        type: "configuration",
+      });
+      return true;
+    }
+    if (activeOption.type === "recipe" && scope.type !== "routes") {
+      const output = routeOutput(activeOption.recipe, query);
+      if (!output || recipesProducing(output.itemId).length <= 1) return false;
+      enterScope({ itemId: output.itemId, type: "routes" });
+      return true;
+    }
+    return false;
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -1292,10 +1296,10 @@ export function NodePicker({
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       moveActive(event.key === "ArrowDown" ? 1 : -1);
-    } else if (
-      (event.key === "ArrowRight" || event.key === "ArrowLeft") &&
-      moveActiveRecipe(event.key === "ArrowRight" ? 1 : -1)
-    ) {
+    } else if (event.key === "ArrowLeft" && historyRef.current.length > 0) {
+      event.preventDefault();
+      returnToPreviousResults();
+    } else if (event.key === "ArrowRight" && enterActiveLayer()) {
       event.preventDefault();
     } else if (event.key === "Enter" && activeOption) {
       event.preventDefault();

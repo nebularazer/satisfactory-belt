@@ -787,8 +787,16 @@ function syncDocument(
   const dark = document.documentElement.classList.contains("dark");
   const selectedIds = new Set(state.selectedIds);
   const visibleIds = new Set(visibleNodes.map(canvasNodeId));
+  const connectionDocument = state.connectionPreview?.replacingLinkId
+    ? {
+        ...state.document,
+        materialLinks: state.document.materialLinks.filter(
+          ({ id }) => id !== state.connectionPreview?.replacingLinkId,
+        ),
+      }
+    : state.document;
   const linksByNodeId = Map.groupBy(
-    state.document.materialLinks.flatMap((link) => [
+    connectionDocument.materialLinks.flatMap((link) => [
       { endpoint: link.from, link },
       { endpoint: link.to, link },
     ]),
@@ -797,7 +805,7 @@ function syncDocument(
   const connectionTargets = state.connectionPreview
     ? new Map(
         canvasConnectionTargets(
-          state.document,
+          connectionDocument,
           state.connectionPreview.from,
         ).map((target) => [
           `${target.endpoint.nodeId}\u0000${target.endpoint.portId}`,
@@ -987,6 +995,7 @@ function drawMaterialLinks(
         ),
       }
     : state.document;
+  const preview = state.connectionPreview;
   const dark = document.documentElement.classList.contains("dark");
   const candidates = moving
     ? [
@@ -1006,6 +1015,7 @@ function drawMaterialLinks(
     ]),
   );
   for (const link of candidates) {
+    if (link.id === preview?.replacingLinkId) continue;
     const path = materialLinkPath(effectiveDocument, link);
     const presentation = presentations.get(link.id);
     if (!path || !presentation) continue;
@@ -1045,6 +1055,7 @@ function drawMaterialLinks(
   }
 
   for (const link of visibleLinks) {
+    if (link.id === preview?.replacingLinkId) continue;
     const path = materialLinkPath(effectiveDocument, link);
     const presentation = presentations.get(link.id);
     if (!path || !presentation) continue;
@@ -1069,10 +1080,17 @@ function drawMaterialLinks(
     labelLayer.addChild(label);
   }
 
-  const preview = state.connectionPreview;
   if (!preview) return;
+  const connectionDocument = preview.replacingLinkId
+    ? {
+        ...state.document,
+        materialLinks: state.document.materialLinks.filter(
+          ({ id }) => id !== preview.replacingLinkId,
+        ),
+      }
+    : state.document;
   const previewTargetStatus = preview.target
-    ? canvasConnectionTargets(state.document, preview.from).find(
+    ? canvasConnectionTargets(connectionDocument, preview.from).find(
         ({ endpoint }) =>
           endpoint.nodeId === preview.target?.nodeId &&
           endpoint.portId === preview.target.portId,

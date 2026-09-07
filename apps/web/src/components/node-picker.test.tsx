@@ -377,6 +377,30 @@ describe("NodePicker", () => {
     });
   });
 
+  it("opens and leaves the active recipe route with horizontal arrows", () => {
+    render(
+      <NodePicker
+        onOpenChange={() => undefined}
+        onSelect={() => undefined}
+        open
+      />,
+    );
+
+    const search = screen.getByPlaceholderText(
+      "Search buildings or recipes...",
+    );
+    fireEvent.change(search, { target: { value: "screws" } });
+    expect(screen.getAllByRole("option")[0]).toHaveAccessibleName(/^Screws/);
+
+    fireEvent.keyDown(search, { key: "ArrowRight" });
+    const routeSearch = screen.getByPlaceholderText("Search Screws recipes...");
+
+    fireEvent.keyDown(routeSearch, { key: "ArrowLeft" });
+    expect(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+    ).toHaveValue("screws");
+  });
+
   it("narrows recipes after selecting a machine", () => {
     const onSelect = vi.fn();
     render(
@@ -473,7 +497,7 @@ describe("NodePicker", () => {
     ).toBeInTheDocument();
   });
 
-  it("moves between available recipes with the horizontal arrow keys", () => {
+  it("moves between picker layers with the horizontal arrow keys", () => {
     render(
       <NodePicker
         onOpenChange={() => undefined}
@@ -482,20 +506,24 @@ describe("NodePicker", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("option", { name: /Constructor 48 recipes/ }),
+    const search = screen.getByPlaceholderText(
+      "Search buildings or recipes...",
     );
-    const search = screen.getByPlaceholderText("Search Constructor recipes...");
-    const firstRecipe = search.getAttribute("aria-activedescendant");
-    expect(firstRecipe).toContain("recipe-");
+    fireEvent.change(search, { target: { value: "constructor" } });
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      expect.stringContaining("machine-Build_ConstructorMk1_C"),
+    );
 
     fireEvent.keyDown(search, { key: "ArrowRight" });
-    const secondRecipe = search.getAttribute("aria-activedescendant");
-    expect(secondRecipe).toContain("recipe-");
-    expect(secondRecipe).not.toBe(firstRecipe);
+    const recipeSearch = screen.getByPlaceholderText(
+      "Search Constructor recipes...",
+    );
 
-    fireEvent.keyDown(search, { key: "ArrowLeft" });
-    expect(search).toHaveAttribute("aria-activedescendant", firstRecipe);
+    fireEvent.keyDown(recipeSearch, { key: "ArrowLeft" });
+    expect(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+    ).toHaveValue("constructor");
   });
 
   it("shows logistics as a quick-add grid", () => {

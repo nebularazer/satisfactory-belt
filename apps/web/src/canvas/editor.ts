@@ -46,6 +46,7 @@ export type CanvasEditorState = Readonly<{
   connectionPreview?: Readonly<{
     current: Point;
     from: MaterialEndpoint;
+    replacingLinkId?: string;
     target?: MaterialEndpoint;
   }>;
   snapToGrid: boolean;
@@ -70,11 +71,18 @@ export type CanvasEditorAction =
       id?: string;
       to: MaterialEndpoint;
     }
+  | {
+      type: "link.reconnect";
+      from: MaterialEndpoint;
+      id: string;
+      to: MaterialEndpoint;
+    }
   | { type: "link.delete"; id: string }
   | {
       type: "link.preview";
       current: Point;
       from: MaterialEndpoint;
+      replacingLinkId?: string;
       target?: MaterialEndpoint;
     }
   | { type: "link.preview.cancel" }
@@ -465,6 +473,72 @@ export function createCanvasEditor(
         return;
       }
 
+      case "link.reconnect": {
+        const index = state.document.materialLinks.findIndex(
+          ({ id }) => id === action.id,
+        );
+        const previousLink = state.document.materialLinks[index];
+        if (!previousLink) return;
+        const replacement: MaterialLink = {
+          from: action.from,
+          id: action.id,
+          to: action.to,
+        };
+        try {
+          const materialLinks = state.document.materialLinks.map(
+            (link, linkIndex) => (linkIndex === index ? replacement : link),
+          );
+          const normalized = createBasicPlan({
+            materialLinks,
+            nodes: state.document.nodes.map(
+              ({ configuration }) => configuration,
+            ),
+          });
+          const canonicalLink = normalized.materialLinks[index]!;
+          if (
+            canonicalLink.from.nodeId === previousLink.from.nodeId &&
+            canonicalLink.from.portId === previousLink.from.portId &&
+            canonicalLink.to.nodeId === previousLink.to.nodeId &&
+            canonicalLink.to.portId === previousLink.to.portId
+          ) {
+            dispatch({
+              type: "selection.link",
+              additive: false,
+              id: previousLink.id,
+            });
+            return;
+          }
+          commit(
+            { ...state.document, materialLinks: normalized.materialLinks },
+            [],
+            {
+              after: [],
+              afterLinks: [{ index, link: canonicalLink }],
+              afterLinkSelection: [canonicalLink.id],
+              afterSelection: [],
+              before: [],
+              beforeLinks: [{ index, link: previousLink }],
+              beforeLinkSelection: state.selectedLinkIds,
+              beforeSelection: state.selectedIds,
+            },
+            [canonicalLink.id],
+          );
+        } catch (error) {
+          const failure =
+            error instanceof BasicPlanError
+              ? { code: error.code, message: error.message }
+              : {
+                  code: "basic.link.invalid",
+                  message:
+                    error instanceof Error
+                      ? error.message
+                      : "The Material Link is invalid.",
+                };
+          publish({ connectionError: failure }, { kind: "settings" });
+        }
+        return;
+      }
+
       case "link.preview":
         publish(
           {
@@ -472,6 +546,9 @@ export function createCanvasEditor(
             connectionPreview: {
               current: action.current,
               from: action.from,
+              ...(action.replacingLinkId
+                ? { replacingLinkId: action.replacingLinkId }
+                : {}),
               ...(action.target ? { target: action.target } : {}),
             },
           },

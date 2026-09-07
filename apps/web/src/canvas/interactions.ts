@@ -26,6 +26,7 @@ type Interaction =
       moved: boolean;
       origin: Point;
       pointerId: number;
+      reconnect?: Readonly<{ additive: boolean; linkId: string }>;
       startScreen: Point;
       target?: MaterialEndpoint;
     })
@@ -245,7 +246,23 @@ export function attachCanvasInteractions(
     }
 
     if (interaction.kind === "connection") {
-      if (!cancelled && interaction.target) {
+      if (interaction.reconnect) {
+        if (!cancelled && interaction.moved && interaction.target) {
+          editor.dispatch({
+            type: "link.reconnect",
+            from: interaction.from,
+            id: interaction.reconnect.linkId,
+            to: interaction.target,
+          });
+        } else if (!cancelled && !interaction.moved) {
+          editor.dispatch({
+            type: "selection.link",
+            additive: interaction.reconnect.additive,
+            id: interaction.reconnect.linkId,
+          });
+        }
+        cancelConnection();
+      } else if (!cancelled && interaction.target) {
         editor.dispatch({
           type: "link.create",
           from: interaction.from,
@@ -404,15 +421,38 @@ export function attachCanvasInteractions(
         from,
       );
       if (connectedLink) {
+        const fixedEndpoint =
+          endpointKey(connectedLink.from) === endpointKey(from)
+            ? connectedLink.to
+            : connectedLink.from;
+        const documentWithoutLink = {
+          ...editor.getState().document,
+          materialLinks: editor
+            .getState()
+            .document.materialLinks.filter(({ id }) => id !== connectedLink.id),
+        };
+        const intent = connectionIntent(documentWithoutLink, fixedEndpoint);
         interaction = {
-          additive: selectionModifier,
-          kind: "link",
-          linkId: connectedLink.id,
+          ...intent,
+          current: worldPoint,
+          dropOnEmpty: false,
+          kind: "connection",
           moved: false,
+          origin: hitPort.point,
           pointerId: event.pointerId,
+          reconnect: {
+            additive: selectionModifier,
+            linkId: connectedLink.id,
+          },
           startScreen: screen,
         };
-        canvas.dataset.cursor = "pointer";
+        editor.dispatch({
+          type: "link.preview",
+          current: hitPort.point,
+          from: fixedEndpoint,
+          replacingLinkId: connectedLink.id,
+        });
+        canvas.dataset.cursor = "crosshair";
         return;
       }
       const intent = connectionIntent(editor.getState().document, from);
@@ -627,6 +667,9 @@ export function attachCanvasInteractions(
         type: "link.preview",
         current: worldPoint,
         from: interaction.from,
+        ...(interaction.reconnect
+          ? { replacingLinkId: interaction.reconnect.linkId }
+          : {}),
         ...(hovered ? { target: hovered } : {}),
       });
       return;

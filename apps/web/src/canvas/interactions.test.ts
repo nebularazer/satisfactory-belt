@@ -324,7 +324,7 @@ describe("canvas interactions", () => {
     ]);
   });
 
-  it("never starts a connection from an occupied port", () => {
+  it("keeps an existing link unchanged when its endpoint is dropped on empty canvas", () => {
     const { editor, nodeRequests, pointer, viewport } = createHarness();
     createIronPair(editor);
     connectIronPair(editor);
@@ -344,6 +344,71 @@ describe("canvas interactions", () => {
     expect(editor.getState().selectedLinkIds).toEqual([]);
     expect(nodeRequests).toEqual([]);
     expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+  });
+
+  it("drags an existing link endpoint to another compatible port", () => {
+    const { editor, pointer } = createHarness();
+    createIronPair(editor);
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 900, y: 100 },
+      node: IRON_SMELTER,
+    });
+    connectIronPair(editor);
+    const original = portPoint(editor, "node-2", "input:Desc_OreIron_C");
+    const target = portPoint(editor, "node-3", "input:Desc_OreIron_C");
+
+    pointer("pointerdown", original.x, original.y, { pointerType: "touch" });
+    expect(editor.getState().connectionPreview).toMatchObject({
+      from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+      replacingLinkId: "ore-link",
+    });
+    pointer("pointermove", original.x + 40, original.y + 40, {
+      pointerType: "touch",
+    });
+    pointer("pointermove", target.x, target.y, { pointerType: "touch" });
+    pointer("pointerup", target.x, target.y, { pointerType: "touch" });
+
+    expect(editor.getState().document.materialLinks).toEqual([
+      {
+        from: { nodeId: "node-1", portId: "output:Desc_OreIron_C" },
+        id: "ore-link",
+        to: { nodeId: "node-3", portId: "input:Desc_OreIron_C" },
+      },
+    ]);
+    expect(editor.getState().selectedLinkIds).toEqual(["ore-link"]);
+    expect(editor.getState().connectionPreview).toBeUndefined();
+
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document.materialLinks[0]?.to.nodeId).toBe(
+      "node-2",
+    );
+  });
+
+  it("can move the source endpoint of an existing link", () => {
+    const { editor, pointer } = createHarness();
+    createIronPair(editor);
+    editor.dispatch({
+      type: "node.create",
+      at: { x: 100, y: 400 },
+      node: IRON_MINER,
+    });
+    connectIronPair(editor);
+    const original = portPoint(editor, "node-1", "output:Desc_OreIron_C");
+    const target = portPoint(editor, "node-3", "output:Desc_OreIron_C");
+
+    pointer("pointerdown", original.x, original.y);
+    pointer("pointermove", original.x + 20, original.y + 20);
+    pointer("pointermove", target.x, target.y);
+    pointer("pointerup", target.x, target.y);
+
+    expect(editor.getState().document.materialLinks).toEqual([
+      {
+        from: { nodeId: "node-3", portId: "output:Desc_OreIron_C" },
+        id: "ore-link",
+        to: { nodeId: "node-2", portId: "input:Desc_OreIron_C" },
+      },
+    ]);
   });
 
   it("selects an occupied port's link on tap", () => {
