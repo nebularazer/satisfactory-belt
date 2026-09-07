@@ -5,6 +5,7 @@ import {
 } from "@satisfactory-belt/production";
 
 import { analyzeBasicPlan, createBasicPlan } from "./basic-topology";
+import { solveNonNegativeLinearSystem } from "./linear-system";
 import type {
   BasicPlan,
   MaterialEndpoint,
@@ -390,6 +391,98 @@ function feasibleLinkRates(
   );
 }
 
+function solveCyclicLinkRates(
+  component: Readonly<{ edges: readonly Edge[]; vertices: readonly string[] }>,
+  itemId: string,
+  links: readonly MaterialLink[],
+  nodes: ReadonlyMap<string, Node>,
+  ports: ReadonlyMap<string, MaterialPort>,
+) {
+  const orderedLinks = [...links].toSorted((left, right) =>
+    left.id.localeCompare(right.id),
+  );
+  const linkIndex = new Map(
+    orderedLinks.map((link, index) => [link.id, index] as const),
+  );
+  const baselineRates = balanceParallelLinkRates(
+    orderedLinks,
+    feasibleLinkRates(component, itemId, nodes, ports),
+  );
+  const matrix: number[][] = [];
+  const rightHandSide: number[] = [];
+  const addEquation = (
+    coefficients: readonly (readonly [linkId: string, coefficient: number])[],
+    value = 0,
+  ) => {
+    const row = Array.from({ length: orderedLinks.length }, () => 0);
+    for (const [linkId, coefficient] of coefficients) {
+      const index = linkIndex.get(linkId);
+      if (index !== undefined) row[index] = row[index]! + coefficient;
+    }
+    matrix.push(row);
+    rightHandSide.push(value);
+  };
+
+  // Process ports are the fixed boundaries of the network. The existing flow
+  // projection already accounts for nominal supply, demand, and shortages.
+  for (const link of orderedLinks) {
+    if (
+      nodes.get(link.from.nodeId)?.kind === "process" ||
+      nodes.get(link.to.nodeId)?.kind === "process"
+    ) {
+      addEquation([[link.id, 1]], baselineRates.get(link.id) ?? 0);
+    }
+  }
+
+  const connectedNodeIds = new Set(
+    orderedLinks.flatMap(({ from, to }) => [from.nodeId, to.nodeId]),
+  );
+  for (const nodeId of [...connectedNodeIds].toSorted()) {
+    const node = nodes.get(nodeId);
+    if (!node || node.kind === "process") continue;
+    const incoming = orderedLinks.filter(({ to }) => to.nodeId === nodeId);
+    const outgoing = orderedLinks.filter(({ from }) => from.nodeId === nodeId);
+
+    // A node with no connected output is an intentional terminal sink (for
+    // example a Storage Container). It absorbs its incoming flow.
+    if (outgoing.length === 0) continue;
+    if (incoming.length === 0) {
+      for (const link of outgoing) addEquation([[link.id, 1]]);
+      continue;
+    }
+
+    addEquation([
+      ...incoming.map((link) => [link.id, 1] as const),
+      ...outgoing.map((link) => [link.id, -1] as const),
+    ]);
+
+    const outputPortCount = node.ports.filter(
+      ({ direction }) => direction === "output",
+    ).length;
+    if (node.kind === "router" && outputPortCount > 1 && outgoing.length > 1) {
+      const [first, ...rest] = outgoing;
+      for (const link of rest) {
+        addEquation([
+          [first!.id, 1],
+          [link.id, -1],
+        ]);
+      }
+    }
+  }
+
+  const result = solveNonNegativeLinearSystem(
+    matrix,
+    rightHandSide,
+    orderedLinks.length,
+  );
+  if (result.status !== "feasible") return undefined;
+  return new Map(
+    orderedLinks.map(
+      (link, index) => [link.id, result.values[index]!] as const,
+    ),
+  );
+}
+
 export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
   const validated = createBasicPlan(plan);
   const topology = analyzeBasicPlan(validated);
@@ -450,7 +543,11 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
         });
       }
     }
-    if (hasDirectedNodeCycle(links)) {
+    const hasCycle = hasDirectedNodeCycle(links);
+    const cyclicRates = hasCycle
+      ? solveCyclicLinkRates(component, itemId, links, nodes, ports)
+      : undefined;
+    if (hasCycle && !cyclicRates) {
       for (const link of links) {
         diagnostics.push({
           code: "basic.network.feedback",
@@ -462,6 +559,10 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
         });
       }
       for (const link of links) rateByLink.delete(link.id);
+    } else if (cyclicRates) {
+      for (const [linkId, rate] of cyclicRates) {
+        rateByLink.set(linkId, rate);
+      }
     } else {
       const feasibleRates = feasibleLinkRates(component, itemId, nodes, ports);
       for (const [linkId, rate] of balanceParallelLinkRates(

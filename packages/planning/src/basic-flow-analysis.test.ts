@@ -473,6 +473,117 @@ describe("Basic flow analysis", () => {
     );
   });
 
+  it("solves a feedback loop with a fixed supply and terminal exits", () => {
+    const plan = createBasicPlan({
+      materialLinks: [
+        {
+          from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
+          id: "source",
+          to: { nodeId: "splitter-one", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-one", portId: "output:1" },
+          id: "first-storage",
+          to: { nodeId: "storage-one", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-one", portId: "output:3" },
+          id: "fresh",
+          to: { nodeId: "merger", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "merger", portId: "output:1" },
+          id: "merged",
+          to: { nodeId: "splitter-two", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-two", portId: "output:1" },
+          id: "second-storage",
+          to: { nodeId: "storage-two", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-two", portId: "output:3" },
+          id: "feedback",
+          to: { nodeId: "merger", portId: "input:3" },
+        },
+      ],
+      nodes: [
+        basicNode({
+          buildableId: "Build_MinerMk1_C",
+          id: "miner",
+          kind: "process",
+          processId: "extraction:Desc_OreIron_C",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter-one",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_StorageContainerMk1_C",
+          id: "storage-one",
+          kind: "buffer",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentMerger_C",
+          id: "merger",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+          id: "splitter-two",
+          kind: "router",
+        }),
+        basicNode({
+          buildableId: "Build_StorageContainerMk1_C",
+          id: "storage-two",
+          kind: "buffer",
+        }),
+      ],
+    });
+
+    const analysis = analyzeBasicFlows(plan);
+    expect(
+      Object.fromEntries(
+        analysis.linkFlows.map(({ linkId, ratePerMinute }) => [
+          linkId,
+          ratePerMinute,
+        ]),
+      ),
+    ).toEqual({
+      feedback: 30,
+      "first-storage": 30,
+      fresh: 30,
+      merged: 60,
+      "second-storage": 30,
+      source: 60,
+    });
+    expect(
+      analysis.diagnostics.some(
+        ({ code }) => code === "basic.network.feedback",
+      ),
+    ).toBe(false);
+    expect(
+      Object.fromEntries(
+        analysis.portFlows
+          .filter(({ endpoint }) =>
+            ["merger", "splitter-two"].includes(endpoint.nodeId),
+          )
+          .map(({ endpoint, ratePerMinute }) => [
+            `${endpoint.nodeId}:${endpoint.portId}`,
+            ratePerMinute,
+          ]),
+      ),
+    ).toMatchObject({
+      "merger:input:1": 30,
+      "merger:input:3": 30,
+      "merger:output:1": 60,
+      "splitter-two:input:1": 60,
+      "splitter-two:output:1": 30,
+      "splitter-two:output:3": 30,
+    });
+  });
+
   it("caps a Material Link at the supply available to an undersupplied consumer", () => {
     const plan = createBasicPlan({
       materialLinks: [

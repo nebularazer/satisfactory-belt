@@ -1,3 +1,4 @@
+import { createNode } from "@satisfactory-belt/production";
 import { describe, expect, it } from "vitest";
 
 import type { CanvasDocument } from "./document";
@@ -6,6 +7,18 @@ import {
   presentMaterialFlow,
   presentMaterialLinks,
 } from "./material-link-presentation";
+
+function documentNode(request: Parameters<typeof createNode>[0], x: number) {
+  const configuration = createNode(request).configuration;
+  return {
+    configuration,
+    height: 320,
+    label: configuration.id,
+    width: 320,
+    x,
+    y: 0,
+  };
+}
 
 describe("Material Link presentation", () => {
   it("formats the implicit per-minute canvas label and inspector details", () => {
@@ -227,5 +240,117 @@ describe("Material Link presentation", () => {
     expect(presentation.port({ nodeId: "node-3", portId: "output:1" })).toEqual(
       { itemId: "Desc_OreIron_C", ratePerMinute: 60 },
     );
+  });
+
+  it("presents a determinate feedback loop with numeric link rates", () => {
+    const document: CanvasDocument = {
+      kind: "basic",
+      materialLinks: [
+        {
+          from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
+          id: "source",
+          to: { nodeId: "splitter-one", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-one", portId: "output:1" },
+          id: "first-storage",
+          to: { nodeId: "storage-one", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-one", portId: "output:3" },
+          id: "fresh",
+          to: { nodeId: "merger", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "merger", portId: "output:1" },
+          id: "merged",
+          to: { nodeId: "splitter-two", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-two", portId: "output:1" },
+          id: "second-storage",
+          to: { nodeId: "storage-two", portId: "input:1" },
+        },
+        {
+          from: { nodeId: "splitter-two", portId: "output:3" },
+          id: "feedback",
+          to: { nodeId: "merger", portId: "input:3" },
+        },
+      ],
+      nodes: [
+        documentNode(
+          {
+            buildableId: "Build_MinerMk1_C",
+            id: "miner",
+            kind: "process",
+            processId: "extraction:Desc_OreIron_C",
+          },
+          0,
+        ),
+        documentNode(
+          {
+            buildableId: "Build_ConveyorAttachmentSplitter_C",
+            id: "splitter-one",
+            kind: "router",
+          },
+          400,
+        ),
+        documentNode(
+          {
+            buildableId: "Build_StorageContainerMk1_C",
+            id: "storage-one",
+            kind: "buffer",
+          },
+          800,
+        ),
+        documentNode(
+          {
+            buildableId: "Build_ConveyorAttachmentMerger_C",
+            id: "merger",
+            kind: "router",
+          },
+          800,
+        ),
+        documentNode(
+          {
+            buildableId: "Build_ConveyorAttachmentSplitter_C",
+            id: "splitter-two",
+            kind: "router",
+          },
+          1_200,
+        ),
+        documentNode(
+          {
+            buildableId: "Build_StorageContainerMk1_C",
+            id: "storage-two",
+            kind: "buffer",
+          },
+          1_600,
+        ),
+      ],
+      version: 4,
+    };
+
+    const presentation = presentMaterialFlow(document);
+    expect(
+      Object.fromEntries(
+        presentation.links.map(({ id, label, ratePerMinute }) => [
+          id,
+          { label, ratePerMinute },
+        ]),
+      ),
+    ).toEqual({
+      feedback: { label: "30", ratePerMinute: 30 },
+      "first-storage": { label: "30", ratePerMinute: 30 },
+      fresh: { label: "30", ratePerMinute: 30 },
+      merged: { label: "60", ratePerMinute: 60 },
+      "second-storage": { label: "30", ratePerMinute: 30 },
+      source: { label: "60", ratePerMinute: 60 },
+    });
+    expect(
+      presentation.links.some(({ diagnostics }) =>
+        diagnostics.some(({ code }) => code === "basic.network.feedback"),
+      ),
+    ).toBe(false);
   });
 });
