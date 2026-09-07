@@ -42,6 +42,7 @@ describe("NodePicker", () => {
           selection.node.kind === "process" &&
           selection.node.processId === "Recipe_IngotIron_C"
         }
+        directRecipesOnly
         onOpenChange={() => undefined}
         onSelect={() => undefined}
         open
@@ -51,8 +52,9 @@ describe("NodePicker", () => {
     expect(
       screen.getByRole("dialog", { name: "Add compatible node" }),
     ).toBeInTheDocument();
+    expect(screen.queryByText("Production")).not.toBeInTheDocument();
     fireEvent.change(
-      screen.getByPlaceholderText("Search buildings or recipes..."),
+      screen.getByPlaceholderText("Search compatible recipes..."),
       { target: { value: "iron ingot" } },
     );
     expect(
@@ -63,7 +65,7 @@ describe("NodePicker", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows compatible recipe counts and can cancel link placement", () => {
+  it("shows compatible recipes directly and can cancel link placement", () => {
     const onOpenChange = vi.fn();
     render(
       <NodePicker
@@ -71,15 +73,17 @@ describe("NodePicker", () => {
           selection.node.kind === "process" &&
           selection.node.processId === "Recipe_IngotIron_C"
         }
+        directRecipesOnly
         onOpenChange={onOpenChange}
         onSelect={() => undefined}
         open
       />,
     );
 
+    expect(screen.getByRole("option", { name: /^Iron Ingot/ })).toBeVisible();
     expect(
-      screen.getByRole("option", { name: /^Smelter 1 recipe/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole("option", { name: /^Smelter 1 recipe/ }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel adding node" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

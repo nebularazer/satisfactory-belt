@@ -88,7 +88,7 @@ function createHarness(
     [];
   const nodeRequests: Array<{
     at: Point;
-    connectionFrom?: Readonly<{ nodeId: string; portId: string }>;
+    connection?: Parameters<CanvasInteractionHost["requestNode"]>[1];
   }> = [];
   let placementActive = false;
   const placements: Point[] = [];
@@ -140,10 +140,10 @@ function createHarness(
       placements.push(at);
       placementActive = false;
     },
-    requestNode: (at, connectionFrom) =>
+    requestNode: (at, connection) =>
       nodeRequests.push({
         at,
-        ...(connectionFrom ? { connectionFrom } : {}),
+        ...(connection ? { connection } : {}),
       }),
     resetView: () => {
       viewport = { x: 500, y: 400, zoom: 1 };
@@ -316,15 +316,17 @@ describe("canvas interactions", () => {
     expect(nodeRequests).toEqual([
       {
         at: { x: 320, y: 220 },
-        connectionFrom: {
-          nodeId: "node-1",
-          portId: "output:Desc_OreIron_C",
+        connection: {
+          from: {
+            nodeId: "node-1",
+            portId: "output:Desc_OreIron_C",
+          },
         },
       },
     ]);
   });
 
-  it("keeps an existing link unchanged when its endpoint is dropped on empty canvas", () => {
+  it("requests a compatible node when an existing endpoint is dropped on empty canvas", () => {
     const { editor, nodeRequests, pointer, viewport } = createHarness();
     createIronPair(editor);
     connectIronPair(editor);
@@ -342,7 +344,18 @@ describe("canvas interactions", () => {
     expect(editor.getState().connectionPreview).toBeUndefined();
     expect(editor.getState().document.materialLinks).toHaveLength(1);
     expect(editor.getState().selectedLinkIds).toEqual([]);
-    expect(nodeRequests).toEqual([]);
+    expect(nodeRequests).toEqual([
+      {
+        at: { x: occupied.x - 80, y: occupied.y + 160 },
+        connection: {
+          from: {
+            nodeId: "node-1",
+            portId: "output:Desc_OreIron_C",
+          },
+          replacingLinkId: "ore-link",
+        },
+      },
+    ]);
     expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
   });
 

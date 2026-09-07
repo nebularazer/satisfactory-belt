@@ -10,6 +10,19 @@ import type { CanvasDocument } from "./document";
 
 const CANDIDATE_NODE_ID = "canvas-compatible-node-candidate";
 
+export function canvasDocumentForConnection(
+  document: CanvasDocument,
+  replacingLinkId?: string,
+): CanvasDocument {
+  if (!replacingLinkId) return document;
+  return {
+    ...document,
+    materialLinks: document.materialLinks.filter(
+      ({ id }) => id !== replacingLinkId,
+    ),
+  };
+}
+
 function asBasicPlan(document: CanvasDocument) {
   return createBasicPlan({
     materialLinks: document.materialLinks,

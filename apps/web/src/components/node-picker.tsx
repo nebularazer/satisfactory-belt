@@ -65,6 +65,7 @@ export type NodePickerSelection = Readonly<{
 
 type NodePickerProps = {
   allowSelection?: (selection: NodePickerSelection) => boolean;
+  directRecipesOnly?: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (selection: NodePickerSelection) => void;
   open: boolean;
@@ -741,6 +742,7 @@ function RecipeRow({
 
 export function NodePicker({
   allowSelection,
+  directRecipesOnly = false,
   onOpenChange,
   onSelect,
   open,
@@ -778,7 +780,7 @@ export function NodePicker({
       !open ||
       scope.type === "extractor" ||
       scope.type === "configuration" ||
-      (rootScope && !rootQueryActive)
+      (rootScope && !rootQueryActive && !directRecipesOnly)
     ) {
       return [];
     }
@@ -788,6 +790,7 @@ export function NodePicker({
     });
   }, [
     open,
+    directRecipesOnly,
     query,
     rootQueryActive,
     rootScope,
@@ -879,7 +882,7 @@ export function NodePicker({
     const addHeading = (key: string, label: string) =>
       nextRows.push({ key: `heading:${key}`, label, type: "heading" });
 
-    if (recentRows.length > 0) {
+    if (!directRecipesOnly && recentRows.length > 0) {
       addHeading("recent", "Recently used");
       nextRows.push({
         key: "grid:recent",
@@ -889,7 +892,11 @@ export function NodePicker({
       });
     }
 
-    if (!rootQueryActive && matchingLogistics.length > 0) {
+    if (
+      !directRecipesOnly &&
+      !rootQueryActive &&
+      matchingLogistics.length > 0
+    ) {
       addHeading("logistics", "Logistics");
       nextRows.push({
         key: "grid:logistics",
@@ -909,11 +916,14 @@ export function NodePicker({
       });
     }
 
-    if (matchingMachines.length > 0 || matchingExtractors.length > 0) {
+    if (
+      !directRecipesOnly &&
+      (matchingMachines.length > 0 || matchingExtractors.length > 0)
+    ) {
       addHeading("production", "Production");
     }
 
-    if (matchingMachines.length > 0) {
+    if (!directRecipesOnly && matchingMachines.length > 0) {
       matchingMachines.forEach((machine) =>
         nextRows.push({
           key: `machine:${machine.id}`,
@@ -923,7 +933,7 @@ export function NodePicker({
       );
     }
 
-    if (matchingExtractors.length > 0) {
+    if (!directRecipesOnly && matchingExtractors.length > 0) {
       matchingExtractors.forEach((extractor) =>
         nextRows.push({
           extractor,
@@ -933,7 +943,7 @@ export function NodePicker({
       );
     }
 
-    if (matchingPowerGenerators.length > 0) {
+    if (!directRecipesOnly && matchingPowerGenerators.length > 0) {
       addHeading("power", "Power");
       matchingPowerGenerators.forEach((buildable) =>
         nextRows.push({
@@ -960,11 +970,13 @@ export function NodePicker({
       );
     };
 
-    if (rootQueryActive) {
+    if (!directRecipesOnly && rootQueryActive) {
       addBuildables("logistics", "Logistics", matchingLogistics);
     }
-    addBuildables("organization", "Organization", matchingBuffers);
-    if (matchingTransports.length > 0) {
+    if (!directRecipesOnly) {
+      addBuildables("organization", "Organization", matchingBuffers);
+    }
+    if (!directRecipesOnly && matchingTransports.length > 0) {
       addHeading("transport", "Transport");
       matchingTransports.forEach((buildable) =>
         nextRows.push({
@@ -974,7 +986,9 @@ export function NodePicker({
         }),
       );
     }
-    addBuildables("special", "Special", matchingSpecial);
+    if (!directRecipesOnly) {
+      addBuildables("special", "Special", matchingSpecial);
+    }
 
     if (selectedConfigurableBuildable && matchingConfigurations.length > 0) {
       addHeading("configurations", "Configurations");
@@ -1017,6 +1031,7 @@ export function NodePicker({
 
     return nextRows;
   }, [
+    directRecipesOnly,
     matchingBuffers,
     matchingConfigurations,
     matchingExtractors,
@@ -1331,7 +1346,9 @@ export function NodePicker({
       className="top-2 bottom-2 h-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none translate-y-0 sm:top-1/2 sm:bottom-auto sm:h-auto sm:w-full sm:max-w-2xl sm:-translate-y-1/2"
       description={
         allowSelection
-          ? "Choose a building or recipe compatible with the Material Link"
+          ? directRecipesOnly
+            ? "Choose a recipe compatible with the Material Link"
+            : "Choose a building or recipe compatible with the Material Link"
           : "Search production buildings and recipes"
       }
       initialFocus={autoFocusSearch ? undefined : false}
@@ -1393,7 +1410,9 @@ export function NodePicker({
                       ? `Search ${selectedConfigurableBuildable.name} configurations...`
                       : routeItem
                         ? `Search ${routeItem.name} recipes...`
-                        : "Search buildings or recipes..."
+                        : directRecipesOnly
+                          ? "Search compatible recipes..."
+                          : "Search buildings or recipes..."
               }
               ref={searchRef}
               role="combobox"
@@ -1415,7 +1434,9 @@ export function NodePicker({
           </InputGroup>
         </div>
         <div
-          aria-label="Buildings and recipes"
+          aria-label={
+            directRecipesOnly ? "Compatible recipes" : "Buildings and recipes"
+          }
           className="no-scrollbar min-h-[clamp(10rem,45dvh,20rem)] flex-1 max-h-none overscroll-contain overflow-x-hidden overflow-y-auto outline-none sm:min-h-[min(32rem,calc(100dvh-12rem))] sm:max-h-[min(32rem,calc(100dvh-12rem))]"
           id={listId}
           ref={listRef}
@@ -1423,7 +1444,9 @@ export function NodePicker({
         >
           {rows.length === 0 ? (
             <div className="py-6 text-center text-xs/relaxed">
-              No buildings or recipes found.
+              {directRecipesOnly
+                ? "No compatible recipes found."
+                : "No buildings or recipes found."}
             </div>
           ) : (
             <div

@@ -13,10 +13,12 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { nodeChoicesForBuildable } from "@satisfactory-belt/production";
-import type { MaterialEndpoint } from "@satisfactory-belt/planning";
 
 import { runCanvasBenchmark } from "@/canvas/benchmark";
-import { compatibleTemplatePortIds } from "@/canvas/connection-compatibility";
+import {
+  canvasDocumentForConnection,
+  compatibleTemplatePortIds,
+} from "@/canvas/connection-compatibility";
 import {
   parseCanvasDocument,
   serializeCanvasDocument,
@@ -30,6 +32,7 @@ import {
 import { createCanvasEditor } from "@/canvas/editor";
 import { canvasNodeId, type CanvasDocument } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
+import type { CanvasConnectionRequest } from "@/canvas/interactions";
 import {
   createCanvasLoadFixture,
   loadFixtureNodeCount,
@@ -103,7 +106,7 @@ type CanvasWorkspaceProps = {
 
 type PendingNodeRequest = Readonly<{
   at?: Point;
-  connectionFrom?: MaterialEndpoint;
+  connection?: CanvasConnectionRequest;
   placementAfterPick: boolean;
 }>;
 
@@ -284,11 +287,11 @@ function CanvasWorkspace({
     writeBooleanPreference(CANVAS_PREFERENCES.showGridDots, enabled);
   };
   const requestNodeAt = useCallback(
-    (at: Point, connectionFrom?: MaterialEndpoint) => {
+    (at: Point, connection?: CanvasConnectionRequest) => {
       preloadNodePicker();
       setPendingNode({
         at,
-        ...(connectionFrom ? { connectionFrom } : {}),
+        ...(connection ? { connection } : {}),
         placementAfterPick: false,
       });
     },
@@ -357,10 +360,14 @@ function CanvasWorkspace({
       return;
     }
     if (!pendingNode.at) return;
-    const compatiblePortIds = pendingNode.connectionFrom
+    const connectionDocument = canvasDocumentForConnection(
+      editor.getState().document,
+      pendingNode.connection?.replacingLinkId,
+    );
+    const compatiblePortIds = pendingNode.connection
       ? compatibleTemplatePortIds(
-          editor.getState().document,
-          pendingNode.connectionFrom,
+          connectionDocument,
+          pendingNode.connection.from,
           selection.node,
         )
       : [];
@@ -371,25 +378,38 @@ function CanvasWorkspace({
       node: selection.node,
     });
     const createdNodeId = editor.getState().selectedIds[0];
-    if (pendingNode.connectionFrom && createdNodeId && compatiblePortIds[0]) {
-      editor.dispatch({
-        type: "link.create",
-        from: pendingNode.connectionFrom,
-        to: { nodeId: createdNodeId, portId: compatiblePortIds[0] },
-      });
+    if (pendingNode.connection && createdNodeId && compatiblePortIds[0]) {
+      const to = { nodeId: createdNodeId, portId: compatiblePortIds[0] };
+      if (pendingNode.connection.replacingLinkId) {
+        editor.dispatch({
+          type: "link.reconnect",
+          from: pendingNode.connection.from,
+          id: pendingNode.connection.replacingLinkId,
+          to,
+        });
+      } else {
+        editor.dispatch({
+          type: "link.create",
+          from: pendingNode.connection.from,
+          to,
+        });
+      }
     }
     setPendingNode(null);
   };
 
   const allowPendingSelection = useCallback(
     (selection: NodePickerSelection) =>
-      !pendingNode?.connectionFrom ||
+      !pendingNode?.connection ||
       compatibleTemplatePortIds(
-        editor.getState().document,
-        pendingNode.connectionFrom,
+        canvasDocumentForConnection(
+          editor.getState().document,
+          pendingNode.connection.replacingLinkId,
+        ),
+        pendingNode.connection.from,
         selection.node,
       ).length > 0,
-    [editor, pendingNode?.connectionFrom],
+    [editor, pendingNode?.connection],
   );
 
   const placePendingNode = useCallback(
@@ -643,8 +663,9 @@ function CanvasWorkspace({
       <Suspense fallback={null}>
         <NodePicker
           allowSelection={
-            pendingNode?.connectionFrom ? allowPendingSelection : undefined
+            pendingNode?.connection ? allowPendingSelection : undefined
           }
+          directRecipesOnly={Boolean(pendingNode?.connection)}
           onOpenChange={(open) => {
             if (!open) setPendingNode(null);
           }}

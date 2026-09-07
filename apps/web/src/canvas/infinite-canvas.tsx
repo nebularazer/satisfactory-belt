@@ -27,7 +27,10 @@ import {
 import type { Point, Rectangle } from "./geometry";
 import { GRID_INTERVAL } from "./grid";
 import { stableImageScaleTier } from "./image-scale";
-import { attachCanvasInteractions } from "./interactions";
+import {
+  attachCanvasInteractions,
+  type CanvasConnectionRequest,
+} from "./interactions";
 import { materialFlowCanvasColor } from "./material-flow-state";
 import {
   createNodeCardModel,
@@ -99,10 +102,7 @@ type InfiniteCanvasProps = {
   onCancelPlacement: () => void;
   onPerformanceMetricsChange: (metrics: CanvasPerformanceMetrics) => void;
   onPlaceNode: (at: Point) => void;
-  onRequestAddNode: (
-    at: Point,
-    connectionFrom?: Readonly<{ nodeId: string; portId: string }>,
-  ) => void;
+  onRequestAddNode: (at: Point, connection?: CanvasConnectionRequest) => void;
   onViewportChange: (viewport: Viewport) => void;
   performanceMetricsEnabled: boolean;
   placementActive: boolean;
@@ -1503,8 +1503,8 @@ export const InfiniteCanvas = forwardRef<
             renderViewport(panViewport(viewportRef.current, delta));
           },
           placeNode: (at) => onPlaceNodeRef.current(at),
-          requestNode: (at, connectionFrom) =>
-            onRequestAddNodeRef.current(at, connectionFrom),
+          requestNode: (at, connection) =>
+            onRequestAddNodeRef.current(at, connection),
           resetView,
           setMarquee: (rectangle) => {
             drawMarquee(marquee, rectangle);

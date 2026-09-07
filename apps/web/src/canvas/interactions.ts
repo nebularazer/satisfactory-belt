@@ -1,6 +1,9 @@
 import type { MaterialEndpoint } from "@satisfactory-belt/planning";
 
-import { canvasConnectionTargets } from "./connection-compatibility";
+import {
+  canvasConnectionTargets,
+  canvasDocumentForConnection,
+} from "./connection-compatibility";
 import { canvasNodeId, type CanvasDocument } from "./document";
 import type { CanvasEditor } from "./editor";
 import type { Point, Rectangle } from "./geometry";
@@ -111,13 +114,15 @@ export type CanvasInteractionHost = Readonly<{
   isPlacementActive: () => boolean;
   panBy: (delta: Point) => void;
   placeNode: (at: Point) => void;
-  requestNode: (
-    at: Point,
-    connectionFrom?: Readonly<{ nodeId: string; portId: string }>,
-  ) => void;
+  requestNode: (at: Point, connection?: CanvasConnectionRequest) => void;
   resetView: () => void;
   setMarquee: (rectangle?: Rectangle) => void;
   zoomAt: (factor: number, anchor: Point) => void;
+}>;
+
+export type CanvasConnectionRequest = Readonly<{
+  from: MaterialEndpoint;
+  replacingLinkId?: string;
 }>;
 
 function passedDragThreshold(
@@ -254,6 +259,11 @@ export function attachCanvasInteractions(
             id: interaction.reconnect.linkId,
             to: interaction.target,
           });
+        } else if (!cancelled && interaction.moved && interaction.dropOnEmpty) {
+          host.requestNode(interaction.current, {
+            from: interaction.from,
+            replacingLinkId: interaction.reconnect.linkId,
+          });
         } else if (!cancelled && !interaction.moved) {
           editor.dispatch({
             type: "selection.link",
@@ -271,7 +281,7 @@ export function attachCanvasInteractions(
         cancelConnection();
       } else if (!cancelled && interaction.moved) {
         if (interaction.dropOnEmpty) {
-          host.requestNode(interaction.current, interaction.from);
+          host.requestNode(interaction.current, { from: interaction.from });
         }
         cancelConnection();
       } else if (!cancelled) {
@@ -425,12 +435,10 @@ export function attachCanvasInteractions(
           endpointKey(connectedLink.from) === endpointKey(from)
             ? connectedLink.to
             : connectedLink.from;
-        const documentWithoutLink = {
-          ...editor.getState().document,
-          materialLinks: editor
-            .getState()
-            .document.materialLinks.filter(({ id }) => id !== connectedLink.id),
-        };
+        const documentWithoutLink = canvasDocumentForConnection(
+          editor.getState().document,
+          connectedLink.id,
+        );
         const intent = connectionIntent(documentWithoutLink, fixedEndpoint);
         interaction = {
           ...intent,

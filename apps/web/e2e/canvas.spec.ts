@@ -105,6 +105,15 @@ test("connects material ports and persists the Material Link", async ({
   await page.mouse.up();
   await expect(
     page.getByRole("dialog", { name: "Add compatible node" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Add compatible node" }),
   ).toBeHidden();
 
   await page.getByRole("button", { name: "Open canvas menu" }).click();
@@ -114,6 +123,7 @@ test("connects material ports and persists the Material Link", async ({
   const path = await download.path();
   expect(path).not.toBeNull();
   const document = JSON.parse(await readFile(path!, "utf8"));
+  expect(document.nodes).toHaveLength(3);
   expect(document.materialLinks).toEqual([
     expect.objectContaining({
       from: expect.objectContaining({ portId: "output:Desc_OreIron_C" }),
@@ -163,6 +173,9 @@ test("offers only compatible recipes after a connection is dropped on empty spac
   await page.goto("/");
   const canvas = page.getByRole("application", { name: "Infinite canvas" });
   const search = page.getByPlaceholder("Search buildings or recipes...");
+  const compatibleSearch = page.getByPlaceholder(
+    "Search compatible recipes...",
+  );
 
   await page.getByRole("button", { name: "Add your first node" }).click();
   await search.fill("miner mk.1");
@@ -180,8 +193,9 @@ test("offers only compatible recipes after a connection is dropped on empty spac
     page.getByRole("dialog", { name: "Add compatible node" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("option", { name: /^Smelter 1 recipe/ }),
+    page.getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ }),
   ).toBeVisible();
+  await expect(page.getByText("Production", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: "Cancel adding node" }).click();
   await expect(
     page.getByRole("dialog", { name: "Add compatible node" }),
@@ -192,13 +206,13 @@ test("offers only compatible recipes after a connection is dropped on empty spac
   await page.mouse.move(900, 450, { steps: 4 });
   await page.mouse.up();
 
-  await search.fill("iron plate");
+  await compatibleSearch.fill("iron plate");
   await expect(
     page.getByRole("option", {
       name: /^Iron Plate.*Iron Ingot.*Constructor/,
     }),
   ).toBeHidden();
-  await search.fill("iron ingot");
+  await compatibleSearch.fill("iron ingot");
   await page
     .getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ })
     .click();
