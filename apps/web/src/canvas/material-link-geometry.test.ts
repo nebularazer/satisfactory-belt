@@ -23,6 +23,20 @@ describe("Material Link geometry", () => {
     });
   });
 
+  it("departs to the left when a connection starts at an input port", () => {
+    expect(
+      materialConnectionPreviewCurve(
+        { x: 212, y: 205 },
+        { x: 72, y: 475 },
+        1,
+        "left",
+      ),
+    ).toEqual({
+      control1: { x: 142, y: 205 },
+      control2: { x: 142, y: 475 },
+    });
+  });
+
   it("culls by curve bounds and keeps paths crossing the viewport", () => {
     const from = testCanvasNode("from", -500, 0);
     const to = testCanvasNode("to", 500, 0);

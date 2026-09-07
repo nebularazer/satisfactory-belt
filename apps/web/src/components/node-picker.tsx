@@ -529,7 +529,7 @@ function PickerTile({
       data-active={active}
       id={domId}
       onClick={onSelect}
-      onMouseEnter={onActivate}
+      onMouseMove={onActivate}
       role="option"
     >
       <ResponsiveCatalogImage
@@ -625,7 +625,7 @@ function RecipeRow({
     <div
       className="flex items-stretch rounded-md data-[active=true]:bg-muted"
       data-active={active}
-      onMouseEnter={onActivate}
+      onMouseMove={onActivate}
     >
       <div
         aria-posinset={position}
@@ -750,6 +750,7 @@ export function NodePicker({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [recentSelections, setRecentSelections] =
     useState(readRecentSelections);
+  const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<PickerHistoryEntry[]>([]);
   const restoreScrollTopRef = useRef<number | null>(null);
@@ -1114,6 +1115,14 @@ export function NodePicker({
     window.matchMedia?.("(min-width: 640px) and (pointer: fine)").matches;
 
   useEffect(() => {
+    if (!open || !autoFocusSearch) return;
+    const frame = requestAnimationFrame(() => {
+      searchRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocusSearch, open, scope]);
+
+  useEffect(() => {
     if (!activeOption) {
       setActiveKey(null);
       return;
@@ -1261,7 +1270,7 @@ export function NodePicker({
     );
     if (recipeEntries.length === 0) return false;
     const currentIndex = recipeEntries.findIndex(
-      ({ option }) => option.key === activeKey,
+      ({ option }) => option.key === activeOption?.key,
     );
     const targetIndex =
       currentIndex < 0
@@ -1382,6 +1391,7 @@ export function NodePicker({
                         ? `Search ${routeItem.name} recipes...`
                         : "Search buildings or recipes..."
               }
+              ref={searchRef}
               role="combobox"
               value={query}
             />
@@ -1484,7 +1494,7 @@ export function NodePicker({
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1525,7 +1535,7 @@ export function NodePicker({
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1561,7 +1571,7 @@ export function NodePicker({
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1586,7 +1596,7 @@ export function NodePicker({
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage
@@ -1619,7 +1629,7 @@ export function NodePicker({
                         data-active={active}
                         id={domId}
                         onClick={() => selectOption(row)}
-                        onMouseEnter={() => setActiveKey(row.key)}
+                        onMouseMove={() => setActiveKey(row.key)}
                         role="option"
                       >
                         <ResponsiveCatalogImage

@@ -238,6 +238,27 @@ test("keeps recipe search usable in a compact mobile viewport", async ({
   await expect(page.getByText("Screws Recipes")).toBeVisible();
 });
 
+test("keeps horizontal recipe navigation focused after choosing a machine", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Add node" }).click();
+  await page.getByRole("option", { name: /^Constructor.*48 recipes/ }).click();
+
+  const search = page.getByPlaceholder("Search Constructor recipes...");
+  await expect(search).toBeFocused();
+  const firstRecipe = await search.getAttribute("aria-activedescendant");
+  expect(firstRecipe).toContain("recipe-");
+
+  await page.keyboard.press("ArrowRight");
+  const secondRecipe = await search.getAttribute("aria-activedescendant");
+  expect(secondRecipe).toContain("recipe-");
+  expect(secondRecipe).not.toBe(firstRecipe);
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(search).toHaveAttribute("aria-activedescendant", firstRecipe!);
+});
+
 test("keeps the canvas and floating controls aligned to a mobile viewport", async ({
   page,
 }) => {

@@ -1081,11 +1081,12 @@ function drawMaterialLinks(
   const fromNode = effectiveDocument.nodes.find(
     ({ configuration }) => configuration.id === preview.from.nodeId,
   );
-  const from = fromNode
+  const fromPort = fromNode
     ? materialPortGeometry(fromNode).find(
         ({ port }) => port.id === preview.from.portId,
-      )?.point
+      )
     : undefined;
+  const from = fromPort?.point;
   const targetNode = preview.target
     ? effectiveDocument.nodes.find(
         ({ configuration }) => configuration.id === preview.target?.nodeId,
@@ -1098,7 +1099,12 @@ function drawMaterialLinks(
         )?.point
       : preview.current;
   if (!from || !to) return;
-  const curve = materialConnectionPreviewCurve(from, to, zoom);
+  const curve = materialConnectionPreviewCurve(
+    from,
+    to,
+    zoom,
+    fromPort.port.direction === "input" ? "left" : "right",
+  );
   if (!curve) return;
   previewGraphics
     .moveTo(from.x, from.y)

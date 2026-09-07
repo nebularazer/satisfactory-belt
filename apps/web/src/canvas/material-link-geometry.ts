@@ -24,6 +24,7 @@ export function materialConnectionPreviewCurve(
   from: Point,
   to: Point,
   zoom: number,
+  departure: "left" | "right" = "right",
 ): MaterialConnectionPreviewCurve | undefined {
   const distance = Math.hypot(to.x - from.x, to.y - from.y);
   if (distance * zoom < CONNECTION_PREVIEW_MIN_LENGTH_PX) {
@@ -33,9 +34,10 @@ export function materialConnectionPreviewCurve(
     Math.max(48, Math.abs(to.x - from.x) * 0.5),
     distance * 0.5,
   );
+  const direction = departure === "left" ? -1 : 1;
   return {
-    control1: { x: from.x + bend, y: from.y },
-    control2: { x: to.x - bend, y: to.y },
+    control1: { x: from.x + bend * direction, y: from.y },
+    control2: { x: to.x - bend * direction, y: to.y },
   };
 }
 
