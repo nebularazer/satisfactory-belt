@@ -6,7 +6,7 @@ import type {
   CanvasDocumentStorage,
   SavedCanvasDocument,
 } from "@/canvas/document-storage";
-import type { CanvasDocument } from "@/canvas/document";
+import type { CanvasPlanDocument } from "@/canvas/plan-document-format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,10 +32,11 @@ import { cn } from "@/lib/utils";
 
 type SavePlanDialogProps = {
   activeSave: SavedCanvasDocument | null;
-  currentDocument: CanvasDocument;
+  currentDocument: CanvasPlanDocument;
   onOpenChange: (open: boolean) => void;
   onSaved: (save: SavedCanvasDocument) => void;
   open: boolean;
+  sourceSaveId?: string;
   storage: CanvasDocumentStorage;
 };
 
@@ -50,6 +51,7 @@ export function SavePlanDialog({
   onOpenChange,
   onSaved,
   open,
+  sourceSaveId,
   storage,
 }: SavePlanDialogProps) {
   const [loading, setLoading] = useState(false);
@@ -103,6 +105,7 @@ export function SavePlanDialog({
         document: currentDocument,
         id: target?.id,
         name: saveName,
+        ...(sourceSaveId ? { sourceSaveId } : {}),
       });
       onSaved(saved);
       setOverwriteTarget(null);
@@ -206,6 +209,11 @@ export function SavePlanDialog({
                               <div className="flex items-center gap-2">
                                 <span className="truncate font-medium">
                                   {save.name}
+                                </span>
+                                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.5625rem] font-medium text-muted-foreground">
+                                  {save.document.kind === "detailed"
+                                    ? "Detailed"
+                                    : "Basic"}
                                 </span>
                                 {current && (
                                   <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[0.5625rem] font-medium text-primary">

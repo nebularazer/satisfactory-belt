@@ -15,6 +15,12 @@ import {
   type CanvasMaterialLink,
   type CanvasNode,
 } from "./document";
+import {
+  DETAILED_CANVAS_DOCUMENT_VERSION,
+  detailedPlanFromCanvas,
+  type DetailedCanvasDocument,
+  type DetailedCanvasNode,
+} from "@/detailed-canvas/document";
 import { nodeCardLayout } from "./node-card-layout";
 
 export type CanvasEditorMode = "basic" | "detailed";
@@ -85,7 +91,7 @@ function physicalConnection(link: CanvasMaterialLink): PhysicalConnection {
  */
 export function materializeDetailedCanvas(
   document: CanvasDocument,
-): CanvasDocument {
+): DetailedCanvasDocument {
   const plan = createBasicPlan({
     materialLinks: document.materialLinks,
     nodes: document.nodes.map(({ configuration, provenance }) => ({
@@ -526,10 +532,56 @@ export function materializeDetailedCanvas(
     tiers: DEFAULT_LOGISTICS_TIERS,
   });
 
+  return detailedDocumentFromEditor(
+    {
+      kind: "basic",
+      materialLinks,
+      nodes: physicalNodes,
+      version: CANVAS_DOCUMENT_VERSION,
+    },
+    DEFAULT_LOGISTICS_TIERS,
+  );
+}
+
+/**
+ * Adapts a persisted Detailed Plan to the shared low-level canvas mechanics.
+ * The adapter is deliberately local: callers continue to persist the Detailed
+ * document rather than leaking this Basic-shaped rendering projection.
+ */
+export function detailedDocumentToEditor(
+  document: DetailedCanvasDocument,
+): CanvasDocument {
   return {
     kind: "basic",
-    materialLinks,
-    nodes: physicalNodes,
+    materialLinks: document.connections.map(
+      ({ from, id, kind, tierId, to }) => ({
+        from,
+        id,
+        logistics: { kind, tierId },
+        to,
+      }),
+    ),
+    nodes: document.nodes,
     version: CANVAS_DOCUMENT_VERSION,
   };
+}
+
+/** Converts the shared physical canvas projection back to its persisted form. */
+export function detailedDocumentFromEditor(
+  document: CanvasDocument,
+  tiers: DetailedCanvasDocument["tiers"],
+): DetailedCanvasDocument {
+  const nodes: DetailedCanvasNode[] = document.nodes.map((node) => {
+    assertDetailedNodeConfiguration(node.configuration);
+    return { ...node, configuration: node.configuration };
+  });
+  const detailed: DetailedCanvasDocument = {
+    connections: document.materialLinks.map(physicalConnection),
+    kind: "detailed",
+    nodes,
+    tiers,
+    version: DETAILED_CANVAS_DOCUMENT_VERSION,
+  };
+  detailedPlanFromCanvas(detailed);
+  return detailed;
 }

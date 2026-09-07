@@ -20,10 +20,6 @@ import {
   compatibleTemplatePortIds,
 } from "@/canvas/connection-compatibility";
 import {
-  parseCanvasDocument,
-  serializeCanvasDocument,
-} from "@/canvas/document-format";
-import {
   attachCanvasAutosave,
   createIndexedDbDocumentStorage,
   type CanvasDocumentStorage,
@@ -31,10 +27,12 @@ import {
 } from "@/canvas/document-storage";
 import { createCanvasEditor } from "@/canvas/editor";
 import {
+  detailedDocumentFromEditor,
+  detailedDocumentToEditor,
   materializeDetailedCanvas,
   type CanvasEditorMode,
 } from "@/canvas/editor-mode";
-import { canvasNodeId, type CanvasDocument } from "@/canvas/document";
+import { canvasNodeId } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
 import type { CanvasConnectionRequest } from "@/canvas/interactions";
 import {
@@ -43,6 +41,11 @@ import {
 } from "@/canvas/load-fixture";
 import type { InfiniteCanvasHandle } from "@/canvas/infinite-canvas";
 import type { CanvasPerformanceMetrics } from "@/canvas/performance";
+import {
+  parseCanvasPlanDocument,
+  serializeCanvasPlanDocument,
+  type CanvasPlanDocument,
+} from "@/canvas/plan-document-format";
 import {
   CANVAS_PREFERENCES,
   readBooleanPreference,
@@ -97,14 +100,14 @@ type BootstrapState =
   | { ready: false }
   | {
       activeSave: SavedCanvasDocument | null;
-      document?: CanvasDocument;
+      document?: CanvasPlanDocument;
       ready: true;
     };
 
 type CanvasWorkspaceProps = {
   autosaveEnabled: boolean;
   initialActiveSave: SavedCanvasDocument | null;
-  initialDocument?: CanvasDocument;
+  initialDocument?: CanvasPlanDocument;
   storage: CanvasDocumentStorage;
 };
 
@@ -120,6 +123,18 @@ function quickBuildSelection(buildableId: string): NodePickerSelection {
   return { label: choice.label, node: choice.template };
 }
 
+function availableDetailedPlanName(
+  sourceName: string,
+  saves: readonly SavedCanvasDocument[],
+) {
+  const base = `${sourceName} — Detailed`;
+  const names = new Set(saves.map(({ name }) => name.toLocaleLowerCase()));
+  if (!names.has(base.toLocaleLowerCase())) return base;
+  let suffix = 2;
+  while (names.has(`${base} ${suffix}`.toLocaleLowerCase())) suffix += 1;
+  return `${base} ${suffix}`;
+}
+
 function CanvasWorkspace({
   autosaveEnabled,
   initialActiveSave,
@@ -128,22 +143,26 @@ function CanvasWorkspace({
 }: CanvasWorkspaceProps) {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const basicEditor = useMemo(
-    () =>
-      createCanvasEditor({
-        document: initialDocument,
-        snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
-        topology: "aggregate",
-      }),
-    [initialDocument],
+  const initialMode: CanvasEditorMode =
+    initialDocument?.kind === "detailed" ? "detailed" : "basic";
+  const detailedTiersRef = useRef(
+    initialDocument?.kind === "detailed" ? initialDocument.tiers : [],
   );
-  const [editorMode, setEditorMode] = useState<CanvasEditorMode>("basic");
-  const [detailedEditor, setDetailedEditor] = useState<ReturnType<
-    typeof createCanvasEditor
-  > | null>(null);
-  const detailedSourceRef = useRef<CanvasDocument | null>(null);
-  const editor =
-    editorMode === "detailed" && detailedEditor ? detailedEditor : basicEditor;
+  const [editorMode, setEditorMode] = useState<CanvasEditorMode>(initialMode);
+  const [editor, setEditor] = useState(() =>
+    createCanvasEditor({
+      ...(initialDocument
+        ? {
+            document:
+              initialDocument.kind === "detailed"
+                ? detailedDocumentToEditor(initialDocument)
+                : initialDocument,
+          }
+        : {}),
+      snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
+      topology: initialMode === "detailed" ? "physical" : "aggregate",
+    }),
+  );
   const getEditorUiState = useMemo(() => {
     const initialState = editor.getState();
     let cached = {
@@ -218,6 +237,7 @@ function CanvasWorkspace({
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
+  const [convertAfterSave, setConvertAfterSave] = useState(false);
   const [activeSave, setActiveSave] = useState<SavedCanvasDocument | null>(
     initialActiveSave,
   );
@@ -226,6 +246,41 @@ function CanvasWorkspace({
     activeSaveRef.current = save;
     setActiveSave(save);
   }, []);
+  const currentPlanDocument = useCallback(
+    (): CanvasPlanDocument =>
+      editorMode === "detailed"
+        ? detailedDocumentFromEditor(
+            editor.getState().document,
+            detailedTiersRef.current,
+          )
+        : editor.getState().document,
+    [editor, editorMode],
+  );
+  const activateDocument = useCallback((document: CanvasPlanDocument) => {
+    const mode = document.kind;
+    if (mode === "detailed") detailedTiersRef.current = document.tiers;
+    setEditor(
+      createCanvasEditor({
+        document:
+          mode === "detailed" ? detailedDocumentToEditor(document) : document,
+        snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
+        topology: mode === "detailed" ? "physical" : "aggregate",
+      }),
+    );
+    setEditorMode(mode);
+  }, []);
+  const activateSave = useCallback(
+    (save: SavedCanvasDocument) => {
+      selectActiveSave(save);
+      activateDocument(save.document);
+      if (autosaveEnabled) {
+        void storage.saveWorkspace(save.document, save.id).catch(() => {
+          toast.error("The current saved plan could not be remembered.");
+        });
+      }
+    },
+    [activateDocument, autosaveEnabled, selectActiveSave, storage],
+  );
 
   useEffect(() => {
     const idleWindow = window as Window & {
@@ -248,15 +303,16 @@ function CanvasWorkspace({
   useEffect(() => {
     if (!autosaveEnabled) return;
     return attachCanvasAutosave(
-      basicEditor,
+      editor,
       storage,
       () => activeSaveRef.current?.id ?? null,
       300,
       () => {
         toast.error("The plan could not be saved in this browser.");
       },
+      currentPlanDocument,
     );
-  }, [autosaveEnabled, basicEditor, storage]);
+  }, [autosaveEnabled, currentPlanDocument, editor, storage]);
 
   useEffect(() => {
     if (connectionError) toast.error(connectionError.message);
@@ -271,40 +327,96 @@ function CanvasWorkspace({
     return () => cancelAnimationFrame(frame);
   }, [editor]);
 
+  const openDetailedPlan = useCallback(
+    async (source: SavedCanvasDocument) => {
+      try {
+        const current = currentPlanDocument();
+        if (current.kind !== "basic") {
+          throw new Error("Only a Basic plan can create a Detailed plan.");
+        }
+        const savedSource = await storage.saveNamed({
+          document: current,
+          id: source.id,
+        });
+        const saves = await storage.listNamed();
+        const existing = saves.find(
+          (save) =>
+            save.document.kind === "detailed" &&
+            save.sourceSaveId === savedSource.id,
+        );
+        if (existing) {
+          activateSave(existing);
+          toast.success(`Opened “${existing.name}”.`);
+          return;
+        }
+        const detailed = await storage.saveNamed({
+          document: materializeDetailedCanvas(current),
+          name: availableDetailedPlanName(savedSource.name, saves),
+          sourceSaveId: savedSource.id,
+        });
+        activateSave(detailed);
+        toast.success(`Created “${detailed.name}” as a separate plan.`);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "The Detailed plan could not be created.",
+        );
+      }
+    },
+    [activateSave, currentPlanDocument, storage],
+  );
+
   const changeEditorMode = useCallback(
     (mode: CanvasEditorMode) => {
       if (mode === editorMode) return;
       setPendingNode(null);
       setPlacement(null);
       setMobileNodeInspectorOpen(false);
-      if (mode === "basic") {
-        setEditorMode("basic");
+
+      if (mode === "detailed") {
+        const source = activeSaveRef.current;
+        if (!source || source.document.kind !== "basic") {
+          setConvertAfterSave(true);
+          setSavePlanOpen(true);
+          toast.info("Save the Basic plan before creating its Detailed copy.");
+          return;
+        }
+        void openDetailedPlan(source);
         return;
       }
 
-      try {
-        const source = basicEditor.getState().document;
-        if (!detailedEditor || detailedSourceRef.current !== source) {
-          const materialized = materializeDetailedCanvas(source);
-          setDetailedEditor(
-            createCanvasEditor({
-              document: materialized,
-              snapToGrid: basicEditor.getState().snapToGrid,
-              topology: "physical",
-            }),
-          );
-          detailedSourceRef.current = source;
-        }
-        setEditorMode("detailed");
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "The Detailed editor could not be created.",
-        );
+      const detailed = activeSaveRef.current;
+      if (!detailed || detailed.document.kind !== "detailed") return;
+      if (!detailed.sourceSaveId) {
+        toast.error("This Detailed plan has no linked Basic source.");
+        return;
       }
+      void (async () => {
+        try {
+          const savedDetailed = await storage.saveNamed({
+            document: currentPlanDocument(),
+            id: detailed.id,
+            sourceSaveId: detailed.sourceSaveId,
+          });
+          const source = (await storage.listNamed()).find(
+            ({ id }) => id === savedDetailed.sourceSaveId,
+          );
+          if (!source || source.document.kind !== "basic") {
+            throw new Error("The linked Basic plan could not be found.");
+          }
+          activateSave(source);
+          toast.success(`Opened “${source.name}”.`);
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "The Basic plan could not be opened.",
+          );
+        }
+      })();
     },
-    [basicEditor, detailedEditor, editorMode],
+    [activateSave, currentPlanDocument, editorMode, openDetailedPlan, storage],
   );
 
   useEffect(() => {
@@ -371,8 +483,9 @@ function CanvasWorkspace({
 
     try {
       const saved = await storage.saveNamed({
-        document: basicEditor.getState().document,
+        document: currentPlanDocument(),
         id: current.id,
+        sourceSaveId: current.sourceSaveId,
       });
       selectActiveSave(saved);
       toast.success(`Updated “${saved.name}”.`);
@@ -383,7 +496,7 @@ function CanvasWorkspace({
           : "The current plan could not be updated.",
       );
     }
-  }, [basicEditor, openSavePlan, selectActiveSave, storage]);
+  }, [currentPlanDocument, openSavePlan, selectActiveSave, storage]);
 
   useEffect(() => {
     const handleSaveShortcut = (event: KeyboardEvent) => {
@@ -533,12 +646,9 @@ function CanvasWorkspace({
     if (!file) return;
 
     try {
-      const document = parseCanvasDocument(await file.text());
+      const document = parseCanvasPlanDocument(await file.text());
       selectActiveSave(null);
-      basicEditor.dispatch({ type: "document.replace", document });
-      detailedSourceRef.current = null;
-      setDetailedEditor(null);
-      setEditorMode("basic");
+      activateDocument(document);
       requestAnimationFrame(() => canvasRef.current?.fitContent());
       toast.success(`Imported ${document.nodes.length} nodes.`);
     } catch (error) {
@@ -551,7 +661,7 @@ function CanvasWorkspace({
   };
 
   const exportDocument = () => {
-    const serialized = serializeCanvasDocument(editor.getState().document);
+    const serialized = serializeCanvasPlanDocument(currentPlanDocument());
     const url = URL.createObjectURL(
       new Blob([serialized], { type: "application/json" }),
     );
@@ -567,17 +677,8 @@ function CanvasWorkspace({
   const duplicateSelection = () =>
     editor.dispatch({ type: "selection.duplicate" });
   const loadDocument = (save: SavedCanvasDocument) => {
-    selectActiveSave(save);
-    basicEditor.dispatch({ type: "document.replace", document: save.document });
-    detailedSourceRef.current = null;
-    setDetailedEditor(null);
-    setEditorMode("basic");
+    activateSave(save);
     requestAnimationFrame(() => canvasRef.current?.fitContent());
-    if (autosaveEnabled) {
-      void storage.saveWorkspace(save.document, save.id).catch(() => {
-        toast.error("The current saved plan could not be remembered.");
-      });
-    }
     toast.success(`Loaded “${save.name}”.`);
   };
   const resetCanvas = () => {
@@ -747,7 +848,7 @@ function CanvasWorkspace({
           selectActiveSave(null);
           if (autosaveEnabled) {
             void storage
-              .saveWorkspace(basicEditor.getState().document, null)
+              .saveWorkspace(currentPlanDocument(), null)
               .catch(() => {
                 toast.error("The current saved plan could not be cleared.");
               });
@@ -760,10 +861,20 @@ function CanvasWorkspace({
       />
       <SavePlanDialog
         activeSave={activeSave}
-        currentDocument={basicEditor.getState().document}
-        onOpenChange={setSavePlanOpen}
-        onSaved={selectActiveSave}
+        currentDocument={currentPlanDocument()}
+        onOpenChange={(open) => {
+          setSavePlanOpen(open);
+          if (!open) setConvertAfterSave(false);
+        }}
+        onSaved={(save) => {
+          selectActiveSave(save);
+          if (convertAfterSave && save.document.kind === "basic") {
+            setConvertAfterSave(false);
+            void openDetailedPlan(save);
+          }
+        }}
         open={savePlanOpen}
+        sourceSaveId={activeSave?.sourceSaveId}
         storage={storage}
       />
       <AlertDialog onOpenChange={setResetCanvasOpen} open={resetCanvasOpen}>

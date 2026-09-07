@@ -348,14 +348,14 @@ describe("canvas interactions", () => {
     ]);
   });
 
-  it("drags a new Basic link from an unselected occupied aggregate Process port", () => {
+  it("fans an unselected Basic aggregate Process port out repeatedly", () => {
     const { editor, pointer } = createHarness({ topology: "aggregate" });
     editor.dispatch({
       type: "node.create",
       at: { x: 100, y: 100 },
       node: IRON_SMELTER,
     });
-    for (const x of [500, 900]) {
+    for (const x of [500, 900, 1_300]) {
       editor.dispatch({
         type: "node.create",
         at: { x, y: 100 },
@@ -383,6 +383,18 @@ describe("canvas interactions", () => {
     pointer("pointermove", target.x, target.y, { pointerType: "touch" });
     pointer("pointerup", target.x, target.y, { pointerType: "touch" });
 
+    const thirdTarget = portPoint(editor, "node-4", "input:Desc_IronIngot_C");
+    pointer("pointerdown", source.x, source.y, { pointerType: "touch" });
+    pointer("pointermove", source.x + 40, source.y + 40, {
+      pointerType: "touch",
+    });
+    pointer("pointermove", thirdTarget.x, thirdTarget.y, {
+      pointerType: "touch",
+    });
+    pointer("pointerup", thirdTarget.x, thirdTarget.y, {
+      pointerType: "touch",
+    });
+
     expect(editor.getState().document.materialLinks).toEqual([
       expect.objectContaining({
         from: { nodeId: "node-1", portId: "output:Desc_IronIngot_C" },
@@ -392,6 +404,10 @@ describe("canvas interactions", () => {
       expect.objectContaining({
         from: { nodeId: "node-1", portId: "output:Desc_IronIngot_C" },
         to: { nodeId: "node-3", portId: "input:Desc_IronIngot_C" },
+      }),
+      expect.objectContaining({
+        from: { nodeId: "node-1", portId: "output:Desc_IronIngot_C" },
+        to: { nodeId: "node-4", portId: "input:Desc_IronIngot_C" },
       }),
     ]);
   });

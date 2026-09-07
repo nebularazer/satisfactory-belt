@@ -85,6 +85,9 @@ describe("Detailed canvas documents", () => {
       configuration,
       height: 176,
       label: "Smart Splitter",
+      portOrder: { output: ["output:3", "output:1", "output:2"] },
+      routerPriorities: { "output:1": "high" as const },
+      routerRules: { "output:1": ["Desc_IronIngot_C"] },
       routingRules: [
         {
           itemIds: ["Desc_IronIngot_C"],

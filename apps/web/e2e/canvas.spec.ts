@@ -50,6 +50,42 @@ test("edits and restores a canvas in a real browser", async ({ page }) => {
   await expect(undo).toBeDisabled();
 });
 
+test("creates, persists, and reopens a separate Detailed plan", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const basic = page.getByRole("button", { name: "Basic editor" });
+  const detailed = page.getByRole("button", { name: "Detailed editor" });
+  const emptyState = page.getByRole("button", { name: "Add your first node" });
+
+  await detailed.click();
+  await expect(
+    page.getByRole("dialog", { name: "Save plan as" }),
+  ).toBeVisible();
+  await page.getByRole("textbox", { name: "Plan name" }).fill("Mode source");
+  await page.getByRole("button", { name: "Save as new" }).click();
+  await expect(detailed).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "Splitter" }).click();
+  await canvas.click({ position: { x: 640, y: 360 } });
+  await page.getByRole("button", { name: "Close node details" }).click();
+  await expect(emptyState).toBeHidden();
+
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(detailed).toHaveAttribute("aria-pressed", "true");
+  await expect(emptyState).toBeHidden();
+
+  await basic.click();
+  await expect(basic).toHaveAttribute("aria-pressed", "true");
+  await expect(emptyState).toBeVisible();
+
+  await detailed.click();
+  await expect(detailed).toHaveAttribute("aria-pressed", "true");
+  await expect(emptyState).toBeHidden();
+});
+
 test("connects material ports and persists the Material Link", async ({
   page,
 }) => {
@@ -83,6 +119,7 @@ test("connects material ports and persists the Material Link", async ({
   await page.mouse.down();
   await page.mouse.move(512, 360, { steps: 4 });
   await page.mouse.up();
+  await canvas.click({ position: { x: 480, y: 360 } });
 
   await expect(
     page.getByRole("complementary", {
@@ -164,6 +201,7 @@ test("shows inferred flow through a terminal Splitter", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(544, 392, { steps: 4 });
   await page.mouse.up();
+  await canvas.click({ position: { x: 496, y: 376 } });
 
   await expect(
     page.getByRole("complementary", {
@@ -224,10 +262,8 @@ test("offers only compatible recipes after a connection is dropped on empty spac
     .click();
 
   await expect(
-    page.getByRole("complementary", {
-      name: "Material Link details: Iron Ore",
-    }),
-  ).toBeVisible();
+    page.getByRole("dialog", { name: "Add compatible node" }),
+  ).toBeHidden();
 });
 
 test("keeps recipe search usable in a compact mobile viewport", async ({
@@ -256,6 +292,57 @@ test("keeps recipe search usable in a compact mobile viewport", async ({
     .first()
     .click();
   await expect(page.getByText("Screws Recipes")).toBeVisible();
+});
+
+test("opens and cancels compatible-node search from a mobile touch drag", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 932, width: 430 });
+  await page.goto("/");
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const picker = page.getByRole("dialog", { name: "Add compatible node" });
+
+  await page.getByRole("button", { name: "Add your first node" }).click();
+  await page
+    .getByPlaceholder("Search buildings or recipes...")
+    .fill("miner mk.1");
+  await page.getByRole("option", { name: /^Miner Mk\.1.*10 recipes/ }).click();
+  await page.getByRole("option", { name: "Iron Ore" }).click();
+  await canvas.click({ position: { x: 215, y: 466 } });
+  await canvas.evaluate((element) => {
+    element.setPointerCapture = () => undefined;
+    element.releasePointerCapture = () => undefined;
+  });
+
+  const touch = { isPrimary: true, pointerId: 7, pointerType: "touch" };
+  await canvas.dispatchEvent("pointerdown", {
+    ...touch,
+    button: 0,
+    buttons: 1,
+    clientX: 343,
+    clientY: 466,
+  });
+  await canvas.dispatchEvent("pointermove", {
+    ...touch,
+    button: 0,
+    buttons: 1,
+    clientX: 300,
+    clientY: 620,
+  });
+  await canvas.dispatchEvent("pointerup", {
+    ...touch,
+    button: 0,
+    buttons: 0,
+    clientX: 300,
+    clientY: 620,
+  });
+
+  await expect(picker).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /^Iron Ingot.*Iron Ore.*Smelter/ }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel adding node" }).click();
+  await expect(picker).toBeHidden();
 });
 
 test("navigates recipe-search layers with horizontal arrows", async ({

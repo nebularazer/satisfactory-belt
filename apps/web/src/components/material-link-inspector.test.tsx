@@ -45,6 +45,7 @@ function linkedEditor(
     id: "ingots",
     to: { nodeId: "node-2", portId: "input:Desc_IronIngot_C" },
   });
+  editor.dispatch({ type: "selection.link", additive: false, id: "ingots" });
   return editor;
 }
 

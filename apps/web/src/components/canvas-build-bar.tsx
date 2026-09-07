@@ -57,6 +57,13 @@ export function CanvasBuildBar({
                 className="h-9 px-2.5"
                 key={option}
                 onClick={() => onModeChange(option)}
+                title={
+                  option === mode
+                    ? `${option === "basic" ? "Basic" : "Detailed"} plan`
+                    : option === "detailed"
+                      ? "Create or open the separate Detailed plan"
+                      : "Open the linked Basic plan"
+                }
                 variant={mode === option ? "secondary" : "ghost"}
               >
                 {option === "basic" ? "Basic" : "Detailed"}

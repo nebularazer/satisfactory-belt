@@ -8,6 +8,7 @@ import {
   type CanvasDocumentStorage,
 } from "./document-storage";
 import { createCanvasEditor } from "./editor";
+import { materializeDetailedCanvas } from "./editor-mode";
 import { TEST_NODE_TEMPLATE, testCanvasNode } from "./test-fixtures";
 
 const documentWith = (...ids: readonly string[]): CanvasDocument => ({
@@ -61,6 +62,35 @@ describe("IndexedDB canvas document storage", () => {
       activeSave: null,
       document: updatedDocument,
     });
+  });
+
+  it("persists a Detailed plan as a separate linked save", async () => {
+    const storage = createIndexedDbDocumentStorage(new IDBFactory());
+    const basicDocument = documentWith("node-1");
+    const basic = await storage.saveNamed({
+      document: basicDocument,
+      id: "basic-save",
+      name: "Factory",
+    });
+    const detailedDocument = materializeDetailedCanvas(basicDocument);
+    const detailed = await storage.saveNamed({
+      document: detailedDocument,
+      id: "detailed-save",
+      name: "Factory — Detailed",
+      sourceSaveId: basic.id,
+    });
+
+    expect(detailed).toMatchObject({
+      document: { kind: "detailed" },
+      sourceSaveId: "basic-save",
+    });
+    await expect(storage.loadWorkspace()).resolves.toEqual({
+      activeSave: detailed,
+      document: detailedDocument,
+    });
+    await expect(storage.listNamed()).resolves.toEqual(
+      expect.arrayContaining([basic, detailed]),
+    );
   });
 });
 

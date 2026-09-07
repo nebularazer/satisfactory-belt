@@ -514,13 +514,13 @@ export function createCanvasEditor(
             {
               after: [],
               afterLinks: [{ index, link: canonicalLink }],
-              afterLinkSelection: [canonicalLink.id],
+              afterLinkSelection: [],
               afterSelection: [],
               before: [],
               beforeLinkSelection: state.selectedLinkIds,
               beforeSelection: state.selectedIds,
             },
-            [canonicalLink.id],
+            [],
           );
         } catch (error) {
           const failure =

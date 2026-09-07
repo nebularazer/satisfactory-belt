@@ -1,23 +1,27 @@
-import type { CanvasDocument } from "./document";
 import type { CanvasEditor } from "./editor";
-import { validateCanvasDocument } from "./document-format";
+import {
+  validateCanvasPlanDocument,
+  type CanvasPlanDocument,
+} from "./plan-document-format";
 
 export type SavedCanvasDocument = Readonly<{
-  document: CanvasDocument;
+  document: CanvasPlanDocument;
   id: string;
   name: string;
+  sourceSaveId?: string;
   updatedAt: string;
 }>;
 
 export type CanvasWorkspaceSnapshot = Readonly<{
   activeSave: SavedCanvasDocument | null;
-  document: CanvasDocument | null;
+  document: CanvasPlanDocument | null;
 }>;
 
 export type SaveCanvasDocumentRequest = Readonly<{
-  document: CanvasDocument;
+  document: CanvasPlanDocument;
   id?: string;
   name?: string;
+  sourceSaveId?: string;
 }>;
 
 export type CanvasDocumentStorage = Readonly<{
@@ -25,7 +29,7 @@ export type CanvasDocumentStorage = Readonly<{
   listNamed: () => Promise<readonly SavedCanvasDocument[]>;
   loadWorkspace: () => Promise<CanvasWorkspaceSnapshot>;
   saveWorkspace: (
-    document: CanvasDocument,
+    document: CanvasPlanDocument,
     activeSaveId: string | null,
   ) => Promise<void>;
   saveNamed: (
@@ -59,9 +63,12 @@ function readStoredNamedDocument(value: unknown): SavedCanvasDocument | null {
   }
 
   return {
-    document: validateCanvasDocument(candidate.document),
+    document: validateCanvasPlanDocument(candidate.document),
     id: candidate.id,
     name: candidate.name,
+    ...(typeof candidate.sourceSaveId === "string"
+      ? { sourceSaveId: candidate.sourceSaveId }
+      : {}),
     updatedAt: candidate.updatedAt,
   };
 }
@@ -93,7 +100,7 @@ export function createIndexedDbDocumentStorage(
   };
 
   const writeWorkspace = async (
-    document: CanvasDocument,
+    document: CanvasPlanDocument,
     activeSaveId: string | null,
   ): Promise<void> => {
     const db = await database;
@@ -139,7 +146,7 @@ export function createIndexedDbDocumentStorage(
       const document =
         documentValue === undefined
           ? null
-          : validateCanvasDocument(documentValue);
+          : validateCanvasPlanDocument(documentValue);
       if (typeof activeSaveId !== "string") {
         return { activeSave: null, document };
       }
@@ -152,7 +159,12 @@ export function createIndexedDbDocumentStorage(
     async saveWorkspace(document, activeSaveId) {
       await writeWorkspace(document, activeSaveId);
     },
-    async saveNamed({ document, id = crypto.randomUUID(), name }) {
+    async saveNamed({
+      document,
+      id = crypto.randomUUID(),
+      name,
+      sourceSaveId,
+    }) {
       const existing = readStoredNamedDocument(
         await read(`${NAMED_SAVE_PREFIX}${id}`),
       );
@@ -160,11 +172,16 @@ export function createIndexedDbDocumentStorage(
       if (!normalizedName) {
         throw new Error("A saved plan needs a name.");
       }
+      const resolvedSourceSaveId =
+        document.kind === "detailed"
+          ? (sourceSaveId ?? existing?.sourceSaveId)
+          : undefined;
       const stored: StoredNamedDocument = {
         document,
         id,
         kind: "named",
         name: normalizedName,
+        ...(resolvedSourceSaveId ? { sourceSaveId: resolvedSourceSaveId } : {}),
         updatedAt: new Date().toISOString(),
       };
       const db = await database;
@@ -188,8 +205,9 @@ export function attachCanvasAutosave(
   getActiveSaveId: () => string | null,
   delay = 300,
   onError: (error: unknown) => void = console.error,
+  getDocument: () => CanvasPlanDocument = () => editor.getState().document,
 ) {
-  let pendingDocument: CanvasDocument | undefined;
+  let pendingDocument: CanvasPlanDocument | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const flush = () => {
@@ -203,7 +221,7 @@ export function attachCanvasAutosave(
 
   const unsubscribe = editor.subscribe((change) => {
     if (change.kind !== "document") return;
-    pendingDocument = editor.getState().document;
+    pendingDocument = getDocument();
     if (timer) clearTimeout(timer);
     timer = setTimeout(flush, delay);
   });

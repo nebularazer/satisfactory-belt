@@ -9,7 +9,11 @@ import {
   type CanvasDocument,
   type CanvasNode,
 } from "./document";
-import { materializeDetailedCanvas } from "./editor-mode";
+import {
+  detailedDocumentFromEditor,
+  detailedDocumentToEditor,
+  materializeDetailedCanvas,
+} from "./editor-mode";
 import { createCanvasEditor } from "./editor";
 import { nodeCardLayout } from "./node-card-layout";
 
@@ -233,8 +237,9 @@ describe("Basic and Detailed editor modes", () => {
     (withSplitter) => {
       const basic = modularFrameFactory(withSplitter);
       const detailed = materializeDetailedCanvas(basic);
+      const projection = detailedDocumentToEditor(detailed);
       const editor = createCanvasEditor({
-        document: detailed,
+        document: projection,
         topology: "physical",
       });
 
@@ -252,11 +257,15 @@ describe("Basic and Detailed editor modes", () => {
               configuration.instances.length === 1,
           ),
       ).toBe(true);
-      expect(detailed.materialLinks.length).toBeGreaterThan(
+      expect(detailed.connections.length).toBeGreaterThan(
         basic.materialLinks.length,
       );
       expect(editor.topology).toBe("physical");
-      expect(editor.getState().document).toBe(detailed);
+      expect(editor.getState().document).toBe(projection);
+      expect(detailed.kind).toBe("detailed");
+      expect(detailedDocumentFromEditor(projection, detailed.tiers)).toEqual(
+        detailed,
+      );
       expect(
         detailed.nodes.some(
           ({ configuration }) => configuration.id === "ingot-splitter",

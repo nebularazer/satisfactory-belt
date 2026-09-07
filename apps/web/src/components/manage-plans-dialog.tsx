@@ -138,6 +138,11 @@ export function ManagePlansDialog({
                           <span className="truncate font-medium">
                             {save.name}
                           </span>
+                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.5625rem] font-medium text-muted-foreground">
+                            {save.document.kind === "detailed"
+                              ? "Detailed"
+                              : "Basic"}
+                          </span>
                           {current && (
                             <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[0.5625rem] font-medium text-primary">
                               Current
