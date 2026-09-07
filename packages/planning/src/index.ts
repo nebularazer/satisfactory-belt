@@ -15,6 +15,7 @@ export {
   type BasicPortFlow,
 } from "./basic-flow-analysis";
 export {
+  assertDetailedNodeConfiguration,
   createDetailedPlan,
   DEFAULT_LOGISTICS_TIERS,
   DetailedPlanError,

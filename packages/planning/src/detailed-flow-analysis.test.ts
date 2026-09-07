@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   analyzeDetailedPlan,
+  assertDetailedNodeConfiguration,
   createDetailedPlan,
   DetailedPlanError,
 } from "./index";
 
 function detailedNode(request: Parameters<typeof createNode>[0]) {
-  return { configuration: createNode(request).configuration };
+  const configuration = createNode(request).configuration;
+  assertDetailedNodeConfiguration(configuration);
+  return { configuration };
 }
 
 describe("Detailed Plans", () => {

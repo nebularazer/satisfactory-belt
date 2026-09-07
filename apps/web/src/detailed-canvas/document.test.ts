@@ -1,4 +1,7 @@
-import { generateDetailedPlan } from "@satisfactory-belt/planning";
+import {
+  assertDetailedNodeConfiguration,
+  generateDetailedPlan,
+} from "@satisfactory-belt/planning";
 import { createNode } from "@satisfactory-belt/production";
 import { describe, expect, it } from "vitest";
 
@@ -34,18 +37,52 @@ describe("Detailed canvas documents", () => {
     ).toThrow("Detailed");
   });
 
+  it("rejects an aggregate process Node during import", () => {
+    const document = detailedPlanToCanvasDocument(
+      generateDetailedPlan({
+        outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 20 }],
+      }).plan,
+    );
+    const processNode = document.nodes.find(
+      ({ configuration }) => configuration.kind === "process",
+    );
+    if (!processNode || processNode.configuration.kind !== "process") {
+      throw new Error("Expected a generated process Node.");
+    }
+    const instance = processNode.configuration.instances[0]!;
+
+    expect(() =>
+      validateDetailedCanvasDocument({
+        ...document,
+        nodes: document.nodes.map((node) =>
+          node === processNode
+            ? {
+                ...node,
+                configuration: {
+                  ...node.configuration,
+                  instances: [instance, { ...instance, id: "second-instance" }],
+                },
+              }
+            : node,
+        ),
+      }),
+    ).toThrow("exactly one Buildable instance");
+  });
+
   it("round-trips validated Smart Splitter routing rules", () => {
     const document = detailedPlanToCanvasDocument(
       generateDetailedPlan({
         outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 20 }],
       }).plan,
     );
+    const configuration = createNode({
+      buildableId: "Build_ConveyorAttachmentSplitterSmart_C",
+      id: "smart-splitter",
+      kind: "router",
+    }).configuration;
+    assertDetailedNodeConfiguration(configuration);
     const splitter = {
-      configuration: createNode({
-        buildableId: "Build_ConveyorAttachmentSplitterSmart_C",
-        id: "smart-splitter",
-        kind: "router",
-      }).configuration,
+      configuration,
       height: 176,
       label: "Smart Splitter",
       routingRules: [

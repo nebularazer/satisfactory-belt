@@ -1,4 +1,5 @@
 import {
+  assertDetailedNodeConfiguration,
   createDetailedPlan,
   parseDetailedPlan,
   type DetailedNode,
@@ -12,8 +13,9 @@ import type { CanvasNode } from "@/canvas/document";
 
 export const DETAILED_CANVAS_DOCUMENT_VERSION = 1;
 
-export type DetailedCanvasNode = CanvasNode &
+export type DetailedCanvasNode = Omit<CanvasNode, "configuration"> &
   Readonly<{
+    configuration: DetailedNode["configuration"];
     routingRules?: DetailedNode["routingRules"];
   }>;
 
@@ -81,8 +83,10 @@ export function validateDetailedCanvasDocument(
     ) {
       throw new Error(`Detailed Node ${index + 1} has invalid geometry.`);
     }
+    const configuration = parseNodeConfiguration(nodeValue.configuration);
+    assertDetailedNodeConfiguration(configuration);
     return {
-      configuration: parseNodeConfiguration(nodeValue.configuration),
+      configuration,
       height: nodeValue.height,
       label: nodeValue.label,
       ...(nodeValue.provenance !== undefined

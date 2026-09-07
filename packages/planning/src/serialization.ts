@@ -1,7 +1,10 @@
 import { parseNodeConfiguration } from "@satisfactory-belt/production";
 
 import { createBasicPlan } from "./basic-topology";
-import { createDetailedPlan } from "./detailed-plan";
+import {
+  assertDetailedNodeConfiguration,
+  createDetailedPlan,
+} from "./detailed-plan";
 import { createLayoutPlan } from "./layout-plan";
 import type {
   BasicNode,
@@ -102,8 +105,10 @@ function detailedNode(value: unknown): DetailedNode {
   if (!isRecord(value)) throw new Error("A Detailed Node must be an object.");
   const rules = routingRules(value.routingRules);
   const parsedProvenance = provenance(value.provenance);
+  const configuration = parseNodeConfiguration(value.configuration);
+  assertDetailedNodeConfiguration(configuration);
   return {
-    configuration: parseNodeConfiguration(value.configuration),
+    configuration,
     ...(parsedProvenance ? { provenance: parsedProvenance } : {}),
     ...(rules ? { routingRules: rules } : {}),
   };

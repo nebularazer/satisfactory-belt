@@ -1,6 +1,8 @@
 import type {
   Descriptor,
+  MaterialNodeConfiguration,
   NodeConfiguration,
+  ProcessNodeConfiguration,
   ResourcePurity,
 } from "@satisfactory-belt/production";
 
@@ -125,8 +127,21 @@ export type RoutingRule = Readonly<{
   overflow?: boolean;
 }>;
 
+type SingularProcessNodeConfiguration<
+  Configuration extends ProcessNodeConfiguration = ProcessNodeConfiguration,
+> = Configuration extends ProcessNodeConfiguration
+  ? Omit<Configuration, "instances"> &
+      Readonly<{
+        instances: readonly [Configuration["instances"][number]];
+      }>
+  : never;
+
+export type DetailedNodeConfiguration =
+  | MaterialNodeConfiguration
+  | SingularProcessNodeConfiguration;
+
 export type DetailedNode = Readonly<{
-  configuration: NodeConfiguration;
+  configuration: DetailedNodeConfiguration;
   provenance?: GenerationProvenance;
   routingRules?: readonly RoutingRule[];
 }>;
