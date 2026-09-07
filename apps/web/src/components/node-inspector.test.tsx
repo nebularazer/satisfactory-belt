@@ -88,6 +88,28 @@ function chooseSelectOption(label: string, option: string) {
 }
 
 describe("NodeInspector", () => {
+  it("does not expose aggregate machine controls in Detailed mode", () => {
+    const editor = createProcessEditor();
+    const node = editor.getState().document.nodes[0]!;
+    if (node.configuration.kind !== "process") throw new Error("process");
+    editor.dispatch({
+      type: "node.configure",
+      configuration: {
+        ...node.configuration,
+        instances: [node.configuration.instances[0]!],
+      },
+      id: node.configuration.id,
+    });
+
+    render(<NodeInspector editor={editor} mode="detailed" />);
+
+    expect(screen.queryByLabelText("Machine count")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit all machines" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Clock speed")).toHaveValue("100");
+  });
+
   it("edits all machines from the aggregate scope", () => {
     const editor = createProcessEditor();
     render(<NodeInspector editor={editor} />);

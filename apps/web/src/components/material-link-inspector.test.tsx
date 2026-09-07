@@ -7,9 +7,15 @@ import { MaterialLinkInspector } from "./material-link-inspector";
 
 afterEach(cleanup);
 
-function linkedEditor(consumerCount = 1) {
+function linkedEditor(
+  consumerCount = 1,
+  topology: "aggregate" | "physical" = "aggregate",
+) {
   let id = 0;
-  const editor = createCanvasEditor({ idFactory: () => `node-${++id}` });
+  const editor = createCanvasEditor({
+    idFactory: () => `node-${++id}`,
+    topology,
+  });
   editor.dispatch({
     type: "node.create",
     at: { x: 0, y: 0 },
@@ -43,6 +49,23 @@ function linkedEditor(consumerCount = 1) {
 }
 
 describe("MaterialLinkInspector", () => {
+  it("selects a logistics tier in Detailed mode", () => {
+    const editor = linkedEditor(1, "physical");
+    render(<MaterialLinkInspector editor={editor} mode="detailed" />);
+
+    expect(screen.getByText("Conveyor Belt")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: "Logistics tier" }));
+    const option = screen.getByRole("option", { name: "MK1 · 60" });
+    fireEvent.pointerDown(option, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(option, { button: 0, pointerId: 1 });
+    fireEvent.click(option);
+
+    expect(editor.getState().document.materialLinks[0]?.logistics).toEqual({
+      kind: "conveyor",
+      tierId: "conveyor-mk1",
+    });
+  });
+
   it("shows flow details and disconnects the selected Material Link", () => {
     const editor = linkedEditor();
     render(<MaterialLinkInspector editor={editor} />);
