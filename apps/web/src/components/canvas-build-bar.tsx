@@ -5,6 +5,8 @@ import type { CanvasEditorMode } from "@/canvas/editor-mode";
 
 type CanvasBuildBarProps = Readonly<{
   mode: CanvasEditorMode;
+  detailedAvailable?: boolean;
+  basicAvailable?: boolean;
   onAddMerger: () => void;
   onAddNode: () => void;
   onAddSplitter: () => void;
@@ -15,6 +17,8 @@ type CanvasBuildBarProps = Readonly<{
 
 export function CanvasBuildBar({
   mode,
+  detailedAvailable = true,
+  basicAvailable = true,
   onAddMerger,
   onAddNode,
   onAddSplitter,
@@ -25,7 +29,7 @@ export function CanvasBuildBar({
   return (
     <div
       aria-label="Build tools"
-      className="flex min-h-11 items-center gap-1 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-sm"
+      className="flex min-h-11 flex-wrap items-center justify-center gap-1 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-sm"
       role="toolbar"
     >
       {placementLabel ? (
@@ -52,38 +56,58 @@ export function CanvasBuildBar({
           >
             {(["basic", "detailed"] as const).map((option) => (
               <Button
-                aria-label={`${option === "basic" ? "Basic" : "Detailed"} editor`}
+                aria-label={
+                  option === "detailed" && !detailedAvailable
+                    ? "Create Detailed plan"
+                    : `${option === "basic" ? "Basic" : "Detailed"} editor`
+                }
+                disabled={option === "basic" && !basicAvailable}
                 aria-pressed={mode === option}
-                className="h-9 px-2.5"
+                className="h-9 px-1.5 sm:px-2.5"
                 key={option}
                 onClick={() => onModeChange(option)}
                 title={
                   option === mode
                     ? `${option === "basic" ? "Basic" : "Detailed"} plan`
                     : option === "detailed"
-                      ? "Create or open the separate Detailed plan"
+                      ? detailedAvailable
+                        ? "Open the Detailed plan"
+                        : "Create and arrange individual machines and balancers"
                       : "Open the linked Basic plan"
                 }
                 variant={mode === option ? "secondary" : "ghost"}
               >
-                {option === "basic" ? "Basic" : "Detailed"}
+                {option === "basic"
+                  ? "Basic"
+                  : detailedAvailable
+                    ? "Detailed"
+                    : "Create Detailed"}
               </Button>
             ))}
           </div>
-          <div aria-hidden="true" className="mx-0.5 h-6 w-px bg-border" />
-          <Button className="h-9 px-3" onClick={onAddNode} variant="ghost">
-            <Plus aria-hidden="true" />
-            <span className="hidden min-[360px]:inline">Add node</span>
-            <span className="min-[360px]:hidden">Add</span>
-          </Button>
-          <Button className="h-9 px-3" onClick={onAddSplitter} variant="ghost">
-            <GitFork aria-hidden="true" />
-            <span className="hidden sm:inline">Splitter</span>
-          </Button>
-          <Button className="h-9 px-3" onClick={onAddMerger} variant="ghost">
-            <Combine aria-hidden="true" />
-            <span className="hidden sm:inline">Merger</span>
-          </Button>
+          <div className="flex items-center gap-1">
+            <div
+              aria-hidden="true"
+              className="mx-0.5 hidden h-6 w-px bg-border sm:block"
+            />
+            <Button className="h-9 px-3" onClick={onAddNode} variant="ghost">
+              <Plus aria-hidden="true" />
+              <span className="hidden min-[360px]:inline">Add node</span>
+              <span className="min-[360px]:hidden">Add</span>
+            </Button>
+            <Button
+              className="h-9 px-3"
+              onClick={onAddSplitter}
+              variant="ghost"
+            >
+              <GitFork aria-hidden="true" />
+              <span className="hidden sm:inline">Splitter</span>
+            </Button>
+            <Button className="h-9 px-3" onClick={onAddMerger} variant="ghost">
+              <Combine aria-hidden="true" />
+              <span className="hidden sm:inline">Merger</span>
+            </Button>
+          </div>
         </>
       )}
     </div>

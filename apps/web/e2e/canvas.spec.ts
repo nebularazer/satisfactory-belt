@@ -59,12 +59,16 @@ test("creates, persists, and reopens a separate Detailed plan", async ({
   const detailed = page.getByRole("button", { name: "Detailed editor" });
   const emptyState = page.getByRole("button", { name: "Add your first node" });
 
-  await detailed.click();
+  await page
+    .getByRole("button", { name: "Create Detailed plan", exact: true })
+    .click();
   await expect(
-    page.getByRole("dialog", { name: "Save plan as" }),
+    page.getByRole("dialog", { name: "Create Detailed plan" }),
   ).toBeVisible();
   await page.getByRole("textbox", { name: "Plan name" }).fill("Mode source");
-  await page.getByRole("button", { name: "Save as new" }).click();
+  await page
+    .getByRole("button", { name: "Create Detailed", exact: true })
+    .click();
   await expect(detailed).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "Splitter" }).click();

@@ -1,4 +1,5 @@
 import { requestCanvasArrangement } from "@/canvas/auto-layout-request";
+import { requestDetailedConversion } from "@/detailed-conversion/request-conversion";
 import { requestAutoBuild } from "@/auto-build/request-auto-build";
 import { prepareProductionInsertion } from "@/canvas/insert-production";
 import {
@@ -32,10 +33,9 @@ import { createCanvasEditor } from "@/canvas/editor";
 import {
   detailedDocumentFromEditor,
   detailedDocumentToEditor,
-  materializeDetailedCanvas,
   type CanvasEditorMode,
 } from "@/canvas/editor-mode";
-import { canvasNodeId } from "@/canvas/document";
+import { canvasNodeId, type CanvasDocument } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
 import type { CanvasConnectionRequest } from "@/canvas/interactions";
 import {
@@ -96,6 +96,11 @@ const MaterialLinkInspector = lazy(async () => ({
 }));
 const AutoBuildDialog = lazy(async () => ({
   default: (await import("@/components/auto-build-dialog")).AutoBuildDialog,
+}));
+
+const CreateDetailedDialog = lazy(async () => ({
+  default: (await import("@/components/create-detailed-dialog"))
+    .CreateDetailedDialog,
 }));
 
 function preloadNodePicker() {
@@ -287,7 +292,16 @@ function CanvasWorkspace({
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
-  const [convertAfterSave, setConvertAfterSave] = useState(false);
+  const [detailedCreation, setDetailedCreation] = useState<{
+    owner: typeof editor;
+    document: CanvasDocument;
+    source: SavedCanvasDocument | null;
+  } | null>(null);
+  useEffect(() => {
+    setDetailedCreation(null);
+  }, [editor]);
+  const [linkedDetailed, setLinkedDetailed] =
+    useState<SavedCanvasDocument | null>(null);
   const [activeSave, setActiveSave] = useState<SavedCanvasDocument | null>(
     initialActiveSave,
   );
@@ -377,45 +391,59 @@ function CanvasWorkspace({
     return () => cancelAnimationFrame(frame);
   }, [editor]);
 
-  const openDetailedPlan = useCallback(
-    async (source: SavedCanvasDocument) => {
-      try {
-        const current = currentPlanDocument();
-        if (current.kind !== "basic") {
-          throw new Error("Only a Basic plan can create a Detailed plan.");
-        }
-        const savedSource = await storage.saveNamed({
-          document: current,
-          id: source.id,
+  useEffect(() => {
+    let active = true;
+    setLinkedDetailed(null);
+    if (activeSave?.document.kind === "basic") {
+      void storage
+        .listNamed()
+        .then((saves) => {
+          if (active)
+            setLinkedDetailed(
+              saves.find(
+                (save) =>
+                  save.document.kind === "detailed" &&
+                  save.sourceSaveId === activeSave.id,
+              ) ?? null,
+            );
+        })
+        .catch(() => {
+          /* Opening the mode reports storage errors. */
         });
-        const saves = await storage.listNamed();
-        const existing = saves.find(
+    }
+    return () => {
+      active = false;
+    };
+  }, [activeSave, managePlansOpen, storage]);
+
+  const openDetailedPlan = useCallback(async () => {
+    try {
+      const current = currentPlanDocument();
+      if (current.kind !== "basic")
+        throw new Error("Only a Basic plan can create a Detailed plan.");
+      const source = activeSaveRef.current;
+      const saves = await storage.listNamed();
+      const existing =
+        source &&
+        saves.find(
           (save) =>
             save.document.kind === "detailed" &&
-            save.sourceSaveId === savedSource.id,
+            save.sourceSaveId === source.id,
         );
-        if (existing) {
-          activateSave(existing);
-          toast.success(`Opened “${existing.name}”.`);
-          return;
-        }
-        const detailed = await storage.saveNamed({
-          document: materializeDetailedCanvas(current),
-          name: availableDetailedPlanName(savedSource.name, saves),
-          sourceSaveId: savedSource.id,
-        });
-        activateSave(detailed);
-        toast.success(`Created “${detailed.name}” as a separate plan.`);
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "The Detailed plan could not be created.",
-        );
+      if (existing) {
+        await storage.saveNamed({ document: current, id: source.id });
+        activateSave(existing);
+        return;
       }
-    },
-    [activateSave, currentPlanDocument, storage],
-  );
+      setDetailedCreation({ owner: editor, document: current, source });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "The Detailed plan could not be opened.",
+      );
+    }
+  }, [activateSave, currentPlanDocument, editor, storage]);
 
   const changeEditorMode = useCallback(
     (mode: CanvasEditorMode) => {
@@ -425,14 +453,7 @@ function CanvasWorkspace({
       setMobileNodeInspectorOpen(false);
 
       if (mode === "detailed") {
-        const source = activeSaveRef.current;
-        if (!source || source.document.kind !== "basic") {
-          setConvertAfterSave(true);
-          setSavePlanOpen(true);
-          toast.info("Save the Basic plan before creating its Detailed copy.");
-          return;
-        }
-        void openDetailedPlan(source);
+        void openDetailedPlan();
         return;
       }
 
@@ -557,7 +578,8 @@ function CanvasWorkspace({
         return;
       }
       event.preventDefault();
-      if (event.repeat || savePlanOpen || managePlansOpen) return;
+      if (event.repeat || savePlanOpen || managePlansOpen || detailedCreation)
+        return;
       if (event.shiftKey) {
         openSavePlan();
       } else {
@@ -566,7 +588,13 @@ function CanvasWorkspace({
     };
     window.addEventListener("keydown", handleSaveShortcut);
     return () => window.removeEventListener("keydown", handleSaveShortcut);
-  }, [managePlansOpen, openSavePlan, saveCurrentPlan, savePlanOpen]);
+  }, [
+    managePlansOpen,
+    openSavePlan,
+    saveCurrentPlan,
+    savePlanOpen,
+    detailedCreation,
+  ]);
 
   const addPendingNode = (selection: NodePickerSelection) => {
     if (!pendingNode) return;
@@ -804,6 +832,14 @@ function CanvasWorkspace({
 
         <div className="pointer-events-auto absolute top-3 left-1/2 max-w-[calc(100vw-5.5rem)] -translate-x-1/2 sm:top-4">
           <CanvasBuildBar
+            detailedAvailable={
+              editorMode === "detailed" ||
+              (linkedDetailed !== null &&
+                linkedDetailed.sourceSaveId === activeSave?.id)
+            }
+            basicAvailable={
+              editorMode === "basic" || Boolean(activeSave?.sourceSaveId)
+            }
             mode={editorMode}
             onAddMerger={() =>
               setPlacement(
@@ -902,6 +938,55 @@ function CanvasWorkspace({
           onSelect={addPendingNode}
           open={pendingNode !== null}
         />
+        {detailedCreation?.owner === editor && (
+          <CreateDetailedDialog
+            sourceName={detailedCreation.source?.name}
+            onClose={() => setDetailedCreation(null)}
+            onCreate={async (settings, name, signal, onStage) => {
+              const { document: sourceDocument, source } = detailedCreation;
+              const saves = await storage.listNamed();
+              if (
+                !source &&
+                saves.some(
+                  (save) =>
+                    save.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+                )
+              )
+                throw new Error(
+                  "A plan with this name already exists. Choose another name.",
+                );
+              const result = await requestDetailedConversion(
+                sourceDocument,
+                settings,
+                signal,
+                onStage,
+              );
+              signal.throwIfAborted();
+              if (editor.getState().document !== sourceDocument)
+                throw new Error(
+                  "The Basic plan changed during conversion. Close this dialog and create Detailed again.",
+                );
+              onStage("Saving plan");
+              const savedSource = await storage.saveNamed({
+                document: sourceDocument,
+                ...(source ? { id: source.id } : { name }),
+              });
+              // Keep the saved source for retry if saving its Detailed version fails.
+              selectActiveSave(savedSource);
+              setDetailedCreation((current) =>
+                current ? { ...current, source: savedSource } : null,
+              );
+              const detailed = await storage.saveNamed({
+                document: result,
+                name: availableDetailedPlanName(savedSource.name, saves),
+                sourceSaveId: savedSource.id,
+              });
+              activateSave(detailed);
+              setDetailedCreation(null);
+              toast.success("Created and arranged the Detailed plan.");
+            }}
+          />
+        )}
         {autoBuild?.owner === editor && (
           <AutoBuildDialog
             itemId={autoBuild.itemId}
@@ -952,16 +1037,9 @@ function CanvasWorkspace({
       <SavePlanDialog
         activeSave={activeSave}
         currentDocument={currentPlanDocument()}
-        onOpenChange={(open) => {
-          setSavePlanOpen(open);
-          if (!open) setConvertAfterSave(false);
-        }}
+        onOpenChange={setSavePlanOpen}
         onSaved={(save) => {
           selectActiveSave(save);
-          if (convertAfterSave && save.document.kind === "basic") {
-            setConvertAfterSave(false);
-            void openDetailedPlan(save);
-          }
         }}
         open={savePlanOpen}
         sourceSaveId={activeSave?.sourceSaveId}
