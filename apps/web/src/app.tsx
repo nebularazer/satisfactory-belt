@@ -1,4 +1,6 @@
 import { requestCanvasArrangement } from "@/canvas/auto-layout-request";
+import { requestAutoBuild } from "@/auto-build/request-auto-build";
+import { prepareProductionInsertion } from "@/canvas/insert-production";
 import {
   lazy,
   Suspense,
@@ -91,6 +93,9 @@ const NodeInspector = lazy(async () => ({
 }));
 const MaterialLinkInspector = lazy(async () => ({
   default: (await loadMaterialLinkInspector()).MaterialLinkInspector,
+}));
+const AutoBuildDialog = lazy(async () => ({
+  default: (await import("@/components/auto-build-dialog")).AutoBuildDialog,
 }));
 
 function preloadNodePicker() {
@@ -273,6 +278,11 @@ function CanvasWorkspace({
     null,
   );
   const [placement, setPlacement] = useState<NodePickerSelection | null>(null);
+  const [autoBuild, setAutoBuild] = useState<{
+    itemId: string;
+    at?: Point;
+    owner: typeof editor;
+  } | null>(null);
   const [mobileNodeInspectorOpen, setMobileNodeInspectorOpen] = useState(false);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
@@ -873,6 +883,15 @@ function CanvasWorkspace({
       />
       <Suspense fallback={null}>
         <NodePicker
+          onAutoBuild={
+            editorMode === "basic" && !pendingNode?.connection
+              ? (itemId) => {
+                  setAutoBuild({ itemId, at: pendingNode?.at, owner: editor });
+                  setPendingNode(null);
+                  setPlacement(null);
+                }
+              : undefined
+          }
           allowSelection={
             pendingNode?.connection ? allowPendingSelection : undefined
           }
@@ -883,6 +902,34 @@ function CanvasWorkspace({
           onSelect={addPendingNode}
           open={pendingNode !== null}
         />
+        {autoBuild?.owner === editor && (
+          <AutoBuildDialog
+            itemId={autoBuild.itemId}
+            onClose={() => setAutoBuild(null)}
+            onGenerate={async (settings, signal, onStage) => {
+              const source = editor.getState().document;
+              const result = await requestAutoBuild(settings, signal, onStage);
+              if (signal.aborted) return;
+              if (source !== editor.getState().document)
+                throw new Error(
+                  "The canvas changed during generation. Please generate again.",
+                );
+              const document = prepareProductionInsertion(
+                source,
+                result.document,
+                `auto-build:${crypto.randomUUID()}`,
+                autoBuild.at,
+              );
+              editor.dispatch({ type: "document.insert", source, document });
+              requestAnimationFrame(() => canvasRef.current?.fitSelection());
+              toast.success(`Added ${document.nodes.length} production nodes.`);
+              if (result.externalInputs.length)
+                toast.info(
+                  `Supply externally: ${result.externalInputs.map((input) => `${input.name} (${input.ratePerMinute}/min)`).join(", ")}.`,
+                );
+            }}
+          />
+        )}
       </Suspense>
       <ManagePlansDialog
         activeSave={activeSave}

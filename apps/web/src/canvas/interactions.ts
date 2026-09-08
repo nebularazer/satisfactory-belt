@@ -190,7 +190,7 @@ function isEditableTarget(target: EventTarget | null) {
     target instanceof HTMLElement &&
     Boolean(
       target.closest(
-        "input, textarea, [contenteditable='true'], [role='menu']",
+        "input, textarea, select, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
       ),
     )
   );
