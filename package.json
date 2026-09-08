@@ -15,7 +15,8 @@
     "lint": "oxlint --deny-warnings .",
     "test": "pnpm --recursive --if-present test",
     "test:e2e": "pnpm --filter @satisfactory-belt/web test:e2e",
-    "typecheck": "pnpm --recursive --if-present typecheck"
+    "typecheck": "pnpm --recursive --if-present typecheck",
+    "prototype:logistics": "pnpm --filter @satisfactory-belt/web dev --host 127.0.0.1 --port 4174 --open '/?prototype=logistics&variant=A'"
   },
   "devDependencies": {
     "oxfmt": "^0.66.0",
