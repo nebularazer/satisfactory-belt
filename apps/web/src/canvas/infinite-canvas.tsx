@@ -1,8 +1,11 @@
+import { groupLabelLayout } from "./group-label-layout";
 import { routeHandles } from "./route-editing";
 import {
   Application,
   Assets,
   Container,
+  CanvasTextMetrics,
+  TextStyle,
   Graphics,
   GraphicsContext,
   Sprite,
@@ -1012,12 +1015,41 @@ function drawMaterialLinks(
       .fill({
         color: dark ? 0xffffff : 0x334155,
         alpha: region.logistics ? 0.018 : 0.03,
+      })
+      .stroke({
+        color:
+          state.selectedGroupId === region.id
+            ? BLUEPRINT_COLORS.selected
+            : dark
+              ? 0xa1a9b5
+              : 0x647184,
+        alpha: state.selectedGroupId === region.id ? 0.85 : 0.18,
+        width: (state.selectedGroupId === region.id ? 1.5 : 0.75) / zoom,
       });
+    const layout = groupLabelLayout(
+      region,
+      zoom,
+      (text, fontSize) =>
+        CanvasTextMetrics.measureText(
+          text,
+          new TextStyle({
+            fontFamily: "Inter Variable, Inter, sans-serif",
+            fontSize,
+            fontWeight: "600",
+          }),
+        ).width,
+    );
+    if (!layout.visible) continue;
     const label = new Text({
-      text: region.label,
+      resolution: textResolutionForZoom(
+        zoom,
+        Math.min(window.devicePixelRatio, 2),
+      ),
+      text: layout.text,
       style: {
         fontFamily: "Inter Variable, Inter, sans-serif",
-        fontSize: Math.min(40, 12 / zoom),
+        fontSize: layout.fontSize,
+        lineHeight: layout.lineHeight,
         fontWeight: "600",
         fill: dark ? 0xa1a9b5 : 0x647184,
       },
@@ -1062,7 +1094,7 @@ function drawMaterialLinks(
       ).stroke({
         alpha: 0.7,
         color: BLUEPRINT_COLORS.selected,
-        width: 7 / zoom,
+        width: 5 / zoom,
       });
     }
     drawMaterialPath(
@@ -1075,7 +1107,7 @@ function drawMaterialLinks(
         state.routeEdit?.id === link.id && !state.routeEdit.valid
           ? BLUEPRINT_COLORS.warning
           : materialFlowCanvasColor(presentation.state, dark),
-      width: (isSelected ? 4 : 3) / zoom,
+      width: (isSelected ? 2.5 : 1.75) / zoom,
     });
   }
 

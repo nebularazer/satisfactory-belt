@@ -1,3 +1,5 @@
+import { productionRegions } from "./production-regions";
+import { MAX_GROUP_NAME_LENGTH, type GroupNames } from "./group-names";
 import type { ConnectionRoute } from "./connection-route";
 import { addRouteBend, moveRouteSegment } from "./route-editing";
 import { routeIsClear, samePoint, simplifyRoute } from "./orthogonal-router";
@@ -49,6 +51,7 @@ export type CanvasEditorState = Readonly<{
   document: CanvasDocument;
   moveDelta: Point | null;
   routeEdit?: Readonly<{ id: string; route: ConnectionRoute; valid: boolean }>;
+  selectedGroupId?: string;
   selectedLinkIds: readonly string[];
   selectedIds: readonly string[];
   connectionError?: Readonly<{ code: string; message: string }>;
@@ -72,6 +75,8 @@ export type CanvasEditorChange = Readonly<
 >;
 
 export type CanvasEditorAction =
+  | { type: "selection.group"; id: string }
+  | { type: "group.rename"; id: string; name: string }
   | {
       type: "document.insert";
       source: CanvasDocument;
@@ -190,6 +195,7 @@ type IndexedLink = Readonly<{
 }>;
 
 type HistoryEntry = Readonly<{
+  groupNames?: { before?: GroupNames; after?: GroupNames };
   after: readonly IndexedNode[];
   afterLinks?: readonly IndexedLink[];
   afterLinkSelection?: readonly string[];
@@ -412,6 +418,20 @@ export function createCanvasEditor(
       canRedo: future.length > 0,
       canUndo: past.length > 0,
     };
+    if (change.kind === "selection" && !("selectedGroupId" in partial))
+      state = { ...state, selectedGroupId: undefined };
+    if (state.selectedGroupId) {
+      const group = productionRegions(state.document).find(
+        (group) => group.id === state.selectedGroupId,
+      );
+      if (
+        !group ||
+        state.selectedLinkIds.length ||
+        group.nodeIds.length !== state.selectedIds.length ||
+        group.nodeIds.some((id) => !state.selectedIds.includes(id))
+      )
+        state = { ...state, selectedGroupId: undefined };
+    }
     const updateTimeMs = performance.now() - dispatchStartedAt;
     listeners.forEach((listener) => listener({ ...change, updateTimeMs }));
   };
@@ -1133,6 +1153,60 @@ export function createCanvasEditor(
         return;
       }
 
+      case "selection.group": {
+        const group = productionRegions(state.document).find(
+          (group) => group.id === action.id,
+        );
+        if (!group) return;
+        publish(
+          {
+            selectedGroupId: group.id,
+            selectedIds: group.nodeIds,
+            selectedLinkIds: [],
+          },
+          {
+            kind: "selection",
+            nodeIds: [...state.selectedIds, ...group.nodeIds],
+          },
+        );
+        return;
+      }
+      case "group.rename": {
+        const group = productionRegions(state.document).find(
+          (group) => group.id === action.id,
+        );
+        const name = action.name.trim();
+        if (!group || name.length > MAX_GROUP_NAME_LENGTH) return;
+        const groupNames = { ...state.document.groupNames };
+        if (!name || name === group.defaultName) delete groupNames[group.id];
+        else groupNames[group.id] = name;
+        if (
+          (groupNames[group.id] ?? "") ===
+          (state.document.groupNames?.[group.id] ?? "")
+        )
+          return;
+        const { groupNames: beforeNames, ...base } = state.document;
+        const afterNames = Object.keys(groupNames).length
+          ? groupNames
+          : undefined;
+        commit(
+          { ...base, ...(afterNames ? { groupNames: afterNames } : {}) },
+          state.selectedIds,
+          {
+            before: [],
+            after: [],
+            beforeSelection: state.selectedIds,
+            afterSelection: state.selectedIds,
+            beforeLinkSelection: state.selectedLinkIds,
+            afterLinkSelection: state.selectedLinkIds,
+            groupNames: { before: beforeNames, after: afterNames },
+          },
+          state.selectedLinkIds,
+          false,
+        );
+        return;
+      }
+
       case "selection.clear":
         if (state.selectedIds.length > 0 || state.selectedLinkIds.length > 0) {
           const nodeIds = state.selectedIds;
@@ -1175,7 +1249,7 @@ export function createCanvasEditor(
           : alreadySelected && state.selectedIds.length === 1
             ? state.selectedIds
             : [action.id];
-        if (selectedIds === state.selectedIds) return;
+        if (selectedIds === state.selectedIds && !state.selectedGroupId) return;
         publish(
           {
             selectedIds,
@@ -1459,13 +1533,18 @@ export function createCanvasEditor(
         if (!entry) return;
         future.push(entry);
         moveTransaction = undefined;
-        const document = applyPatch(
+        let document = applyPatch(
           state.document,
           entry.after,
           entry.before,
           entry.afterLinks,
           entry.beforeLinks,
         );
+        if (entry.groupNames) {
+          const { groupNames: _names, ...base } = document;
+          const names = entry.groupNames.before;
+          document = { ...base, ...(names ? { groupNames: names } : {}) };
+        }
         spatialIndex.apply(
           document,
           entry.after.map(({ node }) => node),
@@ -1489,13 +1568,18 @@ export function createCanvasEditor(
         if (!entry) return;
         past.push(entry);
         moveTransaction = undefined;
-        const document = applyPatch(
+        let document = applyPatch(
           state.document,
           entry.before,
           entry.after,
           entry.beforeLinks,
           entry.afterLinks,
         );
+        if (entry.groupNames) {
+          const { groupNames: _names, ...base } = document;
+          const names = entry.groupNames.after;
+          document = { ...base, ...(names ? { groupNames: names } : {}) };
+        }
         spatialIndex.apply(
           document,
           entry.before.map(({ node }) => node),

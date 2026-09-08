@@ -1,3 +1,4 @@
+import { parseGroupNames } from "./group-names";
 import { parseConnectionRoute } from "./connection-route";
 import { parseNodeConfiguration } from "@satisfactory-belt/production";
 import {
@@ -219,6 +220,9 @@ export function validateCanvasDocument(value: unknown): CanvasDocument {
   });
 
   return {
+    ...(value.groupNames !== undefined
+      ? { groupNames: parseGroupNames(value.groupNames) }
+      : {}),
     kind: "basic",
     materialLinks,
     nodes,

@@ -569,6 +569,7 @@ export function materializeDetailedCanvas(
 
   return detailedDocumentFromEditor(
     {
+      ...(document.groupNames ? { groupNames: document.groupNames } : {}),
       kind: "basic",
       materialLinks: balanced.connections.map(
         ({ from, to, id, kind, tierId }) => ({
@@ -594,6 +595,7 @@ export function detailedDocumentToEditor(
   document: DetailedCanvasDocument,
 ): CanvasDocument {
   return {
+    ...(document.groupNames ? { groupNames: document.groupNames } : {}),
     kind: "basic",
     materialLinks: document.connections.map(
       ({ from, id, kind, tierId, to }) => ({
@@ -632,6 +634,7 @@ export function detailedDocumentFromEditor(
     .filter((link) => link.routeMode === "manual" && link.route)
     .map(({ id }) => id);
   const detailed: DetailedCanvasDocument = {
+    ...(document.groupNames ? { groupNames: document.groupNames } : {}),
     ...(manualConnectionIds.length ? { manualConnectionIds } : {}),
     ...(Object.keys(connectionRoutes).length ? { connectionRoutes } : {}),
     connections: document.materialLinks.map(physicalConnection),

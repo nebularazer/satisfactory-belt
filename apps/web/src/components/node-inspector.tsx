@@ -1307,7 +1307,7 @@ export function NodeInspector({
         (candidate) => candidate.configuration.id === selectedId,
       )
     : undefined;
-  if (!node || state.moveDelta !== null) return null;
+  if (!node || state.moveDelta !== null || state.selectedGroupId) return null;
 
   const handleSheetPointerDown = (
     event: ReactPointerEvent<HTMLButtonElement>,

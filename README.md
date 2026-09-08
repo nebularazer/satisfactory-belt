@@ -70,7 +70,10 @@ and connection remains editable on the same canvas. Feedback belts use separate
 return lanes with dashed strokes and no arrows; their colors still indicate flow
 and capacity. The connection inspector identifies feedback returns. Positions and
 connection paths are saved with the plan. Existing plans adopt the layout on their
-next Auto-arrange, with undo/redo available. Rate labels appear when zoomed in or
+next Auto-arrange, with undo/redo available. Group headers scale with zoom,
+wrap or truncate within their bounds, and have subtle outlines. Click a header to
+select the group and rename it in the inspector; hover to read its full name.
+Custom names survive save/reload and Auto-arrange, with rename/reset undoable. Rate labels appear when zoomed in or
 when a connection is selected. New connections and their previews use the same rounded right-angle style and
 route around cards without moving them. Select a connection to drag its square
 segment handles, double-click a segment (or use Add bend in the inspector) for an

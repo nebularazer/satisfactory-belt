@@ -1,3 +1,4 @@
+import { GroupInspector } from "@/components/group-inspector";
 import { requestCanvasArrangement } from "@/canvas/auto-layout-request";
 import { requestDetailedConversion } from "@/detailed-conversion/request-conversion";
 import { requestAutoBuild } from "@/auto-build/request-auto-build";
@@ -875,6 +876,7 @@ function CanvasWorkspace({
             mobileOpen={mobileNodeInspectorOpen}
           />
           <MaterialLinkInspector editor={editor} mode={editorMode} />
+          <GroupInspector editor={editor} />
         </Suspense>
 
         {!mobileNodeInspectorOpen && (

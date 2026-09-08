@@ -1,3 +1,4 @@
+import { hitProductionGroup } from "./group-label-layout";
 import { materialLinkPath } from "./material-link-geometry";
 import { routeHandles } from "./route-editing";
 import type { MaterialEndpoint } from "@satisfactory-belt/planning";
@@ -465,6 +466,17 @@ export function attachCanvasInteractions(
       return;
     }
 
+    const hitGroup =
+      !hit && !hitPort
+        ? hitProductionGroup(editor.getState().document, worldPoint)
+        : undefined;
+    if (hitGroup && !selectionModifier) {
+      editor.dispatch({ type: "selection.group", id: hitGroup.id });
+      releasePointer(event.pointerId);
+      canvas.dataset.cursor = "pointer";
+      return;
+    }
+
     const routeHandle =
       !selectionModifier && !hitPort && !hit
         ? hitRouteHandle(
@@ -713,6 +725,15 @@ export function attachCanvasInteractions(
         worldPoint,
         (event.pointerType === "touch" ? 24 : 12) / host.getViewport().zoom,
       );
+      const hoverGroup =
+        !hoverPort && !editor.hitTest(worldPoint)
+          ? hitProductionGroup(editor.getState().document, worldPoint)
+          : undefined;
+      canvas.title = hoverGroup?.name ?? "";
+      if (hoverGroup && !selectionModifier && !host.isPlacementActive()) {
+        canvas.dataset.cursor = "pointer";
+        return;
+      }
       const occupiedPort = hoverPort
         ? reconnectableLinkAtEndpoint(
             editor.getState().document,
@@ -969,6 +990,11 @@ export function attachCanvasInteractions(
     if (event.button !== 0) return;
     const screen = screenPoint(event);
     const worldPoint = screenToWorld(screen, host.getViewport());
+    const group = hitProductionGroup(editor.getState().document, worldPoint);
+    if (group) {
+      editor.dispatch({ type: "selection.group", id: group.id });
+      return;
+    }
     const link = editor.hitTestLink(worldPoint, 12 / host.getViewport().zoom);
     if (
       link &&

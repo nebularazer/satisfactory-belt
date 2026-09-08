@@ -17,7 +17,7 @@ function regions(document: CanvasDocument) {
   // moving a card into another area never leaves a stale enclosing box behind.
   if (
     !document.materialLinks.length ||
-    document.materialLinks.some((link) => !link.route)
+    !document.materialLinks.some((link) => link.route)
   )
     return [];
   const recipes = new Map<string, CanvasNode[]>();
@@ -33,8 +33,14 @@ function regions(document: CanvasDocument) {
     ...[...recipes.values()]
       .filter((nodes) => nodes.every((node) => node.x === nodes[0]!.x))
       .map((nodes) => ({
+        id: JSON.stringify([
+          "recipe",
+          nodes[0]!.configuration.kind === "process"
+            ? nodes[0]!.configuration.processId
+            : nodes[0]!.configuration.id,
+        ]),
         nodes,
-        label: `${nodes[0]!.configuration.kind === "process" ? (findProductionProcess(nodes[0]!.configuration.processId)?.name ?? nodes[0]!.label) : nodes[0]!.label} · ${nodes.length}`,
+        label: `${nodes[0]!.configuration.kind === "process" ? (findProductionProcess(nodes[0]!.configuration.processId)?.name ?? nodes[0]!.label) : nodes[0]!.label}`,
         logistics: false,
       })),
     ...structure.logistics.map((ids) => {
@@ -44,6 +50,7 @@ function regions(document: CanvasDocument) {
       );
       const item = links.find((link) => link.id === edge?.id)?.itemName;
       return {
+        id: JSON.stringify(["logistics", ids[0]]),
         nodes: document.nodes.filter((node) =>
           ids.includes(node.configuration.id),
         ),
@@ -71,7 +78,18 @@ function regions(document: CanvasDocument) {
     )
       return [];
     return [
-      { x, y, width, height, label: group.label, logistics: group.logistics },
+      {
+        x,
+        y,
+        width,
+        height,
+        id: group.id,
+        nodeIds: group.nodes.map((node) => node.configuration.id),
+        name: document.groupNames?.[group.id] ?? group.label,
+        defaultName: group.label,
+        count: group.nodes.length,
+        logistics: group.logistics,
+      },
     ];
   });
 }

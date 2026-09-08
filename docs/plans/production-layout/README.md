@@ -25,9 +25,27 @@ Frames/min, Cast Screws, and Mk.1 belts.
 - Keep cycles between production recipes within a finite stage. Long forward
   bypasses stay solid even if their geometry travels leftward.
 - Persist positions and routes through the existing save format. Feedback roles
-  and group labels are derived, so editing a cycle updates its styling and
+  and default group labels are derived; custom names are saved. Editing a cycle updates its styling and
   manual moves cannot leave stale saved group boundaries.
 
 The implementation changes presentation only. It does not replace belts,
 rebalance rates, change machine clocks, or insert/remove physical routers.
 Existing plans adopt it on their next Auto-arrange, which remains undoable.
+
+## Group labels and selection
+
+Group headers grow with the cards at high zoom, use up to two lines when space
+allows, and truncate within the header width at overview zoom. Unreadable labels
+hide at distant zoom; hovering a header reveals its full name. The same text
+resolution scaling as node cards keeps close-up headers sharp.
+
+Click a header to select its nodes and open the group inspector. Rename or reset
+the group there; names persist in Basic and Detailed saves and through subsequent
+Auto-arrange, with undo/redo support. Clicking a member card inspects that node;
+dragging a selected member moves the group. Thin outlines mark group boundaries,
+with a stronger outline for the selected group. Link strokes are thinner while
+preserving their capacity colors, dashed return style, and click targets.
+
+![Selecting and renaming a group](rename.png)
+
+![Sharp, wrapped and truncated group labels at 301 percent zoom](labels-close.png)
