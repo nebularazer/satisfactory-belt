@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { analyzeDetailedPlan } from "@satisfactory-belt/planning";
 
 import {
   detailedDocumentFromEditor,
@@ -40,6 +41,35 @@ describe("Basic and Detailed editor modes", () => {
       expect(editor.topology).toBe("physical");
       expect(editor.getState().document).toBe(projection);
       expect(detailed.kind).toBe("detailed");
+      const analysis = analyzeDetailedPlan(detailed);
+      for (const node of detailed.nodes) {
+        if (
+          node.configuration.buildableId !==
+          "Build_ConveyorAttachmentSplitter_C"
+        )
+          continue;
+        const outputs = detailed.connections.filter(
+          (link) => link.from.nodeId === node.configuration.id,
+        );
+        const rates = outputs.map(
+          (link) =>
+            analysis.connectionFlows.find(
+              (flow) => flow.connectionId === link.id,
+            )?.ratePerMinute,
+        );
+        expect(rates.length).toBeGreaterThan(1);
+        for (const rate of rates) expect(rate).toBeCloseTo(rates[0]!, 6);
+      }
+      expect(
+        Object.values(analysis.machineEfficiency).every(
+          (efficiency) => efficiency > 1 - 1e-7,
+        ),
+      ).toBe(true);
+      expect(
+        analysis.diagnostics.filter(
+          (diagnostic) => diagnostic.code === "detailed.connection.overload",
+        ),
+      ).toEqual([]);
       expect(detailedDocumentFromEditor(projection, detailed.tiers)).toEqual(
         detailed,
       );
@@ -49,5 +79,7 @@ describe("Basic and Detailed editor modes", () => {
         ),
       ).toBe(withSplitter);
     },
+    // Expands 65 machines, solves all balancer flows, and checks persistence.
+    15_000,
   );
 });

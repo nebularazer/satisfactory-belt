@@ -173,8 +173,17 @@ export function createMaterialLinkIndex(document: CanvasDocument) {
           path,
         }))
         .filter(({ distance }) => distance <= radius)
-        .toSorted((left, right) => left.distance - right.distance)[0]?.path
-        .link;
+        .toSorted((left, right) => {
+          const distance = left.distance - right.distance;
+          if (Math.abs(distance) > 1e-7) return distance;
+          // At a crossing, clicking a rate label should select its own belt.
+          const leftLabel = materialLinkLabelPoint(left.path);
+          const rightLabel = materialLinkLabelPoint(right.path);
+          return (
+            Math.hypot(point.x - leftLabel.x, point.y - leftLabel.y) -
+            Math.hypot(point.x - rightLabel.x, point.y - rightLabel.y)
+          );
+        })[0]?.path.link;
     },
     query(rectangle: Rectangle) {
       return paths.filter(({ bounds }) => intersects(bounds, rectangle));

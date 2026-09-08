@@ -76,6 +76,16 @@ Splitters, mergers, and pipeline junctions use headerless 128 × 128 cards with 
 muted building icon in the body, visible ports, and compact rate labels. See
 [the compact Router card design](docs/plans/compact-router-cards.md).
 
+Detailed generation and Basic-to-Detailed conversion use conveyor balancers:
+every connected output of an ordinary splitter gets an equal share. Splitter
+trees and mergers combine those shares to meet individual machine demands,
+including different clocks, without relying on manifold backpressure. Ratios
+such as five equal destinations use a return loop; its extra throughput counts
+toward the belt capacity. Conversion reports unsupported ratios or insufficient
+belt capacity instead of silently producing a manifold. Pipeline junctions retain
+their fluid-network behavior. Existing Detailed saves are unchanged; convert the
+Basic plan again to generate the balanced version.
+
 In the Basic canvas, press **N**, search for a recipe, and choose **Auto-build**
 to generate a production plan for its output item. Set one or more output rates,
 allow alternative recipes, or require specific recipes for outputs and ingredients.

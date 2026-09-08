@@ -50,4 +50,35 @@ describe("Plan generation", () => {
     ).toBe(true);
     expect(() => analyzeDetailedPlan(generated.plan)).not.toThrow();
   });
+
+  it("balances every split in a generated Modular Frame factory", () => {
+    const { plan } = generateDetailedPlan({
+      outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 20 }],
+    });
+    const analysis = analyzeDetailedPlan(plan);
+    const splitters = plan.nodes.filter(
+      (node) =>
+        node.configuration.buildableId === "Build_ConveyorAttachmentSplitter_C",
+    );
+    expect(splitters.length).toBeGreaterThan(0);
+    for (const node of splitters) {
+      const outputs = plan.connections.filter(
+        (connection) => connection.from.nodeId === node.configuration.id,
+      );
+      const rates = outputs.map(
+        (connection) =>
+          analysis.connectionFlows.find(
+            (flow) => flow.connectionId === connection.id,
+          )?.ratePerMinute,
+      );
+      expect(rates.length).toBeGreaterThan(1);
+      for (const rate of rates) expect(rate).toBeCloseTo(rates[0]!, 7);
+    }
+    expect(
+      Object.values(analysis.machineEfficiency).every(
+        (value) => value > 1 - 1e-7,
+      ),
+    ).toBe(true);
+    expect(analysis.diagnostics).toEqual([]);
+  });
 });
