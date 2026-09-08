@@ -5,6 +5,7 @@ import {
 } from "@satisfactory-belt/production";
 
 import { createBasicPlan } from "./basic-topology";
+import { balanceDetailedConveyors } from "./conveyor-balancers";
 import {
   assertDetailedNodeConfiguration,
   createDetailedPlan,
@@ -313,5 +314,10 @@ export function generateDetailedPlan(
     assertDetailedNodeConfiguration(configuration);
     return { ...node, configuration };
   });
-  return { plan: createDetailedPlan({ connections, nodes, tiers }), solution };
+  return {
+    plan: balanceDetailedConveyors(
+      createDetailedPlan({ connections, nodes, tiers }),
+    ),
+    solution,
+  };
 }

@@ -75,7 +75,11 @@ export function presentMaterialFlow(
     materialLinks: document.materialLinks,
     nodes: document.nodes.map(({ configuration }) => configuration),
   });
-  const analysis = analyzeBasicFlows(plan);
+  const analysis = analyzeBasicFlows(plan, {
+    projectUnconnectedOutputs: !document.materialLinks.some(
+      (link) => link.logistics,
+    ),
+  });
   const flowByLink = new Map(
     analysis.linkFlows.map((flow) => [flow.linkId, flow]),
   );

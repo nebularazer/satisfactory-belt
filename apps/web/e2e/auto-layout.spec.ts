@@ -48,6 +48,42 @@ test("auto-arranges a Detailed factory, undoes it, and restores routes after rel
   const arranged = await readDocument();
   expect(arranged.nodes).not.toEqual(original.nodes);
   expect(arranged.connections).toEqual(original.connections);
+  const splits = await page.evaluate(async () => {
+    const storageUrl = "/src/canvas/document-storage.ts";
+    const modeUrl = "/src/canvas/editor-mode.ts";
+    const presentationUrl = "/src/canvas/material-link-presentation.ts";
+    const { createIndexedDbDocumentStorage } = await import(storageUrl);
+    const { detailedDocumentToEditor } = await import(modeUrl);
+    const { presentMaterialFlow } = await import(presentationUrl);
+    const document = detailedDocumentToEditor(
+      (await createIndexedDbDocumentStorage().loadWorkspace()).document,
+    );
+    const flow = presentMaterialFlow(document);
+    return document.nodes
+      .filter(
+        (node: { configuration: { buildableId: string } }) =>
+          node.configuration.buildableId ===
+          "Build_ConveyorAttachmentSplitter_C",
+      )
+      .map((node: { configuration: { id: string } }) =>
+        document.materialLinks
+          .filter(
+            (link: { from: { nodeId: string } }) =>
+              link.from.nodeId === node.configuration.id,
+          )
+          .map(
+            (link: { id: string }) =>
+              flow.links.find(
+                (candidate: { id: string }) => candidate.id === link.id,
+              )?.ratePerMinute,
+          ),
+      );
+  });
+  expect(splits.length).toBeGreaterThan(0);
+  for (const rates of splits) {
+    expect(rates.length).toBeGreaterThan(1);
+    for (const rate of rates) expect(rate).toBeCloseTo(rates[0], 6);
+  }
   await page.screenshot({ path: testInfo.outputPath("detailed-arranged.png") });
   for (let step = 0; step < 8; step++)
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();

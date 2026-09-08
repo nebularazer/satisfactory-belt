@@ -266,6 +266,7 @@ function feasibleLinkRates(
   itemId: string,
   nodes: ReadonlyMap<string, Node>,
   ports: ReadonlyMap<string, MaterialPort>,
+  projectUnconnectedOutputs: boolean,
 ) {
   const source = "\u0001basic-flow-source";
   const sink = "\u0001basic-flow-sink";
@@ -360,6 +361,7 @@ function feasibleLinkRates(
     if (
       !node ||
       node.kind === "process" ||
+      (!projectUnconnectedOutputs && node.kind === "router") ||
       !port ||
       (port.direction !== "output" && port.direction !== "bidirectional")
     ) {
@@ -391,12 +393,13 @@ function feasibleLinkRates(
   );
 }
 
-function solveCyclicLinkRates(
+function solveEqualSplitLinkRates(
   component: Readonly<{ edges: readonly Edge[]; vertices: readonly string[] }>,
   itemId: string,
   links: readonly MaterialLink[],
   nodes: ReadonlyMap<string, Node>,
   ports: ReadonlyMap<string, MaterialPort>,
+  projectUnconnectedOutputs: boolean,
 ) {
   const orderedLinks = [...links].toSorted((left, right) =>
     left.id.localeCompare(right.id),
@@ -406,7 +409,13 @@ function solveCyclicLinkRates(
   );
   const baselineRates = balanceParallelLinkRates(
     orderedLinks,
-    feasibleLinkRates(component, itemId, nodes, ports),
+    feasibleLinkRates(
+      component,
+      itemId,
+      nodes,
+      ports,
+      projectUnconnectedOutputs,
+    ),
   );
   const matrix: number[][] = [];
   const rightHandSide: number[] = [];
@@ -483,7 +492,15 @@ function solveCyclicLinkRates(
   );
 }
 
-export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
+export function analyzeBasicFlows(
+  plan: BasicPlan,
+  options: Readonly<{
+    /** Basic plans project surplus onto open router outputs. Physical belts only
+     * carry material through connected outputs. */
+    projectUnconnectedOutputs?: boolean;
+  }> = {},
+): BasicFlowAnalysis {
+  const projectUnconnectedOutputs = options.projectUnconnectedOutputs ?? true;
   const validated = createBasicPlan(plan);
   const topology = analyzeBasicPlan(validated);
   const nodes = new Map(
@@ -544,9 +561,19 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
       }
     }
     const hasCycle = hasDirectedNodeCycle(links);
-    const cyclicRates = hasCycle
-      ? solveCyclicLinkRates(component, itemId, links, nodes, ports)
-      : undefined;
+    // Split-and-merge balancers also have multiple paths without a directed
+    // feedback cycle. Conservation alone cannot determine their branch rates.
+    const cyclicRates =
+      component.edges.length >= component.vertices.length
+        ? solveEqualSplitLinkRates(
+            component,
+            itemId,
+            links,
+            nodes,
+            ports,
+            projectUnconnectedOutputs,
+          )
+        : undefined;
     if (hasCycle && !cyclicRates) {
       for (const link of links) {
         diagnostics.push({
@@ -564,7 +591,13 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
         rateByLink.set(linkId, rate);
       }
     } else {
-      const feasibleRates = feasibleLinkRates(component, itemId, nodes, ports);
+      const feasibleRates = feasibleLinkRates(
+        component,
+        itemId,
+        nodes,
+        ports,
+        projectUnconnectedOutputs,
+      );
       for (const [linkId, rate] of balanceParallelLinkRates(
         links,
         feasibleRates,

@@ -1,5 +1,6 @@
 import {
   analyzeBasicPlan,
+  balanceDetailedConveyors,
   assertDetailedNodeConfiguration,
   createBasicPlan,
   createDetailedPlan,
@@ -526,17 +527,48 @@ export function materializeDetailedCanvas(
       ...(provenance ? { provenance } : {}),
     };
   });
-  createDetailedPlan({
-    connections: materialLinks.map(physicalConnection),
-    nodes: detailedNodes,
-    tiers: DEFAULT_LOGISTICS_TIERS,
+  const balanced = balanceDetailedConveyors(
+    createDetailedPlan({
+      connections: materialLinks.map(physicalConnection),
+      nodes: detailedNodes,
+      tiers: DEFAULT_LOGISTICS_TIERS,
+    }),
+  );
+
+  const physicalById = new Map(
+    physicalNodes.map((node) => [node.configuration.id, node]),
+  );
+  const balancedNodes = balanced.nodes.map(({ configuration }, index) => {
+    const existing = physicalById.get(configuration.id);
+    if (existing) return { ...existing, configuration };
+    const ownerId = configuration.id.slice(
+      0,
+      configuration.id.lastIndexOf(":balance:"),
+    );
+    const owner = physicalById.get(ownerId) ?? physicalNodes[0]!;
+    return canvasNode(
+      owner,
+      configuration,
+      {
+        x: owner.x + (index % 4) * (owner.width + NODE_GAP),
+        y: owner.y + (1 + Math.floor(index / 4)) * (owner.height + NODE_GAP),
+      },
+      configuration.buildableId.includes("Merger") ? "Merger" : "Splitter",
+    );
   });
 
   return detailedDocumentFromEditor(
     {
       kind: "basic",
-      materialLinks,
-      nodes: physicalNodes,
+      materialLinks: balanced.connections.map(
+        ({ from, to, id, kind, tierId }) => ({
+          from,
+          to,
+          id,
+          logistics: { kind, tierId },
+        }),
+      ),
+      nodes: balancedNodes,
       version: CANVAS_DOCUMENT_VERSION,
     },
     DEFAULT_LOGISTICS_TIERS,
