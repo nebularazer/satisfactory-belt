@@ -119,6 +119,24 @@ export function createDetailedCanvasEditor(
     }> = {},
   ) => {
     const before = snapshot();
+    if (document.connectionRoutes) {
+      const ids = new Set(document.connections.map(({ id }) => id));
+      document = {
+        ...document,
+        connectionRoutes: Object.fromEntries(
+          Object.entries(document.connectionRoutes).filter(([id]) =>
+            ids.has(id),
+          ),
+        ),
+        ...(document.manualConnectionIds
+          ? {
+              manualConnectionIds: document.manualConnectionIds.filter((id) =>
+                ids.has(id),
+              ),
+            }
+          : {}),
+      };
+    }
     const plan = detailedPlanFromCanvas(document);
     past.push({ change, semantic, snapshot: before });
     future.length = 0;

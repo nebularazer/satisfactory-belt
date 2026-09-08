@@ -1,71 +1,31 @@
-import type { MaterialLink } from "@satisfactory-belt/planning";
+import {
+  routeOrthogonally,
+  routeIsClear,
+  samePoint,
+  type RouteEndpoint,
+} from "./orthogonal-router";
+import type { CanvasMaterialLink, CanvasNode } from "./document";
+import type { ConnectionRoute } from "./connection-route";
 
 import type { CanvasDocument } from "./document";
 import type { Point, Rectangle } from "./geometry";
 import { materialPortGeometry } from "./material-port-geometry";
 
 export type MaterialLinkPath = Readonly<{
+  route: ConnectionRoute;
   bounds: Rectangle;
-  control1: Point;
-  control2: Point;
   from: Point;
-  link: MaterialLink;
+  link: CanvasMaterialLink;
   to: Point;
 }>;
 
-export type MaterialConnectionPreviewCurve = Readonly<{
-  control1: Point;
-  control2: Point;
-}>;
-
-const CONNECTION_PREVIEW_MIN_LENGTH_PX = 10;
-
-export function materialConnectionPreviewCurve(
-  from: Point,
-  to: Point,
-  zoom: number,
-  departure: "left" | "right" = "right",
-): MaterialConnectionPreviewCurve | undefined {
-  const distance = Math.hypot(to.x - from.x, to.y - from.y);
-  if (distance * zoom < CONNECTION_PREVIEW_MIN_LENGTH_PX) {
-    return undefined;
-  }
-  const bend = Math.min(
-    Math.max(48, Math.abs(to.x - from.x) * 0.5),
-    distance * 0.5,
-  );
-  const direction = departure === "left" ? -1 : 1;
-  return {
-    control1: { x: from.x + bend * direction, y: from.y },
-    control2: { x: to.x - bend * direction, y: to.y },
-  };
-}
-
 function pathFromPoints(
-  link: MaterialLink,
+  link: CanvasMaterialLink,
   from: Point,
   to: Point,
+  nodes: readonly CanvasNode[],
 ): MaterialLinkPath {
-  const bend = Math.max(48, Math.abs(to.x - from.x) * 0.5);
-  const control1 = { x: from.x + bend, y: from.y };
-  const control2 = { x: to.x - bend, y: to.y };
-  return {
-    bounds: {
-      height:
-        Math.max(from.y, to.y, control1.y, control2.y) -
-        Math.min(from.y, to.y, control1.y, control2.y),
-      width:
-        Math.max(from.x, to.x, control1.x, control2.x) -
-        Math.min(from.x, to.x, control1.x, control2.x),
-      x: Math.min(from.x, to.x, control1.x, control2.x),
-      y: Math.min(from.y, to.y, control1.y, control2.y),
-    },
-    control1,
-    control2,
-    from,
-    link,
-    to,
-  };
+  return materialLinkPathForRoute(link, resolveRoute(link, from, to, nodes));
 }
 
 function normalized(rectangle: Rectangle): Rectangle {
@@ -88,10 +48,21 @@ function intersects(left: Rectangle, right: Rectangle) {
   );
 }
 
+const pathsByDocument = new WeakMap<
+  CanvasDocument,
+  Map<CanvasMaterialLink, MaterialLinkPath | undefined>
+>();
+
 export function materialLinkPath(
   document: CanvasDocument,
-  link: MaterialLink,
+  link: CanvasMaterialLink,
 ): MaterialLinkPath | undefined {
+  let paths = pathsByDocument.get(document);
+  if (!paths) {
+    paths = new Map();
+    pathsByDocument.set(document, paths);
+  }
+  if (paths.has(link)) return paths.get(link);
   const fromNode = document.nodes.find(
     ({ configuration }) => configuration.id === link.from.nodeId,
   );
@@ -108,24 +79,34 @@ export function materialLinkPath(
         ({ port }) => port.id === link.to.portId,
       )?.point
     : undefined;
-  if (!from || !to) return undefined;
-  return pathFromPoints(link, from, to);
+  const path =
+    from && to ? pathFromPoints(link, from, to, document.nodes) : undefined;
+  paths.set(link, path);
+  return path;
 }
 
 export function materialLinkPoint(path: MaterialLinkPath, t: number): Point {
-  const inverse = 1 - t;
-  return {
-    x:
-      inverse ** 3 * path.from.x +
-      3 * inverse ** 2 * t * path.control1.x +
-      3 * inverse * t ** 2 * path.control2.x +
-      t ** 3 * path.to.x,
-    y:
-      inverse ** 3 * path.from.y +
-      3 * inverse ** 2 * t * path.control1.y +
-      3 * inverse * t ** 2 * path.control2.y +
-      t ** 3 * path.to.y,
-  };
+  const lengths = path.route
+    .slice(1)
+    .map((point, index) =>
+      Math.hypot(
+        point.x - path.route![index]!.x,
+        point.y - path.route![index]!.y,
+      ),
+    );
+  let remaining = lengths.reduce((sum, length) => sum + length, 0) * t;
+  for (let index = 0; index < lengths.length; index++) {
+    const length = lengths[index]!;
+    const from = path.route[index]!;
+    const to = path.route[index + 1]!;
+    if (remaining <= length && length > 0)
+      return {
+        x: from.x + ((to.x - from.x) * remaining) / length,
+        y: from.y + ((to.y - from.y) * remaining) / length,
+      };
+    remaining -= length;
+  }
+  return path.to;
 }
 
 function pointSegmentDistance(point: Point, from: Point, to: Point) {
@@ -145,17 +126,11 @@ function pointSegmentDistance(point: Point, from: Point, to: Point) {
 }
 
 export function distanceToMaterialLink(path: MaterialLinkPath, point: Point) {
-  let distance = Number.POSITIVE_INFINITY;
-  let previous = path.from;
-  for (let index = 1; index <= 20; index += 1) {
-    const current = materialLinkPoint(path, index / 20);
-    distance = Math.min(
-      distance,
-      pointSegmentDistance(point, previous, current),
-    );
-    previous = current;
-  }
-  return distance;
+  return Math.min(
+    ...path.route
+      .slice(1)
+      .map((to, index) => pointSegmentDistance(point, path.route[index]!, to)),
+  );
 }
 
 export function createMaterialLinkIndex(document: CanvasDocument) {
@@ -170,11 +145,16 @@ export function createMaterialLinkIndex(document: CanvasDocument) {
         ),
       ),
     );
+    const cached = new Map<CanvasMaterialLink, MaterialLinkPath | undefined>();
     paths = current.materialLinks.flatMap((link) => {
       const from = points.get(`${link.from.nodeId}\u0000${link.from.portId}`);
       const to = points.get(`${link.to.nodeId}\u0000${link.to.portId}`);
-      return from && to ? [pathFromPoints(link, from, to)] : [];
+      const path =
+        from && to ? pathFromPoints(link, from, to, current.nodes) : undefined;
+      cached.set(link, path);
+      return path ? [path] : [];
     });
+    pathsByDocument.set(current, cached);
   };
   rebuild();
   return {
@@ -204,4 +184,153 @@ export function createMaterialLinkIndex(document: CanvasDocument) {
       rebuild();
     },
   };
+}
+
+const obstaclesByNodes = new WeakMap<
+  readonly CanvasNode[],
+  ReturnType<typeof buildRouteObstacles>
+>();
+
+function buildRouteObstacles(nodes: readonly CanvasNode[]) {
+  return nodes.map((node) => ({
+    id: node.configuration.id,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+  }));
+}
+
+export function routeObstacles(nodes: readonly CanvasNode[]) {
+  let obstacles = obstaclesByNodes.get(nodes);
+  if (!obstacles) {
+    obstacles = buildRouteObstacles(nodes);
+    obstaclesByNodes.set(nodes, obstacles);
+  }
+  return obstacles;
+}
+
+function resolveRoute(
+  link: CanvasMaterialLink,
+  from: Point,
+  to: Point,
+  nodes: readonly CanvasNode[],
+) {
+  const obstacles = routeObstacles(nodes);
+  const route = link.route;
+  const first = route?.[0];
+  const last = route?.at(-1);
+  if (
+    route &&
+    first &&
+    last &&
+    samePoint(first, from) &&
+    samePoint(last, to) &&
+    routeIsClear(route, obstacles, link.from.nodeId, link.to.nodeId)
+  )
+    return route;
+  if (route && first && last) {
+    const delta = { x: from.x - first.x, y: from.y - first.y };
+    if (samePoint({ x: last.x + delta.x, y: last.y + delta.y }, to)) {
+      const translated = route.map(({ x, y }) => ({
+        x: x + delta.x,
+        y: y + delta.y,
+      }));
+      if (routeIsClear(translated, obstacles, link.from.nodeId, link.to.nodeId))
+        return translated;
+    }
+  }
+  const endpoint = (
+    point: Point,
+    nodeId: string,
+    fallback: "left" | "right",
+  ): RouteEndpoint => {
+    const node = nodes.find(({ configuration }) => configuration.id === nodeId);
+    const side = node
+      ? Math.abs(point.x - node.x) < 0.01
+        ? "left"
+        : "right"
+      : undefined;
+    return { point, nodeId, side: side ?? fallback };
+  };
+  return routeOrthogonally(
+    endpoint(from, link.from.nodeId, "right"),
+    endpoint(to, link.to.nodeId, "left"),
+    obstacles,
+    link.routeMode === "manual" ? route?.slice(1, -1) : undefined,
+  );
+}
+
+/** Preview geometry uses exactly the same router as completed connections. */
+export function connectionPreviewRoute(
+  document: CanvasDocument,
+  from: RouteEndpoint,
+  to: RouteEndpoint,
+) {
+  const port = (endpoint: RouteEndpoint) => {
+    const node = document.nodes.find(
+      ({ configuration }) => configuration.id === endpoint.nodeId,
+    );
+    return node
+      ? materialPortGeometry(node).find(({ point }) =>
+          samePoint(point, endpoint.point),
+        )?.port
+      : undefined;
+  };
+  const fromPort = port(from);
+  const toPort = port(to);
+  const reverse =
+    fromPort?.direction === "input" ||
+    toPort?.direction === "output" ||
+    (fromPort?.direction === "bidirectional" &&
+      toPort?.direction === "bidirectional" &&
+      ((to.nodeId ?? "").localeCompare(from.nodeId ?? "") ||
+        toPort.id.localeCompare(fromPort.id)) < 0);
+  const obstacles = routeObstacles(document.nodes);
+  return reverse
+    ? routeOrthogonally(to, from, obstacles).toReversed()
+    : routeOrthogonally(from, to, obstacles);
+}
+
+export function materialLinkPathForRoute(
+  link: CanvasMaterialLink,
+  route: ConnectionRoute,
+): MaterialLinkPath {
+  const from = route[0]!;
+  const to = route.at(-1)!;
+  const xs = route.map(({ x }) => x);
+  const ys = route.map(({ y }) => y);
+  return {
+    link,
+    route,
+    from,
+    to,
+    bounds: {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    },
+  };
+}
+
+export function materialLinkLabelPoint(path: MaterialLinkPath): Point {
+  if (!path.route) return materialLinkPoint(path, 0.5);
+  const segments = path.route
+    .slice(1)
+    .map((to, index) => ({ from: path.route![index]!, to }));
+  const horizontal = segments.filter(
+    ({ from, to }) => Math.abs(from.y - to.y) < 0.1,
+  );
+  const longest = (horizontal.length ? horizontal : segments).toSorted(
+    (a, b) =>
+      Math.hypot(b.to.x - b.from.x, b.to.y - b.from.y) -
+      Math.hypot(a.to.x - a.from.x, a.to.y - a.from.y),
+  )[0];
+  return longest
+    ? {
+        x: (longest.from.x + longest.to.x) / 2,
+        y: (longest.from.y + longest.to.y) / 2,
+      }
+    : path.from;
 }

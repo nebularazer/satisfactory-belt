@@ -1,3 +1,4 @@
+import { requestCanvasArrangement } from "@/canvas/auto-layout-request";
 import {
   lazy,
   Suspense,
@@ -163,6 +164,45 @@ function CanvasWorkspace({
       topology: initialMode === "detailed" ? "physical" : "aggregate",
     }),
   );
+  const [arranging, setArranging] = useState(false);
+  const arrangementRequest = useRef<AbortController | null>(null);
+  useEffect(() => {
+    setArranging(false);
+    return () => arrangementRequest.current?.abort();
+  }, [editor]);
+  const autoArrange = async () => {
+    if (arrangementRequest.current || !editor.getState().document.nodes.length)
+      return;
+    const controller = new AbortController();
+    arrangementRequest.current = controller;
+    setArranging(true);
+    const source = editor.getState().document;
+    try {
+      const document = await requestCanvasArrangement(
+        source,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      editor.dispatch({ type: "document.arrange", source, document });
+      if (editor.getState().document === document) {
+        canvasRef.current?.fitContent();
+      } else {
+        toast.info(
+          "The plan changed while arranging. Click Auto-arrange again.",
+        );
+      }
+    } catch (error) {
+      if (!controller.signal.aborted)
+        toast.error(
+          error instanceof Error ? error.message : "Auto-arrange failed.",
+        );
+    } finally {
+      if (arrangementRequest.current === controller) {
+        arrangementRequest.current = null;
+        setArranging(false);
+      }
+    }
+  };
   const getEditorUiState = useMemo(() => {
     const initialState = editor.getState();
     let cached = {
@@ -798,6 +838,9 @@ function CanvasWorkspace({
 
         <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-4 lg:translate-x-0">
           <CanvasControls
+            canArrange={editorState.nodeCount > 0}
+            arranging={arranging}
+            onArrange={() => void autoArrange()}
             canRedo={editorState.canRedo}
             canUndo={editorState.canUndo}
             onRedo={() => editor.dispatch({ type: "history.redo" })}

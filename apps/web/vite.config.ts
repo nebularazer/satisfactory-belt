@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     tailwindcss(),
   ],
+  // The layout engine loads on the first button click; prebundle it to avoid
+  // a development-server reload interrupting that first arrangement.
+  optimizeDeps: { include: ["elkjs/lib/elk-api.js"] },
   server: {
     host: "0.0.0.0",
   },

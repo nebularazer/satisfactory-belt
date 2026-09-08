@@ -199,9 +199,10 @@ test("shows inferred flow through a terminal Splitter", async ({ page }) => {
 
   await canvas.hover({ position: { x: 448, y: 360 } });
   await page.mouse.down();
-  await page.mouse.move(544, 392, { steps: 4 });
+  await page.mouse.move(576, 368, { steps: 4 });
   await page.mouse.up();
-  await canvas.click({ position: { x: 496, y: 376 } });
+  // Select the horizontal segment of the orthogonal connection.
+  await canvas.click({ position: { x: 496, y: 360 } });
 
   await expect(
     page.getByRole("complementary", {

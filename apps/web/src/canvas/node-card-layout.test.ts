@@ -4,26 +4,31 @@ import { nodeCardLayout, nodeCardPortY } from "./node-card-layout";
 
 describe("node card layout", () => {
   it.each([
-    ["process", 256, 256, true],
-    ["transport", 256, 256, true],
-    ["buffer", 256, 208, false],
-    ["router", 192, 176, false],
+    ["process", 256, 256, true, true],
+    ["transport", 256, 256, true, true],
+    ["buffer", 256, 208, false, true],
+    ["router", 128, 128, false, false],
   ] as const)(
     "uses the %s card hierarchy",
-    (kind, width, height, hasFooter) => {
-      expect(nodeCardLayout({ kind })).toEqual({ height, width, hasFooter });
+    (kind, width, height, hasFooter, hasHeader) => {
+      expect(nodeCardLayout({ kind })).toEqual({
+        height,
+        width,
+        hasFooter,
+        hasHeader,
+      });
     },
   );
 
   it.each([
-    [{ hasFooter: true, height: 256 }, 1, [128]],
-    [{ hasFooter: true, height: 256 }, 2, [112, 144]],
-    [{ hasFooter: true, height: 256 }, 3, [96, 128, 160]],
-    [{ hasFooter: true, height: 256 }, 4, [80, 112, 144, 176]],
-    [{ hasFooter: false, height: 176 }, 1, [112]],
-    [{ hasFooter: false, height: 176 }, 2, [96, 128]],
-    [{ hasFooter: false, height: 176 }, 3, [80, 112, 144]],
-    [{ hasFooter: false, height: 208 }, 1, [128]],
+    [{ hasHeader: true, hasFooter: true, height: 256 }, 1, [128]],
+    [{ hasHeader: true, hasFooter: true, height: 256 }, 2, [112, 144]],
+    [{ hasHeader: true, hasFooter: true, height: 256 }, 3, [96, 128, 160]],
+    [{ hasHeader: true, hasFooter: true, height: 256 }, 4, [80, 112, 144, 176]],
+    [{ hasHeader: false, hasFooter: false, height: 128 }, 1, [64]],
+    [{ hasHeader: false, hasFooter: false, height: 128 }, 2, [48, 80]],
+    [{ hasHeader: false, hasFooter: false, height: 128 }, 3, [32, 64, 96]],
+    [{ hasHeader: true, hasFooter: false, height: 208 }, 1, [128]],
   ] as const)(
     "centers %s layouts with %s half-grid port lanes",
     (layout, count, expected) => {

@@ -43,6 +43,8 @@ The canvas interaction slice supports:
 - scrolling to zoom around the pointer;
 - pinching to zoom and using two fingers to pan on touch screens;
 - zooming with the floating controls or `+` and `-`;
+- arranging Basic or Detailed factories with the magic-wand Auto-arrange button
+  beside Undo, using aligned nodes and routed connections in one undoable step;
 - resetting the view with the zoom percentage or `0`;
 - fitting every node with `1` (or an empty-canvas double-click), and fitting the selection with `2`;
 - moving selected nodes with the arrow keys, or four grid intervals with Shift + arrow;
@@ -59,6 +61,20 @@ The canvas interaction slice supports:
 The grid uses a fixed 32-unit interval and its dots are shown by default. Snap and
 the grid dots can be switched off independently in the menu without changing the
 visual scale of the canvas.
+
+Auto-arrange runs ELK in a worker and fits the result on screen. Positions and
+connection paths are saved with the plan. Rate labels appear when zoomed in or
+when a connection is selected. New connections and their previews use the same rounded right-angle style and
+route around cards without moving them. Select a connection to drag its square
+segment handles, double-click a segment (or use Add bend in the inspector) for an
+extra detour, and use Reset route to restore automatic routing. Route edits snap
+to the grid when enabled, support Escape/pointer cancellation, and form one undo
+step per completed drag. Manual bends are saved and preserved where possible
+when connected nodes move.
+
+Splitters, mergers, and pipeline junctions use headerless 128 × 128 cards with a
+muted building icon in the body, visible ports, and compact rate labels. See
+[the compact Router card design](docs/plans/compact-router-cards.md).
 
 Rendering is scheduled only when canvas state changes. Node drags update the selected
 Pixi objects transiently and commit the document once when the drag ends, while the

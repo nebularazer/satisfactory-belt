@@ -1,8 +1,18 @@
-import { Minus, Plus, Redo2, Undo2 } from "lucide-react";
+import {
+  LoaderCircle,
+  Minus,
+  Plus,
+  Redo2,
+  Undo2,
+  WandSparkles,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
 type CanvasControlsProps = {
+  canArrange: boolean;
+  arranging: boolean;
+  onArrange: () => void;
   canRedo: boolean;
   canUndo: boolean;
   onRedo: () => void;
@@ -14,6 +24,9 @@ type CanvasControlsProps = {
 };
 
 export function CanvasControls({
+  canArrange,
+  arranging,
+  onArrange,
   canRedo,
   canUndo,
   onRedo,
@@ -29,6 +42,22 @@ export function CanvasControls({
       className="flex items-center rounded-xl border border-border bg-card p-1 shadow-md"
       role="toolbar"
     >
+      <Button
+        aria-label="Auto-arrange"
+        aria-busy={arranging}
+        disabled={!canArrange || arranging}
+        onClick={onArrange}
+        size="icon-lg"
+        title={arranging ? "Arranging factory…" : "Auto-arrange factory"}
+        variant="ghost"
+      >
+        {arranging ? (
+          <LoaderCircle aria-hidden="true" className="animate-spin" />
+        ) : (
+          <WandSparkles aria-hidden="true" />
+        )}
+      </Button>
+      <div aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
       <Button
         aria-label="Undo"
         disabled={!canUndo}

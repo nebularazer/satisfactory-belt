@@ -558,6 +558,12 @@ export function detailedDocumentToEditor(
         from,
         id,
         logistics: { kind, tierId },
+        ...(document.manualConnectionIds?.includes(id)
+          ? { routeMode: "manual" as const }
+          : {}),
+        ...(document.connectionRoutes?.[id]
+          ? { route: document.connectionRoutes[id] }
+          : {}),
         to,
       }),
     ),
@@ -575,7 +581,17 @@ export function detailedDocumentFromEditor(
     assertDetailedNodeConfiguration(node.configuration);
     return { ...node, configuration: node.configuration };
   });
+  const connectionRoutes = Object.fromEntries(
+    document.materialLinks.flatMap((link) =>
+      link.route ? [[link.id, link.route]] : [],
+    ),
+  );
+  const manualConnectionIds = document.materialLinks
+    .filter((link) => link.routeMode === "manual" && link.route)
+    .map(({ id }) => id);
   const detailed: DetailedCanvasDocument = {
+    ...(manualConnectionIds.length ? { manualConnectionIds } : {}),
+    ...(Object.keys(connectionRoutes).length ? { connectionRoutes } : {}),
     connections: document.materialLinks.map(physicalConnection),
     kind: "detailed",
     nodes,

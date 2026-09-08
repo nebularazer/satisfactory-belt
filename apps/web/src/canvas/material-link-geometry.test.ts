@@ -3,41 +3,42 @@ import { describe, expect, it } from "vitest";
 import type { CanvasDocument } from "./document";
 import {
   createMaterialLinkIndex,
-  materialConnectionPreviewCurve,
+  materialLinkPath,
+  materialLinkPoint,
+  connectionPreviewRoute,
 } from "./material-link-geometry";
 import { testCanvasNode } from "./test-fixtures";
+import { modularFrameFactory } from "./modular-frame-fixture";
+import { materialPortGeometry } from "./material-port-geometry";
 
 describe("Material Link geometry", () => {
-  it("suppresses a connection preview that folds back over its source port", () => {
-    expect(
-      materialConnectionPreviewCurve({ x: 100, y: 100 }, { x: 100, y: 100 }, 1),
-    ).toBeUndefined();
-    expect(
-      materialConnectionPreviewCurve({ x: 100, y: 100 }, { x: 104, y: 100 }, 2),
-    ).toBeUndefined();
-    expect(
-      materialConnectionPreviewCurve({ x: 100, y: 100 }, { x: 110, y: 100 }, 1),
-    ).toEqual({
-      control1: { x: 105, y: 100 },
-      control2: { x: 105, y: 100 },
-    });
-  });
-
-  it("departs to the left when a connection starts at an input port", () => {
-    expect(
-      materialConnectionPreviewCurve(
-        { x: 212, y: 205 },
-        { x: 72, y: 475 },
-        1,
-        "left",
+  it("matches the final route when connecting from an input port", () => {
+    const source = modularFrameFactory(false);
+    const document = {
+      ...source,
+      nodes: source.nodes.map((node, index) =>
+        index === 1 ? { ...node, y: node.y + 96 } : node,
       ),
-    ).toEqual({
-      control1: { x: 142, y: 205 },
-      control2: { x: 142, y: 475 },
-    });
+    };
+    const link = document.materialLinks[0]!;
+    const fromNode = document.nodes.find(
+      ({ configuration }) => configuration.id === link.from.nodeId,
+    )!;
+    const toNode = document.nodes.find(
+      ({ configuration }) => configuration.id === link.to.nodeId,
+    )!;
+    const output = materialPortGeometry(fromNode).find(
+      ({ port }) => port.id === link.from.portId,
+    )!;
+    const input = materialPortGeometry(toNode).find(
+      ({ port }) => port.id === link.to.portId,
+    )!;
+    expect(
+      connectionPreviewRoute(document, input, output).toReversed(),
+    ).toEqual(materialLinkPath(document, link)!.route);
   });
 
-  it("culls by curve bounds and keeps paths crossing the viewport", () => {
+  it("culls by route bounds and keeps paths crossing the viewport", () => {
     const from = testCanvasNode("from", -500, 0);
     const to = testCanvasNode("to", 500, 0);
     const document: CanvasDocument = {
@@ -74,7 +75,11 @@ describe("Material Link geometry", () => {
       version: 4,
     };
     const index = createMaterialLinkIndex(document);
-    expect(index.hitTest({ x: 288, y: 96 }, 12)?.id).toBe("link");
-    expect(index.hitTest({ x: 288, y: 130 }, 4)).toBeUndefined();
+    const point = materialLinkPoint(
+      materialLinkPath(document, document.materialLinks[0]!)!,
+      0.4,
+    );
+    expect(index.hitTest({ x: point.x, y: point.y + 8 }, 12)?.id).toBe("link");
+    expect(index.hitTest({ x: point.x, y: point.y + 8 }, 4)).toBeUndefined();
   });
 });

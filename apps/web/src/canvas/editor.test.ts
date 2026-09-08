@@ -215,26 +215,26 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
 
     const [first, second] = editor.getState().document.nodes;
     expect(first).toMatchObject({
       configuration: { id: "node-1" },
-      height: 176,
-      width: 192,
+      height: 128,
+      width: 128,
       x: 0,
       y: 16,
     });
     expect(second).toMatchObject({
       configuration: { id: "node-2" },
-      height: 176,
-      width: 192,
+      height: 128,
+      width: 128,
       x: 304,
       y: 208,
     });
@@ -253,12 +253,12 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
 
     editor.dispatch({ type: "selection.node", additive: false, id: "node-1" });
@@ -274,7 +274,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
 
     editor.dispatch({ type: "selection.node", additive: false, id: "missing" });
@@ -294,7 +294,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({
@@ -318,7 +318,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     const document = editor.getState().document;
     const changes: Array<{ kind: string }> = [];
@@ -344,12 +344,12 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     editor.dispatch({
       type: "selection.marquee",
@@ -378,7 +378,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({ type: "selection.move.begin" });
     editor.dispatch({
@@ -398,7 +398,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({ type: "selection.copy" });
     editor.dispatch({ type: "selection.paste" });
@@ -420,7 +420,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({ type: "selection.nudge", delta: { x: 32, y: -32 } });
 
@@ -440,23 +440,23 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
 
     expect(editor.getBounds("all")).toEqual({
-      height: 368,
-      width: 496,
+      height: 320,
+      width: 432,
       x: 0,
       y: 16,
     });
     expect(editor.getBounds("selection")).toEqual({
-      height: 176,
-      width: 192,
+      height: 128,
+      width: 128,
       x: 304,
       y: 208,
     });
@@ -467,7 +467,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "document.replace",
@@ -502,6 +502,10 @@ describe("canvas editor", () => {
             height: 256,
             width: 256,
           }),
+          testCanvasNode("header-router", 0, 320, {
+            height: 176,
+            width: 192,
+          }),
           testCanvasNode("legacy-router", 320, 0, {
             height: 160,
             width: 192,
@@ -525,8 +529,9 @@ describe("canvas editor", () => {
     });
 
     expect(editor.getState().document.nodes).toMatchObject([
-      { height: 176, width: 192 },
-      { height: 176, width: 192 },
+      { height: 128, width: 128 },
+      { height: 128, width: 128 },
+      { height: 128, width: 128 },
       { height: 208, width: 256 },
       { height: 96, width: 176 },
     ]);
@@ -537,7 +542,7 @@ describe("canvas editor", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({ type: "selection.copy" });
     editor.dispatch({ type: "selection.move.begin" });
