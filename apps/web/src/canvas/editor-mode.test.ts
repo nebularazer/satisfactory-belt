@@ -31,7 +31,7 @@ describe("Basic and Detailed editor modes", () => {
       item: "Desc_Water_C",
     },
   ])(
-    "keeps manually rebuilt $medium connections within the saved plan tiers",
+    "starts manual $medium links at Mk.1 and permits upgrades beyond old conversion limits",
     ({ medium, source, sourceProcess, target, targetProcess, item }) => {
       const tiers = DEFAULT_LOGISTICS_TIERS.filter(
         (tier) => tier.id === `${medium}-mk1`,
@@ -69,6 +69,9 @@ describe("Basic and Detailed editor modes", () => {
       editor.dispatch(connection);
       editor.dispatch({ type: "link.delete", id: "manual" });
       editor.dispatch(connection);
+      expect(
+        editor.getState().document.materialLinks[0]?.logistics?.tierId,
+      ).toBe(`${medium}-mk1`);
       editor.dispatch({
         type: "link.tier",
         id: "manual",
@@ -77,44 +80,34 @@ describe("Basic and Detailed editor modes", () => {
       expect(editor.getState().connectionError).toBeUndefined();
       const detailed = detailedDocumentFromEditor(
         editor.getState().document,
-        tiers,
+        editor.logisticsTiers,
       );
-      expect(detailed.connections[0]?.tierId).toBe(`${medium}-mk1`);
+      expect(detailed.connections[0]?.tierId).toBe(`${medium}-mk2`);
       editor.dispatch({ type: "history.undo" });
-      expect(editor.getState().document.materialLinks).toEqual([]);
+      expect(
+        editor.getState().document.materialLinks[0]?.logistics?.tierId,
+      ).toBe(`${medium}-mk1`);
       editor.dispatch({ type: "history.redo" });
       expect(
-        detailedDocumentFromEditor(editor.getState().document, tiers),
+        detailedDocumentFromEditor(
+          editor.getState().document,
+          editor.logisticsTiers,
+        ),
       ).toEqual(detailed);
     },
   );
 
-  it("reports a missing transport medium without adding an invalid physical connection", () => {
-    let id = 0;
+  it("adds missing standard tiers while preserving saved custom definitions", () => {
+    const custom = {
+      id: "custom-conveyor",
+      medium: "conveyor" as const,
+      capacityPerMinute: 777,
+    };
     const editor = createCanvasEditor({
       topology: "physical",
-      logisticsTiers: [],
-      idFactory: () => `node-${++id}`,
+      logisticsTiers: [custom],
     });
-    for (const x of [0, 500])
-      editor.dispatch({
-        type: "node.create",
-        at: { x, y: 0 },
-        node: {
-          kind: "router",
-          buildableId: "Build_ConveyorAttachmentSplitter_C",
-        },
-      });
-    const document = editor.getState().document;
-    editor.dispatch({
-      type: "link.create",
-      from: { nodeId: "node-1", portId: "output:1" },
-      to: { nodeId: "node-2", portId: "input:1" },
-    });
-    expect(editor.getState().document).toBe(document);
-    expect(editor.getState().connectionError?.message).toContain(
-      "no available conveyor tier",
-    );
+    expect(editor.logisticsTiers).toEqual([custom, ...DEFAULT_LOGISTICS_TIERS]);
   });
 
   it.each([true, false])(

@@ -137,6 +137,8 @@ export function CreateDetailedDialog({ sourceName, onClose, onCreate }: Props) {
             <p className="text-muted-foreground">
               Shared conveyor supply is divided into parallel balanced lines.
               Each machine’s individual port must still fit the selected speed.
+              These limits apply only to conversion. Afterwards, new links start
+              at Mk.1 and you can choose any tier in the link inspector.
             </p>
           </fieldset>
           {error && (

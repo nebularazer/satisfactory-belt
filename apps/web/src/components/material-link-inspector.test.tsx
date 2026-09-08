@@ -53,7 +53,7 @@ function linkedEditor(
 }
 
 describe("MaterialLinkInspector", () => {
-  it("only offers the active plan's available tiers", () => {
+  it("offers every conveyor tier even for a save with old conversion limits", () => {
     const editor = linkedEditor(
       1,
       "physical",
@@ -61,7 +61,7 @@ describe("MaterialLinkInspector", () => {
     );
     render(<MaterialLinkInspector editor={editor} mode="detailed" />);
     fireEvent.click(screen.getByRole("combobox", { name: "Logistics tier" }));
-    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.getAllByRole("option")).toHaveLength(6);
     expect(
       screen.getByRole("option", { name: "MK1 · 60" }),
     ).toBeInTheDocument();
@@ -73,14 +73,14 @@ describe("MaterialLinkInspector", () => {
 
     expect(screen.getByText("Conveyor Belt")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("combobox", { name: "Logistics tier" }));
-    const option = screen.getByRole("option", { name: "MK1 · 60" });
+    const option = screen.getByRole("option", { name: "MK6 · 1,200" });
     fireEvent.pointerDown(option, { button: 0, pointerId: 1 });
     fireEvent.pointerUp(option, { button: 0, pointerId: 1 });
     fireEvent.click(option);
 
     expect(editor.getState().document.materialLinks[0]?.logistics).toEqual({
       kind: "conveyor",
-      tierId: "conveyor-mk1",
+      tierId: "conveyor-mk6",
     });
   });
 

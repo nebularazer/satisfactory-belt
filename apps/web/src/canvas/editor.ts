@@ -272,7 +272,7 @@ function defaultLogistics(
   const tier = tiers
     .filter(({ medium }) => medium === kind)
     .toSorted(
-      (left, right) => right.capacityPerMinute - left.capacityPerMinute,
+      (left, right) => left.capacityPerMinute - right.capacityPerMinute,
     )[0];
   if (!tier) throw new Error(`This plan has no available ${kind} tier.`);
   return { kind, tierId: tier.id };
@@ -363,7 +363,15 @@ export function createCanvasEditor(
   );
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const topology = options.topology ?? "aggregate";
-  const logisticsTiers = options.logisticsTiers ?? DEFAULT_LOGISTICS_TIERS;
+  // Older saves contain only the tiers selected for conversion. Editing always
+  // offers the full catalog while preserving any saved custom definitions.
+  const savedTiers = options.logisticsTiers ?? [];
+  const logisticsTiers = [
+    ...savedTiers,
+    ...DEFAULT_LOGISTICS_TIERS.filter(
+      (tier) => !savedTiers.some((saved) => saved.id === tier.id),
+    ),
+  ];
   const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: HistoryEntry[] = [];
   const future: HistoryEntry[] = [];

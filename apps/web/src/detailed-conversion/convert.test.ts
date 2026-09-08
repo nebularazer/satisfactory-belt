@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { analyzeDetailedPlan } from "@satisfactory-belt/planning";
+import {
+  analyzeDetailedPlan,
+  DEFAULT_LOGISTICS_TIERS,
+} from "@satisfactory-belt/planning";
 import { modularFrameFactory } from "@/canvas/modular-frame-fixture";
 import { convertDetailed, defaultConversionSettings } from "./convert";
 
 describe("Detailed conversion settings", () => {
-  it("persists only available tiers and reports real conversion stages", () => {
+  it("limits generated links while exposing all tiers for later editing", () => {
     const stages: string[] = [];
     const result = convertDetailed(
       modularFrameFactory(false),
@@ -16,16 +19,15 @@ describe("Detailed conversion settings", () => {
       "Building balancers",
       "Checking belts and pipes",
     ]);
-    expect(result.tiers.map((tier) => tier.id)).toEqual([
-      "conveyor-mk1",
-      "conveyor-mk2",
-      "conveyor-mk3",
-      "conveyor-mk4",
-      "pipeline-mk1",
-    ]);
+    expect(result.tiers).toEqual(DEFAULT_LOGISTICS_TIERS);
     expect(
       result.connections.every((connection) =>
-        result.tiers.some((tier) => tier.id === connection.tierId),
+        DEFAULT_LOGISTICS_TIERS.some(
+          (tier) =>
+            tier.id === connection.tierId &&
+            tier.capacityPerMinute <=
+              (connection.kind === "conveyor" ? 480 : 300),
+        ),
       ),
     ).toBe(true);
   });
