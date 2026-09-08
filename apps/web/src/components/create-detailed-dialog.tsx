@@ -135,8 +135,8 @@ export function CreateDetailedDialog({ sourceName, onClose, onCreate }: Props) {
               );
             })}
             <p className="text-muted-foreground">
-              If a belt or pipe cannot carry the required flow, you can adjust
-              these limits and try again.
+              Shared conveyor supply is divided into parallel balanced lines.
+              Each machine’s individual port must still fit the selected speed.
             </p>
           </fieldset>
           {error && (

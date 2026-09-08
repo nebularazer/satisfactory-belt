@@ -1,6 +1,7 @@
 import { createNode, findDescriptor } from "@satisfactory-belt/production";
 import {
   analyzeBasicFlows,
+  DEFAULT_LOGISTICS_TIERS,
   createBasicPlan,
   type MaterialEndpoint,
   type OperationalDiagnostic,
@@ -76,6 +77,20 @@ export function presentMaterialFlow(
     nodes: document.nodes.map(({ configuration }) => configuration),
   });
   const analysis = analyzeBasicFlows(plan, {
+    linkCapacities: new Map(
+      document.materialLinks.flatMap((link) =>
+        link.logistics?.kind === "conveyor"
+          ? [
+              [
+                link.id,
+                DEFAULT_LOGISTICS_TIERS.find(
+                  (tier) => tier.id === link.logistics!.tierId,
+                )?.capacityPerMinute ?? Infinity,
+              ] as const,
+            ]
+          : [],
+      ),
+    ),
     projectUnconnectedOutputs: !document.materialLinks.some(
       (link) => link.logistics,
     ),

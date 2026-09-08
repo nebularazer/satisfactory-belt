@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { analyzeDetailedPlan } from "@satisfactory-belt/planning";
 import { modularFrameFactory } from "@/canvas/modular-frame-fixture";
 import { convertDetailed, defaultConversionSettings } from "./convert";
 
@@ -29,14 +30,42 @@ describe("Detailed conversion settings", () => {
     ).toBe(true);
   });
 
-  it("rejects insufficient limits and invalid settings instead of ignoring them", () => {
-    expect(() =>
-      convertDetailed(
-        modularFrameFactory(false),
-        { ...defaultConversionSettings, conveyorTierId: "conveyor-mk1" },
-        () => {},
+  it("automatically separates conveyor supply and rejects invalid settings", () => {
+    const result = convertDetailed(
+      modularFrameFactory(false),
+      { ...defaultConversionSettings, conveyorTierId: "conveyor-mk1" },
+      () => {},
+    );
+    expect(
+      result.connections
+        .filter((connection) => connection.kind === "conveyor")
+        .every((connection) => connection.tierId === "conveyor-mk1"),
+    ).toBe(true);
+    const analysis = analyzeDetailedPlan(result);
+    expect(
+      Object.values(analysis.machineEfficiency).every(
+        (efficiency) => efficiency > 1 - 1e-7,
       ),
-    ).toThrow(/capacity|limit/);
+    ).toBe(true);
+    expect(
+      analysis.conveyorProfiles.every(
+        (profile) => profile.totalRatePerMinute <= 60 + 1e-7,
+      ),
+    ).toBe(true);
+    for (const node of result.nodes.filter(
+      (node) =>
+        node.configuration.buildableId === "Build_ConveyorAttachmentSplitter_C",
+    )) {
+      const outputs = result.connections.filter(
+        (edge) => edge.from.nodeId === node.configuration.id,
+      );
+      const rates = outputs.map(
+        (edge) =>
+          analysis.connectionFlows.find((flow) => flow.connectionId === edge.id)
+            ?.ratePerMinute,
+      );
+      for (const rate of rates) expect(rate).toBeCloseTo(rates[0]!, 7);
+    }
     expect(() =>
       convertDetailed(
         modularFrameFactory(false),

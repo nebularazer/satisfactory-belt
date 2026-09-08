@@ -47,17 +47,6 @@ test("creates an arranged Detailed plan through speed settings and reopens it", 
   await dialog
     .getByRole("button", { name: "Create Detailed", exact: true })
     .click();
-  await expect(dialog.getByRole("alert")).toContainText(/capacity|limit/, {
-    timeout: 15_000,
-  });
-  expect(await readSaves()).toHaveLength(1);
-  await page
-    .getByRole("combobox", { name: "Maximum conveyor speed" })
-    .selectOption("conveyor-mk4");
-  await expect(dialog.getByRole("alert")).toHaveCount(0);
-  await dialog
-    .getByRole("button", { name: "Create Detailed", exact: true })
-    .click();
   await expect(dialog.getByRole("progressbar")).toBeVisible();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
   await expect(
@@ -79,11 +68,22 @@ test("creates an arranged Detailed plan through speed settings and reopens it", 
   );
   expect(detailed.tiers.map((tier: { id: string }) => tier.id)).toEqual([
     "conveyor-mk1",
-    "conveyor-mk2",
-    "conveyor-mk3",
-    "conveyor-mk4",
     "pipeline-mk1",
   ]);
+  const flows = await page.evaluate(async (document) => {
+    const moduleUrl = "/src/canvas/material-link-presentation.ts";
+    const modeUrl = "/src/canvas/editor-mode.ts";
+    const { presentMaterialFlow } = await import(moduleUrl);
+    const { detailedDocumentToEditor } = await import(modeUrl);
+    return presentMaterialFlow(detailedDocumentToEditor(document)).links;
+  }, detailed);
+  expect(
+    flows.every(
+      (flow: { ratePerMinute: number }) =>
+        Number.isFinite(flow.ratePerMinute) && flow.ratePerMinute <= 60 + 1e-7,
+    ),
+  ).toBe(true);
+  await page.keyboard.press("1");
   await page.screenshot({ path: testInfo.outputPath("created-detailed.png") });
   await page.getByRole("button", { name: "Basic editor" }).click();
   await expect(
