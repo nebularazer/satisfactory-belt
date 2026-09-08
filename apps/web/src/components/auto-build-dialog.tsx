@@ -148,8 +148,9 @@ export function AutoBuildDialog({ itemId, onClose, onGenerate }: Props) {
             Auto-build production
           </DialogTitle>
           <DialogDescription>
-            Choose your outputs. We’ll build and arrange a Basic production
-            plan, ready to edit or expand into Detailed.
+            Choose your outputs. We’ll build and arrange a Basic production plan
+            with machine clocks at 100% or less, ready to edit or expand into
+            Detailed.
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-5" onSubmit={(event) => void submit(event)}>

@@ -12,6 +12,32 @@ const request = {
 } as const;
 
 describe("Plan generation", () => {
+  it.each([generateBasicPlan, generateDetailedPlan])(
+    "adds machines instead of overclocking and underclocks the final instance",
+    (generate) => {
+      const { plan } = generate({
+        outputs: [{ itemId: "Desc_IronPlate_C", ratePerMinute: 50 }],
+      });
+      const clocks = plan.nodes.flatMap(({ configuration }) =>
+        configuration.kind === "process" &&
+        configuration.processId === "Recipe_IronPlate_C"
+          ? configuration.instances.map((instance) =>
+              "clockSpeedPercent" in instance
+                ? instance.clockSpeedPercent
+                : undefined,
+            )
+          : [],
+      );
+      expect(clocks).toEqual([100, 100, 50]);
+      for (const { configuration } of plan.nodes) {
+        if (configuration.kind !== "process") continue;
+        for (const instance of configuration.instances)
+          if ("clockSpeedPercent" in instance)
+            expect(instance.clockSpeedPercent).toBeLessThanOrEqual(100);
+      }
+    },
+  );
+
   it("generates an independent deterministic Basic Plan", () => {
     const first = generateBasicPlan(request);
     const second = generateBasicPlan(request);

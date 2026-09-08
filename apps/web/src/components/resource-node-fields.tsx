@@ -145,7 +145,7 @@ export function ResourceNodeFields({
                         aria-label={`${resource.name} maximum clock`}
                         type="number"
                         min={1}
-                        max={250}
+                        max={100}
                         step="any"
                         required
                         value={budget.maximumClockPercent}

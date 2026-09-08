@@ -46,7 +46,7 @@ function activityChunks(activity: number) {
   const chunks: number[] = [];
   let remaining = activity;
   while (remaining > 1e-8) {
-    const chunk = Math.min(2.5, remaining);
+    const chunk = Math.min(1, remaining);
     chunks.push(chunk);
     remaining -= chunk;
   }
@@ -69,7 +69,7 @@ function processConfiguration(
   const instances = chunks.map((chunk, index) => ({
     ...base,
     ...("clockSpeedPercent" in base
-      ? { clockSpeedPercent: Math.max(1, Math.min(250, chunk * 100)) }
+      ? { clockSpeedPercent: Math.max(1, Math.min(100, chunk * 100)) }
       : {}),
     id: `${id}:instance-${index + 1}`,
   }));
@@ -101,7 +101,10 @@ function processNodes(
   return nodes;
 }
 
-function topologyFor(nodes: readonly TopologyNode[]): TopologyResult {
+function topologyFor(
+  nodes: readonly TopologyNode[],
+  mode: "basic" | "detailed",
+): TopologyResult {
   const allNodes = [...nodes];
   const connections: Array<{
     from: MaterialEndpoint;
@@ -168,6 +171,21 @@ function topologyFor(nodes: readonly TopologyNode[]): TopologyResult {
     const medium =
       findDescriptor(itemId)?.form === "solid" ? "conveyor" : "pipeline";
     if (!sources.length || !consumers.length) continue;
+
+    // Basic ports represent aggregate flows and can have multiple links. Only
+    // physical topology needs routers to collect or distribute those flows.
+    // Preserve routing for self-returning materials: the Basic model disallows
+    // a direct link from a process back to itself.
+    if (
+      mode === "basic" &&
+      !sources.some((source) =>
+        consumers.some((consumer) => consumer.nodeId === source.nodeId),
+      )
+    ) {
+      for (const source of sources)
+        for (const consumer of consumers) connect(source, consumer, itemId);
+      continue;
+    }
 
     if (medium === "conveyor") {
       while (sources.length > 1) {
@@ -252,6 +270,7 @@ export function generateBasicPlan(
   const solution = solveSteadyState(request);
   const topology = topologyFor(
     processNodes(request, solution.activities, false),
+    "basic",
   );
   const spacing = options.spacing ?? { x: 320, y: 240 };
   const nodes: BasicNode[] = topology.nodes.map((node, index) => ({
@@ -297,6 +316,7 @@ export function generateDetailedPlan(
   const solution = solveSteadyState(request);
   const topology = topologyFor(
     processNodes(request, solution.activities, true),
+    "detailed",
   );
   const tiers = allowedTiers(options);
   const connections: PhysicalConnection[] = topology.connections.map(

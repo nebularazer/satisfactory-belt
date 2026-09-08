@@ -67,9 +67,9 @@ export function resourceNodeCapacity(budget: ResourceNodeBudget) {
   if (
     !Number.isFinite(budget.maximumClockPercent) ||
     budget.maximumClockPercent < 1 ||
-    budget.maximumClockPercent > 250
+    budget.maximumClockPercent > 100
   )
-    throw new Error("Extractor clocks must be between 1% and 250%.");
+    throw new Error("Auto-build extractor clocks must be between 1% and 100%.");
   if (
     purities.some(
       (purity) =>
