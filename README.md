@@ -105,6 +105,11 @@ Basic plan again to generate the balanced version.
 In the Basic canvas, press **N**, search for a recipe, and choose **Auto-build**
 to generate a production plan for its output item. Set one or more output rates,
 allow alternative recipes, or require specific recipes for outputs and ingredients.
+Basic generation connects process groups directly, leaving physical distribution
+to Detailed conversion (self-returning materials still need a routing node because
+Basic links cannot connect a process to itself). Generated machine clocks never
+exceed 100%; larger rates add machines, with a partially used final instance
+underclocked as needed. Auto-build extractor clock budgets are also capped at 100%.
 Direct extraction supplies raw resources by default; enabled alternatives get first
 consideration among manufacturing recipes. Available resource nodes can limit each
 generated group to listed mineral and oil nodes, with extractor tiers, purity counts,

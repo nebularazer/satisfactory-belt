@@ -55,6 +55,21 @@ test("auto-builds multiple outputs with an alternative recipe and adds independe
     .toBeGreaterThan(5);
   const first = await readDocument();
   expect(
+    first.nodes.every((node: any) =>
+      node.configuration.instances.every(
+        (instance: any) =>
+          instance.clockSpeedPercent === undefined ||
+          instance.clockSpeedPercent <= 100,
+      ),
+    ),
+  ).toBe(true);
+  expect(
+    first.nodes.every(
+      (node: { configuration: { kind: string } }) =>
+        node.configuration.kind === "process",
+    ),
+  ).toBe(true);
+  expect(
     first.nodes.some(
       (node: { configuration: { buildableId: string } }) =>
         node.configuration.buildableId === "Build_Converter_C",

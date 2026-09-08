@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  analyzeBasicFlows,
+  createBasicPlan,
+} from "@satisfactory-belt/planning";
+import {
   createNode,
   findRecipe,
   searchRecipes,
@@ -33,6 +37,54 @@ const processes = (result: ReturnType<typeof generateProduction>) =>
   );
 
 describe("Auto-build production", () => {
+  it("connects Basic ingot consumers directly without generated logistics", () => {
+    const { document } = generateProduction({
+      ...settings,
+      outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 10 }],
+      pinnedRecipes: { Desc_IronScrew_C: cast.id },
+    });
+    expect(
+      document.nodes.every((node) => node.configuration.kind === "process"),
+    ).toBe(true);
+    const ingots = document.nodes.find(
+      (node) =>
+        node.configuration.kind === "process" &&
+        node.configuration.processId === "Recipe_IngotIron_C",
+    )!;
+    const branches = document.materialLinks.filter(
+      (link) => link.from.nodeId === ingots.configuration.id,
+    );
+    expect(branches).toHaveLength(3);
+    const analysis = analyzeBasicFlows(
+      createBasicPlan({
+        nodes: document.nodes,
+        materialLinks: document.materialLinks,
+      }),
+    );
+    const rates = branches
+      .map(
+        (link) =>
+          analysis.linkFlows.find((flow) => flow.linkId === link.id)!
+            .ratePerMinute,
+      )
+      .toSorted((a, b) => a! - b!);
+    expect(rates).toEqual([45, 60, 135]);
+    expect(
+      analysis.diagnostics.filter(
+        (diagnostic) => diagnostic.severity !== "info",
+      ),
+    ).toEqual([]);
+    for (const node of document.nodes) {
+      if (node.configuration.kind !== "process") continue;
+      for (const instance of node.configuration.instances)
+        if ("clockSpeedPercent" in instance)
+          expect(instance.clockSpeedPercent).toBeLessThanOrEqual(100);
+    }
+    expect(ingots.configuration).toMatchObject({
+      instances: Array.from({ length: 8 }, () => ({ clockSpeedPercent: 100 })),
+    });
+  });
+
   it("builds the requested net outputs using only standard recipes by default", () => {
     const result = generateProduction(settings);
     expect(result.document.nodes.length).toBeGreaterThan(5);
@@ -164,7 +216,7 @@ describe("Auto-build production", () => {
     expect(() =>
       productionRequest({
         ...settings,
-        resourceNodes: [{ ...budget, maximumClockPercent: 251 }],
+        resourceNodes: [{ ...budget, maximumClockPercent: 101 }],
       }),
     ).toThrow("between 1%");
     expect(() =>
