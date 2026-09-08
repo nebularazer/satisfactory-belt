@@ -1404,7 +1404,9 @@ export const InfiniteCanvas = forwardRef<
       })
       .then(() => {
         if (!active) {
-          app.destroy(true);
+          // Renderer lifetimes can overlap during mode changes or async init.
+          // Keep shared Pixi pools alive for the active renderer.
+          app.destroy({ removeView: true, releaseGlobalResources: false });
           return;
         }
 
@@ -1639,7 +1641,10 @@ export const InfiniteCanvas = forwardRef<
 
       if (appRef.current === app) {
         appRef.current = null;
-        app.destroy(true, { children: true });
+        app.destroy(
+          { removeView: true, releaseGlobalResources: false },
+          { children: true },
+        );
       }
     };
   }, [editor]);
