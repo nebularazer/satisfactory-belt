@@ -1,5 +1,85 @@
 import { expect, test } from "@playwright/test";
 
+test("converts Auto-built Modular Frames without duplicated rod feed balancers", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const generationUrl = "/src/auto-build/generate-production.ts";
+    const storageUrl = "/src/canvas/document-storage.ts";
+    const { generateProduction } = await import(generationUrl);
+    const { createIndexedDbDocumentStorage } = await import(storageUrl);
+    const { document } = generateProduction({
+      outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 10 }],
+      allowedAlternateIds: [],
+      pinnedRecipes: { Desc_IronScrew_C: "Recipe_Alternate_Screw_C" },
+    });
+    await createIndexedDbDocumentStorage().saveWorkspace(document);
+  });
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Create Detailed plan", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Maximum conveyor speed" })
+    .selectOption("conveyor-mk1");
+  await page
+    .getByRole("button", { name: "Create Detailed", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Detailed editor" }),
+  ).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
+  const readFeeds = () =>
+    page.evaluate(async () => {
+      const storageUrl = "/src/canvas/document-storage.ts";
+      const modeUrl = "/src/canvas/editor-mode.ts";
+      const flowUrl = "/src/canvas/material-link-presentation.ts";
+      const { createIndexedDbDocumentStorage } = await import(storageUrl);
+      const { detailedDocumentToEditor } = await import(modeUrl);
+      const { presentMaterialFlow } = await import(flowUrl);
+      const { document } =
+        await createIndexedDbDocumentStorage().loadWorkspace();
+      const nodes = new Map<
+        string,
+        { processId?: string; buildableId: string }
+      >(
+        document.nodes.map((node: any) => [
+          node.configuration.id,
+          node.configuration,
+        ]),
+      );
+      const flows = presentMaterialFlow(
+        detailedDocumentToEditor(document),
+      ).links;
+      return document.connections
+        .filter(
+          (edge: any) =>
+            edge.to.portId === "input:Desc_IronRod_C" &&
+            nodes.get(edge.to.nodeId)?.processId === "Recipe_ModularFrame_C",
+        )
+        .map((edge: any) => ({
+          source: nodes.get(edge.from.nodeId)?.buildableId,
+          rate: flows.find((flow: any) => flow.id === edge.id)?.ratePerMinute,
+        }));
+    });
+  const expected = Array.from({ length: 5 }, () => ({
+    source: "Build_ConveyorAttachmentSplitter_C",
+    rate: expect.closeTo(12, 7),
+  }));
+  expect(await readFeeds()).toEqual(expected);
+  await page.getByRole("application", { name: "Infinite canvas" }).press("1");
+  await page.screenshot({
+    path: testInfo.outputPath("whole-consumer-feeds.png"),
+  });
+  await page.reload();
+  expect(await readFeeds()).toEqual(expected);
+  expect(errors).toEqual([]);
+});
+
 test("creates Mk.1 manual links and upgrades beyond conversion limits before and after reload", async ({
   page,
 }) => {

@@ -94,8 +94,9 @@ trees and mergers combine those shares to meet individual machine demands,
 including different clocks, without relying on manifold backpressure. Ratios
 such as five equal destinations use a return loop; its extra throughput counts
 toward the belt capacity. Supply that exceeds one belt is automatically kept on
-parallel producer feeds. Full-belt return balancers split before recirculation,
-so their internal belts also stay within the selected tier. Conversion preserves
+parallel producer feeds. Full-belt return balancers distribute returning material
+across the first branches, keeping internal belts within the selected tier without
+duplicating and then merging half-rate consumer feeds. Conversion preserves
 machine configurations and reports genuine single-port bottlenecks: parallel
 logistics cannot add extra input or output ports to a machine. Unsupported ratios
 produce an error instead of a manifold. Pipeline junctions retain

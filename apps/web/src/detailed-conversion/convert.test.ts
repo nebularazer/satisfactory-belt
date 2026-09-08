@@ -5,8 +5,58 @@ import {
 } from "@satisfactory-belt/planning";
 import { modularFrameFactory } from "@/canvas/modular-frame-fixture";
 import { convertDetailed, defaultConversionSettings } from "./convert";
+import { generateProduction } from "@/auto-build/generate-production";
 
 describe("Detailed conversion settings", () => {
+  it.each(["conveyor-mk1", "conveyor-mk6"])(
+    "feeds Modular Frame rod inputs directly from whole balancer shares on %s",
+    (conveyorTierId) => {
+      const { document } = generateProduction({
+        outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 10 }],
+        allowedAlternateIds: [],
+        pinnedRecipes: { Desc_IronScrew_C: "Recipe_Alternate_Screw_C" },
+      });
+      const result = convertDetailed(
+        document,
+        { ...defaultConversionSettings, conveyorTierId },
+        () => {},
+      );
+      const consumers = result.nodes.filter(
+        (node) =>
+          node.configuration.kind === "process" &&
+          node.configuration.processId === "Recipe_ModularFrame_C",
+      );
+      expect(consumers).toHaveLength(5);
+      const analysis = analyzeDetailedPlan(result);
+      for (const consumer of consumers) {
+        const feed = result.connections.find(
+          (edge) =>
+            edge.to.nodeId === consumer.configuration.id &&
+            edge.to.portId === "input:Desc_IronRod_C",
+        )!;
+        expect(
+          analysis.connectionFlows.find((flow) => flow.connectionId === feed.id)
+            ?.ratePerMinute,
+        ).toBeCloseTo(12, 7);
+        expect(
+          result.nodes.find(
+            (node) => node.configuration.id === feed.from.nodeId,
+          )?.configuration.buildableId,
+        ).toBe("Build_ConveyorAttachmentSplitter_C");
+      }
+      expect(
+        Object.values(analysis.machineEfficiency).every(
+          (efficiency) => Math.abs(efficiency - 1) < 1e-7,
+        ),
+      ).toBe(true);
+      expect(
+        analysis.diagnostics.filter(
+          (diagnostic) => diagnostic.code === "detailed.connection.overload",
+        ),
+      ).toEqual([]);
+    },
+  );
+
   it("limits generated links while exposing all tiers for later editing", () => {
     const stages: string[] = [];
     const result = convertDetailed(

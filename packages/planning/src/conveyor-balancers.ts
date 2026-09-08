@@ -183,7 +183,7 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
     const totalRate = rates.reduce((sum, rate) => sum + rate, 0);
     const unitRate = totalRate / count;
     tierFor(totalRate);
-    const parallel =
+    const distributeFeedback =
       slots * unitRate > (tiers.at(-1)?.capacityPerMinute ?? 0) + 1e-7;
     const itemId = flowById.get(leaves[0]!.id)?.itemId;
     const original = nodes.get(rootId)!;
@@ -240,67 +240,77 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
       }
       return inputs[0]!;
     };
-    const combined: Share[][] = Array.from({ length: leaves.length }, () => []);
     addRouter(SPLITTER, rootId);
     nodes.set(rootId, {
       ...original,
       configuration: nodes.get(rootId)!.configuration,
     });
-    const buildLane = (
-      laneRoot: string,
-      ratePerSlot: number,
-      feed?: MaterialEndpoint,
-    ) => {
-      const shares: Share[][] = Array.from(
-        { length: leaves.length + 1 },
-        () => [],
-      );
-      const boundaries: number[] = [];
-      let end = 0;
-      for (const weight of [...weights, slots - count]) {
-        end += weight;
-        boundaries.push(end);
-      }
-      const targetAt = (slot: number) =>
-        boundaries.findIndex((boundary) => slot < boundary);
-      const split = (start: number, length: number, id: string) => {
-        const arity = length % 3 === 0 ? 3 : 2;
-        const size = length / arity;
-        for (let index = 0; index < arity; index++) {
-          const offset = start + index * size;
-          const endpoint = { nodeId: id, portId: `output:${index + 1}` };
-          const target = targetAt(offset);
-          if (target === targetAt(offset + size - 1))
-            shares[target]!.push({ endpoint, rate: size * ratePerSlot });
-          else {
-            const child = addRouter(SPLITTER);
-            connect(
-              endpoint,
-              { nodeId: child, portId: "input:1" },
-              size * ratePerSlot,
-            );
-            split(offset, size, child);
-          }
-        }
-      };
-      split(0, slots, laneRoot);
-      leaves.forEach((_, index) => combined[index]!.push(...shares[index]!));
-      if (slots > count) {
-        const feedback = merge(shares[leaves.length]!);
-        const inlet = addRouter(MERGER);
-        if (feed)
+    const shares: Share[][] = Array.from(
+      { length: leaves.length + 1 },
+      () => [],
+    );
+    const boundaries: number[] = [];
+    let end = 0;
+    for (const weight of [...weights, slots - count]) {
+      end += weight;
+      boundaries.push(end);
+    }
+    const targetAt = (slot: number) =>
+      boundaries.findIndex((boundary) => slot < boundary);
+    // When circulating flow exceeds one belt, share the return across the
+    // first branches. Each subtree still supplies whole destination shares;
+    // duplicating complete balancers would require merging half-rate outputs.
+    const returnSplitter = distributeFeedback ? addRouter(SPLITTER) : undefined;
+    const split = (start: number, length: number, id: string) => {
+      const arity = length % 3 === 0 ? 3 : 2;
+      const size = length / arity;
+      for (let index = 0; index < arity; index++) {
+        const offset = start + index * size;
+        let endpoint = { nodeId: id, portId: `output:${index + 1}` };
+        if (id === rootId && returnSplitter) {
+          const inlet = addRouter(MERGER);
           connect(
-            feed,
+            endpoint,
             { nodeId: inlet, portId: "input:1" },
-            count * ratePerSlot,
+            totalRate / arity,
           );
-        else {
-          const input = incoming.get(rootId)![0]!;
-          connections.set(input.id, {
-            ...connections.get(input.id)!,
-            to: { nodeId: inlet, portId: "input:1" },
-          });
+          connect(
+            { nodeId: returnSplitter, portId: `output:${index + 1}` },
+            { nodeId: inlet, portId: "input:2" },
+            ((slots - count) * unitRate) / arity,
+          );
+          endpoint = { nodeId: inlet, portId: "output:1" };
         }
+        const target = targetAt(offset);
+        if (target === targetAt(offset + size - 1))
+          shares[target]!.push({ endpoint, rate: size * unitRate });
+        else {
+          const child = addRouter(SPLITTER);
+          connect(
+            endpoint,
+            { nodeId: child, portId: "input:1" },
+            size * unitRate,
+          );
+          split(offset, size, child);
+        }
+      }
+    };
+    split(0, slots, rootId);
+    if (slots > count) {
+      const feedback = merge(shares[leaves.length]!);
+      if (returnSplitter) {
+        connect(
+          feedback.endpoint,
+          { nodeId: returnSplitter, portId: "input:1" },
+          feedback.rate,
+        );
+      } else {
+        const inlet = addRouter(MERGER);
+        const input = incoming.get(rootId)![0]!;
+        connections.set(input.id, {
+          ...connections.get(input.id)!,
+          to: { nodeId: inlet, portId: "input:1" },
+        });
         connect(
           feedback.endpoint,
           { nodeId: inlet, portId: "input:2" },
@@ -308,27 +318,13 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
         );
         connect(
           { nodeId: inlet, portId: "output:1" },
-          { nodeId: laneRoot, portId: "input:1" },
-          slots * ratePerSlot,
+          { nodeId: rootId, portId: "input:1" },
+          slots * unitRate,
         );
-      } else if (feed)
-        connect(
-          feed,
-          { nodeId: laneRoot, portId: "input:1" },
-          count * ratePerSlot,
-        );
-    };
-    // A full belt can still feed a feedback balancer: split before adding the
-    // returned shares, then recombine each destination's two equal allocations.
-    if (parallel) {
-      for (let index = 1; index <= 2; index++)
-        buildLane(addRouter(SPLITTER), unitRate / 2, {
-          nodeId: rootId,
-          portId: `output:${index}`,
-        });
-    } else buildLane(rootId, unitRate);
+      }
+    }
     leaves.forEach((leaf, index) => {
-      const share = merge(combined[index]!);
+      const share = merge(shares[index]!);
       connections.set(leaf.id, {
         ...connections.get(leaf.id)!,
         from: share.endpoint,
