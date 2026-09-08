@@ -1,3 +1,4 @@
+import { routeHandles } from "./route-editing";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createCanvasEditor } from "./editor";
@@ -704,25 +705,25 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     editor.dispatch({ type: "selection.clear" });
 
-    pointer("pointerdown", 20, 80);
-    pointer("pointerup", 20, 80);
+    pointer("pointerdown", 60, 80);
+    pointer("pointerup", 60, 80);
     expect(editor.getState().selectedIds).toEqual(["node-1"]);
 
     pointer("pointerdown", 340, 280, { ctrlKey: true });
     pointer("pointerup", 340, 280, { ctrlKey: true });
     expect(editor.getState().selectedIds).toEqual(["node-1", "node-2"]);
 
-    pointer("pointerdown", 20, 80, { metaKey: true });
-    pointer("pointerup", 20, 80, { metaKey: true });
+    pointer("pointerdown", 60, 80, { metaKey: true });
+    pointer("pointerup", 60, 80, { metaKey: true });
     expect(editor.getState().selectedIds).toEqual(["node-2"]);
   });
 
@@ -731,7 +732,7 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
 
     pointer("pointerdown", 500, 500);
@@ -751,18 +752,18 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     const original = editor.getState().document;
 
-    pointer("pointerdown", 20, 80);
-    pointer("pointermove", 50, 100);
-    pointer("pointerup", 50, 100);
+    pointer("pointerdown", 60, 80);
+    pointer("pointermove", 90, 100);
+    pointer("pointerup", 90, 100);
 
     expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
     expect(editor.getState().selectedIds).toEqual(["node-1"]);
@@ -775,7 +776,7 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     const original = editor.getState().document.nodes[0];
 
@@ -798,7 +799,7 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
 
     pointer("pointerdown", 160, 190);
@@ -813,10 +814,10 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
 
-    pointer("pointerdown", 20, 80);
+    pointer("pointerdown", 60, 80);
     pointer("pointermove", 995, 400);
 
     expect(viewport().x).toBeLessThan(0);
@@ -829,7 +830,7 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
 
     pointer("pointerdown", 140, 210);
@@ -846,12 +847,12 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     editor.dispatch({ type: "selection.clear" });
 
@@ -871,12 +872,12 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     editor.dispatch({ type: "selection.node", additive: false, id: "node-2" });
 
@@ -956,7 +957,7 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     const original = editor.getState().document.nodes[0];
 
@@ -1002,7 +1003,7 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     key("ArrowRight");
     expect(editor.getState().document.nodes[0]?.x).toBe(16);
@@ -1028,16 +1029,16 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({ type: "selection.clear" });
     const original = editor.getState().document.nodes[0];
 
-    pointer("pointerdown", 20, 80, {
+    pointer("pointerdown", 60, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
-    pointer("pointermove", 26, 86, {
+    pointer("pointermove", 66, 86, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -1045,7 +1046,7 @@ describe("canvas interactions", () => {
     expect(editor.getState().selectedIds).toEqual([]);
     expect(editor.getState().document.nodes[0]).toEqual(original);
 
-    pointer("pointerup", 26, 86, {
+    pointer("pointerup", 66, 86, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -1057,14 +1058,14 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
 
-    pointer("pointerdown", 20, 80, {
+    pointer("pointerdown", 60, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
-    pointer("pointermove", 40, 100, {
+    pointer("pointermove", 80, 100, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -1072,7 +1073,7 @@ describe("canvas interactions", () => {
     expect(editor.getState().selectedIds).toEqual(["node-1"]);
     expect(editor.getState().moveDelta).toEqual({ x: 20, y: 20 });
 
-    pointer("pointerup", 40, 100, {
+    pointer("pointerup", 80, 100, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -1084,24 +1085,24 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     const original = editor.getState().document;
 
-    pointer("pointerdown", 20, 80, {
+    pointer("pointerdown", 60, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
-    pointer("pointermove", 40, 100, {
+    pointer("pointermove", 80, 100, {
       pointerId: 1,
       pointerType: "touch",
     });
-    pointer("pointerup", 40, 100, {
+    pointer("pointerup", 80, 100, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -1112,17 +1113,17 @@ describe("canvas interactions", () => {
     expect(editor.getState().document.nodes[0]).toMatchObject({ x: 24, y: 32 });
   });
 
-  it("moves when a single-touch drag starts on an unselected node header", () => {
+  it("moves when a single-touch drag starts on an unselected node upper body", () => {
     const { editor, pointer, viewport } = createHarness({ snapToGrid: false });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     const original = editor.getState().document;
 
@@ -1150,16 +1151,16 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     const original = editor.getState().document;
 
-    pointer("pointerdown", 20, 80, {
+    pointer("pointerdown", 60, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -1173,7 +1174,7 @@ describe("canvas interactions", () => {
       pointerId: 2,
       pointerType: "touch",
     });
-    pointer("pointerup", 20, 80, {
+    pointer("pointerup", 60, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
@@ -1192,12 +1193,12 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
     editor.dispatch({ type: "selection.node", additive: false, id: "node-1" });
     const original = editor.getState().document;
@@ -1238,23 +1239,83 @@ describe("canvas interactions", () => {
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 100, y: 100 },
+      at: { x: 68, y: 76 },
     });
     editor.dispatch({
       type: "node.create",
       node: TEST_NODE_TEMPLATE,
-      at: { x: 400, y: 300 },
+      at: { x: 368, y: 276 },
     });
 
-    pointer("pointerdown", 20, 80, {
+    pointer("pointerdown", 60, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
-    pointer("pointercancel", 20, 80, {
+    pointer("pointercancel", 60, 80, {
       pointerId: 1,
       pointerType: "touch",
     });
 
     expect(editor.getState().selectedIds).toEqual(["node-2"]);
   });
+});
+
+describe("connection segment interactions", () => {
+  it("drags a selected segment as one undoable change", () => {
+    const { editor, pointer } = createHarness({ snapToGrid: false });
+    createIronPair(editor);
+    connectIronPair(editor);
+    const before = editor.getState().document;
+    const path = materialLinkPath(before, before.materialLinks[0]!)!;
+    const handle = routeHandles(path.route!)[0]!;
+    editor.dispatch({
+      type: "selection.link",
+      id: "ore-link",
+      additive: false,
+    });
+    pointer("pointerdown", handle.point.x, handle.point.y);
+    pointer("pointermove", handle.point.x, handle.point.y + 48);
+    expect(editor.getState().document).toBe(before);
+    expect(editor.getState().routeEdit?.valid).toBe(true);
+    pointer("pointerup", handle.point.x, handle.point.y + 48);
+    expect(editor.getState().routeEdit).toBeUndefined();
+    expect(editor.getState().document.materialLinks[0]!.routeMode).toBe(
+      "manual",
+    );
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document).toEqual(before);
+  });
+
+  it.each(["escape", "pointercancel", "pinch"])(
+    "cancels a segment edit on %s",
+    (cancel) => {
+      const { editor, pointer, key } = createHarness({ snapToGrid: false });
+      createIronPair(editor);
+      connectIronPair(editor);
+      const before = editor.getState().document;
+      const handle = routeHandles(
+        materialLinkPath(before, before.materialLinks[0]!)!.route!,
+      )[0]!;
+      editor.dispatch({
+        type: "selection.link",
+        id: "ore-link",
+        additive: false,
+      });
+      const pointerType = cancel === "pinch" ? "touch" : "mouse";
+      pointer("pointerdown", handle.point.x, handle.point.y, { pointerType });
+      pointer("pointermove", handle.point.x, handle.point.y + 48, {
+        pointerType,
+      });
+      if (cancel === "escape") key("Escape");
+      else if (cancel === "pointercancel")
+        pointer("pointercancel", handle.point.x, handle.point.y + 48);
+      else
+        pointer("pointerdown", 800, 500, {
+          pointerType: "touch",
+          pointerId: 2,
+        });
+      expect(editor.getState().routeEdit).toBeUndefined();
+      expect(editor.getState().document).toBe(before);
+    },
+  );
 });

@@ -1,4 +1,11 @@
-import { ArrowRight, TriangleAlert, Trash2, X } from "lucide-react";
+import {
+  ArrowRight,
+  CornerDownRight,
+  RotateCcw,
+  TriangleAlert,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { DEFAULT_LOGISTICS_TIERS } from "@satisfactory-belt/planning";
 
@@ -142,6 +149,40 @@ export function MaterialLinkInspector({
             </Select>
           </div>
         )}
+
+        <div className="mb-4 space-y-2 rounded-lg border border-border p-3">
+          <div className="text-xs font-medium">Connection path</div>
+          <p className="text-xs text-muted-foreground">
+            Drag the square handles to move a segment. Double-click a line to
+            add a bend.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={() =>
+                editor.dispatch({ type: "link.route.bend", id: link.id })
+              }
+              variant="outline"
+            >
+              <CornerDownRight aria-hidden="true" />
+              Add bend
+            </Button>
+            <Button
+              onClick={() =>
+                editor.dispatch({ type: "link.route.reset", id: link.id })
+              }
+              variant="outline"
+              disabled={!documentLink?.route}
+            >
+              <RotateCcw aria-hidden="true" />
+              Reset route
+            </Button>
+          </div>
+          {state.routeEdit?.id === link.id && !state.routeEdit.valid && (
+            <p className="text-xs text-destructive" role="status">
+              Move the segment clear of the nodes.
+            </p>
+          )}
+        </div>
 
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-xs">
           <div className="min-w-0 rounded-md bg-muted/35 p-2">

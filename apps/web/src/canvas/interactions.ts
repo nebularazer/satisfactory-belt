@@ -1,3 +1,5 @@
+import { materialLinkPath } from "./material-link-geometry";
+import { routeHandles } from "./route-editing";
 import type { MaterialEndpoint } from "@satisfactory-belt/planning";
 
 import {
@@ -21,6 +23,13 @@ type ConnectionIntent = Readonly<{
 }>;
 
 type Interaction =
+  | {
+      kind: "route";
+      pointerId: number;
+      startScreen: Point;
+      moved: boolean;
+      axis: "x" | "y";
+    }
   | (ConnectionIntent & {
       current: Point;
       dropOnEmpty: boolean;
@@ -248,8 +257,39 @@ export function attachCanvasInteractions(
     };
   };
 
+  const hitRouteHandle = (point: Point, radius: number) => {
+    const state = editor.getState();
+    if (state.selectedLinkIds.length !== 1) return undefined;
+    const link = state.document.materialLinks.find(
+      ({ id }) => id === state.selectedLinkIds[0],
+    );
+    const path = link ? materialLinkPath(state.document, link) : undefined;
+    return path?.route
+      ? routeHandles(path.route, host.getViewport().zoom)
+          .map((handle) => ({
+            ...handle,
+            id: link!.id,
+            distance: Math.hypot(
+              point.x - handle.point.x,
+              point.y - handle.point.y,
+            ),
+          }))
+          .filter(({ distance }) => distance <= radius)
+          .toSorted((a, b) => a.distance - b.distance)[0]
+      : undefined;
+  };
+
   const finishInteraction = (event: PointerEvent, cancelled = false) => {
     if (!interaction || interaction.pointerId !== event.pointerId) return;
+
+    if (interaction.kind === "route") {
+      editor.dispatch({
+        type:
+          cancelled || !interaction.moved
+            ? "link.route.cancel"
+            : "link.route.commit",
+      });
+    }
 
     if (interaction.kind === "move") {
       if (interaction.started) {
@@ -391,6 +431,8 @@ export function attachCanvasInteractions(
           }
           restoreSelection(interaction.selectionBefore);
         }
+        if (interaction?.kind === "route")
+          editor.dispatch({ type: "link.route.cancel" });
         if (interaction?.kind === "select") {
           host.setMarquee();
           restoreSelection(interaction.baseIds);
@@ -420,6 +462,32 @@ export function attachCanvasInteractions(
       host.placeNode(worldPoint);
       releasePointer(event.pointerId);
       canvas.dataset.cursor = "grab";
+      return;
+    }
+
+    const routeHandle =
+      !selectionModifier && !hitPort && !hit
+        ? hitRouteHandle(
+            worldPoint,
+            (coarsePointer ? 24 : 12) / host.getViewport().zoom,
+          )
+        : undefined;
+    if (routeHandle) {
+      interaction = {
+        kind: "route",
+        pointerId: event.pointerId,
+        startScreen: screen,
+        moved: false,
+        axis: routeHandle.axis,
+      };
+      editor.dispatch({
+        type: "link.route.begin",
+        id: routeHandle.id,
+        route: routeHandle.route,
+        segment: routeHandle.index,
+      });
+      canvas.dataset.cursor =
+        routeHandle.axis === "x" ? "ew-resize" : "ns-resize";
       return;
     }
 
@@ -656,23 +724,54 @@ export function attachCanvasInteractions(
             editor.getState().selectedLinkIds,
           )
         : undefined;
-      canvas.dataset.cursor = host.isPlacementActive()
-        ? "crosshair"
-        : selectionModifier
-          ? "crosshair"
-          : hoverPort
-            ? occupiedPort
-              ? "pointer"
-              : "crosshair"
-            : editor.hitTestLink(
-                  worldPoint,
-                  (event.pointerType === "touch" ? 24 : 12) /
-                    host.getViewport().zoom,
-                )
-              ? "pointer"
-              : editor.hitTest(worldPoint)
-                ? "move"
-                : "grab";
+      const routeHandle = !hoverPort
+        ? hitRouteHandle(
+            worldPoint,
+            (event.pointerType === "touch" ? 24 : 12) / host.getViewport().zoom,
+          )
+        : undefined;
+      canvas.dataset.cursor =
+        routeHandle && !selectionModifier && !host.isPlacementActive()
+          ? routeHandle.axis === "x"
+            ? "ew-resize"
+            : "ns-resize"
+          : host.isPlacementActive()
+            ? "crosshair"
+            : selectionModifier
+              ? "crosshair"
+              : hoverPort
+                ? occupiedPort
+                  ? "pointer"
+                  : "crosshair"
+                : editor.hitTestLink(
+                      worldPoint,
+                      (event.pointerType === "touch" ? 24 : 12) /
+                        host.getViewport().zoom,
+                    )
+                  ? "pointer"
+                  : editor.hitTest(worldPoint)
+                    ? "move"
+                    : "grab";
+      return;
+    }
+
+    if (interaction.kind === "route") {
+      if (
+        !interaction.moved &&
+        !passedDragThreshold(interaction.startScreen, screen, event.pointerType)
+      )
+        return;
+      interaction.moved = true;
+      editor.dispatch({
+        type: "link.route.update",
+        at: screenToWorld(screen, host.getViewport()),
+      });
+      canvas.dataset.cursor =
+        editor.getState().routeEdit?.valid === false
+          ? "not-allowed"
+          : interaction.axis === "x"
+            ? "ew-resize"
+            : "ns-resize";
       return;
     }
 
@@ -870,6 +969,42 @@ export function attachCanvasInteractions(
     if (event.button !== 0) return;
     const screen = screenPoint(event);
     const worldPoint = screenToWorld(screen, host.getViewport());
+    const link = editor.hitTestLink(worldPoint, 12 / host.getViewport().zoom);
+    if (
+      link &&
+      !editor.hitTestPort(worldPoint, 12 / host.getViewport().zoom) &&
+      !editor.hitTest(worldPoint)
+    ) {
+      const path = materialLinkPath(editor.getState().document, link);
+      const handle = path?.route
+        ? routeHandles(path.route).toSorted((a, b) => {
+            const distance = (handle: typeof a) => {
+              const from = handle.route[handle.index]!;
+              const to = handle.route[handle.index + 1]!;
+              return Math.hypot(
+                worldPoint.x -
+                  Math.max(
+                    Math.min(from.x, to.x),
+                    Math.min(Math.max(from.x, to.x), worldPoint.x),
+                  ),
+                worldPoint.y -
+                  Math.max(
+                    Math.min(from.y, to.y),
+                    Math.min(Math.max(from.y, to.y), worldPoint.y),
+                  ),
+              );
+            };
+            return distance(a) - distance(b);
+          })[0]
+        : undefined;
+      if (handle)
+        editor.dispatch({
+          type: "link.route.bend",
+          id: link.id,
+          segment: handle.index,
+        });
+      return;
+    }
     if (
       !editor.hitTest(worldPoint) &&
       !editor.hitTestPort(worldPoint, 12 / host.getViewport().zoom) &&
@@ -921,6 +1056,8 @@ export function attachCanvasInteractions(
       editor.dispatch({ type: "selection.delete" });
     } else if (event.key === "Escape") {
       event.preventDefault();
+      if (interaction?.kind === "route")
+        editor.dispatch({ type: "link.route.cancel" });
       if (interaction?.kind === "move") {
         editor.dispatch({ type: "selection.move.cancel" });
       }
@@ -1023,6 +1160,8 @@ export function attachCanvasInteractions(
   window.addEventListener("keyup", keyUp);
 
   return () => {
+    if (interaction?.kind === "route")
+      editor.dispatch({ type: "link.route.cancel" });
     if (interaction?.kind === "move") {
       editor.dispatch({ type: "selection.move.cancel" });
     }

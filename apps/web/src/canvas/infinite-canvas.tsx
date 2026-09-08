@@ -1,3 +1,4 @@
+import { routeHandles } from "./route-editing";
 import {
   Application,
   Assets,
@@ -55,9 +56,10 @@ import { createRenderScheduler } from "./render-scheduler";
 import { resolveResponsiveImage } from "./responsive-image-cache";
 import { createTextureCache } from "./texture-cache";
 import {
-  materialConnectionPreviewCurve,
+  connectionPreviewRoute,
+  materialLinkPathForRoute,
   materialLinkPath,
-  materialLinkPoint,
+  materialLinkLabelPoint,
 } from "./material-link-geometry";
 import {
   presentMaterialFlow,
@@ -338,6 +340,7 @@ function updateMaterialVisual(
   requestImage: RequestImage,
 ) {
   const y = nodeCardPortY(layout, index, count);
+  const compact = !layout.hasHeader;
   const visible = material !== undefined;
   display.image.visible = false;
   display.multipleIcon.visible = false;
@@ -346,9 +349,9 @@ function updateMaterialVisual(
     visible && (material?.rate !== undefined || (material?.ruleCount ?? 0) > 1);
   if (!visible || !material) return;
 
-  if ((material.ruleCount ?? 0) > 1) {
+  if (!compact && (material.ruleCount ?? 0) > 1) {
     display.multipleIcon.visible = true;
-  } else {
+  } else if (!compact) {
     const { displayUrl = "", requestedUrl = "" } = resolveResponsiveImage(
       material.image,
       ITEM_IMAGE_SIZE * imageScale,
@@ -377,8 +380,11 @@ function updateMaterialVisual(
   display.multipleIcon.tint = dark ? 0xa1a1aa : 0x71717a;
   display.multipleIcon.alpha = contentAlpha;
   display.rate.anchor.set(side === "left" ? 0 : 1, 0.5);
-  display.rate.position.set(side === "left" ? 46 : cardWidth - 46, y);
-  display.rate.text = material.rate ?? `${material.ruleCount ?? ""}`;
+  const rateInset = compact ? 18 : 46;
+  display.rate.position.set(
+    side === "left" ? rateInset : cardWidth - rateInset,
+    y,
+  );
   display.rate.alpha = 1;
   display.rate.style = {
     fill: material.connected
@@ -392,6 +398,9 @@ function updateMaterialVisual(
     fontSize: 12,
     fontWeight: "400",
   };
+  const rate = material.rate ?? `${material.ruleCount ?? ""}`;
+  if (compact) fitText(display.rate, rate, cardWidth / 2 - rateInset - 4);
+  else display.rate.text = rate;
   updateTextResolution(display.rate, textResolution);
 
   const center = statusColor(material.status);
@@ -478,7 +487,7 @@ function updateNodeVisual(
     imageScaleTier,
   );
   const layout = nodeCardLayout(node.configuration);
-  const cardVisualKey = `${dark}:${selected}:${selected ? zoom : ""}:${node.width}:${node.height}:${layout.hasFooter}`;
+  const cardVisualKey = `${dark}:${selected}:${selected ? zoom : ""}:${node.width}:${node.height}:${layout.hasHeader}:${layout.hasFooter}`;
   if (display.cardVisualKey !== cardVisualKey) {
     const body = dark ? 0x18181b : 0xffffff;
     const chrome = dark ? 0x242427 : 0xfafafa;
@@ -490,11 +499,14 @@ function updateNodeVisual(
     const card = display.card
       .clear()
       .roundRect(0, 0, node.width, node.height, 12)
-      .fill({ color: body })
-      .roundRect(0, 0, node.width, NODE_CARD_HEADER_HEIGHT, 12)
-      .fill({ color: chrome })
-      .rect(0, 12, node.width, NODE_CARD_HEADER_HEIGHT - 12)
-      .fill({ color: chrome });
+      .fill({ color: body });
+    if (layout.hasHeader) {
+      card
+        .roundRect(0, 0, node.width, NODE_CARD_HEADER_HEIGHT, 12)
+        .fill({ color: chrome })
+        .rect(0, 12, node.width, NODE_CARD_HEADER_HEIGHT - 12)
+        .fill({ color: chrome });
+    }
     if (layout.hasFooter) {
       card
         .roundRect(
@@ -513,9 +525,11 @@ function updateNodeVisual(
         )
         .fill({ color: chrome });
     }
-    card
-      .moveTo(0, NODE_CARD_HEADER_HEIGHT)
-      .lineTo(node.width, NODE_CARD_HEADER_HEIGHT);
+    if (layout.hasHeader) {
+      card
+        .moveTo(0, NODE_CARD_HEADER_HEIGHT)
+        .lineTo(node.width, NODE_CARD_HEADER_HEIGHT);
+    }
     if (layout.hasFooter) {
       card
         .moveTo(0, node.height - NODE_CARD_FOOTER_HEIGHT)
@@ -542,22 +556,29 @@ function updateNodeVisual(
   };
   const titleWidth = Math.max(40, node.width - 88);
   fitText(display.title, model.title, titleWidth);
+  display.title.visible = layout.hasHeader;
   display.title.position.y = model.subtitle ? 6 : 14;
-  display.subtitle.visible = model.subtitle !== undefined;
+  display.subtitle.visible = layout.hasHeader && model.subtitle !== undefined;
   fitText(display.subtitle, model.subtitle ?? "", titleWidth);
 
+  const machineImageSize = layout.hasHeader ? MACHINE_IMAGE_SIZE : 64;
   const { displayUrl = "", requestedUrl = "" } = resolveResponsiveImage(
     model.buildableImage,
-    MACHINE_IMAGE_SIZE * imageScale,
+    machineImageSize * imageScale,
     (imageUrl) => Assets.cache.has(imageUrl),
   );
   const machineTexture = displayUrl ? cachedTexture(displayUrl) : undefined;
   if (display.machineImageVisualKey !== displayUrl) {
     display.machineImage.texture = machineTexture ?? Texture.EMPTY;
-    display.machineImage.setSize(MACHINE_IMAGE_SIZE, MACHINE_IMAGE_SIZE);
     display.machineImage.visible = Boolean(machineTexture);
     display.machineImageVisualKey = displayUrl;
   }
+  display.machineImage.setSize(machineImageSize, machineImageSize);
+  display.machineImage.position.set(
+    layout.hasHeader ? 36 : node.width / 2,
+    layout.hasHeader ? 24 : node.height / 2,
+  );
+  display.machineImage.alpha = layout.hasHeader ? 1 : dark ? 0.3 : 0.18;
   if (requestedUrl && requestedUrl !== displayUrl) {
     requestImage(requestedUrl, "high");
   }
@@ -993,6 +1014,10 @@ function drawMaterialLinks(
           links.findIndex(({ id }) => id === link.id) === index,
       )
     : visibleLinks;
+  const getPath = (link: CanvasMaterialLink) =>
+    state.routeEdit?.id === link.id
+      ? materialLinkPathForRoute(link, state.routeEdit.route)
+      : materialLinkPath(effectiveDocument, link);
   const presentations = new Map(
     presentMaterialLinks(state.document).map((presentation) => [
       presentation.id,
@@ -1001,50 +1026,34 @@ function drawMaterialLinks(
   );
   for (const link of candidates) {
     if (link.id === preview?.replacingLinkId) continue;
-    const path = materialLinkPath(effectiveDocument, link);
+    const path = getPath(link);
     const presentation = presentations.get(link.id);
     if (!path || !presentation) continue;
     const isSelected = selected.has(link.id);
     if (isSelected) {
-      graphics
-        .moveTo(path.from.x, path.from.y)
-        .bezierCurveTo(
-          path.control1.x,
-          path.control1.y,
-          path.control2.x,
-          path.control2.y,
-          path.to.x,
-          path.to.y,
-        )
-        .stroke({
-          alpha: 0.7,
-          color: BLUEPRINT_COLORS.selected,
-          width: 7 / zoom,
-        });
-    }
-    graphics
-      .moveTo(path.from.x, path.from.y)
-      .bezierCurveTo(
-        path.control1.x,
-        path.control1.y,
-        path.control2.x,
-        path.control2.y,
-        path.to.x,
-        path.to.y,
-      )
-      .stroke({
-        alpha: isSelected ? 1 : 0.88,
-        color: materialFlowCanvasColor(presentation.state, dark),
-        width: (isSelected ? 4 : 3) / zoom,
+      drawMaterialPath(graphics, path).stroke({
+        alpha: 0.7,
+        color: BLUEPRINT_COLORS.selected,
+        width: 7 / zoom,
       });
+    }
+    drawMaterialPath(graphics, path).stroke({
+      alpha: isSelected ? 1 : 0.88,
+      color:
+        state.routeEdit?.id === link.id && !state.routeEdit.valid
+          ? BLUEPRINT_COLORS.warning
+          : materialFlowCanvasColor(presentation.state, dark),
+      width: (isSelected ? 4 : 3) / zoom,
+    });
   }
 
   for (const link of visibleLinks) {
     if (link.id === preview?.replacingLinkId) continue;
-    const path = materialLinkPath(effectiveDocument, link);
+    const path = getPath(link);
     const presentation = presentations.get(link.id);
     if (!path || !presentation) continue;
-    const position = materialLinkPoint(path, 0.5);
+    if (path.route && zoom < 0.45 && !selected.has(link.id)) continue;
+    const position = materialLinkLabelPoint(path);
     const label = new Container();
     const stateColor = materialFlowCanvasColor(presentation.state, dark);
     const text = new Text({
@@ -1060,11 +1069,39 @@ function drawMaterialLinks(
     text.anchor.set(0.5);
     label.addChild(text);
     label.eventMode = "none";
-    label.position.set(position.x, position.y);
+    label.position.set(
+      position.x,
+      position.y - (selected.has(link.id) ? 16 / zoom : 0),
+    );
     label.scale.set(1 / zoom);
     labelLayer.addChild(label);
   }
 
+  if (selected.size === 1 && !preview) {
+    const link = effectiveDocument.materialLinks.find(({ id }) =>
+      selected.has(id),
+    );
+    const path = link ? getPath(link) : undefined;
+    if (path?.route)
+      for (const handle of routeHandles(path.route, zoom)) {
+        previewGraphics
+          .roundRect(
+            handle.point.x - 5 / zoom,
+            handle.point.y - 5 / zoom,
+            10 / zoom,
+            10 / zoom,
+            2 / zoom,
+          )
+          .fill({ color: dark ? 0x111216 : 0xffffff })
+          .stroke({
+            color:
+              state.routeEdit?.valid === false
+                ? BLUEPRINT_COLORS.warning
+                : BLUEPRINT_COLORS.selected,
+            width: 2 / zoom,
+          });
+      }
+  }
   if (!preview) return;
   const connectionDocument = preview.replacingLinkId
     ? {
@@ -1095,40 +1132,39 @@ function drawMaterialLinks(
         ({ configuration }) => configuration.id === preview.target?.nodeId,
       )
     : undefined;
-  const to =
+  const targetPort =
     targetNode && preview.target
       ? materialPortGeometry(targetNode).find(
           ({ port }) => port.id === preview.target?.portId,
-        )?.point
-      : preview.current;
-  if (!from || !to) return;
-  const curve = materialConnectionPreviewCurve(
-    from,
-    to,
-    zoom,
-    fromPort.port.direction === "input" ? "left" : "right",
+        )
+      : undefined;
+  const to = targetPort?.point ?? preview.current;
+  if (!from || Math.hypot(from.x - to.x, from.y - to.y) * zoom < 10) return;
+  const route = connectionPreviewRoute(
+    effectiveDocument,
+    { point: from, side: fromPort.side, nodeId: fromPort.nodeId },
+    {
+      point: to,
+      side: targetPort?.side ?? (fromPort.side === "left" ? "right" : "left"),
+      ...(targetPort ? { nodeId: targetPort.nodeId } : {}),
+    },
   );
-  if (!curve) return;
-  previewGraphics
-    .moveTo(from.x, from.y)
-    .bezierCurveTo(
-      curve.control1.x,
-      curve.control1.y,
-      curve.control2.x,
-      curve.control2.y,
-      to.x,
-      to.y,
-    )
-    .stroke({
-      alpha: 0.9,
-      color:
-        previewTargetStatus === "compatible"
-          ? BLUEPRINT_COLORS.output
-          : previewTargetStatus === "occupied"
-            ? BLUEPRINT_COLORS.blocked
-            : BLUEPRINT_COLORS.warning,
-      width: 3 / zoom,
-    });
+  drawMaterialPath(
+    previewGraphics,
+    materialLinkPathForRoute(
+      { id: "preview", from: preview.from, to: preview.target ?? preview.from },
+      route,
+    ),
+  ).stroke({
+    alpha: 0.9,
+    color:
+      previewTargetStatus === "compatible"
+        ? BLUEPRINT_COLORS.output
+        : previewTargetStatus === "occupied"
+          ? BLUEPRINT_COLORS.blocked
+          : BLUEPRINT_COLORS.warning,
+    width: 3 / zoom,
+  });
 }
 
 export const InfiniteCanvas = forwardRef<
@@ -1610,3 +1646,30 @@ export const InfiniteCanvas = forwardRef<
 
   return <div className="infinite-canvas" ref={hostRef} />;
 });
+
+function drawMaterialPath(
+  graphics: Graphics,
+  path: ReturnType<typeof materialLinkPath> & {},
+) {
+  graphics.moveTo(path.from.x, path.from.y);
+  for (let index = 1; index < path.route.length - 1; index++) {
+    const previous = path.route[index - 1]!;
+    const corner = path.route[index]!;
+    const next = path.route[index + 1]!;
+    const incoming = Math.hypot(corner.x - previous.x, corner.y - previous.y);
+    const outgoing = Math.hypot(next.x - corner.x, next.y - corner.y);
+    if (!incoming || !outgoing) continue;
+    const radius = Math.min(10, incoming / 2, outgoing / 2);
+    graphics.lineTo(
+      corner.x + ((previous.x - corner.x) * radius) / incoming,
+      corner.y + ((previous.y - corner.y) * radius) / incoming,
+    );
+    graphics.quadraticCurveTo(
+      corner.x,
+      corner.y,
+      corner.x + ((next.x - corner.x) * radius) / outgoing,
+      corner.y + ((next.y - corner.y) * radius) / outgoing,
+    );
+  }
+  return graphics.lineTo(path.to.x, path.to.y);
+}

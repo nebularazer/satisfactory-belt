@@ -1,3 +1,4 @@
+import { validateDetailedCanvasDocument } from "./document";
 import {
   generateDetailedPlan,
   type DetailedPlan,
@@ -19,6 +20,30 @@ function generatedEditor() {
 }
 
 describe("Detailed canvas editor", () => {
+  it("removes route metadata with a deleted connection and restores it on undo", () => {
+    const initial = generatedEditor().getState().document;
+    const id = initial.connections[0]!.id;
+    const document = {
+      ...initial,
+      connectionRoutes: {
+        [id]: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+        ],
+      },
+      manualConnectionIds: [id],
+    };
+    const editor = createDetailedCanvasEditor(document);
+    editor.dispatch({ type: "connection.delete", id });
+    expect(() =>
+      validateDetailedCanvasDocument(editor.getState().document),
+    ).not.toThrow();
+    expect(editor.getState().document.manualConnectionIds).toEqual([]);
+    expect(editor.getState().document.connectionRoutes).toEqual({});
+    editor.dispatch({ type: "history.undo" });
+    expect(editor.getState().document).toEqual(document);
+  });
+
   it("configures one physical machine without an aggregate-count operation", () => {
     const editor = generatedEditor();
     const node = editor

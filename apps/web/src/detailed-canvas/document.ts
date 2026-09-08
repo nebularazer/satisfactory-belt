@@ -1,4 +1,8 @@
 import {
+  parseConnectionRoute,
+  type ConnectionRoute,
+} from "@/canvas/connection-route";
+import {
   assertDetailedNodeConfiguration,
   createDetailedPlan,
   parseDetailedPlan,
@@ -25,6 +29,8 @@ export type DetailedCanvasNode = Omit<CanvasNode, "configuration"> &
   }>;
 
 export type DetailedCanvasDocument = Readonly<{
+  connectionRoutes?: Readonly<Record<string, ConnectionRoute>>;
+  manualConnectionIds?: readonly string[];
   connections: readonly PhysicalConnection[];
   kind: "detailed";
   nodes: readonly DetailedCanvasNode[];
@@ -168,6 +174,18 @@ export function validateDetailedCanvasDocument(
       y: nodeValue.y,
     };
   });
+  let connectionRoutes: Record<string, ConnectionRoute> | undefined;
+  if (value.connectionRoutes !== undefined) {
+    if (!isRecord(value.connectionRoutes))
+      throw new Error("Connection routes must be an object.");
+    connectionRoutes = Object.fromEntries(
+      Object.entries(value.connectionRoutes).map(([id, route]) => {
+        const points = parseConnectionRoute(route);
+        if (!points) throw new Error("Connection route is missing.");
+        return [id, points];
+      }),
+    );
+  }
   const candidate = {
     connections: value.connections,
     kind: "detailed" as const,
@@ -176,8 +194,27 @@ export function validateDetailedCanvasDocument(
     version: 1 as const,
   };
   const plan = parseDetailedPlan(candidate);
+  if (
+    connectionRoutes &&
+    Object.keys(connectionRoutes).some(
+      (id) => !plan.connections.some((connection) => connection.id === id),
+    )
+  )
+    throw new Error("Route references an unknown connection.");
+  const manualConnectionIds = stringArray(
+    value.manualConnectionIds,
+    "Manual connection ids",
+  );
+  if (
+    manualConnectionIds &&
+    (new Set(manualConnectionIds).size !== manualConnectionIds.length ||
+      manualConnectionIds.some((id) => !connectionRoutes?.[id]))
+  )
+    throw new Error("Manual connection ids must reference saved routes.");
   return {
     ...candidate,
+    ...(manualConnectionIds ? { manualConnectionIds } : {}),
+    ...(connectionRoutes ? { connectionRoutes } : {}),
     connections: plan.connections,
     nodes: nodes.map((node, index) => ({
       ...node,

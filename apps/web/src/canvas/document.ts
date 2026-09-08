@@ -1,3 +1,4 @@
+import type { ConnectionRoute } from "./connection-route";
 import type { NodeConfiguration } from "@satisfactory-belt/production";
 import type {
   GenerationProvenance,
@@ -50,6 +51,8 @@ export const EMPTY_CANVAS_DOCUMENT: CanvasDocument = {
 
 export type CanvasMaterialLink = MaterialLink &
   Readonly<{
+    route?: ConnectionRoute;
+    routeMode?: "manual";
     logistics?: Readonly<{
       kind: "conveyor" | "pipeline";
       tierId: string;

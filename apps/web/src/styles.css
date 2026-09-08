@@ -202,3 +202,13 @@ canvas {
     @apply font-sans;
   }
 }
+
+.infinite-canvas__surface[data-cursor="ew-resize"] {
+  cursor: ew-resize;
+}
+.infinite-canvas__surface[data-cursor="ns-resize"] {
+  cursor: ns-resize;
+}
+.infinite-canvas__surface[data-cursor="not-allowed"] {
+  cursor: not-allowed;
+}

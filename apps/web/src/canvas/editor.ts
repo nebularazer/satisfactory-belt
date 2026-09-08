@@ -1,3 +1,6 @@
+import type { ConnectionRoute } from "./connection-route";
+import { addRouteBend, moveRouteSegment } from "./route-editing";
+import { routeIsClear, samePoint, simplifyRoute } from "./orthogonal-router";
 import {
   createNode,
   type NodeConfiguration,
@@ -30,6 +33,8 @@ import {
 } from "./material-port-geometry";
 import {
   createMaterialLinkIndex,
+  materialLinkPath,
+  routeObstacles,
   type MaterialLinkPath,
 } from "./material-link-geometry";
 
@@ -42,6 +47,7 @@ export type CanvasEditorState = Readonly<{
   canUndo: boolean;
   document: CanvasDocument;
   moveDelta: Point | null;
+  routeEdit?: Readonly<{ id: string; route: ConnectionRoute; valid: boolean }>;
   selectedLinkIds: readonly string[];
   selectedIds: readonly string[];
   connectionError?: Readonly<{ code: string; message: string }>;
@@ -67,6 +73,22 @@ export type CanvasEditorChange = Readonly<
 export type CanvasEditorAction =
   | { type: "document.replace"; document: CanvasDocument }
   | { type: "document.reset" }
+  | {
+      type: "link.route.begin";
+      id: string;
+      route: ConnectionRoute;
+      segment: number;
+    }
+  | { type: "link.route.update"; at: Point }
+  | { type: "link.route.commit" }
+  | { type: "link.route.cancel" }
+  | { type: "link.route.bend"; id: string; segment?: number }
+  | { type: "link.route.reset"; id: string }
+  | {
+      type: "document.arrange";
+      source: CanvasDocument;
+      document: CanvasDocument;
+    }
   | {
       type: "link.create";
       from: MaterialEndpoint;
@@ -157,7 +179,7 @@ type IndexedNode = Readonly<{
 
 type IndexedLink = Readonly<{
   index: number;
-  link: MaterialLink;
+  link: CanvasMaterialLink;
 }>;
 
 type HistoryEntry = Readonly<{
@@ -263,7 +285,8 @@ function normalizeLegacyNodeCardSizes(
     const legacyPassiveSize =
       (node.configuration.kind === "router" &&
         node.width === GRID_INTERVAL * 6 &&
-        node.height === GRID_INTERVAL * 5) ||
+        (node.height === GRID_INTERVAL * 5 ||
+          node.height === GRID_INTERVAL * 5 + GRID_INTERVAL / 2)) ||
       (node.configuration.kind === "buffer" &&
         node.width === GRID_INTERVAL * 8 &&
         node.height === GRID_INTERVAL * 6);
@@ -334,11 +357,19 @@ export function createCanvasEditor(
   const past: HistoryEntry[] = [];
   const future: HistoryEntry[] = [];
   let clipboard: Readonly<{
-    links: readonly MaterialLink[];
+    links: readonly CanvasMaterialLink[];
     nodes: readonly CanvasNode[];
   }> = { links: [], nodes: [] };
   let dispatchStartedAt = 0;
   let moveTransaction: MoveTransaction | undefined;
+  let routeTransaction:
+    | {
+        id: string;
+        source: CanvasDocument;
+        route: ConnectionRoute;
+        segment: number;
+      }
+    | undefined;
   let nodeSequence = initialDocument.nodes.length;
   let state: CanvasEditorState = {
     canRedo: false,
@@ -406,7 +437,7 @@ export function createCanvasEditor(
 
   const duplicateDocument = (
     nodes: readonly CanvasNode[],
-    links: readonly MaterialLink[],
+    links: readonly CanvasMaterialLink[],
   ) => {
     const offset = SNAP_INTERVAL;
     const ids = new Map<string, string>();
@@ -427,6 +458,15 @@ export function createCanvasEditor(
       return fromNodeId && toNodeId
         ? [
             {
+              ...link,
+              ...(link.route
+                ? {
+                    route: link.route.map(({ x, y }) => ({
+                      x: x + offset,
+                      y: y + offset,
+                    })),
+                  }
+                : {}),
               from: { ...link.from, nodeId: fromNodeId },
               id: idFactory(),
               to: { ...link.to, nodeId: toNodeId },
@@ -437,10 +477,193 @@ export function createCanvasEditor(
     return { links: duplicatedLinks, nodes: duplicates };
   };
 
+  const commitRoute = (id: string, route?: ConnectionRoute) => {
+    const index = state.document.materialLinks.findIndex(
+      (link) => link.id === id,
+    );
+    const before = state.document.materialLinks[index];
+    if (!before) return;
+    const { route: _route, routeMode: _mode, ...connection } = before;
+    const after: CanvasMaterialLink = route
+      ? { ...connection, route, routeMode: "manual" }
+      : connection;
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    commit(
+      {
+        ...state.document,
+        materialLinks: state.document.materialLinks.map((link) =>
+          link.id === id ? after : link,
+        ),
+      },
+      state.selectedIds,
+      {
+        before: [],
+        after: [],
+        beforeLinks: [{ index, link: before }],
+        afterLinks: [{ index, link: after }],
+        beforeSelection: state.selectedIds,
+        afterSelection: state.selectedIds,
+        beforeLinkSelection: state.selectedLinkIds,
+        afterLinkSelection: state.selectedLinkIds,
+      },
+      state.selectedLinkIds,
+      false,
+    );
+  };
+  const clearRouteEdit = () => {
+    routeTransaction = undefined;
+    if (state.routeEdit)
+      publish({ routeEdit: undefined }, { kind: "settings" });
+  };
+  const routeValid = (id: string, route: ConnectionRoute) => {
+    const link = state.document.materialLinks.find((link) => link.id === id);
+    const path = link ? materialLinkPath(state.document, link) : undefined;
+    return Boolean(
+      link &&
+      path &&
+      route.length >= 2 &&
+      samePoint(route[0]!, path.from) &&
+      samePoint(route.at(-1)!, path.to) &&
+      routeIsClear(
+        route,
+        routeObstacles(state.document.nodes),
+        link.from.nodeId,
+        link.to.nodeId,
+      ),
+    );
+  };
+
   const dispatch = (action: CanvasEditorAction) => {
     dispatchStartedAt = performance.now();
+    if (routeTransaction && action.type === "document.arrange") return;
+    if (routeTransaction && !action.type.startsWith("link.route."))
+      clearRouteEdit();
 
     switch (action.type) {
+      case "link.route.begin": {
+        if (!routeValid(action.id, action.route)) return;
+        routeTransaction = {
+          id: action.id,
+          route: action.route,
+          segment: action.segment,
+          source: state.document,
+        };
+        publish(
+          { routeEdit: { id: action.id, route: action.route, valid: true } },
+          { kind: "settings" },
+        );
+        return;
+      }
+      case "link.route.update": {
+        if (!routeTransaction || routeTransaction.source !== state.document) {
+          clearRouteEdit();
+          return;
+        }
+        const at = state.snapToGrid
+          ? { x: snap(action.at.x), y: snap(action.at.y) }
+          : action.at;
+        const route = moveRouteSegment(
+          routeTransaction.route,
+          routeTransaction.segment,
+          at,
+        );
+        publish(
+          {
+            routeEdit: {
+              id: routeTransaction.id,
+              route,
+              valid: routeValid(routeTransaction.id, route),
+            },
+          },
+          { kind: "settings" },
+        );
+        return;
+      }
+      case "link.route.commit": {
+        const edit = state.routeEdit;
+        const current = routeTransaction?.source === state.document;
+        const changed =
+          edit &&
+          routeTransaction &&
+          JSON.stringify(simplifyRoute(edit.route)) !==
+            JSON.stringify(simplifyRoute(routeTransaction.route));
+        clearRouteEdit();
+        if (edit?.valid && current && changed) commitRoute(edit.id, edit.route);
+        return;
+      }
+      case "link.route.cancel":
+        clearRouteEdit();
+        return;
+      case "link.route.reset":
+        clearRouteEdit();
+        commitRoute(action.id);
+        return;
+      case "link.route.bend": {
+        clearRouteEdit();
+        const link = state.document.materialLinks.find(
+          ({ id }) => id === action.id,
+        );
+        const path = link ? materialLinkPath(state.document, link) : undefined;
+        if (!path?.route) return;
+        for (const offset of [64, -64, 32, -32]) {
+          const route = addRouteBend(path.route, action.segment, offset);
+          if (
+            route.length > path.route.length &&
+            routeValid(action.id, route)
+          ) {
+            commitRoute(action.id, route);
+            return;
+          }
+        }
+        publish(
+          {
+            connectionError: {
+              code: "canvas.route.blocked",
+              message:
+                "There is no room for a bend here. Move the connection or nearby nodes to make space.",
+            },
+          },
+          { kind: "settings" },
+        );
+        return;
+      }
+
+      case "document.arrange": {
+        // A worker result must never overwrite edits made while it was running.
+        if (action.source !== state.document || moveTransaction) return;
+        const before = state.document.nodes.map((node, index) => ({
+          node,
+          index,
+        }));
+        const after = action.document.nodes.map((node, index) => ({
+          node,
+          index,
+        }));
+        commit(
+          action.document,
+          state.selectedIds,
+          {
+            before,
+            after,
+            beforeLinks: state.document.materialLinks.map((link, index) => ({
+              link,
+              index,
+            })),
+            afterLinks: action.document.materialLinks.map((link, index) => ({
+              link,
+              index,
+            })),
+            beforeSelection: state.selectedIds,
+            afterSelection: state.selectedIds,
+            beforeLinkSelection: state.selectedLinkIds,
+            afterLinkSelection: state.selectedLinkIds,
+          },
+          state.selectedLinkIds,
+          false,
+        );
+        return;
+      }
+
       case "document.replace": {
         const document = normalizeLegacyNodeCardSizes(action.document);
         past.length = 0;

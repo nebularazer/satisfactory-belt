@@ -1,3 +1,4 @@
+import { parseConnectionRoute } from "./connection-route";
 import { parseNodeConfiguration } from "@satisfactory-belt/production";
 import {
   createBasicPlan,
@@ -148,6 +149,11 @@ function parseMaterialLink(value: unknown, index: number): CanvasMaterialLink {
   if (typeof value.id !== "string" || !value.id.trim()) {
     throw new Error(`Material Link ${index + 1} has an invalid id.`);
   }
+  if (
+    value.routeMode !== undefined &&
+    (value.routeMode !== "manual" || value.route === undefined)
+  )
+    throw new Error("Manual routes need route points.");
   const logistics = value.logistics;
   if (
     logistics !== undefined &&
@@ -159,6 +165,10 @@ function parseMaterialLink(value: unknown, index: number): CanvasMaterialLink {
     throw new Error(`Material Link ${index + 1} has invalid logistics.`);
   }
   return {
+    ...(value.route !== undefined
+      ? { route: parseConnectionRoute(value.route) }
+      : {}),
+    ...(value.routeMode === "manual" ? { routeMode: "manual" as const } : {}),
     from: parseEndpoint(value.from, `Material Link ${index + 1} from endpoint`),
     id: value.id,
     ...(isRecord(logistics)
