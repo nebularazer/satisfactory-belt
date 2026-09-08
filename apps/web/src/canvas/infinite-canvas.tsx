@@ -1,3 +1,8 @@
+import {
+  selectionFocus,
+  MUTED_CANVAS_ALPHA,
+  type SelectionFocus,
+} from "./selection-focus";
 import { groupLabelLayout } from "./group-label-layout";
 import { routeHandles } from "./route-editing";
 import {
@@ -801,6 +806,7 @@ function visibleImageUrls(
 function syncDocument(
   scene: Container,
   state: CanvasEditorState,
+  focus: SelectionFocus | undefined,
   displays: Map<string, NodeDisplay>,
   pool: NodeDisplay[],
   visibleNodes: readonly CanvasNode[],
@@ -900,6 +906,8 @@ function syncDocument(
       displays.set(id, display);
     }
 
+    display.container.alpha =
+      !focus || focus.nodeIds.has(id) ? 1 : MUTED_CANVAS_ALPHA;
     display.baseX = node.x;
     display.baseY = node.y;
     display.node = node;
@@ -982,6 +990,7 @@ function drawMaterialLinks(
   labelLayer: Container,
   previewGraphics: Graphics,
   state: CanvasEditorState,
+  focus: SelectionFocus | undefined,
   zoom: number,
   visibleLinks: readonly CanvasMaterialLink[],
   topology: CanvasEditor["topology"],
@@ -1010,11 +1019,15 @@ function drawMaterialLinks(
   const preview = state.connectionPreview;
   const dark = document.documentElement.classList.contains("dark");
   for (const region of moving ? [] : productionRegions(state.document)) {
+    const alpha =
+      !focus || region.nodeIds.some((id) => focus.nodeIds.has(id))
+        ? 1
+        : MUTED_CANVAS_ALPHA;
     graphics
       .roundRect(region.x, region.y, region.width, region.height, 16)
       .fill({
         color: dark ? 0xffffff : 0x334155,
-        alpha: region.logistics ? 0.018 : 0.03,
+        alpha: (region.logistics ? 0.018 : 0.03) * alpha,
       })
       .stroke({
         color:
@@ -1023,7 +1036,7 @@ function drawMaterialLinks(
             : dark
               ? 0xa1a9b5
               : 0x647184,
-        alpha: state.selectedGroupId === region.id ? 0.85 : 0.18,
+        alpha: (state.selectedGroupId === region.id ? 0.85 : 0.18) * alpha,
         width: (state.selectedGroupId === region.id ? 1.5 : 0.75) / zoom,
       });
     const layout = groupLabelLayout(
@@ -1054,6 +1067,7 @@ function drawMaterialLinks(
         fill: dark ? 0xa1a9b5 : 0x647184,
       },
     });
+    label.alpha = alpha;
     label.position.set(region.x + 20, region.y + 8);
     labelLayer.addChild(label);
   }
@@ -1102,7 +1116,9 @@ function drawMaterialLinks(
       path,
       feedbackLinks.has(link.id) ? zoom : undefined,
     ).stroke({
-      alpha: isSelected ? 1 : 0.88,
+      alpha:
+        (isSelected ? 1 : 0.88) *
+        (!focus || focus.linkIds.has(link.id) ? 1 : MUTED_CANVAS_ALPHA),
       color:
         state.routeEdit?.id === link.id && !state.routeEdit.valid
           ? BLUEPRINT_COLORS.warning
@@ -1119,6 +1135,7 @@ function drawMaterialLinks(
     if (path.route && zoom < 0.45 && !selected.has(link.id)) continue;
     const position = materialLinkLabelPoint(path);
     const label = new Container();
+    label.alpha = !focus || focus.linkIds.has(link.id) ? 1 : MUTED_CANVAS_ALPHA;
     const stateColor = materialFlowCanvasColor(presentation.state, dark);
     const text = new Text({
       style: {
@@ -1303,6 +1320,7 @@ export const InfiniteCanvas = forwardRef<
     if (!app || !scene) return;
 
     const state = editor.getState();
+    const focus = selectionFocus(state);
     const linkGraphics = linkGraphicsRef.current;
     const linkLabelLayer = linkLabelLayerRef.current;
     const previewGraphics = previewGraphicsRef.current;
@@ -1321,6 +1339,7 @@ export const InfiniteCanvas = forwardRef<
         linkLabelLayer,
         previewGraphics,
         state,
+        focus,
         viewportRef.current.zoom,
         visibleLinks,
         editor.topology,
@@ -1330,6 +1349,7 @@ export const InfiniteCanvas = forwardRef<
     syncDocument(
       scene,
       state,
+      focus,
       nodeDisplaysRef.current,
       nodeDisplayPoolRef.current,
       visibleCanvasNodes(state, viewportRef.current, app.screen, editor.query),
