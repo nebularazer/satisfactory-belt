@@ -64,10 +64,11 @@ visual scale of the canvas.
 
 Auto-arrange runs ELK in a worker and fits the result on screen. Machines using
 one recipe form a vertical stack, and parallel production steps share a stage.
-Splitters, mergers, and junctions are placed individually between stages, close
-to their connected machines. Belts route directly between actual ports, with
-parallel runs where paths naturally align. Group outlines annotate the finished
-layout; there are no shared boundary exits forcing belts into a highway. Every physical node
+Each logistics network occupies an exclusive area between recipe groups, with
+one router column per forward step. Neighboring machine stacks guide its height
+and port spacing, leaving room for long clear runs. Belts use separate lanes
+chosen to reduce overlap and crossings, then bends, then length; unrelated group
+interiors stay clear. Every physical node
 and connection remains editable on the same canvas. Feedback belts use separate
 return lanes with dashed strokes and no arrows; their colors still indicate flow
 and capacity. The connection inspector identifies feedback returns. Positions and

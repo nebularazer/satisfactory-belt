@@ -1,5 +1,7 @@
 import { generateProduction } from "../auto-build/generate-production";
 import { convertDetailed } from "../detailed-conversion/convert";
+import { productionRegions } from "./production-regions";
+import { graphStages } from "./graph-stages";
 import { productionStructure } from "./production-structure";
 import { presentMaterialFlow } from "./material-link-presentation";
 import { describe, expect, it } from "vitest";
@@ -92,7 +94,68 @@ function expectDirectConsumerFeeds(document: CanvasDocument) {
         0,
       );
     const direct = Math.abs(route.at(-1)!.y - route[0]!.y);
-    expect(verticalTravel - direct, link.id).toBeLessThanOrEqual(128);
+    const from = route[0]!,
+      to = route.at(-1)!;
+    const regions = productionRegions(document, "physical");
+    const blocked = regions.some(
+      (region) =>
+        !region.nodeIds.includes(link.from.nodeId) &&
+        !region.nodeIds.includes(link.to.nodeId) &&
+        region.x < to.x &&
+        region.x + region.width > from.x &&
+        region.y < Math.max(from.y, to.y) &&
+        region.y + region.height > Math.min(from.y, to.y),
+    );
+    // Long bypasses around other production groups are intentional. Clear
+    // corridors must not acquire a trip to a common exit and back.
+    if (!blocked)
+      expect(verticalTravel - direct, link.id).toBeLessThanOrEqual(128);
+  }
+}
+
+function expectLogisticsGroupsAndSteps(document: CanvasDocument) {
+  const structure = productionStructure(document);
+  const regions = productionRegions(document, "physical");
+  for (const ids of structure.logistics) {
+    const members = new Set(ids);
+    const region = regions.find(
+      (region) =>
+        region.logistics && region.nodeIds.some((id) => members.has(id)),
+    );
+    expect(region, `Missing logistics group ${ids[0]}`).toBeDefined();
+    expect(new Set(region!.nodeIds)).toEqual(members);
+    const forward = ids.filter((id) => !structure.returnNodes.has(id));
+    const edges = document.materialLinks.filter(
+      (link) =>
+        members.has(link.from.nodeId) &&
+        members.has(link.to.nodeId) &&
+        !structure.feedbackLinks.has(link.id),
+    );
+    const steps = graphStages(
+      forward,
+      edges.map((link) => ({ from: link.from.nodeId, to: link.to.nodeId })),
+    );
+    const columns = new Map<number, number>();
+    for (const id of forward) {
+      const node = document.nodes.find((node) => node.configuration.id === id)!;
+      const step = steps.get(id)!;
+      if (columns.has(step))
+        expect(node.x, `Step ${step} of ${ids[0]}`).toBe(columns.get(step));
+      columns.set(step, node.x);
+    }
+    const ordered = [...columns].sort(([a], [b]) => a - b);
+    for (let i = 1; i < ordered.length; i++)
+      expect(ordered[i]![1]).toBeGreaterThan(ordered[i - 1]![1]);
+    for (const node of document.nodes.filter(
+      (node) => !members.has(node.configuration.id),
+    )) {
+      expect(
+        node.x < region!.x + region!.width &&
+          node.x + node.width > region!.x &&
+          node.y < region!.y + region!.height &&
+          node.y + node.height > region!.y,
+      ).toBe(false);
+    }
   }
 }
 
@@ -116,6 +179,7 @@ describe("Auto-arrange", () => {
     expectRecipeColumns(result);
     expectAttachedClearRoutes(result);
     expectDirectConsumerFeeds(result);
+    expectLogisticsGroupsAndSteps(result);
     expect(result.nodes.map(({ configuration }) => configuration)).toEqual(
       source.nodes.map(({ configuration }) => configuration),
     );
@@ -184,6 +248,7 @@ describe("Auto-arrange", () => {
     expectRecipeColumns(result);
     expectAttachedClearRoutes(result);
     expectDirectConsumerFeeds(result);
+    expectLogisticsGroupsAndSteps(result);
     const parts = result.nodes.filter(
       (node) =>
         node.configuration.kind === "process" &&
@@ -208,7 +273,7 @@ describe("Auto-arrange", () => {
       const top = Math.min(...members.map((node) => node.y));
       const bottom = Math.max(...members.map((node) => node.y + node.height));
       for (const node of result.nodes.filter(
-        (node) => node.configuration.kind !== "router",
+        (node) => !ids.includes(node.configuration.id),
       )) {
         expect(
           node.x < right &&

@@ -13,9 +13,10 @@ Frames/min, Cast Screws, and Mk.1 belts.
 
 ![Rod collection, distribution, and separate dashed return lanes](returns.png)
 
-The larger Detailed fixture shows balancer branches aligned with the Cast Screw
-constructors they feed. The last mergers connect straight into the machine
-stack, without collecting those belts into a shared exit.
+The larger Detailed fixture shows the logistics columns before and after the
+Cast Screw constructor stack, with separate feeds and space between the groups.
+
+![Larger factory arranged in recipe stacks and logistics areas](large-overview.png)
 
 ![Balancer branches feeding machines directly at their port heights](direct-feeds.png)
 
@@ -27,14 +28,20 @@ stack, without collecting those belts into a shared exit.
   actual port identities, smart rules, priorities, and rates stay unchanged.
 - Group connected routers and parallel supply groups serving the same recipe
   port. Capacity limits still describe separate physical belts.
-- Lay out individual routers together with fixed recipe stacks in one graph.
-  Reserve layers for each production stage and its logistics depth, keeping
-  parallel recipes aligned even when their balancers have different depths.
-  Route directly between actual ports; no logistics boundary ports or joined
-  internal/external routes funnel belts through a shared exit.
-- Prefer short routes and local bends, allowing branches to leave at different
-  heights near their consumers. Draw group outlines around clear areas of the
-  resulting layout; omit a rectangle if it would enclose unrelated nodes.
+- Keep every logistics group in its own non-overlapping area between recipe
+  groups. Routers at the same forward depth occupy one column; later steps are
+  strictly to the right. Recipe stacks and logistics areas never interleave.
+- Size local layout guides using the complete neighboring recipe stacks and
+  their real port heights. This preserves vertical space for separate branches
+  instead of compressing all boundary connections into one short row of ports.
+- Arrange group areas by production stage, with fixed recipe stacks. After group
+  placement, route connections through free corridors between actual ports.
+  Routing obstacles follow visible group bounds, not the unused guide space.
+- Preserve ELK's separate corridor lanes as candidates. In two deterministic
+  sweeps, rank clear routes by overlapping belt length, crossings, bends, and
+  finally length. The final route never has to visit a prescribed boundary exit.
+  Longer bypasses can stay outside unrelated groups. This is a bounded heuristic,
+  not a claim that every factory has a crossing-free layout.
 - Identify cycles from topology, then recognize return distributors feeding
   parallel branches. Put routers serving only returns below the forward flow.
   Give return links separate lanes, rounded dashes, and the existing flow colors.
