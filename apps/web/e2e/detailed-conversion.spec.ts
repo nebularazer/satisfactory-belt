@@ -1,5 +1,125 @@
 import { expect, test } from "@playwright/test";
 
+test("manually reconnects a restricted-tier Detailed plan before and after reload", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const fixtureUrl = "/src/canvas/modular-frame-fixture.ts";
+    const storageUrl = "/src/canvas/document-storage.ts";
+    const { modularFrameFactory } = await import(fixtureUrl);
+    const { createIndexedDbDocumentStorage } = await import(storageUrl);
+    const factory = modularFrameFactory(false);
+    const nodes = factory.nodes.slice(1, 3).map((node: any) => ({
+      ...node,
+      configuration: {
+        ...node.configuration,
+        instances: [
+          { ...node.configuration.instances[0], clockSpeedPercent: 40 },
+        ],
+      },
+    }));
+    await createIndexedDbDocumentStorage().saveWorkspace({
+      ...factory,
+      nodes,
+      materialLinks: [
+        {
+          id: "ingots",
+          from: { nodeId: "smelters", portId: "output:Desc_IronIngot_C" },
+          to: { nodeId: "plates", portId: "input:Desc_IronIngot_C" },
+        },
+      ],
+    });
+  });
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Create Detailed plan", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Maximum conveyor speed" })
+    .selectOption("conveyor-mk1");
+  await page
+    .getByRole("button", { name: "Create Detailed", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Create Detailed plan" }),
+  ).toBeHidden();
+  const canvas = page.getByRole("application", { name: "Infinite canvas" });
+  const readConnections = () =>
+    page.evaluate(async () => {
+      const storageUrl = "/src/canvas/document-storage.ts";
+      const { createIndexedDbDocumentStorage } = await import(storageUrl);
+      return (await createIndexedDbDocumentStorage().loadWorkspace()).document
+        .connections;
+    });
+  for (const reload of [false, true]) {
+    if (reload) await page.reload();
+    await canvas.press("1");
+    const ports = await page.evaluate(async () => {
+      const storageUrl = "/src/canvas/document-storage.ts";
+      const modeUrl = "/src/canvas/editor-mode.ts";
+      const portUrl = "/src/canvas/material-port-geometry.ts";
+      const viewportUrl = "/src/canvas/viewport.ts";
+      const { createIndexedDbDocumentStorage } = await import(storageUrl);
+      const { detailedDocumentToEditor } = await import(modeUrl);
+      const { materialPortGeometry } = await import(portUrl);
+      const { fitRectangleInViewport } = await import(viewportUrl);
+      const document = detailedDocumentToEditor(
+        (await createIndexedDbDocumentStorage().loadWorkspace()).document,
+      );
+      const left = Math.min(...document.nodes.map((node: any) => node.x));
+      const top = Math.min(...document.nodes.map((node: any) => node.y));
+      const right = Math.max(
+        ...document.nodes.map((node: any) => node.x + node.width),
+      );
+      const bottom = Math.max(
+        ...document.nodes.map((node: any) => node.y + node.height),
+      );
+      const viewport = fitRectangleInViewport(
+        { x: left, y: top, width: right - left, height: bottom - top },
+        { width: innerWidth, height: innerHeight },
+      );
+      const link = document.materialLinks[0];
+      return [link.from, link.to].map((endpoint) => {
+        const node = document.nodes.find(
+          (node: any) => node.configuration.id === endpoint.nodeId,
+        );
+        const { point } = materialPortGeometry(node).find(
+          ({ port }: any) => port.id === endpoint.portId,
+        );
+        return {
+          x: point.x * viewport.zoom + viewport.x,
+          y: point.y * viewport.zoom + viewport.y,
+        };
+      });
+    });
+    await page.mouse.click(ports[0].x, ports[0].y);
+    await expect(page.getByText("12 items/min", { exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "Logistics tier" }).click();
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+    await expect.poll(readConnections).toEqual([]);
+    await page.mouse.move(ports[0].x, ports[0].y);
+    await page.mouse.down();
+    await page.mouse.move(ports[1].x, ports[1].y, { steps: 8 });
+    await page.mouse.up();
+    await expect
+      .poll(async () =>
+        (await readConnections()).map((edge: any) => edge.tierId),
+      )
+      .toEqual(["conveyor-mk1"]);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect.poll(readConnections).toEqual([]);
+    await page.getByRole("button", { name: "Redo", exact: true }).click();
+    await expect.poll(async () => (await readConnections()).length).toBe(1);
+  }
+  expect(errors).toEqual([]);
+});
+
 test("creates an arranged Detailed plan through speed settings and reopens it", async ({
   page,
 }, testInfo) => {

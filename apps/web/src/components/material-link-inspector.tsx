@@ -7,7 +7,6 @@ import {
   X,
 } from "lucide-react";
 import { useSyncExternalStore } from "react";
-import { DEFAULT_LOGISTICS_TIERS } from "@satisfactory-belt/planning";
 
 import type { CanvasEditor } from "@/canvas/editor";
 import type { CanvasEditorMode } from "@/canvas/editor-mode";
@@ -63,7 +62,7 @@ export function MaterialLinkInspector({
   );
   const logistics = documentLink?.logistics;
   const tiers = logistics
-    ? DEFAULT_LOGISTICS_TIERS.filter(({ medium }) => medium === logistics.kind)
+    ? editor.logisticsTiers.filter(({ medium }) => medium === logistics.kind)
     : [];
 
   const palette = MATERIAL_FLOW_PALETTE[link.state];

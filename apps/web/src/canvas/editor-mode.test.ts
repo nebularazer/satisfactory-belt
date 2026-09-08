@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { analyzeDetailedPlan } from "@satisfactory-belt/planning";
+import {
+  analyzeDetailedPlan,
+  DEFAULT_LOGISTICS_TIERS,
+} from "@satisfactory-belt/planning";
 
 import {
   detailedDocumentFromEditor,
@@ -10,6 +13,110 @@ import { createCanvasEditor } from "./editor";
 import { modularFrameFactory } from "./modular-frame-fixture";
 
 describe("Basic and Detailed editor modes", () => {
+  it.each([
+    {
+      medium: "conveyor",
+      source: "Build_MinerMk1_C",
+      sourceProcess: "extraction:Desc_OreIron_C",
+      target: "Build_SmelterMk1_C",
+      targetProcess: "Recipe_IngotIron_C",
+      item: "Desc_OreIron_C",
+    },
+    {
+      medium: "pipeline",
+      source: "Build_WaterPump_C",
+      sourceProcess: "extraction:Desc_Water_C",
+      target: "Build_OilRefinery_C",
+      targetProcess: "Recipe_AluminaSolution_C",
+      item: "Desc_Water_C",
+    },
+  ])(
+    "keeps manually rebuilt $medium connections within the saved plan tiers",
+    ({ medium, source, sourceProcess, target, targetProcess, item }) => {
+      const tiers = DEFAULT_LOGISTICS_TIERS.filter(
+        (tier) => tier.id === `${medium}-mk1`,
+      );
+      let id = 0;
+      const editor = createCanvasEditor({
+        topology: "physical",
+        logisticsTiers: tiers,
+        idFactory: () => `node-${++id}`,
+      });
+      editor.dispatch({
+        type: "node.create",
+        at: { x: 0, y: 0 },
+        node: {
+          kind: "process",
+          buildableId: source,
+          processId: sourceProcess,
+        },
+      });
+      editor.dispatch({
+        type: "node.create",
+        at: { x: 500, y: 0 },
+        node: {
+          kind: "process",
+          buildableId: target,
+          processId: targetProcess,
+        },
+      });
+      const connection = {
+        type: "link.create" as const,
+        id: "manual",
+        from: { nodeId: "node-1", portId: `output:${item}` },
+        to: { nodeId: "node-2", portId: `input:${item}` },
+      };
+      editor.dispatch(connection);
+      editor.dispatch({ type: "link.delete", id: "manual" });
+      editor.dispatch(connection);
+      editor.dispatch({
+        type: "link.tier",
+        id: "manual",
+        tierId: `${medium}-mk2`,
+      });
+      expect(editor.getState().connectionError).toBeUndefined();
+      const detailed = detailedDocumentFromEditor(
+        editor.getState().document,
+        tiers,
+      );
+      expect(detailed.connections[0]?.tierId).toBe(`${medium}-mk1`);
+      editor.dispatch({ type: "history.undo" });
+      expect(editor.getState().document.materialLinks).toEqual([]);
+      editor.dispatch({ type: "history.redo" });
+      expect(
+        detailedDocumentFromEditor(editor.getState().document, tiers),
+      ).toEqual(detailed);
+    },
+  );
+
+  it("reports a missing transport medium without adding an invalid physical connection", () => {
+    let id = 0;
+    const editor = createCanvasEditor({
+      topology: "physical",
+      logisticsTiers: [],
+      idFactory: () => `node-${++id}`,
+    });
+    for (const x of [0, 500])
+      editor.dispatch({
+        type: "node.create",
+        at: { x, y: 0 },
+        node: {
+          kind: "router",
+          buildableId: "Build_ConveyorAttachmentSplitter_C",
+        },
+      });
+    const document = editor.getState().document;
+    editor.dispatch({
+      type: "link.create",
+      from: { nodeId: "node-1", portId: "output:1" },
+      to: { nodeId: "node-2", portId: "input:1" },
+    });
+    expect(editor.getState().document).toBe(document);
+    expect(editor.getState().connectionError?.message).toContain(
+      "no available conveyor tier",
+    );
+  });
+
   it.each([true, false])(
     "materializes the example factory with splitter=%s into singular physical Nodes",
     (withSplitter) => {

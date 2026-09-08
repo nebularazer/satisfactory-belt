@@ -10,6 +10,7 @@ import {
   BasicPlanError,
   createBasicPlan,
   DEFAULT_LOGISTICS_TIERS,
+  type LogisticsTier,
   type MaterialEndpoint,
   type MaterialLink,
 } from "@satisfactory-belt/planning";
@@ -175,6 +176,7 @@ export type CanvasEditor = Readonly<{
   queryLinks: (rectangle: Rectangle) => readonly MaterialLinkPath[];
   subscribe: (listener: (change: CanvasEditorChange) => void) => () => void;
   topology: "aggregate" | "physical";
+  logisticsTiers: readonly LogisticsTier[];
 }>;
 
 type IndexedNode = Readonly<{
@@ -209,6 +211,7 @@ type CreateCanvasEditorOptions = {
   idFactory?: () => string;
   snapToGrid?: boolean;
   topology?: "aggregate" | "physical";
+  logisticsTiers?: readonly LogisticsTier[];
 };
 
 function validateDocument(
@@ -254,6 +257,7 @@ function validateDocument(
 function defaultLogistics(
   document: CanvasDocument,
   endpoint: MaterialEndpoint,
+  tiers: readonly LogisticsTier[],
 ): CanvasMaterialLink["logistics"] {
   const node = document.nodes.find(
     ({ configuration }) => configuration.id === endpoint.nodeId,
@@ -265,12 +269,13 @@ function defaultLogistics(
     : undefined;
   const kind: "conveyor" | "pipeline" =
     port?.medium === "pipeline" ? "pipeline" : "conveyor";
-  const tier = DEFAULT_LOGISTICS_TIERS.filter(
-    ({ medium }) => medium === kind,
-  ).toSorted(
-    (left, right) => right.capacityPerMinute - left.capacityPerMinute,
-  )[0];
-  return tier ? { kind, tierId: tier.id } : undefined;
+  const tier = tiers
+    .filter(({ medium }) => medium === kind)
+    .toSorted(
+      (left, right) => right.capacityPerMinute - left.capacityPerMinute,
+    )[0];
+  if (!tier) throw new Error(`This plan has no available ${kind} tier.`);
+  return { kind, tierId: tier.id };
 }
 
 function snap(value: number) {
@@ -358,6 +363,7 @@ export function createCanvasEditor(
   );
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const topology = options.topology ?? "aggregate";
+  const logisticsTiers = options.logisticsTiers ?? DEFAULT_LOGISTICS_TIERS;
   const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: HistoryEntry[] = [];
   const future: HistoryEntry[] = [];
@@ -752,16 +758,22 @@ export function createCanvasEditor(
         return;
 
       case "link.create": {
-        const link: CanvasMaterialLink = {
-          from: action.from,
-          id: action.id ?? idFactory(),
-          ...(topology === "physical"
-            ? { logistics: defaultLogistics(state.document, action.from) }
-            : {}),
-          to: action.to,
-        };
-        const index = state.document.materialLinks.length;
         try {
+          const link: CanvasMaterialLink = {
+            from: action.from,
+            id: action.id ?? idFactory(),
+            ...(topology === "physical"
+              ? {
+                  logistics: defaultLogistics(
+                    state.document,
+                    action.from,
+                    logisticsTiers,
+                  ),
+                }
+              : {}),
+            to: action.to,
+          };
+          const index = state.document.materialLinks.length;
           const document = {
             ...state.document,
             materialLinks: [...state.document.materialLinks, link],
@@ -929,9 +941,7 @@ export function createCanvasEditor(
           ({ id }) => id === action.id,
         );
         const link = state.document.materialLinks[index];
-        const tier = DEFAULT_LOGISTICS_TIERS.find(
-          ({ id }) => id === action.tierId,
-        );
+        const tier = logisticsTiers.find(({ id }) => id === action.tierId);
         if (!link?.logistics || !tier || tier.medium !== link.logistics.kind) {
           return;
         }
@@ -1541,5 +1551,6 @@ export function createCanvasEditor(
       return () => listeners.delete(listener);
     },
     topology,
+    logisticsTiers,
   };
 }

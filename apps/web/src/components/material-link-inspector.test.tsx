@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createCanvasEditor } from "@/canvas/editor";
+import { DEFAULT_LOGISTICS_TIERS } from "@satisfactory-belt/planning";
 
 import { MaterialLinkInspector } from "./material-link-inspector";
 
@@ -10,11 +11,13 @@ afterEach(cleanup);
 function linkedEditor(
   consumerCount = 1,
   topology: "aggregate" | "physical" = "aggregate",
+  logisticsTiers = DEFAULT_LOGISTICS_TIERS,
 ) {
   let id = 0;
   const editor = createCanvasEditor({
     idFactory: () => `node-${++id}`,
     topology,
+    logisticsTiers,
   });
   editor.dispatch({
     type: "node.create",
@@ -50,6 +53,20 @@ function linkedEditor(
 }
 
 describe("MaterialLinkInspector", () => {
+  it("only offers the active plan's available tiers", () => {
+    const editor = linkedEditor(
+      1,
+      "physical",
+      DEFAULT_LOGISTICS_TIERS.filter((tier) => tier.id === "conveyor-mk1"),
+    );
+    render(<MaterialLinkInspector editor={editor} mode="detailed" />);
+    fireEvent.click(screen.getByRole("combobox", { name: "Logistics tier" }));
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(
+      screen.getByRole("option", { name: "MK1 · 60" }),
+    ).toBeInTheDocument();
+  });
+
   it("selects a logistics tier in Detailed mode", () => {
     const editor = linkedEditor(1, "physical");
     render(<MaterialLinkInspector editor={editor} mode="detailed" />);
