@@ -84,7 +84,9 @@ when connected nodes move.
 
 Splitters, mergers, and pipeline junctions use headerless 128 × 128 cards with a
 muted building icon in the body, visible ports, and compact rate labels. See
-[the compact Router card design](docs/plans/compact-router-cards.md).
+[the compact Router card design](docs/plans/compact-router-cards.md). During
+generation and Auto-arrange, splitters and mergers using two ports place them
+in the outer slots, leaving the middle slot unconnected.
 
 The mode switch shows **Create Detailed** when the Basic plan has no Detailed
 version. It opens a conversion dialog with maximum conveyor and pipeline tiers,

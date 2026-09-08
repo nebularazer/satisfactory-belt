@@ -13,7 +13,10 @@ Frames/min, Cast Screws, and Mk.1 belts.
 
 ## Layout rules
 
-- Group machines by recipe, preserving individual cards and port order.
+- Group machines by recipe, preserving individual cards and machine port order.
+- Two-way splitter outputs and merger inputs occupy the top and bottom slots,
+  leaving the center unused. Generation and Auto-arrange set presentation order;
+  actual port identities, smart rules, priorities, and rates stay unchanged.
 - Group connected routers and parallel supply groups serving the same recipe
   port. Capacity limits still describe separate physical belts.
 - Lay out each logistics area with fixed boundary ports, then arrange those
@@ -22,6 +25,9 @@ Frames/min, Cast Screws, and Mk.1 belts.
 - Identify cycles from topology, then recognize return distributors feeding
   parallel branches. Put routers serving only returns below the forward flow.
   Give return links separate lanes, rounded dashes, and the existing flow colors.
+  Feeds leaving a return distributor travel horizontally at their port heights
+  before turning toward their destinations. The main returning belt uses the
+  outside lane below the group.
 - Keep cycles between production recipes within a finite stage. Long forward
   bypasses stay solid even if their geometry travels leftward.
 - Persist positions and routes through the existing save format. Feedback roles

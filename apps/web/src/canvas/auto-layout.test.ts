@@ -211,6 +211,34 @@ describe("Auto-arrange", () => {
     expect(
       rodReturns.map((link) => link.ratePerMinute).sort((a, b) => a! - b!),
     ).toEqual([4, 4, 4, 12]);
+    for (const flow of rodReturns.filter((flow) => flow.ratePerMinute === 4)) {
+      const route = result.materialLinks.find(
+        (link) => link.id === flow.id,
+      )!.route!;
+      expect(route[1]!.y).toBe(route[0]!.y);
+      expect(route[1]!.x - route[0]!.x).toBeGreaterThan(128);
+      expect(Math.max(...route.map((point) => point.y))).toBe(route[0]!.y);
+    }
+    for (const node of result.nodes.filter(
+      (node) => node.configuration.kind === "router",
+    )) {
+      for (const direction of ["input", "output"] as const) {
+        const ports = materialPortGeometry(node).filter(
+          ({ port }) => port.direction === direction,
+        );
+        const active = new Set(
+          result.materialLinks
+            .flatMap((link) => [link.from, link.to])
+            .filter((endpoint) => endpoint.nodeId === node.configuration.id)
+            .map((endpoint) => endpoint.portId),
+        );
+        if (
+          ports.length === 3 &&
+          ports.filter(({ port }) => active.has(port.id)).length === 2
+        )
+          expect(active.has(ports[1]!.port.id)).toBe(false);
+      }
+    }
     const returnRoutes = rodReturns.map(
       (flow) =>
         result.materialLinks.find((link) => link.id === flow.id)!.route!,

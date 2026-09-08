@@ -1,3 +1,4 @@
+import { spaceRouterPorts } from "./router-port-spacing";
 import type { ELK, ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api";
 import type {
   CanvasDocument,
@@ -191,18 +192,47 @@ async function logisticsBlock(
     const fromX =
       from.point.x + (from.side === "left" ? -laneOffset : laneOffset);
     const toX = to.point.x + (to.side === "left" ? -laneOffset : laneOffset);
+    // Return distributors already sit below the forward network. Their outgoing
+    // feeds travel directly across at their port heights, then rise to rejoin.
+    // Only the belt arriving back at the distributor needs the outside lane.
+    const rejoin =
+      structure.returnNodes.has(from.nodeId) &&
+      !structure.returnNodes.has(to.nodeId) &&
+      from.side === "right" &&
+      to.side === "left" &&
+      to.point.x > from.point.x;
+    const siblings = feedback
+      .filter((edge) => edge.from.nodeId === from.nodeId)
+      .toSorted(
+        (a, b) =>
+          ports.get(key(a.from.nodeId, a.from.portId))!.point.y -
+            ports.get(key(b.from.nodeId, b.from.portId))!.point.y ||
+          a.id.localeCompare(b.id),
+      );
+    const rejoinX =
+      to.point.x -
+      32 -
+      (siblings.length -
+        1 -
+        siblings.findIndex((edge) => edge.id === link.id)) *
+        20;
     routes.set(
       link.id,
       routeOrthogonally(
         { point: from.point, side: from.side, nodeId: from.nodeId },
         { point: to.point, side: to.side, nodeId: to.nodeId },
         obstacles,
-        [
-          { x: fromX, y: from.point.y },
-          { x: fromX, y },
-          { x: toX, y },
-          { x: toX, y: to.point.y },
-        ],
+        rejoin
+          ? [
+              { x: rejoinX, y: from.point.y },
+              { x: rejoinX, y: to.point.y },
+            ]
+          : [
+              { x: fromX, y: from.point.y },
+              { x: fromX, y },
+              { x: toX, y },
+              { x: toX, y: to.point.y },
+            ],
       ),
     );
   });
@@ -269,7 +299,8 @@ async function logisticsBlock(
   return block;
 }
 
-/** Computes presentation only. Node identities, port order and topology stay intact. */
+/** Computes presentation only. Topology and machine port order stay intact;
+ * two-way belt routers place their unused slot in the middle. */
 export async function arrangeCanvas(
   document: CanvasDocument,
   elk: Pick<ELK, "layout">,
@@ -278,7 +309,7 @@ export async function arrangeCanvas(
   // Stable model order makes repeated arrangements independent of canvas positions.
   const sorted: CanvasDocument = {
     ...document,
-    nodes: document.nodes.toSorted((a, b) =>
+    nodes: spaceRouterPorts(document).nodes.toSorted((a, b) =>
       a.configuration.id.localeCompare(b.configuration.id, "en", {
         numeric: true,
       }),

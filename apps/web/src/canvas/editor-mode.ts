@@ -1,3 +1,4 @@
+import { spaceRouterPorts } from "./router-port-spacing";
 import {
   analyzeBasicPlan,
   balanceDetailedConveyors,
@@ -568,7 +569,7 @@ export function materializeDetailedCanvas(
   });
 
   return detailedDocumentFromEditor(
-    {
+    spaceRouterPorts({
       ...(document.groupNames ? { groupNames: document.groupNames } : {}),
       kind: "basic",
       materialLinks: balanced.connections.map(
@@ -581,7 +582,7 @@ export function materializeDetailedCanvas(
       ),
       nodes: balancedNodes,
       version: CANVAS_DOCUMENT_VERSION,
-    },
+    }),
     tiers,
   );
 }
