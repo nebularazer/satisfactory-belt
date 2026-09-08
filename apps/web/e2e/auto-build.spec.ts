@@ -197,6 +197,7 @@ test("limits mining to available nodes and keeps the form open for a capacity sh
     }),
   ).toBeDisabled();
   await page.getByLabel("Iron Ore extractor").selectOption("Build_MinerMk2_C");
+  await expect(page.getByRole("alert")).not.toBeVisible();
   await page
     .getByRole("spinbutton", { name: "Iron Ore normal nodes" })
     .fill("0");
