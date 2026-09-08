@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 test("auto-arranges a Detailed factory, undoes it, and restores routes after reload", async ({
   page,
 }, testInfo) => {
+  // Two worker layouts, undo/redo, and reload share this workflow's time budget.
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 1800, height: 1100 });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

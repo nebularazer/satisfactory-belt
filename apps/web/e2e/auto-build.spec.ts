@@ -55,6 +55,12 @@ test("auto-builds multiple outputs with an alternative recipe and adds independe
     .toBeGreaterThan(5);
   const first = await readDocument();
   expect(
+    first.nodes.some(
+      (node: { configuration: { buildableId: string } }) =>
+        node.configuration.buildableId === "Build_Converter_C",
+    ),
+  ).toBe(false);
+  expect(
     first.nodes.some((node: { label: string }) => node.label === "Cast Screws"),
   ).toBe(true);
   expect(
@@ -156,4 +162,81 @@ test("cancels generation before it can change the canvas", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Add your first node" }),
   ).toBeVisible();
+});
+
+test("limits mining to available nodes and keeps the form open for a capacity shortfall", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Add your first node" }).click();
+  await page
+    .getByPlaceholder("Search buildings or recipes...")
+    .fill("modular frame");
+  await page
+    .getByRole("button", { name: "Auto-build Modular Frame", exact: true })
+    .first()
+    .click();
+  await page
+    .getByText("Available resource nodes · unlimited", { exact: true })
+    .click();
+  await page
+    .getByRole("checkbox", { name: "Use only my listed mineral and oil nodes" })
+    .check();
+  await expect(
+    page.getByText("Up to 60 items/min", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Generate production plan" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Iron Ore needs 240 items/min; your listed nodes can supply 60 items/min",
+  );
+  await expect(
+    page.getByRole("button", {
+      name: "Undo",
+      exact: true,
+      includeHidden: true,
+    }),
+  ).toBeDisabled();
+  await page.getByLabel("Iron Ore extractor").selectOption("Build_MinerMk2_C");
+  await page
+    .getByRole("spinbutton", { name: "Iron Ore normal nodes" })
+    .fill("0");
+  await page.getByRole("spinbutton", { name: "Iron Ore pure nodes" }).fill("1");
+  await expect(
+    page.getByText("Up to 240 items/min", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("resource-node-budget.png"),
+  });
+  await page.getByRole("button", { name: "Generate production plan" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Auto-build production" }),
+  ).not.toBeVisible({ timeout: 20000 });
+  const read = () =>
+    page.evaluate(async () => {
+      const storageUrl = "/src/canvas/document-storage.ts";
+      const { createIndexedDbDocumentStorage } = await import(storageUrl);
+      return (await createIndexedDbDocumentStorage().loadWorkspace()).document;
+    });
+  await expect
+    .poll(async () => (await read())?.nodes?.length ?? 0)
+    .toBeGreaterThan(0);
+  const document = await read();
+  const miner = document.nodes.find(
+    (node: { configuration: { processId?: string } }) =>
+      node.configuration.processId === "extraction:Desc_OreIron_C",
+  );
+  expect(miner.configuration).toMatchObject({
+    buildableId: "Build_MinerMk2_C",
+    instances: [{ resourcePurity: "pure", clockSpeedPercent: 100 }],
+  });
+  expect(miner.configuration.instances).toHaveLength(1);
+  expect(
+    document.nodes.some(
+      (node: { configuration: { buildableId: string } }) =>
+        node.configuration.buildableId === "Build_Converter_C",
+    ),
+  ).toBe(false);
+  await page.screenshot({
+    path: testInfo.outputPath("modular-frames-from-iron.png"),
+  });
 });

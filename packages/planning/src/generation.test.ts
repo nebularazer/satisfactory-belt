@@ -17,6 +17,18 @@ describe("Plan generation", () => {
     const second = generateBasicPlan(request);
     expect(first).toEqual(second);
     expect(first.plan.kind).toBe("basic");
+    expect(
+      first.plan.nodes.some(
+        (node) =>
+          node.configuration.kind === "process" &&
+          node.configuration.processId === "extraction:Desc_OreIron_C",
+      ),
+    ).toBe(true);
+    expect(
+      first.plan.nodes.some(
+        (node) => node.configuration.buildableId === "Build_Converter_C",
+      ),
+    ).toBe(false);
     expect(first.plan.materialLinks.length).toBeGreaterThan(0);
     expect(() => analyzeBasicPlan(first.plan)).not.toThrow();
   });

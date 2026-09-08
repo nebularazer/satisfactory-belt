@@ -79,7 +79,11 @@ muted building icon in the body, visible ports, and compact rate labels. See
 In the Basic canvas, press **N**, search for a recipe, and choose **Auto-build**
 to generate a production plan for its output item. Set one or more output rates,
 allow alternative recipes, or require specific recipes for outputs and ingredients.
-Standard recipes are used by default; enabled alternatives get first consideration.
+Direct extraction supplies raw resources by default; enabled alternatives get first
+consideration among manufacturing recipes. Available resource nodes can limit each
+generated group to listed mineral and oil nodes, with extractor tiers, purity counts,
+and maximum clocks. The generator places matching extractors and reports capacity
+shortfalls. Water extractors and resource wells remain unrestricted by this budget.
 Generation and arrangement run in workers with cancellable progress. The result is
 added in free space and selected as one undoable operation, preserving existing nodes
 and connections. Clicking the recipe row still adds a single production node.
