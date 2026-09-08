@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("converts Auto-built Modular Frames without duplicated rod feed balancers", async ({
+test("converts Auto-built Modular Frames into recipe columns without duplicated rod feed balancers", async ({
   page,
 }, testInfo) => {
   test.setTimeout(60_000);
@@ -71,12 +71,37 @@ test("converts Auto-built Modular Frames without duplicated rod feed balancers",
     rate: expect.closeTo(12, 7),
   }));
   expect(await readFeeds()).toEqual(expected);
+  const readAssemblerStack = () =>
+    page.evaluate(async () => {
+      const storageUrl = "/src/canvas/document-storage.ts";
+      const modeUrl = "/src/canvas/editor-mode.ts";
+      const { createIndexedDbDocumentStorage } = await import(storageUrl);
+      const { detailedDocumentToEditor } = await import(modeUrl);
+      const document = detailedDocumentToEditor(
+        (await createIndexedDbDocumentStorage().loadWorkspace()).document,
+      );
+      return document.nodes
+        .filter(
+          (node: any) =>
+            node.configuration.processId === "Recipe_ModularFrame_C",
+        )
+        .map((node: any) => ({ x: node.x, y: node.y, height: node.height }))
+        .sort((a: any, b: any) => a.y - b.y);
+    });
+  const stack = await readAssemblerStack();
+  expect(stack).toHaveLength(5);
+  expect(new Set(stack.map((node: any) => node.x)).size).toBe(1);
+  for (let index = 1; index < stack.length; index++)
+    expect(stack[index].y - stack[index - 1].y - stack[index - 1].height).toBe(
+      64,
+    );
   await page.getByRole("application", { name: "Infinite canvas" }).press("1");
   await page.screenshot({
     path: testInfo.outputPath("whole-consumer-feeds.png"),
   });
   await page.reload();
   expect(await readFeeds()).toEqual(expected);
+  expect(await readAssemblerStack()).toEqual(stack);
   expect(errors).toEqual([]);
 });
 
