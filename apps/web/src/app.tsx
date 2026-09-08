@@ -156,9 +156,6 @@ function CanvasWorkspace({
   const importInputRef = useRef<HTMLInputElement>(null);
   const initialMode: CanvasEditorMode =
     initialDocument?.kind === "detailed" ? "detailed" : "basic";
-  const detailedTiersRef = useRef(
-    initialDocument?.kind === "detailed" ? initialDocument.tiers : [],
-  );
   const [editorMode, setEditorMode] = useState<CanvasEditorMode>(initialMode);
   const [editor, setEditor] = useState(() =>
     createCanvasEditor({
@@ -319,14 +316,13 @@ function CanvasWorkspace({
       editorMode === "detailed"
         ? detailedDocumentFromEditor(
             editor.getState().document,
-            detailedTiersRef.current,
+            editor.logisticsTiers,
           )
         : editor.getState().document,
     [editor, editorMode],
   );
   const activateDocument = useCallback((document: CanvasPlanDocument) => {
     const mode = document.kind;
-    if (mode === "detailed") detailedTiersRef.current = document.tiers;
     setEditor(
       createCanvasEditor({
         document:

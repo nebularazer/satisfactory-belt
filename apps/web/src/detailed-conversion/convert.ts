@@ -49,5 +49,6 @@ export function convertDetailed(
     throw new Error(
       `A connection needs ${Number(Number(overloaded.context?.ratePerMinute).toFixed(4))}/min, above its ${overloaded.context?.capacityPerMinute}/min limit. Choose a faster tier or split production into smaller groups.`,
     );
-  return result;
+  // Speed limits constrain generation, not subsequent manual editing.
+  return { ...result, tiers: DEFAULT_LOGISTICS_TIERS };
 }

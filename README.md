@@ -80,7 +80,10 @@ The mode switch shows **Create Detailed** when the Basic plan has no Detailed
 version. It opens a conversion dialog with maximum conveyor and pipeline tiers,
 and a plan name when the Basic plan is unsaved. Conversion and auto-arrangement
 run in workers, with stage progress, cancellation, and errors that keep the
-settings available for retry. The finished result opens already arranged. The
+settings available for retry. The selected speed limits apply only to conversion.
+The finished result opens already arranged with every conveyor and pipeline tier
+available for editing. New manual links start at Mk.1; the link inspector changes
+their tier. Existing saves also gain the full tier selection when opened. The
 button then becomes **Detailed** and reopens the saved version, including after a
 reload. Basic and Detailed still use linked saved documents; this conversion flow
 does not migrate them into one save record.

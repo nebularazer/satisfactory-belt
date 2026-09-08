@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-test("manually reconnects a restricted-tier Detailed plan before and after reload", async ({
+test("creates Mk.1 manual links and upgrades beyond conversion limits before and after reload", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -56,7 +57,12 @@ test("manually reconnects a restricted-tier Detailed plan before and after reloa
         .connections;
     });
   for (const reload of [false, true]) {
-    if (reload) await page.reload();
+    if (reload) {
+      await page.reload();
+      await expect
+        .poll(async () => (await readConnections())[0]?.tierId)
+        .toBe("conveyor-mk6");
+    }
     await canvas.press("1");
     const ports = await page.evaluate(async () => {
       const storageUrl = "/src/canvas/document-storage.ts";
@@ -99,7 +105,7 @@ test("manually reconnects a restricted-tier Detailed plan before and after reloa
     await page.mouse.click(ports[0].x, ports[0].y);
     await expect(page.getByText("12 items/min", { exact: true })).toBeVisible();
     await page.getByRole("combobox", { name: "Logistics tier" }).click();
-    await expect(page.getByRole("option")).toHaveCount(1);
+    await expect(page.getByRole("option")).toHaveCount(6);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Disconnect", exact: true }).click();
     await expect.poll(readConnections).toEqual([]);
@@ -116,6 +122,20 @@ test("manually reconnects a restricted-tier Detailed plan before and after reloa
     await expect.poll(readConnections).toEqual([]);
     await page.getByRole("button", { name: "Redo", exact: true }).click();
     await expect.poll(async () => (await readConnections()).length).toBe(1);
+    await page.mouse.click(ports[0].x, ports[0].y);
+    await page.getByRole("combobox", { name: "Logistics tier" }).click();
+    await page.getByRole("option", { name: "MK6 · 1,200" }).click();
+    await expect
+      .poll(async () => (await readConnections())[0]?.tierId)
+      .toBe("conveyor-mk6");
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect
+      .poll(async () => (await readConnections())[0]?.tierId)
+      .toBe("conveyor-mk1");
+    await page.getByRole("button", { name: "Redo", exact: true }).click();
+    await expect
+      .poll(async () => (await readConnections())[0]?.tierId)
+      .toBe("conveyor-mk6");
   }
   expect(errors).toEqual([]);
 });
@@ -188,8 +208,20 @@ test("creates an arranged Detailed plan through speed settings and reopens it", 
   );
   expect(detailed.tiers.map((tier: { id: string }) => tier.id)).toEqual([
     "conveyor-mk1",
+    "conveyor-mk2",
+    "conveyor-mk3",
+    "conveyor-mk4",
+    "conveyor-mk5",
+    "conveyor-mk6",
     "pipeline-mk1",
+    "pipeline-mk2",
   ]);
+  expect(
+    detailed.connections.every(
+      (edge: { kind: string; tierId: string }) =>
+        edge.tierId === `${edge.kind}-mk1`,
+    ),
+  ).toBe(true);
   const flows = await page.evaluate(async (document) => {
     const moduleUrl = "/src/canvas/material-link-presentation.ts";
     const modeUrl = "/src/canvas/editor-mode.ts";

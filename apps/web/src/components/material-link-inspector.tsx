@@ -62,7 +62,11 @@ export function MaterialLinkInspector({
   );
   const logistics = documentLink?.logistics;
   const tiers = logistics
-    ? editor.logisticsTiers.filter(({ medium }) => medium === logistics.kind)
+    ? editor.logisticsTiers
+        .filter(({ medium }) => medium === logistics.kind)
+        .toSorted(
+          (left, right) => left.capacityPerMinute - right.capacityPerMinute,
+        )
     : [];
 
   const palette = MATERIAL_FLOW_PALETTE[link.state];
