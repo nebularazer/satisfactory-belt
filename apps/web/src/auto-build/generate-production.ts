@@ -1,3 +1,4 @@
+import { applyResourceNodes } from "./resource-nodes";
 import { generateBasicPlan } from "@satisfactory-belt/planning";
 import { createNode, findDescriptor } from "@satisfactory-belt/production";
 import { basicPlanToCanvasDocument } from "@/canvas/plan-adapters";
@@ -51,8 +52,11 @@ export function generateProduction(settings: AutoBuildSettings) {
       "These rates cannot be met within the machines’ clock limits. Try a higher output rate or another recipe.",
     );
   }
+  const document = basicPlanToCanvasDocument(generated.plan);
   return {
-    document: basicPlanToCanvasDocument(generated.plan),
+    document: settings.resourceNodes
+      ? applyResourceNodes(document, settings.resourceNodes)
+      : document,
     externalInputs: generated.solution.externalResources.map((resource) => ({
       ...resource,
       name: findDescriptor(resource.itemId)?.name ?? resource.itemId,

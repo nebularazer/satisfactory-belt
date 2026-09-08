@@ -1,3 +1,5 @@
+import { ResourceNodeFields } from "./resource-node-fields";
+import type { ResourceNodeBudget } from "@/auto-build/resource-nodes";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   findDescriptor,
@@ -57,6 +59,9 @@ export function AutoBuildDialog({ itemId, onClose, onGenerate }: Props) {
   const [pinnedRecipes, setPinnedRecipes] = useState<Record<string, string>>(
     {},
   );
+  const [resourceNodes, setResourceNodes] = useState<
+    readonly ResourceNodeBudget[] | undefined
+  >();
   const [stage, setStage] = useState<AutoBuildStage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -108,6 +113,7 @@ export function AutoBuildDialog({ itemId, onClose, onGenerate }: Props) {
           })),
           allowedAlternateIds,
           pinnedRecipes,
+          resourceNodes,
         },
         abort.signal,
         setStage,
@@ -291,6 +297,11 @@ export function AutoBuildDialog({ itemId, onClose, onGenerate }: Props) {
               </Button>
             )}
           </fieldset>
+          <ResourceNodeFields
+            disabled={busy}
+            value={resourceNodes}
+            onChange={setResourceNodes}
+          />
           <fieldset disabled={busy} className="min-w-0 disabled:opacity-60">
             <details>
               <summary className="cursor-pointer font-medium">

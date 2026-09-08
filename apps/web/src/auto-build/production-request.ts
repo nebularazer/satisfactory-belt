@@ -1,4 +1,8 @@
 import {
+  validateResourceNodes,
+  type ResourceNodeBudget,
+} from "./resource-nodes";
+import {
   findDescriptor,
   findRecipe,
   listProductionProcesses,
@@ -11,6 +15,7 @@ import type {
 
 export type AutoBuildSettings = Readonly<{
   outputs: readonly RequestedOutput[];
+  resourceNodes?: readonly ResourceNodeBudget[];
   allowedAlternateIds: readonly string[];
   pinnedRecipes: Readonly<Record<string, string>>;
 }>;
@@ -19,6 +24,7 @@ export type AutoBuildSettings = Readonly<{
 export function productionRequest(
   settings: AutoBuildSettings,
 ): PlanningRequest {
+  if (settings.resourceNodes) validateResourceNodes(settings.resourceNodes);
   if (!settings.outputs.length) throw new Error("Add at least one output.");
   const outputs = new Map<string, number>();
   for (const output of settings.outputs) {
@@ -67,9 +73,16 @@ export function productionRequest(
     throw new Error(
       "Required recipes conflict because they produce the same item. Choose compatible recipes.",
     );
-  // Enabled alternatives get first consideration; pins exclude competing recipes.
-  const priority = (id: string) =>
-    pins.some(([, recipeId]) => recipeId === id) ? 0 : allowed.has(id) ? 1 : 2;
+  // Direct extraction supplies raw resources by default. Explicit pins override it;
+  // enabled alternatives get first consideration among manufacturing recipes.
+  const priority = (process: (typeof processes)[number]) =>
+    pins.some(([, recipeId]) => recipeId === process.id)
+      ? 0
+      : process.kind === "extraction" || process.kind === "resource-well"
+        ? 1
+        : allowed.has(process.id)
+          ? 2
+          : 3;
   return {
     outputs: [...outputs].map(([itemId, ratePerMinute]) => ({
       itemId,
@@ -78,7 +91,7 @@ export function productionRequest(
     allowedProcessIds: processes
       .toSorted(
         (a, b) =>
-          priority(a.id) - priority(b.id) ||
+          priority(a) - priority(b) ||
           a.name.localeCompare(b.name) ||
           a.id.localeCompare(b.id),
       )

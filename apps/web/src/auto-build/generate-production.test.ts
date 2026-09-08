@@ -36,6 +36,13 @@ describe("Auto-build production", () => {
   it("builds the requested net outputs using only standard recipes by default", () => {
     const result = generateProduction(settings);
     expect(result.document.nodes.length).toBeGreaterThan(5);
+    expect(processes(result)).toContain("extraction:Desc_OreIron_C");
+    expect(
+      result.document.nodes.some(
+        (node) => node.configuration.buildableId === "Build_Converter_C",
+      ),
+    ).toBe(false);
+    expect(processes(result)).not.toContain("extraction:Desc_SAM_C");
     expect(processes(result).every((id) => !findRecipe(id)?.alternate)).toBe(
       true,
     );
@@ -81,6 +88,91 @@ describe("Auto-build production", () => {
       pinnedRecipes: { Desc_IronScrew_C: cast.id },
     });
     expect(processes(result)).toContain(cast.id);
+  });
+
+  it("allocates miners to the selected tier, purity counts, and clock limit", () => {
+    const result = generateProduction({
+      ...settings,
+      resourceNodes: [
+        {
+          itemId: "Desc_OreIron_C",
+          buildableId: "Build_MinerMk2_C",
+          impure: 0,
+          normal: 1,
+          pure: 1,
+          maximumClockPercent: 100,
+        },
+      ],
+    });
+    const miner = result.document.nodes.find(
+      (node) =>
+        node.configuration.kind === "process" &&
+        node.configuration.processId === "extraction:Desc_OreIron_C",
+    )!;
+    expect(miner.configuration).toMatchObject({
+      buildableId: "Build_MinerMk2_C",
+      instances: [
+        { resourcePurity: "pure", clockSpeedPercent: 75 },
+        { resourcePurity: "normal", clockSpeedPercent: 75 },
+      ],
+    });
+    const output = createNode(miner.configuration).profile.materials;
+    expect(output).toMatchObject({
+      outputs: [{ itemId: "Desc_OreIron_C", ratePerMinute: 270 }],
+    });
+  });
+
+  it("reports unavailable resources and insufficient node capacity", () => {
+    expect(() =>
+      generateProduction({ ...settings, resourceNodes: [] }),
+    ).toThrow("Iron Ore needs 270 items/min; your listed nodes can supply 0");
+    expect(() =>
+      generateProduction({
+        ...settings,
+        resourceNodes: [
+          {
+            itemId: "Desc_OreIron_C",
+            buildableId: "Build_MinerMk1_C",
+            impure: 0,
+            normal: 1,
+            pure: 0,
+            maximumClockPercent: 100,
+          },
+        ],
+      }),
+    ).toThrow("can supply 60 items/min");
+  });
+
+  it("rejects malformed resource budgets", () => {
+    const budget = {
+      itemId: "Desc_OreIron_C",
+      buildableId: "Build_MinerMk1_C",
+      impure: 0,
+      normal: 1,
+      pure: 0,
+      maximumClockPercent: 100,
+    };
+    expect(() =>
+      productionRequest({ ...settings, resourceNodes: [budget, budget] }),
+    ).toThrow("List each resource once");
+    expect(() =>
+      productionRequest({
+        ...settings,
+        resourceNodes: [{ ...budget, normal: 1.5 }],
+      }),
+    ).toThrow("whole numbers");
+    expect(() =>
+      productionRequest({
+        ...settings,
+        resourceNodes: [{ ...budget, maximumClockPercent: 251 }],
+      }),
+    ).toThrow("between 1%");
+    expect(() =>
+      productionRequest({
+        ...settings,
+        resourceNodes: [{ ...budget, buildableId: "Build_OilPump_C" }],
+      }),
+    ).toThrow("compatible extractor");
   });
 
   it("rejects rates that would be changed by the minimum machine clock", () => {
