@@ -4,7 +4,11 @@ import { productionStructure } from "./production-structure";
 import { presentMaterialLinks } from "./material-link-presentation";
 
 const cache = new WeakMap<CanvasDocument, ReturnType<typeof regions>>();
-export function productionRegions(document: CanvasDocument) {
+export function productionRegions(
+  document: CanvasDocument,
+  topology: "aggregate" | "physical" = "physical",
+) {
+  if (topology === "aggregate") return [];
   let result = cache.get(document);
   if (!result) {
     result = regions(document);

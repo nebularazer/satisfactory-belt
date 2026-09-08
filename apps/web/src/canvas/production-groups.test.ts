@@ -23,7 +23,10 @@ it("selects, renames, resets and persists production and logistics group names",
     basic,
     await arrangeCanvas(detailedDocumentToEditor(detailed), new ELK()),
   ]) {
-    const editor = createCanvasEditor({ document: source });
+    const editor = createCanvasEditor({
+      document: source,
+      topology: "physical",
+    });
     const groups = productionRegions(source);
     for (const group of [
       groups.find((group) => !group.logistics)!,
@@ -86,4 +89,16 @@ it("rejects malformed saved group names and accepts older saves", () => {
   ])
     expect(() => parseGroupNames(value)).toThrow();
   expect(parseGroupNames({ id: "North" })).toEqual({ id: "North" });
+});
+
+it("does not expose groups or accept group selection in Basic mode", async () => {
+  const document = await arrangeCanvas(modularFrameFactory(false), new ELK());
+  const group = productionRegions(document, "physical")[0]!;
+  expect(productionRegions(document, "aggregate")).toEqual([]);
+  const editor = createCanvasEditor({ document });
+  editor.dispatch({ type: "selection.group", id: group.id });
+  expect(editor.getState().selectedGroupId).toBeUndefined();
+  expect(editor.getState().selectedIds).toEqual([]);
+  editor.dispatch({ type: "group.rename", id: group.id, name: "Hidden group" });
+  expect(editor.getState().document).toBe(document);
 });

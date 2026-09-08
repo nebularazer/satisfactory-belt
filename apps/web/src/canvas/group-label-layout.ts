@@ -41,8 +41,12 @@ export function groupLabelLayout(
   return { text: lines.join("\n"), fontSize, lineHeight, visible };
 }
 
-export function hitProductionGroup(document: CanvasDocument, point: Point) {
-  return productionRegions(document).find(
+export function hitProductionGroup(
+  document: CanvasDocument,
+  point: Point,
+  topology: "aggregate" | "physical" = "physical",
+) {
+  return productionRegions(document, topology).find(
     (region) =>
       point.x >= region.x &&
       point.x <= region.x + region.width &&

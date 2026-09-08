@@ -468,7 +468,11 @@ export function attachCanvasInteractions(
 
     const hitGroup =
       !hit && !hitPort
-        ? hitProductionGroup(editor.getState().document, worldPoint)
+        ? hitProductionGroup(
+            editor.getState().document,
+            worldPoint,
+            editor.topology,
+          )
         : undefined;
     if (hitGroup && !selectionModifier) {
       editor.dispatch({ type: "selection.group", id: hitGroup.id });
@@ -727,7 +731,11 @@ export function attachCanvasInteractions(
       );
       const hoverGroup =
         !hoverPort && !editor.hitTest(worldPoint)
-          ? hitProductionGroup(editor.getState().document, worldPoint)
+          ? hitProductionGroup(
+              editor.getState().document,
+              worldPoint,
+              editor.topology,
+            )
           : undefined;
       canvas.title = hoverGroup?.name ?? "";
       if (hoverGroup && !selectionModifier && !host.isPlacementActive()) {
@@ -990,7 +998,11 @@ export function attachCanvasInteractions(
     if (event.button !== 0) return;
     const screen = screenPoint(event);
     const worldPoint = screenToWorld(screen, host.getViewport());
-    const group = hitProductionGroup(editor.getState().document, worldPoint);
+    const group = hitProductionGroup(
+      editor.getState().document,
+      worldPoint,
+      editor.topology,
+    );
     if (group) {
       editor.dispatch({ type: "selection.group", id: group.id });
       return;

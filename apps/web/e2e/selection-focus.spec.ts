@@ -35,15 +35,13 @@ test("selection fades unrelated cards, keeps them clickable and clears without c
       }),
     )
     .toBe(true);
-  const { nodes, group, link, saved } = await page.evaluate(async () => {
+  const { nodes, link, saved } = await page.evaluate(async () => {
     document.documentElement.classList.remove("dark");
     const storageUrl = "/src/canvas/document-storage.ts";
     const viewportUrl = "/src/canvas/viewport.ts";
-    const regionsUrl = "/src/canvas/production-regions.ts";
     const geometryUrl = "/src/canvas/material-link-geometry.ts";
     const { createIndexedDbDocumentStorage } = await import(storageUrl);
     const { fitRectangleInViewport } = await import(viewportUrl);
-    const { productionRegions } = await import(regionsUrl);
     const { materialLinkPath, materialLinkLabelPoint } = await import(
       geometryUrl
     );
@@ -61,9 +59,6 @@ test("selection fades unrelated cards, keeps them clickable and clears without c
       x: x * viewport.zoom + viewport.x,
       y: y * viewport.zoom + viewport.y,
     });
-    const group = productionRegions(saved).find((g: any) =>
-      g.nodeIds.includes("screws"),
-    );
     const linkPoint = materialLinkLabelPoint(
       materialLinkPath(
         saved,
@@ -82,7 +77,6 @@ test("selection fades unrelated cards, keeps them clickable and clears without c
           },
         ]),
       ),
-      group: point(group.x + group.width / 2, group.y + 20),
       link: point(linkPoint.x, linkPoint.y),
     };
   });
@@ -130,12 +124,6 @@ test("selection fades unrelated cards, keeps them clickable and clears without c
     }),
   ).toBeVisible();
   expect(await contrast("smelters")).toBeGreaterThan(before.smelters * 0.9);
-  await page.mouse.click(group.x, group.y);
-  await expect(
-    page.getByRole("complementary", { name: "Group details", exact: true }),
-  ).toBeVisible();
-  await expect.poll(() => contrast("miners")).toBeLessThan(before.miners * 0.4);
-  await page.screenshot({ path: testInfo.outputPath("group-focus.png") });
   await page.keyboard.press("Escape");
   await expect
     .poll(() => contrast("miners"))

@@ -449,3 +449,40 @@ test("routes an empty-canvas long press only to the node picker", async ({
   await expect(page.getByText("Duplicate selection")).toBeHidden();
   await expect(page.getByText("Delete selection")).toBeHidden();
 });
+
+test("mobile build tools stay on one row with labeled mode and router menus", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  for (const width of [320, 390, 412]) {
+    await page.setViewportSize({ width, height: 844 });
+    const bar = page.getByRole("toolbar", { name: "Build tools" });
+    const menu = page.getByRole("button", { name: "Open canvas menu" });
+    const bounds = (await bar.boundingBox())!;
+    const menuBounds = (await menu.boundingBox())!;
+    expect(bounds.height).toBeLessThanOrEqual(56);
+    expect(bounds.x).toBeGreaterThan(menuBounds.x + menuBounds.width);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 8);
+    await page.getByRole("button", { name: "Plan mode: Basic" }).click();
+    await page
+      .getByRole("menuitem", { name: "Create Detailed", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Create Detailed plan" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    for (const router of ["Splitter", "Merger"]) {
+      await page.getByRole("button", { name: "More build tools" }).click();
+      await page.getByRole("menuitem", { name: router, exact: true }).click();
+      await expect(bar).toContainText("Tap canvas to place");
+      await page.getByRole("button", { name: "Cancel node placement" }).click();
+    }
+    await page.screenshot({
+      path: testInfo.outputPath(`mobile-toolbar-${width}.png`),
+    });
+  }
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(
+    page.getByPlaceholder("Search buildings or recipes..."),
+  ).toBeVisible();
+});

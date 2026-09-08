@@ -13,7 +13,7 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
     editor.getState,
   );
   const group = state.selectedGroupId
-    ? productionRegions(state.document).find(
+    ? productionRegions(state.document, editor.topology).find(
         (group) => group.id === state.selectedGroupId,
       )
     : undefined;

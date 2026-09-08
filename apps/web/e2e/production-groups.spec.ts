@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 for (const mode of ["basic", "detailed"] as const)
-  test(`selects and renames ${mode} groups with persistent names and bounded zoom labels`, async ({
+  test(`${mode === "basic" ? "hides Basic groups" : "renames Detailed groups with persistent names and bounded zoom labels"}`, async ({
     page,
   }, testInfo) => {
     test.setTimeout(60_000);
@@ -90,6 +90,15 @@ for (const mode of ["basic", "detailed"] as const)
     const inspector = page.getByRole("complementary", {
       name: "Group details",
     });
+    if (mode === "basic") {
+      await expect(inspector).toBeHidden();
+      await page.screenshot({
+        path: testInfo.outputPath("basic-without-groups.png"),
+      });
+      expect(await readNames()).toEqual({});
+      expect(errors).toEqual([]);
+      return;
+    }
     await expect(inspector).toBeVisible();
     const name =
       "Northern production — reinforced plate supply and distribution";

@@ -369,7 +369,7 @@ function updateMaterialVisual(
       (imageUrl) => Assets.cache.has(imageUrl),
     );
     const texture = displayUrl ? cachedTexture(displayUrl) : undefined;
-    if (display.imageVisualKey !== displayUrl) {
+    if (display.image.texture !== (texture ?? Texture.EMPTY)) {
       display.image.texture = texture ?? Texture.EMPTY;
       display.imageVisualKey = displayUrl;
     }
@@ -579,11 +579,11 @@ function updateNodeVisual(
     (imageUrl) => Assets.cache.has(imageUrl),
   );
   const machineTexture = displayUrl ? cachedTexture(displayUrl) : undefined;
-  if (display.machineImageVisualKey !== displayUrl) {
+  if (display.machineImage.texture !== (machineTexture ?? Texture.EMPTY)) {
     display.machineImage.texture = machineTexture ?? Texture.EMPTY;
-    display.machineImage.visible = Boolean(machineTexture);
     display.machineImageVisualKey = displayUrl;
   }
+  display.machineImage.visible = Boolean(machineTexture);
   display.machineImage.setSize(machineImageSize, machineImageSize);
   display.machineImage.position.set(
     layout.hasHeader ? 36 : node.width / 2,
@@ -758,6 +758,10 @@ function recycleNodeDisplay(
   pool: NodeDisplay[],
 ) {
   scene.removeChild(display.container);
+  // A pooled card may return as the same node at the same zoom. Its cleared
+  // textures still need rebuilding even when the document did not change.
+  display.modelNode = undefined;
+  display.visualKey = "";
   display.machineImage.texture = Texture.EMPTY;
   display.machineImageVisualKey = "";
   for (const material of [...display.leftPorts, ...display.rightPorts]) {
@@ -1018,7 +1022,9 @@ function drawMaterialLinks(
     : state.document;
   const preview = state.connectionPreview;
   const dark = document.documentElement.classList.contains("dark");
-  for (const region of moving ? [] : productionRegions(state.document)) {
+  for (const region of moving
+    ? []
+    : productionRegions(state.document, topology)) {
     const alpha =
       !focus || region.nodeIds.some((id) => focus.nodeIds.has(id))
         ? 1

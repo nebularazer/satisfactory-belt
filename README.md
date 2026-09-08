@@ -70,10 +70,14 @@ and connection remains editable on the same canvas. Feedback belts use separate
 return lanes with dashed strokes and no arrows; their colors still indicate flow
 and capacity. The connection inspector identifies feedback returns. Positions and
 connection paths are saved with the plan. Existing plans adopt the layout on their
-next Auto-arrange, with undo/redo available. Group headers scale with zoom,
+next Auto-arrange, with undo/redo available. Basic mode shows the cards directly;
+Detailed mode adds group outlines and labels. Group headers scale with zoom,
 wrap or truncate within their bounds, and have subtle outlines. Click a header to
 select the group and rename it in the inspector; hover to read its full name.
-Custom names survive save/reload and Auto-arrange, with rename/reset undoable.
+Custom Detailed group names survive save/reload and Auto-arrange, with rename/reset undoable.
+On mobile, the build toolbar stays on one row: choose Basic or Detailed from the
+mode menu, add a node directly, or open More build tools for splitters and mergers.
+
 Selecting nodes or a group keeps their immediate connections and neighbors clear
 while fading the rest of the canvas. Selecting a link focuses its two endpoints.
 Faded elements remain clickable; clear the selection to restore full visibility.

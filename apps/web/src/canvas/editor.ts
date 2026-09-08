@@ -421,7 +421,7 @@ export function createCanvasEditor(
     if (change.kind === "selection" && !("selectedGroupId" in partial))
       state = { ...state, selectedGroupId: undefined };
     if (state.selectedGroupId) {
-      const group = productionRegions(state.document).find(
+      const group = productionRegions(state.document, topology).find(
         (group) => group.id === state.selectedGroupId,
       );
       if (
@@ -1154,7 +1154,7 @@ export function createCanvasEditor(
       }
 
       case "selection.group": {
-        const group = productionRegions(state.document).find(
+        const group = productionRegions(state.document, topology).find(
           (group) => group.id === action.id,
         );
         if (!group) return;
@@ -1172,7 +1172,7 @@ export function createCanvasEditor(
         return;
       }
       case "group.rename": {
-        const group = productionRegions(state.document).find(
+        const group = productionRegions(state.document, topology).find(
           (group) => group.id === action.id,
         );
         const name = action.name.trim();

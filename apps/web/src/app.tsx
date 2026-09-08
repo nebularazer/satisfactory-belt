@@ -833,7 +833,7 @@ function CanvasWorkspace({
           />
         </div>
 
-        <div className="pointer-events-auto absolute top-3 left-1/2 max-w-[calc(100vw-5.5rem)] -translate-x-1/2 sm:top-4">
+        <div className="pointer-events-auto absolute top-3 right-3 left-16 sm:top-4 sm:right-auto sm:left-1/2 sm:max-w-[calc(100vw-5.5rem)] sm:-translate-x-1/2">
           <CanvasBuildBar
             detailedAvailable={
               editorMode === "detailed" ||

@@ -473,8 +473,9 @@ test("cancels an active conversion without saving either version", async ({
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.getByRole("button", { name: "Plan mode: Basic" }).click();
   await page
-    .getByRole("button", { name: "Create Detailed plan", exact: true })
+    .getByRole("menuitem", { name: "Create Detailed", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Create Detailed plan" });
   await expect(dialog).toBeVisible();
@@ -497,10 +498,7 @@ test("cancels an active conversion without saving either version", async ({
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(
-    page.getByRole("button", { name: "Basic editor" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(
-    page.getByRole("button", { name: "Create Detailed plan", exact: true }),
+    page.getByRole("button", { name: "Plan mode: Basic" }),
   ).toBeVisible();
   expect(
     await page.evaluate(async () => {

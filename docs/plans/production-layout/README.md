@@ -3,6 +3,8 @@
 Auto-arrange and Detailed conversion use the same layout. Recipes form vertical
 stacks; parallel steps occupy the same production stage. Physical logistics sit
 in their own areas between stages. The diagram stays on one editable canvas.
+Group labels, outlines, header selection, and renaming are shown only in Detailed
+mode; Basic mode shows its recipe cards directly.
 
 These screenshots are from the actual browser conversion workflow: 10 Modular
 Frames/min, Cast Screws, and Mk.1 belts.
@@ -55,3 +57,12 @@ preserving their capacity colors, dashed return style, and click targets.
 ![Selecting and renaming a group](rename.png)
 
 ![Sharp, wrapped and truncated group labels at 301 percent zoom](labels-close.png)
+
+Basic mode keeps the arranged cards and connections without group decorations.
+
+![Basic factory without group labels or outlines](basic.png)
+
+The mobile build toolbar uses a mode menu, Add node, and a menu with labeled
+Splitter and Merger actions. It stays on one row at 320–412px widths.
+
+![Single-row mobile build toolbar](mobile-toolbar.png)
