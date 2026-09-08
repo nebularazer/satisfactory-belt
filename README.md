@@ -64,8 +64,10 @@ visual scale of the canvas.
 
 Auto-arrange runs ELK in a worker and fits the result on screen. Machines using
 one recipe form a vertical stack, and parallel production steps share a stage.
-Splitters, mergers, and junctions occupy labeled logistics areas between stages,
-including separate supply groups needed for belt capacity. Every physical node
+Splitters, mergers, and junctions are placed individually between stages, close
+to their connected machines. Belts route directly between actual ports, with
+parallel runs where paths naturally align. Group outlines annotate the finished
+layout; there are no shared boundary exits forcing belts into a highway. Every physical node
 and connection remains editable on the same canvas. Feedback belts use separate
 return lanes with dashed strokes and no arrows; their colors still indicate flow
 and capacity. The connection inspector identifies feedback returns. Positions and

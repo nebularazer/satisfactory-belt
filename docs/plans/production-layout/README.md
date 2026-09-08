@@ -2,7 +2,7 @@
 
 Auto-arrange and Detailed conversion use the same layout. Recipes form vertical
 stacks; parallel steps occupy the same production stage. Physical logistics sit
-in their own areas between stages. The diagram stays on one editable canvas.
+between stages, aligned with their connected machine ports. The diagram stays on one editable canvas.
 Group labels, outlines, header selection, and renaming are shown only in Detailed
 mode; Basic mode shows its recipe cards directly.
 
@@ -13,6 +13,12 @@ Frames/min, Cast Screws, and Mk.1 belts.
 
 ![Rod collection, distribution, and separate dashed return lanes](returns.png)
 
+The larger Detailed fixture shows balancer branches aligned with the Cast Screw
+constructors they feed. The last mergers connect straight into the machine
+stack, without collecting those belts into a shared exit.
+
+![Balancer branches feeding machines directly at their port heights](direct-feeds.png)
+
 ## Layout rules
 
 - Group machines by recipe, preserving individual cards and machine port order.
@@ -21,9 +27,14 @@ Frames/min, Cast Screws, and Mk.1 belts.
   actual port identities, smart rules, priorities, and rates stay unchanged.
 - Group connected routers and parallel supply groups serving the same recipe
   port. Capacity limits still describe separate physical belts.
-- Lay out each logistics area with fixed boundary ports, then arrange those
-  areas between production stages. Join the internal and external routes at
-  their boundary ports. No synthetic boundary nodes enter the saved plan.
+- Lay out individual routers together with fixed recipe stacks in one graph.
+  Reserve layers for each production stage and its logistics depth, keeping
+  parallel recipes aligned even when their balancers have different depths.
+  Route directly between actual ports; no logistics boundary ports or joined
+  internal/external routes funnel belts through a shared exit.
+- Prefer short routes and local bends, allowing branches to leave at different
+  heights near their consumers. Draw group outlines around clear areas of the
+  resulting layout; omit a rectangle if it would enclose unrelated nodes.
 - Identify cycles from topology, then recognize return distributors feeding
   parallel branches. Put routers serving only returns below the forward flow.
   Give return links separate lanes, rounded dashes, and the existing flow colors.

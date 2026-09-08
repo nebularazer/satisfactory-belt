@@ -72,6 +72,30 @@ function expectAttachedClearRoutes(document: CanvasDocument) {
   }
 }
 
+function expectDirectConsumerFeeds(document: CanvasDocument) {
+  const nodes = new Map(
+    document.nodes.map((node) => [node.configuration.id, node]),
+  );
+  for (const link of document.materialLinks) {
+    if (
+      nodes.get(link.from.nodeId)!.configuration.kind !== "router" ||
+      nodes.get(link.to.nodeId)!.configuration.kind !== "process"
+    )
+      continue;
+    const route = link.route!;
+    // A local bend can avoid a port or card. A trip down to a common highway
+    // and back adds hundreds of pixels of unnecessary vertical travel.
+    const verticalTravel = route
+      .slice(1)
+      .reduce(
+        (sum, point, index) => sum + Math.abs(point.y - route[index]!.y),
+        0,
+      );
+    const direct = Math.abs(route.at(-1)!.y - route[0]!.y);
+    expect(verticalTravel - direct, link.id).toBeLessThanOrEqual(128);
+  }
+}
+
 describe("Auto-arrange", () => {
   it("lays out the Detailed Modular Frame factory without overlaps or routes through cards", async () => {
     const detailed = materializeDetailedCanvas(modularFrameFactory(false));
@@ -91,6 +115,7 @@ describe("Auto-arrange", () => {
     const result = await arrangeCanvas(source);
     expectRecipeColumns(result);
     expectAttachedClearRoutes(result);
+    expectDirectConsumerFeeds(result);
     expect(result.nodes.map(({ configuration }) => configuration)).toEqual(
       source.nodes.map(({ configuration }) => configuration),
     );
@@ -142,7 +167,7 @@ describe("Auto-arrange", () => {
     expect(detailedDocumentToEditor(restored)).toEqual(result);
   }, 40_000);
 
-  it("separates full logistics networks from recipe stacks and reserves a return lane", async () => {
+  it("places logistics between recipe stacks and reserves a return lane", async () => {
     const { document } = generateProduction({
       outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 10 }],
       allowedAlternateIds: [],
@@ -158,6 +183,7 @@ describe("Auto-arrange", () => {
     const result = await arrangeCanvas(source);
     expectRecipeColumns(result);
     expectAttachedClearRoutes(result);
+    expectDirectConsumerFeeds(result);
     const parts = result.nodes.filter(
       (node) =>
         node.configuration.kind === "process" &&
@@ -182,7 +208,7 @@ describe("Auto-arrange", () => {
       const top = Math.min(...members.map((node) => node.y));
       const bottom = Math.max(...members.map((node) => node.y + node.height));
       for (const node of result.nodes.filter(
-        (node) => !ids.includes(node.configuration.id),
+        (node) => node.configuration.kind !== "router",
       )) {
         expect(
           node.x < right &&
