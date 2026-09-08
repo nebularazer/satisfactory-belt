@@ -300,7 +300,10 @@ export function AutoBuildDialog({ itemId, onClose, onGenerate }: Props) {
           <ResourceNodeFields
             disabled={busy}
             value={resourceNodes}
-            onChange={setResourceNodes}
+            onChange={(next) => {
+              setResourceNodes(next);
+              setError(null);
+            }}
           />
           <fieldset disabled={busy} className="min-w-0 disabled:opacity-60">
             <details>
