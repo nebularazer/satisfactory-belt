@@ -41,7 +41,13 @@ import {
   type NodeRequest,
   type NodeTemplate,
 } from "@satisfactory-belt/production";
-import { ArrowLeft, ArrowRight, SearchIcon, XIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  SearchIcon,
+  WandSparkles,
+  XIcon,
+} from "lucide-react";
 
 import { CommandDialog } from "@/components/ui/command";
 import {
@@ -64,6 +70,7 @@ export type NodePickerSelection = Readonly<{
 }>;
 
 type NodePickerProps = {
+  onAutoBuild?: (itemId: string) => void;
   allowSelection?: (selection: NodePickerSelection) => boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (selection: NodePickerSelection) => void;
@@ -575,6 +582,8 @@ function ResponsiveCatalogImage({
 }
 
 type RecipeRowProps = {
+  onAutoBuild?: (itemId: string) => void;
+  targetItemId?: string;
   active: boolean;
   domId: string;
   machine: ProductionMachine;
@@ -589,6 +598,8 @@ type RecipeRowProps = {
 };
 
 function RecipeRow({
+  onAutoBuild,
+  targetItemId,
   active,
   domId,
   machine,
@@ -601,7 +612,9 @@ function RecipeRow({
   setSize,
   showStandardBadge = false,
 }: RecipeRowProps) {
-  const output = routeOutput(recipe, query);
+  const output =
+    recipe.outputs.find((output) => output.itemId === targetItemId) ??
+    routeOutput(recipe, query);
   const routes = output ? recipesProducing(output.itemId) : [];
   const outputItem = output ? findDescriptor(output.itemId) : undefined;
   const inputMaterials = formatMaterials(recipe.inputs);
@@ -624,123 +637,140 @@ function RecipeRow({
 
   return (
     <div
-      className="flex items-stretch rounded-md data-[active=true]:bg-muted"
+      className="flex flex-col rounded-md data-[active=true]:bg-muted"
       data-active={active}
       onMouseMove={onActivate}
     >
-      <div
-        aria-posinset={position}
-        aria-selected={active}
-        aria-setsize={setSize}
-        className="flex min-w-0 flex-1 cursor-default items-start gap-3 rounded-md px-2.5 py-2 text-xs/relaxed outline-hidden"
-        id={domId}
-        onClick={onSelect}
-        role="option"
-      >
-        <ResponsiveCatalogImage
-          className="mt-0.5 size-14 shrink-0 object-contain"
-          image={buildableImage(machine.id)}
-          loading="lazy"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="truncate font-medium">
-              <HighlightedText query={query} text={recipe.name} />
-            </span>
-            {(recipe.alternate || showStandardBadge) && (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.5625rem] leading-none text-muted-foreground">
-                <HighlightedText
-                  query={query}
-                  text={recipe.alternate ? "Alternate" : "Standard"}
-                />
+      <div className="flex items-stretch">
+        <div
+          aria-posinset={position}
+          aria-selected={active}
+          aria-setsize={setSize}
+          className="flex min-w-0 flex-1 cursor-default items-start gap-3 rounded-md px-2.5 py-2 text-xs/relaxed outline-hidden"
+          id={domId}
+          onClick={onSelect}
+          role="option"
+        >
+          <ResponsiveCatalogImage
+            className="mt-0.5 size-14 shrink-0 object-contain"
+            image={buildableImage(machine.id)}
+            loading="lazy"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className="truncate font-medium">
+                <HighlightedText query={query} text={recipe.name} />
               </span>
-            )}
-          </div>
-          <div className="mt-0.5 grid grid-cols-[1.5rem_max-content_minmax(0,1fr)] items-baseline gap-x-1 text-[0.625rem] leading-relaxed text-muted-foreground">
-            {inputMaterials.map((material, index) => (
-              <div className="contents" key={`input:${material.name}:${index}`}>
-                <span
-                  aria-label={index === 0 ? "Inputs" : undefined}
-                  className="font-medium tracking-wide text-muted-foreground/70"
-                >
-                  {index === 0 ? "IN" : ""}
+              {(recipe.alternate || showStandardBadge) && (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.5625rem] leading-none text-muted-foreground">
+                  <HighlightedText
+                    query={query}
+                    text={recipe.alternate ? "Alternate" : "Standard"}
+                  />
                 </span>
-                <span
-                  className={cn(
-                    "text-right tabular-nums",
-                    materialClassName(material.name),
-                  )}
-                >
-                  {material.rate}
-                </span>
-                <span
-                  className={cn("truncate", materialClassName(material.name))}
-                  title={material.name}
-                >
-                  <HighlightedText query={query} text={material.name} />
-                </span>
-              </div>
-            ))}
-            {outputMaterials.map((material, index) => (
-              <div
-                className="contents"
-                key={`output:${material.name}:${index}`}
-              >
-                <span
-                  aria-label={index === 0 ? "Outputs" : undefined}
-                  className="font-medium tracking-wide text-muted-foreground/70"
-                >
-                  {index === 0 ? "OUT" : ""}
-                </span>
-                <span
-                  className={cn(
-                    "text-right tabular-nums",
-                    materialClassName(material.name),
-                  )}
-                >
-                  {material.rate}
-                </span>
-                <span
-                  className={cn("truncate", materialClassName(material.name))}
-                  title={material.name}
-                >
-                  <HighlightedText query={query} text={material.name} />
-                </span>
-              </div>
-            ))}
-          </div>
-          {matchReason && (
-            <div className="mt-0.5">
-              <MatchReason query={query} reason={matchReason} />
+              )}
             </div>
-          )}
-          <div
-            className="mt-0.5 text-[0.625rem] text-muted-foreground"
-            title="Power at 100% clock speed without production amplification"
-          >
-            <HighlightedText query={query} text={machine.name} /> ·{" "}
-            {formatPower(recipe, machine)}
+            <div className="mt-0.5 grid grid-cols-[1.5rem_max-content_minmax(0,1fr)] items-baseline gap-x-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+              {inputMaterials.map((material, index) => (
+                <div
+                  className="contents"
+                  key={`input:${material.name}:${index}`}
+                >
+                  <span
+                    aria-label={index === 0 ? "Inputs" : undefined}
+                    className="font-medium tracking-wide text-muted-foreground/70"
+                  >
+                    {index === 0 ? "IN" : ""}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-right tabular-nums",
+                      materialClassName(material.name),
+                    )}
+                  >
+                    {material.rate}
+                  </span>
+                  <span
+                    className={cn("truncate", materialClassName(material.name))}
+                    title={material.name}
+                  >
+                    <HighlightedText query={query} text={material.name} />
+                  </span>
+                </div>
+              ))}
+              {outputMaterials.map((material, index) => (
+                <div
+                  className="contents"
+                  key={`output:${material.name}:${index}`}
+                >
+                  <span
+                    aria-label={index === 0 ? "Outputs" : undefined}
+                    className="font-medium tracking-wide text-muted-foreground/70"
+                  >
+                    {index === 0 ? "OUT" : ""}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-right tabular-nums",
+                      materialClassName(material.name),
+                    )}
+                  >
+                    {material.rate}
+                  </span>
+                  <span
+                    className={cn("truncate", materialClassName(material.name))}
+                    title={material.name}
+                  >
+                    <HighlightedText query={query} text={material.name} />
+                  </span>
+                </div>
+              ))}
+            </div>
+            {matchReason && (
+              <div className="mt-0.5">
+                <MatchReason query={query} reason={matchReason} />
+              </div>
+            )}
+            <div
+              className="mt-0.5 text-[0.625rem] text-muted-foreground"
+              title="Power at 100% clock speed without production amplification"
+            >
+              <HighlightedText query={query} text={machine.name} /> ·{" "}
+              {formatPower(recipe, machine)}
+            </div>
           </div>
         </div>
+        {onOpenRoutes && output && routes.length > 1 ? (
+          <button
+            aria-label={routeLabel}
+            className="flex size-11 shrink-0 items-center justify-center self-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            onClick={() => onOpenRoutes(output.itemId)}
+            title={routeLabel}
+            type="button"
+          >
+            <ArrowRight aria-hidden="true" className="size-4" />
+          </button>
+        ) : (
+          <span aria-hidden="true" className="size-11 shrink-0" />
+        )}
       </div>
-      {onOpenRoutes && output && routes.length > 1 ? (
+      {onAutoBuild && output && (
         <button
-          aria-label={routeLabel}
-          className="flex size-11 shrink-0 items-center justify-center self-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-          onClick={() => onOpenRoutes(output.itemId)}
-          title={routeLabel}
+          aria-label={`Auto-build ${outputItem?.name ?? "production"}`}
+          className="ml-[4.875rem] mb-2 flex min-h-9 shrink-0 items-center gap-1 self-start rounded-md px-2 text-[0.625rem] font-medium text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          onClick={() => onAutoBuild(output.itemId)}
           type="button"
         >
-          <ArrowRight aria-hidden="true" className="size-4" />
+          <WandSparkles aria-hidden="true" className="size-3.5" />
+          Auto-build
         </button>
-      ) : (
-        <span aria-hidden="true" className="size-11 shrink-0" />
       )}
     </div>
   );
 }
 
 export function NodePicker({
+  onAutoBuild,
   allowSelection,
   onOpenChange,
   onSelect,
@@ -1669,6 +1699,17 @@ export function NodePicker({
                       </div>
                     ) : (
                       <RecipeRow
+                        onAutoBuild={
+                          onAutoBuild
+                            ? (itemId) => {
+                                setOpen(false);
+                                onAutoBuild(itemId);
+                              }
+                            : undefined
+                        }
+                        targetItemId={
+                          scope.type === "routes" ? scope.itemId : undefined
+                        }
                         active={active}
                         domId={domId}
                         machine={row.machine}

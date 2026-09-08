@@ -71,6 +71,11 @@ export type CanvasEditorChange = Readonly<
 >;
 
 export type CanvasEditorAction =
+  | {
+      type: "document.insert";
+      source: CanvasDocument;
+      document: CanvasDocument;
+    }
   | { type: "document.replace"; document: CanvasDocument }
   | { type: "document.reset" }
   | {
@@ -625,6 +630,44 @@ export function createCanvasEditor(
           },
           { kind: "settings" },
         );
+        return;
+      }
+
+      case "document.insert": {
+        if (
+          action.source !== state.document ||
+          moveTransaction ||
+          topology !== "aggregate"
+        )
+          return;
+        const after = action.document.nodes.map((node, index) => ({
+          node,
+          index: state.document.nodes.length + index,
+        }));
+        const afterLinks = action.document.materialLinks.map((link, index) => ({
+          link,
+          index: state.document.materialLinks.length + index,
+        }));
+        const document = {
+          ...state.document,
+          nodes: [...state.document.nodes, ...action.document.nodes],
+          materialLinks: [
+            ...state.document.materialLinks,
+            ...action.document.materialLinks,
+          ],
+        };
+        validateDocument(document, topology);
+        const selectedIds = action.document.nodes.map(canvasNodeId);
+        commit(document, selectedIds, {
+          before: [],
+          after,
+          beforeLinks: [],
+          afterLinks,
+          beforeSelection: state.selectedIds,
+          afterSelection: selectedIds,
+          beforeLinkSelection: state.selectedLinkIds,
+          afterLinkSelection: [],
+        });
         return;
       }
 
