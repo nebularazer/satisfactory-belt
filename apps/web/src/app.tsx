@@ -172,6 +172,10 @@ function CanvasWorkspace({
         : {}),
       snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
       topology: initialMode === "detailed" ? "physical" : "aggregate",
+      logisticsTiers:
+        initialDocument?.kind === "detailed"
+          ? initialDocument.tiers
+          : undefined,
     }),
   );
   const [arranging, setArranging] = useState(false);
@@ -329,6 +333,8 @@ function CanvasWorkspace({
           mode === "detailed" ? detailedDocumentToEditor(document) : document,
         snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
         topology: mode === "detailed" ? "physical" : "aggregate",
+        logisticsTiers:
+          document.kind === "detailed" ? document.tiers : undefined,
       }),
     );
     setEditorMode(mode);
