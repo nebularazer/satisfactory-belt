@@ -2,6 +2,7 @@ import { findProductionProcess } from "@satisfactory-belt/production";
 import type { CanvasDocument, CanvasNode } from "./document";
 import { productionStructure } from "./production-structure";
 import { presentMaterialLinks } from "./material-link-presentation";
+import { groupBounds } from "./group-bounds";
 
 const cache = new WeakMap<CanvasDocument, ReturnType<typeof regions>>();
 export function productionRegions(
@@ -64,12 +65,15 @@ function regions(document: CanvasDocument) {
     }),
   ];
   return groups.flatMap((group) => {
-    const x = Math.min(...group.nodes.map((node) => node.x)) - 20;
-    const y = Math.min(...group.nodes.map((node) => node.y)) - 56;
-    const width =
-      Math.max(...group.nodes.map((node) => node.x + node.width)) - x + 20;
-    const height =
-      Math.max(...group.nodes.map((node) => node.y + node.height)) - y + 20;
+    const ids = new Set(group.nodes.map((node) => node.configuration.id));
+    const internal = group.logistics
+      ? document.materialLinks
+          .filter(
+            (link) => ids.has(link.from.nodeId) && ids.has(link.to.nodeId),
+          )
+          .map((link) => link.route ?? [])
+      : [];
+    const { x, y, width, height } = groupBounds(group.nodes, internal);
     if (
       document.nodes.some(
         (node) =>

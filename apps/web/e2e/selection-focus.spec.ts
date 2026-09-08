@@ -35,11 +35,13 @@ test("selection fades unrelated cards, keeps them clickable and clears without c
       }),
     )
     .toBe(true);
-  const { nodes, link, saved } = await page.evaluate(async () => {
+  const { nodes, link, saved, portInterior } = await page.evaluate(async () => {
     document.documentElement.classList.remove("dark");
     const storageUrl = "/src/canvas/document-storage.ts";
     const viewportUrl = "/src/canvas/viewport.ts";
     const geometryUrl = "/src/canvas/material-link-geometry.ts";
+    const portUrl = "/src/canvas/material-port-geometry.ts";
+    const { materialPortGeometry } = await import(portUrl);
     const { createIndexedDbDocumentStorage } = await import(storageUrl);
     const { fitRectangleInViewport } = await import(viewportUrl);
     const { materialLinkPath, materialLinkLabelPoint } = await import(
@@ -65,7 +67,15 @@ test("selection fades unrelated cards, keeps them clickable and clears without c
         saved.materialLinks.find((l: any) => l.id === "ore"),
       ),
     );
+    const port = materialPortGeometry(
+      saved.nodes.find((node: any) => node.configuration.id === "miners"),
+    ).find((port: any) => port.side === "right");
     return {
+      portInterior: {
+        ...point(port.point.x, port.point.y - 4),
+        width: 2,
+        height: 2,
+      },
       saved,
       nodes: Object.fromEntries(
         saved.nodes.map((n: any) => [
@@ -106,6 +116,13 @@ test("selection fades unrelated cards, keeps them clickable and clears without c
   ).toBeVisible();
   await expect.poll(() => contrast("miners")).toBeLessThan(before.miners * 0.4);
   expect(await contrast("smelters")).toBeGreaterThan(before.smelters * 0.9);
+  // The faded port remains a colored ring with a neutral center; a colored
+  // disk underneath a translucent white disk would tint the center instead.
+  const center = await sharp(
+    await page.screenshot({ clip: portInterior }),
+  ).stats();
+  const channels = center.channels.slice(0, 3).map((channel) => channel.mean);
+  expect(Math.max(...channels) - Math.min(...channels)).toBeLessThanOrEqual(4);
   await page.screenshot({ path: testInfo.outputPath("node-focus.png") });
   // Muted cards retain their normal hit targets.
   await clickNode("miners");

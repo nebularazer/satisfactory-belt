@@ -27,6 +27,10 @@ test("paints delayed images without interaction and restores recycled cards at t
     await route.continue();
   });
   await page.reload();
+  // Fit all needs the mounted renderer; the toolbar can appear before it.
+  await expect(
+    page.getByRole("application", { name: "Infinite canvas" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Open canvas menu" }).click();
   await page.getByRole("menuitem", { name: /^Fit all/ }).click();
   // The lone 256px card is centered at 100% zoom by Fit all.

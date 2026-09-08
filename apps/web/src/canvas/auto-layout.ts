@@ -1,3 +1,5 @@
+import { groupBounds } from "./group-bounds";
+import { routeFeedback } from "./feedback-routing";
 import { routeBetweenGroups } from "./layout-routing";
 import { spaceRouterPorts } from "./router-port-spacing";
 import type { ELK, ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api";
@@ -8,7 +10,7 @@ import type {
 } from "./document";
 import type { Point } from "./geometry";
 import { materialPortGeometry } from "./material-port-geometry";
-import { routeOrthogonally, simplifyRoute } from "./orthogonal-router";
+import { simplifyRoute } from "./orthogonal-router";
 import { graphStages } from "./graph-stages";
 import { productionStructure } from "./production-structure";
 
@@ -38,7 +40,6 @@ type Block = {
   nodes: CanvasNode[];
   ports: NonNullable<ElkNode["ports"]>;
   routes: Map<string, readonly Point[]>;
-  tails: Map<string, Point[]>;
 };
 const endpointKey = (link: CanvasMaterialLink, end: "from" | "to") =>
   key(link.id, end);
@@ -216,93 +217,19 @@ async function logisticsBlock(
       })
       .map((edge) => [edge.id, points(edge)]),
   );
-  const ports = new Map(
-    placed.flatMap((node) =>
-      materialPortGeometry(node).map(
-        (p) => [key(node.configuration.id, p.port.id), p] as const,
-      ),
-    ),
-  );
-  const bottom = Math.max(...placed.map((node) => node.y + node.height));
-  const obstacles = placed.map((node) => ({
-    ...node,
-    id: node.configuration.id,
-  }));
-  feedback.forEach((link, index) => {
-    const from = ports.get(key(link.from.nodeId, link.from.portId))!;
-    const to = ports.get(key(link.to.nodeId, link.to.portId))!;
-    const y = bottom + 64 + index * 28;
-    const laneOffset = 32 + index * 20;
-    const fromX =
-      from.point.x + (from.side === "left" ? -laneOffset : laneOffset);
-    const toX = to.point.x + (to.side === "left" ? -laneOffset : laneOffset);
-    // Return distributors already sit below the forward network. Their outgoing
-    // feeds travel directly across at their port heights, then rise to rejoin.
-    // Only the belt arriving back at the distributor needs the outside lane.
-    const rejoin =
-      structure.returnNodes.has(from.nodeId) &&
-      !structure.returnNodes.has(to.nodeId) &&
-      from.side === "right" &&
-      to.side === "left" &&
-      to.point.x > from.point.x;
-    const siblings = feedback
-      .filter((edge) => edge.from.nodeId === from.nodeId)
-      .toSorted(
-        (a, b) =>
-          ports.get(key(a.from.nodeId, a.from.portId))!.point.y -
-            ports.get(key(b.from.nodeId, b.from.portId))!.point.y ||
-          a.id.localeCompare(b.id),
-      );
-    const rejoinX =
-      to.point.x -
-      32 -
-      (siblings.length -
-        1 -
-        siblings.findIndex((edge) => edge.id === link.id)) *
-        20;
-    routes.set(
-      link.id,
-      routeOrthogonally(
-        { point: from.point, side: from.side, nodeId: from.nodeId },
-        { point: to.point, side: to.side, nodeId: to.nodeId },
-        obstacles,
-        rejoin
-          ? [
-              { x: rejoinX, y: from.point.y },
-              { x: rejoinX, y: to.point.y },
-            ]
-          : [
-              { x: fromX, y: from.point.y },
-              { x: fromX, y },
-              { x: toX, y },
-              { x: toX, y: to.point.y },
-            ],
-      ),
-    );
-  });
-  // Reserve any leftward return detour inside the logistics obstacle as well.
-  const shiftX = Math.max(
-    0,
-    48 -
-      Math.min(
-        ...[...routes.values()].flat().map((point) => point.x),
-        ...placed.map((node) => node.x),
-      ),
-  );
-  if (shiftX) {
-    for (const node of placed) node.x += shiftX;
-    for (const [id, route] of routes)
-      routes.set(id, translate(route, { x: shiftX, y: 0 }));
+  routeFeedback(placed, links, feedback, structure.returnNodes, routes);
+  // Reserve internal belts and symmetric padding, including local return lanes.
+  const bounds = groupBounds(placed, [...routes.values()]);
+  const shift = { x: Math.max(0, -bounds.x), y: Math.max(0, -bounds.y) };
+  for (const node of placed) {
+    node.x += shift.x;
+    node.y += shift.y;
   }
-  const width = Math.max(
-    graph.width ?? 0,
-    returnX,
-    ...[...routes.values()].flat().map((point) => point.x + 48),
-  );
+  for (const [id, route] of routes) routes.set(id, translate(route, shift));
+  const width = Math.max(graph.width ?? 0, bounds.x + bounds.width + shift.x);
   const height = Math.max(
     graph.height ?? 0,
-    ...placed.map((node) => node.y + node.height + 48),
-    ...[...routes.values()].flat().map((point) => point.y + 48),
+    bounds.y + bounds.height + shift.y,
   );
   const block: Block = {
     id: key("logistics", ids[0]!),
@@ -311,7 +238,6 @@ async function logisticsBlock(
     nodes: placed,
     ports: [],
     routes,
-    tails: new Map(),
   };
   for (const [edges, end] of [
     [inputs, "from"],
@@ -333,20 +259,6 @@ async function logisticsBlock(
           point,
           entering ? "left" : "right",
         ),
-      );
-      const boundary = {
-        point,
-        side: entering ? ("right" as const) : ("left" as const),
-      };
-      const obstacles = placed.map((node) => ({
-        ...node,
-        id: node.configuration.id,
-      }));
-      block.tails.set(
-        link.id,
-        entering
-          ? [...routeOrthogonally(boundary, actual, obstacles)]
-          : [...routeOrthogonally(actual, boundary, obstacles)],
       );
     }
   }
@@ -400,7 +312,6 @@ export async function arrangeCanvas(
       height: y - STACK_GAP,
       ports: [],
       routes: new Map(),
-      tails: new Map(),
     };
   });
   const recipeOwners = new Map(
@@ -498,8 +409,6 @@ export async function arrangeCanvas(
     nodes: document.nodes.map((node) => placed.get(node.configuration.id)!),
     materialLinks: document.materialLinks.map(
       ({ routeMode: _routeMode, ...link }) => {
-        const fromBlock = owners.get(link.from.nodeId)!;
-        const toBlock = owners.get(link.to.nodeId)!;
         const from = materialPortGeometry(placed.get(link.from.nodeId)!).find(
           (p) => p.port.id === link.from.portId,
         )!.point;
@@ -510,19 +419,10 @@ export async function arrangeCanvas(
         if (!route) throw new Error("Could not route every connection.");
         return {
           ...link,
-          route: simplifyRoute([
-            from,
-            ...translate(
-              fromBlock.tails.get(link.id) ?? [],
-              position(graph, fromBlock.id),
-            ),
-            ...route,
-            ...translate(
-              toBlock.tails.get(link.id) ?? [],
-              position(graph, toBlock.id),
-            ),
-            to,
-          ]),
+          // Coarse lanes are only routing hints. Route between actual ports
+          // once, after all groups are placed, instead of routing local tails
+          // that would immediately be discarded by the corridor pass.
+          route: simplifyRoute([from, ...route, to]),
         };
       },
     ),
@@ -533,14 +433,18 @@ export async function arrangeCanvas(
       const nodes = block.nodes.map((node) =>
         placed.get(node.configuration.id)!,
       );
-      const x = Math.min(...nodes.map((node) => node.x)) - 20;
-      const y = Math.min(...nodes.map((node) => node.y)) - 56;
+      const members = new Set(nodes.map((node) => node.configuration.id));
+      const internal = block.routes.size
+        ? arranged.materialLinks
+            .filter(
+              (link) =>
+                members.has(link.from.nodeId) && members.has(link.to.nodeId),
+            )
+            .map((link) => link.route!)
+        : [];
       return {
         id: block.id,
-        x,
-        y,
-        width: Math.max(...nodes.map((node) => node.x + node.width)) - x + 20,
-        height: Math.max(...nodes.map((node) => node.y + node.height)) - y + 20,
+        ...groupBounds(nodes, internal),
         nodeIds: nodes.map((node) => node.configuration.id),
       };
     }),

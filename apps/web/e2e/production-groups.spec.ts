@@ -118,12 +118,15 @@ for (const mode of ["basic", "detailed"] as const)
     // Center the header before zooming, keeping its full boundary on screen.
     await page.mouse.move(group.x, group.y);
     await page.mouse.down({ button: "middle" });
-    await page.mouse.move(400, 180, { steps: 6 });
+    await page.mouse.move(800, 180, { steps: 6 });
     await page.mouse.up({ button: "middle" });
     const previousZoom = await page
       .getByRole("button", { name: /Reset zoom/ })
       .innerText();
-    await page.mouse.wheel(0, -650);
+    await page.mouse.wheel(
+      0,
+      -Math.log(3 / (parseFloat(previousZoom) / 100)) / 0.002,
+    );
     await expect(
       page.getByRole("button", { name: /Reset zoom/ }),
     ).not.toHaveText(previousZoom);

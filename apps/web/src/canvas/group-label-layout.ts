@@ -1,20 +1,20 @@
 import type { Point } from "./geometry";
 import { productionRegions } from "./production-regions";
 import type { CanvasDocument } from "./document";
+import { GROUP_PADDING } from "./group-bounds";
 
 type Region = ReturnType<typeof productionRegions>[number];
 
 /** Same header area at every zoom; long labels never spill into a neighbor. */
 export function groupLabelLayout(
   region: Pick<Region, "name" | "count" | "width">,
-  zoom: number,
   measure: (text: string, fontSize: number) => number,
 ) {
-  const fontSize = Math.max(18, Math.min(40, 12 / zoom));
+  const fontSize = 18;
   const width = Math.max(0, region.width - 40);
   const lineHeight = fontSize * 1.1;
   const maxLines = Math.max(1, Math.floor(44 / lineHeight));
-  const visible = fontSize * zoom >= 6 && width * zoom >= 32;
+  const visible = width > 0;
   const words = `${region.name} · ${region.count}`.split(/\s+/);
   const lines: string[] = [];
   let line = "";
@@ -51,6 +51,6 @@ export function hitProductionGroup(
       point.x >= region.x &&
       point.x <= region.x + region.width &&
       point.y >= region.y &&
-      point.y < region.y + 56,
+      point.y < region.y + GROUP_PADDING,
   );
 }

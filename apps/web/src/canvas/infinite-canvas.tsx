@@ -417,8 +417,8 @@ function updateMaterialVisual(
   const center = statusColor(material.status);
   display.port
     .clear()
-    .circle(0, 0, 10)
-    .fill({ color: portColor(material.direction) })
+    .circle(0, 0, 9)
+    .stroke({ color: portColor(material.direction), width: 2 })
     .circle(0, 0, 8)
     .fill({ color: dark ? 0x18181b : 0xffffff });
   if (center !== undefined) {
@@ -1047,7 +1047,6 @@ function drawMaterialLinks(
       });
     const layout = groupLabelLayout(
       region,
-      zoom,
       (text, fontSize) =>
         CanvasTextMetrics.measureText(
           text,

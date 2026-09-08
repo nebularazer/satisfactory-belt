@@ -70,12 +70,14 @@ and port spacing, leaving room for long clear runs. Belts use separate lanes
 chosen to reduce overlap and crossings, then bends, then length; unrelated group
 interiors stay clear. Every physical node
 and connection remains editable on the same canvas. Feedback belts use separate
-return lanes with dashed strokes and no arrows; their colors still indicate flow
+local return lanes with dashed strokes and no arrows; their colors still indicate flow
 and capacity. The connection inspector identifies feedback returns. Positions and
 connection paths are saved with the plan. Existing plans adopt the layout on their
 next Auto-arrange, with undo/redo available. Basic mode shows the cards directly;
-Detailed mode adds group outlines and labels. Group headers scale with zoom,
-wrap or truncate within their bounds, and have subtle outlines. Click a header to
+Detailed mode adds group outlines and labels. Headers use a fixed 18px canvas
+font size, wrap or truncate within their bounds, and remain rendered at every
+zoom with appropriately scaled text resolution. Group bounds include internal
+logistics routes and use the same 56px padding on all sides. Click a header to
 select the group and rename it in the inspector; hover to read its full name.
 Custom Detailed group names survive save/reload and Auto-arrange, with rename/reset undoable.
 On mobile, the build toolbar stays on one row: choose Basic or Detailed from the
@@ -85,7 +87,8 @@ Selecting nodes or a group keeps their immediate connections and neighbors clear
 while fading the rest of the canvas. Selecting a link focuses its two endpoints.
 Faded elements remain clickable; clear the selection to restore full visibility.
 Capacity colors and dashed feedback lines retain their meaning. All targets are
-shown normally while drawing a new connection. Rate labels appear when zoomed in or
+shown normally while drawing a new connection. Port rings and their neutral centers
+remain visually distinct when muted. Rate labels appear when zoomed in or
 when a connection is selected. New connections and their previews use the same rounded right-angle style and
 route around cards without moving them. Select a connection to drag its square
 segment handles, double-click a segment (or use Add bend in the inspector) for an

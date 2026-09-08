@@ -124,6 +124,16 @@ function expectLogisticsGroupsAndSteps(document: CanvasDocument) {
     );
     expect(region, `Missing logistics group ${ids[0]}`).toBeDefined();
     expect(new Set(region!.nodeIds)).toEqual(members);
+    for (const link of document.materialLinks.filter(
+      (link) => members.has(link.from.nodeId) && members.has(link.to.nodeId),
+    )) {
+      for (const point of link.route!) {
+        expect(point.x).toBeGreaterThanOrEqual(region!.x + 56);
+        expect(point.x).toBeLessThanOrEqual(region!.x + region!.width - 56);
+        expect(point.y).toBeGreaterThanOrEqual(region!.y + 56);
+        expect(point.y).toBeLessThanOrEqual(region!.y + region!.height - 56);
+      }
+    }
     const forward = ids.filter((id) => !structure.returnNodes.has(id));
     const edges = document.materialLinks.filter(
       (link) =>

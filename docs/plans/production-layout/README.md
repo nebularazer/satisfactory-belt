@@ -46,8 +46,13 @@ Cast Screw constructor stack, with separate feeds and space between the groups.
   parallel branches. Put routers serving only returns below the forward flow.
   Give return links separate lanes, rounded dashes, and the existing flow colors.
   Feeds leaving a return distributor travel horizontally at their port heights
-  before turning toward their destinations. The main returning belt uses the
-  outside lane below the group.
+  before turning toward their destinations. Other returns choose nearby clear
+  paths around their connected routers. Candidate paths avoid overlaps and weigh
+  length against bends and crossings; unrelated branches below a loop do not force
+  it down to the bottom of the entire group.
+- Include internal logistics routes in group bounds, with equal 56px padding on
+  every side. External feeds do not enlarge those bounds. The same bounds reserve
+  layout space, draw outlines, and keep unrelated bypass belts out.
 - Keep cycles between production recipes within a finite stage. Long forward
   bypasses stay solid even if their geometry travels leftward.
 - Persist positions and routes through the existing save format. Feedback roles
@@ -60,10 +65,10 @@ Existing plans adopt it on their next Auto-arrange, which remains undoable.
 
 ## Group labels and selection
 
-Group headers grow with the cards at high zoom, use up to two lines when space
-allows, and truncate within the header width at overview zoom. Unreadable labels
-hide at distant zoom; hovering a header reveals its full name. The same text
-resolution scaling as node cards keeps close-up headers sharp.
+Group headers use a fixed 18px canvas font size at every zoom. Labels use up to
+two lines and truncate to fit the header width; zoom never changes their text,
+font size, wrapping, or visibility. Text texture resolution increases with zoom
+and display density to keep lettering sharp. Hovering reveals the full name.
 
 Click a header to select its nodes and open the group inspector. Rename or reset
 the group there; names persist in Basic and Detailed saves and through subsequent
@@ -74,7 +79,7 @@ preserving their capacity colors, dashed return style, and click targets.
 
 ![Selecting and renaming a group](rename.png)
 
-![Sharp, wrapped and truncated group labels at 301 percent zoom](labels-close.png)
+![Fixed-size canvas labels rendered sharply at close zoom](labels-close.png)
 
 Basic mode keeps the arranged cards and connections without group decorations.
 
@@ -84,3 +89,9 @@ The mobile build toolbar uses a mode menu, Add node, and a menu with labeled
 Splitter and Merger actions. It stays on one row at 320–412px widths.
 
 ![Single-row mobile build toolbar](mobile-toolbar.png)
+
+Muted ports retain their colored ring and neutral center. The ring and center
+are drawn separately so reducing opacity cannot expose a colored disk beneath
+the center.
+
+![Muted ports retain their ring and neutral center](muted-ports.png)
