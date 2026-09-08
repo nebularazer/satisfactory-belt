@@ -2,6 +2,7 @@ import { spaceRouterPorts } from "./router-port-spacing";
 import {
   analyzeBasicPlan,
   balanceDetailedConveyors,
+  sizeDetailedConnections,
   assertDetailedNodeConfiguration,
   createBasicPlan,
   createDetailedPlan,
@@ -538,12 +539,14 @@ export function materializeDetailedCanvas(
     };
   });
   options.onStage?.("Building balancers");
-  const balanced = balanceDetailedConveyors(
-    createDetailedPlan({
-      connections: materialLinks.map(physicalConnection),
-      nodes: detailedNodes,
-      tiers,
-    }),
+  const balanced = sizeDetailedConnections(
+    balanceDetailedConveyors(
+      createDetailedPlan({
+        connections: materialLinks.map(physicalConnection),
+        nodes: detailedNodes,
+        tiers,
+      }),
+    ),
   );
 
   const physicalById = new Map(

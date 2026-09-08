@@ -24,6 +24,12 @@ describe("Create Detailed dialog", () => {
         onCreate={onCreate}
       />,
     );
+    expect(
+      screen.getByRole("combobox", { name: "Maximum conveyor speed" }),
+    ).toHaveValue("conveyor-mk1");
+    expect(
+      screen.getByRole("combobox", { name: "Maximum pipeline speed" }),
+    ).toHaveValue("pipeline-mk1");
     fireEvent.change(
       screen.getByRole("combobox", { name: "Maximum conveyor speed" }),
       { target: { value: "conveyor-mk3" } },

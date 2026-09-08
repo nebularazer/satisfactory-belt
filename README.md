@@ -112,6 +112,10 @@ button then becomes **Detailed** and reopens the saved version, including after 
 reload. Basic and Detailed still use linked saved documents; this conversion flow
 does not migrate them into one save record.
 
+The conversion dialog defaults to Mk.1 conveyors and pipes. Higher maximum
+tiers can be selected; each generated connection uses the lowest available tier
+that carries its flow, including feedback circulation.
+
 Detailed generation and Basic-to-Detailed conversion use conveyor balancers:
 every connected output of an ordinary splitter gets an equal share. Splitter
 trees and mergers combine those shares to meet individual machine demands,
@@ -133,8 +137,9 @@ allow alternative recipes, or require specific recipes for outputs and ingredien
 Basic generation connects process groups directly, leaving physical distribution
 to Detailed conversion (self-returning materials still need a routing node because
 Basic links cannot connect a process to itself). Generated machine clocks never
-exceed 100%; larger rates add machines, with a partially used final instance
-underclocked as needed. Auto-build extractor clock budgets are also capped at 100%.
+exceed 100%; the minimum required machine count shares the workload evenly.
+For example, 90 plates/min uses five constructors at 90%, reducing power while
+keeping the same output and machine count. Auto-build extractor clock budgets are also capped at 100%.
 Direct extraction supplies raw resources by default; enabled alternatives get first
 consideration among manufacturing recipes. Available resource nodes can limit each
 generated group to listed mineral and oil nodes, with extractor tiers, purity counts,

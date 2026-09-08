@@ -54,6 +54,15 @@ test("auto-builds multiple outputs with an alternative recipe and adds independe
     .poll(async () => (await readDocument())?.nodes.length ?? 0)
     .toBeGreaterThan(5);
   const first = await readDocument();
+  for (const node of first.nodes) {
+    expect(
+      new Set(
+        node.configuration.instances.map(
+          (instance: any) => instance.clockSpeedPercent,
+        ),
+      ).size,
+    ).toBe(1);
+  }
   expect(
     first.nodes.every((node: any) =>
       node.configuration.instances.every(

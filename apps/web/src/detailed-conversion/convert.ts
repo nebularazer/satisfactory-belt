@@ -18,8 +18,8 @@ export type ConversionSettings = Readonly<{
   pipelineTierId: string;
 }>;
 export const defaultConversionSettings: ConversionSettings = {
-  conveyorTierId: "conveyor-mk6",
-  pipelineTierId: "pipeline-mk2",
+  conveyorTierId: "conveyor-mk1",
+  pipelineTierId: "pipeline-mk1",
 };
 
 export function convertDetailed(

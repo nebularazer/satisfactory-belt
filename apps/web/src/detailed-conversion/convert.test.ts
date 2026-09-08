@@ -70,6 +70,23 @@ describe("Detailed conversion settings", () => {
       "Checking belts and pipes",
     ]);
     expect(result.tiers).toEqual(DEFAULT_LOGISTICS_TIERS);
+    const analysis = analyzeDetailedPlan(result);
+    for (const flow of analysis.connectionFlows) {
+      const connection = result.connections.find(
+        (edge) => edge.id === flow.connectionId,
+      )!;
+      const smallest = result.tiers.find(
+        (tier) =>
+          tier.medium === connection.kind &&
+          tier.capacityPerMinute + 1e-7 >= flow.ratePerMinute,
+      )!;
+      expect(connection.tierId).toBe(smallest.id);
+    }
+    expect(
+      analysis.diagnostics.filter(
+        (diagnostic) => diagnostic.code === "detailed.connection.overload",
+      ),
+    ).toEqual([]);
     expect(
       result.connections.every((connection) =>
         DEFAULT_LOGISTICS_TIERS.some(
@@ -184,11 +201,21 @@ it("enforces pipeline capacity after expanding fluid machines", async () => {
       () => {},
     ),
   ).toThrow("450/min, above its 300/min limit");
-  expect(
-    convertDetailed(
-      document,
-      defaultConversionSettings,
-      () => {},
-    ).connections.every((connection) => connection.tierId === "pipeline-mk2"),
-  ).toBe(true);
+  const upgraded = convertDetailed(
+    document,
+    { ...defaultConversionSettings, pipelineTierId: "pipeline-mk2" },
+    () => {},
+  );
+  const flows = analyzeDetailedPlan(upgraded).connectionFlows;
+  expect(flows.map((flow) => flow.ratePerMinute).sort((a, b) => a - b)).toEqual(
+    [225, 225, 450],
+  );
+  for (const connection of upgraded.connections) {
+    const rate = flows.find(
+      (flow) => flow.connectionId === connection.id,
+    )!.ratePerMinute;
+    expect(connection.tierId).toBe(
+      rate <= 300 ? "pipeline-mk1" : "pipeline-mk2",
+    );
+  }
 });

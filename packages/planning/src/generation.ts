@@ -6,6 +6,7 @@ import {
 
 import { createBasicPlan } from "./basic-topology";
 import { balanceDetailedConveyors } from "./conveyor-balancers";
+import { sizeDetailedConnections } from "./connection-tiers";
 import {
   assertDetailedNodeConfiguration,
   createDetailedPlan,
@@ -43,14 +44,10 @@ type TopologyResult = Readonly<{
 }>;
 
 function activityChunks(activity: number) {
-  const chunks: number[] = [];
-  let remaining = activity;
-  while (remaining > 1e-8) {
-    const chunk = Math.min(1, remaining);
-    chunks.push(chunk);
-    remaining -= chunk;
-  }
-  return chunks.length ? chunks : [1];
+  // Keep the minimum machine count under the 100% cap, then share the load.
+  // The tolerance avoids an extra machine for solver noise at whole counts.
+  const count = Math.max(1, Math.ceil(activity - 1e-8));
+  return Array.from({ length: count }, () => activity / count);
 }
 
 function processConfiguration(
@@ -335,8 +332,10 @@ export function generateDetailedPlan(
     return { ...node, configuration };
   });
   return {
-    plan: balanceDetailedConveyors(
-      createDetailedPlan({ connections, nodes, tiers }),
+    plan: sizeDetailedConnections(
+      balanceDetailedConveyors(
+        createDetailedPlan({ connections, nodes, tiers }),
+      ),
     ),
     solution,
   };

@@ -24,9 +24,9 @@ test("converts Auto-built Modular Frames into recipe columns without duplicated 
   await page
     .getByRole("button", { name: "Create Detailed plan", exact: true })
     .click();
-  await page
-    .getByRole("combobox", { name: "Maximum conveyor speed" })
-    .selectOption("conveyor-mk1");
+  await expect(
+    page.getByRole("combobox", { name: "Maximum conveyor speed" }),
+  ).toHaveValue("conveyor-mk1");
   await page
     .getByRole("button", { name: "Create Detailed", exact: true })
     .click();
@@ -386,12 +386,12 @@ test("creates an arranged Detailed plan through speed settings and reopens it", 
   await expect(dialog.getByRole("textbox", { name: "Plan name" })).toHaveCount(
     0,
   );
-  await page
-    .getByRole("combobox", { name: "Maximum conveyor speed" })
-    .selectOption("conveyor-mk1");
-  await page
-    .getByRole("combobox", { name: "Maximum pipeline speed" })
-    .selectOption("pipeline-mk1");
+  await expect(
+    page.getByRole("combobox", { name: "Maximum conveyor speed" }),
+  ).toHaveValue("conveyor-mk1");
+  await expect(
+    page.getByRole("combobox", { name: "Maximum pipeline speed" }),
+  ).toHaveValue("pipeline-mk1");
   await page.screenshot({
     path: testInfo.outputPath("conversion-settings.png"),
   });
