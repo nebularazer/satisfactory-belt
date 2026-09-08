@@ -267,7 +267,8 @@ function feasibleLinkRates(
   nodes: ReadonlyMap<string, Node>,
   ports: ReadonlyMap<string, MaterialPort>,
   projectUnconnectedOutputs: boolean,
-) {
+  linkCapacities?: ReadonlyMap<string, number>,
+): Map<string, number> {
   const source = "\u0001basic-flow-source";
   const sink = "\u0001basic-flow-sink";
   const rates = component.vertices.map((vertex) => {
@@ -296,7 +297,12 @@ function feasibleLinkRates(
     if (!edge.link) continue;
     arcByLinkId.set(
       edge.link.id,
-      addResidualArc(graph, edge.from, edge.to, capacity),
+      addResidualArc(
+        graph,
+        edge.from,
+        edge.to,
+        Math.min(capacity, linkCapacities?.get(edge.link.id) ?? Infinity),
+      ),
     );
   }
 
@@ -385,12 +391,34 @@ function feasibleLinkRates(
     maximizeFlow(graph, source, sink);
   }
 
-  return new Map(
+  const result = new Map(
     [...arcByLinkId].map(([linkId, location]) => [
       linkId,
       Math.max(0, graph.get(location.from)![location.index]!.flow),
     ]),
   );
+  if (linkCapacities?.size) {
+    const unconstrained = feasibleLinkRates(
+      component,
+      itemId,
+      nodes,
+      ports,
+      projectUnconnectedOutputs,
+    );
+    const consumed = (rates: ReadonlyMap<string, number>) =>
+      component.edges.reduce(
+        (sum, edge) =>
+          edge.link && nodes.get(edge.link.to.nodeId)?.kind === "process"
+            ? sum + (rates.get(edge.link.id) ?? 0)
+            : sum,
+        0,
+      );
+    // Keep demand-based overload diagnostics for an infeasible physical plan.
+    // Capacities resolve surplus-source allocation only when demand is met.
+    if (consumed(result) + TOLERANCE < consumed(unconstrained))
+      return unconstrained;
+  }
+  return result;
 }
 
 function solveEqualSplitLinkRates(
@@ -400,6 +428,7 @@ function solveEqualSplitLinkRates(
   nodes: ReadonlyMap<string, Node>,
   ports: ReadonlyMap<string, MaterialPort>,
   projectUnconnectedOutputs: boolean,
+  linkCapacities?: ReadonlyMap<string, number>,
 ) {
   const orderedLinks = [...links].toSorted((left, right) =>
     left.id.localeCompare(right.id),
@@ -415,6 +444,7 @@ function solveEqualSplitLinkRates(
       nodes,
       ports,
       projectUnconnectedOutputs,
+      linkCapacities,
     ),
   );
   const matrix: number[][] = [];
@@ -498,9 +528,12 @@ export function analyzeBasicFlows(
     /** Basic plans project surplus onto open router outputs. Physical belts only
      * carry material through connected outputs. */
     projectUnconnectedOutputs?: boolean;
+    /** Physical conveyor capacities; omitted for unconstrained Basic plans. */
+    linkCapacities?: ReadonlyMap<string, number>;
   }> = {},
 ): BasicFlowAnalysis {
   const projectUnconnectedOutputs = options.projectUnconnectedOutputs ?? true;
+  const linkCapacities = options.linkCapacities;
   const validated = createBasicPlan(plan);
   const topology = analyzeBasicPlan(validated);
   const nodes = new Map(
@@ -572,6 +605,7 @@ export function analyzeBasicFlows(
             nodes,
             ports,
             projectUnconnectedOutputs,
+            linkCapacities,
           )
         : undefined;
     if (hasCycle && !cyclicRates) {
@@ -597,6 +631,7 @@ export function analyzeBasicFlows(
         nodes,
         ports,
         projectUnconnectedOutputs,
+        linkCapacities,
       );
       for (const [linkId, rate] of balanceParallelLinkRates(
         links,

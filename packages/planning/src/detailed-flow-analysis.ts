@@ -176,7 +176,15 @@ export function analyzeDetailedPlan(plan: DetailedPlan): DetailedFlowAnalysis {
     ) {
       const flow = analyzeBasicFlows(
         createBasicPlan({ nodes: networkNodes, materialLinks: connections }),
-        { projectUnconnectedOutputs: false },
+        {
+          projectUnconnectedOutputs: false,
+          linkCapacities: new Map(
+            connections.map((edge) => [
+              edge.id,
+              resolved.tiers.get(edge.tierId)!.capacityPerMinute,
+            ]),
+          ),
+        },
       );
       for (const link of flow.linkFlows) {
         if (link.ratePerMinute === undefined || !link.itemId) continue;

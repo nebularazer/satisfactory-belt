@@ -33,13 +33,18 @@ function process(
   return { configuration };
 }
 
-function factory(rates: number[]): DetailedPlan {
+function factory(
+  rates: number[],
+  supplies = [rates.reduce((a, b) => a + b, 0)],
+): DetailedPlan {
   const nodes = [
-    process(
-      "miner",
-      "extraction:Desc_OreIron_C",
-      "Build_MinerMk3_C",
-      rates.reduce((a, b) => a + b, 0),
+    ...supplies.map((rate, index) =>
+      process(
+        `miner:${index}`,
+        "extraction:Desc_OreIron_C",
+        "Build_MinerMk3_C",
+        rate,
+      ),
     ),
     ...rates.map((rate, index) =>
       process(
@@ -81,9 +86,43 @@ function factory(rates: number[]): DetailedPlan {
   };
   const connections: DetailedPlan["connections"][number][] = [];
   const root = addTree(rates.map((_, index) => index));
+  let sources = supplies.map((_, index) => ({
+    nodeId: `miner:${index}`,
+    portId: "output:Desc_OreIron_C",
+  }));
+  while (sources.length > 1) {
+    const next: typeof sources = [];
+    for (let index = 0; index < sources.length; index += 3) {
+      const group = sources.slice(index, index + 3);
+      if (group.length === 1) {
+        next.push(group[0]!);
+        continue;
+      }
+      const id = `merger:${nodes.length}`;
+      const configuration = createNode({
+        id,
+        buildableId: "Build_ConveyorAttachmentMerger_C",
+        kind: "router",
+        itemId: "Desc_OreIron_C",
+      }).configuration;
+      assertDetailedNodeConfiguration(configuration);
+      nodes.push({ configuration });
+      group.forEach((from, port) =>
+        connections.push({
+          id: `edge:${connections.length}`,
+          from,
+          to: { nodeId: id, portId: `input:${port + 1}` },
+          kind: "conveyor",
+          tierId: "conveyor-mk6",
+        }),
+      );
+      next.push({ nodeId: id, portId: "output:1" });
+    }
+    sources = next;
+  }
   connections.push({
     id: "supply",
-    from: { nodeId: "miner", portId: "output:Desc_OreIron_C" },
+    from: sources[0]!,
     to: { nodeId: root, portId: "input:1" },
     kind: "conveyor",
     tierId: "conveyor-mk6",
@@ -161,7 +200,7 @@ describe("Detailed conveyor balancers", () => {
     );
   });
 
-  it("requires enough belt capacity for the returning shares", () => {
+  it("splits a full belt before adding returning balancer shares", () => {
     const original = factory([12, 12, 12, 12, 12]);
     const plan = createDetailedPlan({
       ...original,
@@ -173,6 +212,116 @@ describe("Detailed conveyor balancers", () => {
         tierId: "conveyor-mk1",
       })),
     });
-    expect(() => balanceDetailedConveyors(plan)).toThrow("72 items/min");
+    const balanced = balanceDetailedConveyors(plan);
+    const actual = physicalRates(balanced);
+    expect(Math.max(...actual.values())).toBeCloseTo(60);
+    for (const edge of balanced.connections) {
+      if (edge.to.nodeId.startsWith("smelter:"))
+        expect(actual.get(edge.id)).toBeCloseTo(12, 7);
+    }
+    expect(analyzeDetailedPlan(balanced).diagnostics).toEqual([]);
+  });
+  it.each([
+    {
+      rates: Array.from({ length: 16 }, () => 30),
+      supplies: Array.from({ length: 8 }, () => 60),
+    },
+    { rates: [40, 40, 40], supplies: [60, 60] },
+    { rates: [22.5, 67.5, 30], supplies: [60, 60], tier: "conveyor-mk2" },
+  ])(
+    "separates aggregate supply into capacity-limited feeds: $rates",
+    ({ rates, supplies, tier = "conveyor-mk1" }) => {
+      const original = factory(rates, supplies);
+      const plan = createDetailedPlan({
+        ...original,
+        tiers: DEFAULT_LOGISTICS_TIERS.filter(
+          (candidate) => candidate.id === tier,
+        ),
+        connections: original.connections.map((edge) => ({
+          ...edge,
+          tierId: tier,
+        })),
+      });
+      const balanced = balanceDetailedConveyors(plan);
+      const analysis = analyzeDetailedPlan(balanced);
+      const actual = physicalRates(balanced);
+      for (const edge of balanced.connections) {
+        expect(actual.get(edge.id)).toBeLessThanOrEqual(
+          balanced.tiers[0]!.capacityPerMinute + 1e-7,
+        );
+        if (edge.to.nodeId.startsWith("smelter:"))
+          expect(actual.get(edge.id)).toBeCloseTo(
+            rates[Number(edge.to.nodeId.split(":")[1])]!,
+            7,
+          );
+        expect(
+          analysis.connectionFlows.find((flow) => flow.connectionId === edge.id)
+            ?.ratePerMinute,
+        ).toBeCloseTo(actual.get(edge.id)!, 7);
+      }
+      expect(analysis.diagnostics).toEqual([]);
+      expect(
+        balanced.nodes.filter((node) => node.configuration.kind === "process"),
+      ).toEqual(
+        original.nodes.filter((node) => node.configuration.kind === "process"),
+      );
+      expect(balanceDetailedConveyors(plan)).toEqual(balanced);
+    },
+  );
+
+  it("routes surplus production without requiring unused balancer branches", () => {
+    const original = factory([40, 60], [60, 120]);
+    const plan = createDetailedPlan({
+      ...original,
+      tiers: DEFAULT_LOGISTICS_TIERS.filter(
+        (tier) => tier.id === "conveyor-mk1",
+      ),
+      connections: original.connections.map((edge) => ({
+        ...edge,
+        tierId: "conveyor-mk1",
+      })),
+    });
+    const balanced = balanceDetailedConveyors(plan);
+    const analysis = analyzeDetailedPlan(balanced);
+    for (const flow of analysis.connectionFlows)
+      expect(flow.ratePerMinute).toBeLessThanOrEqual(60 + 1e-7);
+    for (const id of ["smelter:0", "smelter:1"])
+      expect(analysis.machineEfficiency[id]).toBeCloseTo(1);
+    for (const node of balanced.nodes) {
+      if (
+        node.configuration.buildableId !== "Build_ConveyorAttachmentSplitter_C"
+      )
+        continue;
+      const outputs = balanced.connections.filter(
+        (edge) => edge.from.nodeId === node.configuration.id,
+      );
+      const rates = outputs.map(
+        (edge) =>
+          analysis.connectionFlows.find(
+            (flow) => flow.connectionId === edge.id,
+          )!.ratePerMinute,
+      );
+      for (const rate of rates) expect(rate).toBeCloseTo(rates[0]!);
+    }
+  });
+
+  it("reports a real single-port bottleneck instead of creating extra machine ports", () => {
+    const original = factory([30, 30, 30]);
+    const plan = createDetailedPlan({
+      ...original,
+      tiers: DEFAULT_LOGISTICS_TIERS.filter(
+        (tier) => tier.id === "conveyor-mk1",
+      ),
+      connections: original.connections.map((edge) => ({
+        ...edge,
+        tierId: "conveyor-mk1",
+      })),
+    });
+    expect(() => balanceDetailedConveyors(plan)).toThrow(
+      "output ports can supply only 60 of the required 90",
+    );
+    expect(analyzeDetailedPlan(plan).diagnostics).toContainEqual(
+      expect.objectContaining({ code: "detailed.connection.overload" }),
+    );
   });
 });

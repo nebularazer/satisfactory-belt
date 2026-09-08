@@ -1,3 +1,4 @@
+import { separateConveyorSupply } from "./parallel-conveyors";
 import { createNode } from "@satisfactory-belt/production";
 import { analyzeBasicFlows } from "./basic-flow-analysis";
 import { createBasicPlan } from "./basic-topology";
@@ -53,12 +54,28 @@ function smoothCeiling(count: number) {
  * Process configurations and external connection identities are preserved.
  */
 export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
-  const flows = analyzeBasicFlows(
-    createBasicPlan({
-      nodes: plan.nodes,
-      materialLinks: plan.connections,
-    }),
+  const originalNodeIds = new Set(
+    plan.nodes.map((node) => node.configuration.id),
+  );
+  const unconstrained = analyzeBasicFlows(
+    createBasicPlan({ nodes: plan.nodes, materialLinks: plan.connections }),
     { projectUnconnectedOutputs: false },
+  );
+  plan = separateConveyorSupply(plan, unconstrained.linkFlows);
+  const flows = analyzeBasicFlows(
+    createBasicPlan({ nodes: plan.nodes, materialLinks: plan.connections }),
+    {
+      projectUnconnectedOutputs: false,
+      linkCapacities: new Map(
+        plan.connections
+          .filter((edge) => edge.kind === "conveyor")
+          .map((edge) => [
+            edge.id,
+            plan.tiers.find((tier) => tier.id === edge.tierId)!
+              .capacityPerMinute,
+          ]),
+      ),
+    },
   ).linkFlows;
   const flowById = new Map(flows.map((flow) => [flow.linkId, flow]));
   const nodes = new Map(
@@ -106,7 +123,7 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
     );
     if (!tier)
       throw new Error(
-        `The balancer needs a conveyor carrying ${Number(rate.toFixed(4))} items/min, above the available belt capacity. Reduce the production rate or split the supply into separate groups.`,
+        `This physical connection needs ${Number(rate.toFixed(4))} items/min after parallel routing, above the available belt capacity. Choose a faster tier or lower the connected machine rates.`,
       );
     return tier.id;
   };
@@ -126,6 +143,32 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
       }
     };
     visit(rootId);
+    const removeTree = () => {
+      for (const id of tree) {
+        nodes.delete(id);
+        for (const connection of outgoing.get(id) ?? [])
+          if (tree.has(connection.to.nodeId)) connections.delete(connection.id);
+      }
+    };
+    // Capacity-aware flow assignment can leave some new parallel allocations
+    // unused when producers have surplus. Remove those branches so the physical
+    // balancer does not depend on a blocked output to redistribute its supply.
+    if (!originalNodeIds.has(rootId)) {
+      for (let index = leaves.length - 1; index >= 0; index--) {
+        if ((flowById.get(leaves[index]!.id)?.ratePerMinute ?? 0) <= 1e-8) {
+          connections.delete(leaves[index]!.id);
+          leaves.splice(index, 1);
+        }
+      }
+      if (leaves.length < 2) {
+        removeTree();
+        const input = incoming.get(rootId)![0]!;
+        connections.delete(input.id);
+        if (leaves[0])
+          connections.set(leaves[0].id, { ...leaves[0], from: input.from });
+        continue;
+      }
+    }
     const rates = leaves.map(
       (leaf) => flowById.get(leaf.id)?.ratePerMinute ?? 0,
     );
@@ -139,15 +182,12 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
     const slots = smoothCeiling(count);
     const totalRate = rates.reduce((sum, rate) => sum + rate, 0);
     const unitRate = totalRate / count;
-    tierFor(slots * unitRate);
+    tierFor(totalRate);
+    const parallel =
+      slots * unitRate > (tiers.at(-1)?.capacityPerMinute ?? 0) + 1e-7;
     const itemId = flowById.get(leaves[0]!.id)?.itemId;
     const original = nodes.get(rootId)!;
-    for (const id of tree) {
-      nodes.delete(id);
-      for (const connection of outgoing.get(id) ?? []) {
-        if (tree.has(connection.to.nodeId)) connections.delete(connection.id);
-      }
-    }
+    removeTree();
     const addRouter = (buildableId: string, id = uniqueId(rootId)) => {
       const configuration = createNode({
         id,
@@ -174,44 +214,6 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
       });
     };
     type Share = { endpoint: MaterialEndpoint; rate: number };
-    const shares: Share[][] = Array.from(
-      { length: leaves.length + 1 },
-      () => [],
-    );
-    const boundaries: number[] = [];
-    let end = 0;
-    for (const weight of [...weights, slots - count]) {
-      end += weight;
-      boundaries.push(end);
-    }
-    const targetAt = (slot: number) =>
-      boundaries.findIndex((boundary) => slot < boundary);
-    const split = (start: number, length: number, id: string) => {
-      const arity = length % 3 === 0 ? 3 : 2;
-      const size = length / arity;
-      for (let index = 0; index < arity; index++) {
-        const offset = start + index * size;
-        const endpoint = { nodeId: id, portId: `output:${index + 1}` };
-        const target = targetAt(offset);
-        if (target === targetAt(offset + size - 1)) {
-          shares[target]!.push({ endpoint, rate: size * unitRate });
-        } else {
-          const child = addRouter(SPLITTER);
-          connect(
-            endpoint,
-            { nodeId: child, portId: "input:1" },
-            size * unitRate,
-          );
-          split(offset, size, child);
-        }
-      }
-    };
-    addRouter(SPLITTER, rootId);
-    nodes.set(rootId, {
-      ...original,
-      configuration: nodes.get(rootId)!.configuration,
-    });
-    split(0, slots, rootId);
     const merge = (inputs: Share[]): Share => {
       while (inputs.length > 1) {
         const next: Share[] = [];
@@ -238,33 +240,101 @@ export function balanceDetailedConveyors(plan: DetailedPlan): DetailedPlan {
       }
       return inputs[0]!;
     };
+    const combined: Share[][] = Array.from({ length: leaves.length }, () => []);
+    addRouter(SPLITTER, rootId);
+    nodes.set(rootId, {
+      ...original,
+      configuration: nodes.get(rootId)!.configuration,
+    });
+    const buildLane = (
+      laneRoot: string,
+      ratePerSlot: number,
+      feed?: MaterialEndpoint,
+    ) => {
+      const shares: Share[][] = Array.from(
+        { length: leaves.length + 1 },
+        () => [],
+      );
+      const boundaries: number[] = [];
+      let end = 0;
+      for (const weight of [...weights, slots - count]) {
+        end += weight;
+        boundaries.push(end);
+      }
+      const targetAt = (slot: number) =>
+        boundaries.findIndex((boundary) => slot < boundary);
+      const split = (start: number, length: number, id: string) => {
+        const arity = length % 3 === 0 ? 3 : 2;
+        const size = length / arity;
+        for (let index = 0; index < arity; index++) {
+          const offset = start + index * size;
+          const endpoint = { nodeId: id, portId: `output:${index + 1}` };
+          const target = targetAt(offset);
+          if (target === targetAt(offset + size - 1))
+            shares[target]!.push({ endpoint, rate: size * ratePerSlot });
+          else {
+            const child = addRouter(SPLITTER);
+            connect(
+              endpoint,
+              { nodeId: child, portId: "input:1" },
+              size * ratePerSlot,
+            );
+            split(offset, size, child);
+          }
+        }
+      };
+      split(0, slots, laneRoot);
+      leaves.forEach((_, index) => combined[index]!.push(...shares[index]!));
+      if (slots > count) {
+        const feedback = merge(shares[leaves.length]!);
+        const inlet = addRouter(MERGER);
+        if (feed)
+          connect(
+            feed,
+            { nodeId: inlet, portId: "input:1" },
+            count * ratePerSlot,
+          );
+        else {
+          const input = incoming.get(rootId)![0]!;
+          connections.set(input.id, {
+            ...connections.get(input.id)!,
+            to: { nodeId: inlet, portId: "input:1" },
+          });
+        }
+        connect(
+          feedback.endpoint,
+          { nodeId: inlet, portId: "input:2" },
+          feedback.rate,
+        );
+        connect(
+          { nodeId: inlet, portId: "output:1" },
+          { nodeId: laneRoot, portId: "input:1" },
+          slots * ratePerSlot,
+        );
+      } else if (feed)
+        connect(
+          feed,
+          { nodeId: laneRoot, portId: "input:1" },
+          count * ratePerSlot,
+        );
+    };
+    // A full belt can still feed a feedback balancer: split before adding the
+    // returned shares, then recombine each destination's two equal allocations.
+    if (parallel) {
+      for (let index = 1; index <= 2; index++)
+        buildLane(addRouter(SPLITTER), unitRate / 2, {
+          nodeId: rootId,
+          portId: `output:${index}`,
+        });
+    } else buildLane(rootId, unitRate);
     leaves.forEach((leaf, index) => {
-      const share = merge(shares[index]!);
+      const share = merge(combined[index]!);
       connections.set(leaf.id, {
         ...connections.get(leaf.id)!,
         from: share.endpoint,
         tierId: tierFor(share.rate),
       });
     });
-    if (slots > count) {
-      const feedback = merge(shares[leaves.length]!);
-      const inlet = addRouter(MERGER);
-      const input = incoming.get(rootId)![0]!;
-      connections.set(input.id, {
-        ...connections.get(input.id)!,
-        to: { nodeId: inlet, portId: "input:1" },
-      });
-      connect(
-        feedback.endpoint,
-        { nodeId: inlet, portId: "input:2" },
-        feedback.rate,
-      );
-      connect(
-        { nodeId: inlet, portId: "output:1" },
-        { nodeId: rootId, portId: "input:1" },
-        slots * unitRate,
-      );
-    }
   }
   return createDetailedPlan({
     ...plan,
