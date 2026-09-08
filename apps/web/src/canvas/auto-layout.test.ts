@@ -1,3 +1,7 @@
+import { generateProduction } from "../auto-build/generate-production";
+import { convertDetailed } from "../detailed-conversion/convert";
+import { productionStructure } from "./production-structure";
+import { presentMaterialFlow } from "./material-link-presentation";
 import { describe, expect, it } from "vitest";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { createNode } from "@satisfactory-belt/production";
@@ -137,6 +141,108 @@ describe("Auto-arrange", () => {
     if (restored.kind !== "detailed") throw new Error("Expected Detailed plan");
     expect(detailedDocumentToEditor(restored)).toEqual(result);
   }, 40_000);
+
+  it("separates full logistics networks from recipe stacks and reserves a return lane", async () => {
+    const { document } = generateProduction({
+      outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 10 }],
+      allowedAlternateIds: [],
+      pinnedRecipes: { Desc_IronScrew_C: "Recipe_Alternate_Screw_C" },
+    });
+    const source = detailedDocumentToEditor(
+      convertDetailed(
+        document,
+        { conveyorTierId: "conveyor-mk1", pipelineTierId: "pipeline-mk2" },
+        () => {},
+      ),
+    );
+    const result = await arrangeCanvas(source);
+    expectRecipeColumns(result);
+    expectAttachedClearRoutes(result);
+    const parts = result.nodes.filter(
+      (node) =>
+        node.configuration.kind === "process" &&
+        [
+          "Recipe_IronPlate_C",
+          "Recipe_Alternate_Screw_C",
+          "Recipe_IronRod_C",
+        ].includes(node.configuration.processId),
+    );
+    expect(new Set(parts.map((node) => node.x)).size).toBe(1);
+    expect(presentMaterialFlow(result).links).toEqual(
+      presentMaterialFlow(source).links,
+    );
+    const structure = productionStructure(result);
+    expect(structure.logistics).toHaveLength(6);
+    for (const ids of structure.logistics) {
+      const members = result.nodes.filter((node) =>
+        ids.includes(node.configuration.id),
+      );
+      const left = Math.min(...members.map((node) => node.x));
+      const right = Math.max(...members.map((node) => node.x + node.width));
+      const top = Math.min(...members.map((node) => node.y));
+      const bottom = Math.max(...members.map((node) => node.y + node.height));
+      for (const node of result.nodes.filter(
+        (node) => !ids.includes(node.configuration.id),
+      )) {
+        expect(
+          node.x < right &&
+            node.x + node.width > left &&
+            node.y < bottom &&
+            node.y + node.height > top,
+          node.configuration.id,
+        ).toBe(false);
+      }
+      const forward = members.filter(
+        (node) => !structure.returnNodes.has(node.configuration.id),
+      );
+      for (const node of members.filter((node) =>
+        structure.returnNodes.has(node.configuration.id),
+      ))
+        expect(node.y).toBeGreaterThan(
+          Math.max(...forward.map((node) => node.y + node.height)),
+        );
+    }
+    const flows = presentMaterialFlow(result);
+    const rodReturns = flows.links.filter(
+      (link) =>
+        link.itemId === "Desc_IronRod_C" &&
+        structure.feedbackLinks.has(link.id),
+    );
+    expect(
+      rodReturns.map((link) => link.ratePerMinute).sort((a, b) => a! - b!),
+    ).toEqual([4, 4, 4, 12]);
+    const returnRoutes = rodReturns.map(
+      (flow) =>
+        result.materialLinks.find((link) => link.id === flow.id)!.route!,
+    );
+    const vertical = (route: (typeof returnRoutes)[number]) =>
+      route.slice(1).flatMap((to, index) => {
+        const from = route[index]!;
+        return from.x === to.x
+          ? [
+              {
+                x: from.x,
+                top: Math.min(from.y, to.y),
+                bottom: Math.max(from.y, to.y),
+              },
+            ]
+          : [];
+      });
+    for (let i = 0; i < returnRoutes.length; i++)
+      for (const other of returnRoutes.slice(i + 1)) {
+        for (const a of vertical(returnRoutes[i]!))
+          for (const b of vertical(other)) {
+            if (a.x === b.x)
+              expect(
+                Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top),
+              ).toBeLessThanOrEqual(0);
+          }
+      }
+    expect(
+      result.materialLinks.map(({ route: _route, ...link }) => link),
+    ).toEqual(source.materialLinks);
+    expect(await arrangeCanvas(result)).toEqual(result);
+  }, 20_000);
 
   it("supports Basic plans and preserves their routes through save/reload", async () => {
     const result = await arrangeCanvas(modularFrameFactory(false));

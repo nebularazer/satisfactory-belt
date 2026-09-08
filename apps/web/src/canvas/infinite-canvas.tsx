@@ -32,6 +32,9 @@ import {
   attachCanvasInteractions,
   type CanvasConnectionRequest,
 } from "./interactions";
+import { dashedRoute } from "./dashed-route";
+import { productionRegions } from "./production-regions";
+import { productionStructure } from "./production-structure";
 import { materialFlowCanvasColor } from "./material-flow-state";
 import {
   createNodeCardModel,
@@ -1003,6 +1006,26 @@ function drawMaterialLinks(
     : state.document;
   const preview = state.connectionPreview;
   const dark = document.documentElement.classList.contains("dark");
+  for (const region of moving ? [] : productionRegions(state.document)) {
+    graphics
+      .roundRect(region.x, region.y, region.width, region.height, 16)
+      .fill({
+        color: dark ? 0xffffff : 0x334155,
+        alpha: region.logistics ? 0.018 : 0.03,
+      });
+    const label = new Text({
+      text: region.label,
+      style: {
+        fontFamily: "Inter Variable, Inter, sans-serif",
+        fontSize: Math.min(40, 12 / zoom),
+        fontWeight: "600",
+        fill: dark ? 0xa1a9b5 : 0x647184,
+      },
+    });
+    label.position.set(region.x + 20, region.y + 8);
+    labelLayer.addChild(label);
+  }
+
   const candidates = moving
     ? [
         ...visibleLinks,
@@ -1024,6 +1047,7 @@ function drawMaterialLinks(
       presentation,
     ]),
   );
+  const { feedbackLinks } = productionStructure(state.document);
   for (const link of candidates) {
     if (link.id === preview?.replacingLinkId) continue;
     const path = getPath(link);
@@ -1031,13 +1055,21 @@ function drawMaterialLinks(
     if (!path || !presentation) continue;
     const isSelected = selected.has(link.id);
     if (isSelected) {
-      drawMaterialPath(graphics, path).stroke({
+      drawMaterialPath(
+        graphics,
+        path,
+        feedbackLinks.has(link.id) ? zoom : undefined,
+      ).stroke({
         alpha: 0.7,
         color: BLUEPRINT_COLORS.selected,
         width: 7 / zoom,
       });
     }
-    drawMaterialPath(graphics, path).stroke({
+    drawMaterialPath(
+      graphics,
+      path,
+      feedbackLinks.has(link.id) ? zoom : undefined,
+    ).stroke({
       alpha: isSelected ? 1 : 0.88,
       color:
         state.routeEdit?.id === link.id && !state.routeEdit.valid
@@ -1655,7 +1687,15 @@ export const InfiniteCanvas = forwardRef<
 function drawMaterialPath(
   graphics: Graphics,
   path: ReturnType<typeof materialLinkPath> & {},
+  dashZoom?: number,
 ) {
+  if (dashZoom !== undefined) {
+    for (const stroke of dashedRoute(path.route, dashZoom)) {
+      graphics.moveTo(stroke[0]!.x, stroke[0]!.y);
+      for (const point of stroke.slice(1)) graphics.lineTo(point.x, point.y);
+    }
+    return graphics;
+  }
   graphics.moveTo(path.from.x, path.from.y);
   for (let index = 1; index < path.route.length - 1; index++) {
     const previous = path.route[index - 1]!;

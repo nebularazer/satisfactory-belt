@@ -99,6 +99,112 @@ test("converts Auto-built Modular Frames into recipe columns without duplicated 
   await page.screenshot({
     path: testInfo.outputPath("whole-consumer-feeds.png"),
   });
+  const feedbackView = await page.evaluate(async () => {
+    const storageUrl = "/src/canvas/document-storage.ts";
+    const modeUrl = "/src/canvas/editor-mode.ts";
+    const structureUrl = "/src/canvas/production-structure.ts";
+    const flowUrl = "/src/canvas/material-link-presentation.ts";
+    const geometryUrl = "/src/canvas/material-link-geometry.ts";
+    const viewportUrl = "/src/canvas/viewport.ts";
+    const { createIndexedDbDocumentStorage } = await import(storageUrl);
+    const { detailedDocumentToEditor } = await import(modeUrl);
+    const { productionStructure } = await import(structureUrl);
+    const { presentMaterialFlow } = await import(flowUrl);
+    const { materialLinkPath, materialLinkLabelPoint } = await import(
+      geometryUrl
+    );
+    const { fitRectangleInViewport } = await import(viewportUrl);
+    const document = detailedDocumentToEditor(
+      (await createIndexedDbDocumentStorage().loadWorkspace()).document,
+    );
+    const structure = productionStructure(document);
+    const flows = presentMaterialFlow(document).links;
+    const returns = flows.filter(
+      (link: any) =>
+        link.itemId === "Desc_IronRod_C" &&
+        structure.feedbackLinks.has(link.id),
+    );
+    const belt = document.materialLinks.find(
+      (link: any) =>
+        link.id === returns.find((flow: any) => flow.ratePerMinute === 12).id,
+    );
+    const bounds = (nodes: any[]) => {
+      const x = Math.min(...nodes.map((node) => node.x));
+      const y = Math.min(...nodes.map((node) => node.y));
+      return {
+        x,
+        y,
+        width: Math.max(...nodes.map((node) => node.x + node.width)) - x,
+        height: Math.max(...nodes.map((node) => node.y + node.height)) - y,
+      };
+    };
+    const viewport = fitRectangleInViewport(bounds(document.nodes), {
+      width: innerWidth,
+      height: innerHeight,
+    });
+    const point = materialLinkLabelPoint(materialLinkPath(document, belt));
+    const ids = structure.logistics.find((ids: string[]) =>
+      ids.includes(belt.from.nodeId),
+    );
+    const focus = bounds(
+      document.nodes.filter(
+        (node: any) =>
+          ids.includes(node.configuration.id) ||
+          ["Recipe_IronRod_C", "Recipe_ModularFrame_C"].includes(
+            node.configuration.processId,
+          ),
+      ),
+    );
+    const focusViewport = fitRectangleInViewport(focus, {
+      width: innerWidth,
+      height: innerHeight,
+    });
+    return {
+      rates: returns
+        .map((flow: any) => flow.ratePerMinute)
+        .sort((a: number, b: number) => a - b),
+      states: returns.map((flow: any) => flow.state),
+      point: {
+        x: point.x * viewport.zoom + viewport.x,
+        y: point.y * viewport.zoom + viewport.y,
+      },
+      center: {
+        x: (focus.x + focus.width / 2) * viewport.zoom + viewport.x,
+        y: (focus.y + focus.height / 2) * viewport.zoom + viewport.y,
+      },
+      wheel: -Math.log(focusViewport.zoom / viewport.zoom) / 0.002,
+      zoomPercent: Math.round(focusViewport.zoom * 100),
+    };
+  });
+  expect(feedbackView.rates).toEqual([4, 4, 4, 12]);
+  expect(feedbackView.states).toEqual([
+    "balanced",
+    "balanced",
+    "balanced",
+    "balanced",
+  ]);
+  await page.mouse.click(feedbackView.point.x, feedbackView.point.y);
+  await expect(
+    page.getByText(
+      "Feedback return · Dashed line. Color indicates flow and capacity.",
+    ),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Close Material Link details" })
+    .click();
+  await page.mouse.move(feedbackView.center.x, feedbackView.center.y);
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(800, 500, { steps: 8 });
+  await page.mouse.up({ button: "middle" });
+  await page.mouse.wheel(0, feedbackView.wheel);
+  await expect(
+    page.getByRole("button", {
+      name: `Reset zoom, currently ${feedbackView.zoomPercent} percent`,
+    }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("rod-logistics-feedback.png"),
+  });
   await page.reload();
   expect(await readFeeds()).toEqual(expected);
   expect(await readAssemblerStack()).toEqual(stack);

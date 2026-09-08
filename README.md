@@ -62,8 +62,15 @@ The grid uses a fixed 32-unit interval and its dots are shown by default. Snap a
 the grid dots can be switched off independently in the menu without changing the
 visual scale of the canvas.
 
-Auto-arrange runs ELK in a worker and fits the result on screen. Positions and
-connection paths are saved with the plan. Rate labels appear when zoomed in or
+Auto-arrange runs ELK in a worker and fits the result on screen. Machines using
+one recipe form a vertical stack, and parallel production steps share a stage.
+Splitters, mergers, and junctions occupy labeled logistics areas between stages,
+including separate supply groups needed for belt capacity. Every physical node
+and connection remains editable on the same canvas. Feedback belts use separate
+return lanes with dashed strokes and no arrows; their colors still indicate flow
+and capacity. The connection inspector identifies feedback returns. Positions and
+connection paths are saved with the plan. Existing plans adopt the layout on their
+next Auto-arrange, with undo/redo available. Rate labels appear when zoomed in or
 when a connection is selected. New connections and their previews use the same rounded right-angle style and
 route around cards without moving them. Select a connection to drag its square
 segment handles, double-click a segment (or use Add bend in the inspector) for an
