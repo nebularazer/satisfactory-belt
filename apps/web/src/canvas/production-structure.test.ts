@@ -1,3 +1,4 @@
+import { createNode } from "@satisfactory-belt/production";
 import { describe, expect, it } from "vitest";
 import { productionStructure } from "./production-structure";
 import { EMPTY_CANVAS_DOCUMENT, type CanvasDocument } from "./document";
@@ -78,6 +79,78 @@ describe("Production structure", () => {
       "c-c",
     ]);
   });
+  it("separates destination balancers from shared supply without splitting feedback", () => {
+    const document = network([
+      "source-shared",
+      "shared-a",
+      "shared-b",
+      "a-loop",
+      "loop-a",
+      "loop-plates",
+      "b-rods",
+      "source-parallel",
+      "parallel-plates2",
+      "unrelated-isolated",
+      "isolated-alone",
+    ]);
+    const recipes: Record<string, string> = {
+      source: "Recipe_IngotIron_C",
+      unrelated: "Recipe_IngotIron_C",
+      plates: "Recipe_IronPlate_C",
+      plates2: "Recipe_IronPlate_C",
+      rods: "Recipe_IronRod_C",
+      alone: "Recipe_IronRod_C",
+    };
+    const source = {
+      ...document,
+      nodes: document.nodes.map((node) =>
+        recipes[node.configuration.id]
+          ? {
+              ...node,
+              configuration: createNode({
+                id: node.configuration.id,
+                kind: "process",
+                buildableId:
+                  recipes[node.configuration.id] === "Recipe_IngotIron_C"
+                    ? "Build_SmelterMk1_C"
+                    : "Build_ConstructorMk1_C",
+                processId: recipes[node.configuration.id]!,
+              }).configuration,
+            }
+          : node,
+      ),
+    };
+    const result = productionStructure(source);
+    expect(result.logistics).toEqual([
+      ["a", "loop", "parallel"],
+      ["b", "isolated"],
+      ["shared"],
+    ]);
+    expect(result.logisticsDestinations.get("shared")).toEqual([
+      "Recipe_IronPlate_C",
+      "Recipe_IronRod_C",
+    ]);
+    expect(result.logisticsDestinations.get("a")).toEqual([
+      "Recipe_IronPlate_C",
+    ]);
+    for (const id of result.feedbackLinks) {
+      const link = source.materialLinks.find((link) => link.id === id)!;
+      expect(
+        result.logistics.some(
+          (group) =>
+            group.includes(link.from.nodeId) && group.includes(link.to.nodeId),
+        ),
+      ).toBe(true);
+    }
+    expect(
+      productionStructure({
+        ...source,
+        nodes: source.nodes.toReversed(),
+        materialLinks: source.materialLinks.toReversed(),
+      }),
+    ).toEqual(result);
+  });
+
   it("draws screen-sized dashes along rounded corners while leaving the route intact", () => {
     const route = [
       { x: 0, y: 0 },

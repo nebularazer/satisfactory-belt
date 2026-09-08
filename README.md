@@ -64,8 +64,11 @@ visual scale of the canvas.
 
 Auto-arrange runs ELK in a worker and fits the result on screen. Machines using
 one recipe form a vertical stack, and parallel production steps share a stage.
-Each logistics network occupies an exclusive area between recipe groups, with
-one router column per forward step. Neighboring machine stacks guide its height
+Logistics are grouped by the next recipes they supply: destination balancers
+sit before their machine stacks, with shared distribution in separate upstream
+areas. Sharing a producer alone does not combine all its branches into one group;
+complete feedback paths stay together. Each area has one router column per
+forward step. Neighboring machine stacks guide its height
 and port spacing, leaving room for long clear runs. Belts use separate lanes
 chosen to reduce overlap and crossings, then bends, then length; unrelated group
 interiors stay clear. Every physical node

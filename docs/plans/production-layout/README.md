@@ -20,21 +20,39 @@ Cast Screw constructor stack, with separate feeds and space between the groups.
 
 ![Balancer branches feeding machines directly at their port heights](direct-feeds.png)
 
+## Destination logistics groups
+
+Ingot distribution is now separated by the recipes it supplies. The same
+10-Modular-Frames/min example has a 10-router screw supply group, a 26-router
+plate supply group, one rod splitter, and two separate shared splitters. The
+39 physical routers and their connections are preserved. Shared branches stay
+upstream; the destination groups sit before their machine stacks.
+
+![Separate ingot supply groups for screws, plates, and rods](destination-groups.png)
+
 ## Layout rules
 
 - Group machines by recipe, preserving individual cards and machine port order.
 - Two-way splitter outputs and merger inputs occupy the top and bottom slots,
   leaving the center unused. Generation and Auto-arrange set presentation order;
   actual port identities, smart rules, priorities, and rates stay unchanged.
-- Group connected routers and parallel supply groups serving the same recipe
-  port. Capacity limits still describe separate physical belts.
+- Group routers by the next recipe inputs they supply. Parallel supplies with
+  the same destinations stay together; sharing a producer recipe alone does not
+  join them. Routers serving several recipes form shared distribution groups
+  before the destination balancers. Complete feedback paths stay in one group.
+  Headers identify the destination recipe or shared distribution. Capacity limits
+  still describe separate physical belts.
 - Keep every logistics group in its own non-overlapping area between recipe
   groups. Routers at the same forward depth occupy one column; later steps are
   strictly to the right. Recipe stacks and logistics areas never interleave.
 - Size local layout guides using the complete neighboring recipe stacks and
   their real port heights. This preserves vertical space for separate branches
   instead of compressing all boundary connections into one short row of ports.
-- Arrange group areas by production stage, with fixed recipe stacks. After group
+- Lay out destination balancers before their upstream shared distribution so
+  their port heights guide the connecting branches. Guides influence placement
+  without reserving empty space beyond the visible group contents.
+- Arrange group areas by production stage, with fixed recipe stacks. Additional
+  logistics groups do not stagger recipes belonging to the same production stage. After group
   placement, route connections through free corridors between actual ports.
   Routing obstacles follow visible group bounds, not the unused guide space.
 - Preserve ELK's separate corridor lanes as candidates. In two deterministic

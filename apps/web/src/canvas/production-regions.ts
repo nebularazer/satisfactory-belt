@@ -54,12 +54,24 @@ function regions(document: CanvasDocument) {
           ids.includes(link.from.nodeId) || ids.includes(link.to.nodeId),
       );
       const item = links.find((link) => link.id === edge?.id)?.itemName;
+      const targets = structure.logisticsDestinations.get(ids[0]!)!;
+      const destination =
+        targets.length === 1
+          ? findProductionProcess(targets[0]!)?.name
+          : undefined;
+      const label = destination
+        ? `${item ?? "Logistics"} → ${destination}`
+        : targets.length > 1
+          ? `${item ?? "Logistics"} shared distribution`
+          : item
+            ? `${item} logistics`
+            : "Logistics";
       return {
         id: JSON.stringify(["logistics", ids[0]]),
         nodes: document.nodes.filter((node) =>
           ids.includes(node.configuration.id),
         ),
-        label: item ? `${item} logistics` : "Logistics",
+        label,
         logistics: true,
       };
     }),

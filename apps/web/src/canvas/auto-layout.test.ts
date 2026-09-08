@@ -273,7 +273,29 @@ describe("Auto-arrange", () => {
       presentMaterialFlow(source).links,
     );
     const structure = productionStructure(result);
-    expect(structure.logistics).toHaveLength(6);
+    const regions = productionRegions(result).filter(
+      (region) => region.logistics,
+    );
+    const ingotGroups = regions.filter((region) =>
+      region.defaultName.startsWith("Iron Ingot"),
+    );
+    expect(ingotGroups.map((region) => region.defaultName)).toEqual(
+      expect.arrayContaining([
+        "Iron Ingot → Cast Screws",
+        "Iron Ingot → Iron Plate",
+        "Iron Ingot → Iron Rod",
+        "Iron Ingot shared distribution",
+      ]),
+    );
+    for (const id of structure.feedbackLinks) {
+      const link = result.materialLinks.find((link) => link.id === id)!;
+      expect(
+        structure.logistics.some(
+          (group) =>
+            group.includes(link.from.nodeId) && group.includes(link.to.nodeId),
+        ),
+      ).toBe(true);
+    }
     for (const ids of structure.logistics) {
       const members = result.nodes.filter((node) =>
         ids.includes(node.configuration.id),

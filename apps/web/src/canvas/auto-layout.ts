@@ -220,17 +220,15 @@ async function logisticsBlock(
   routeFeedback(placed, links, feedback, structure.returnNodes, routes);
   // Reserve internal belts and symmetric padding, including local return lanes.
   const bounds = groupBounds(placed, [...routes.values()]);
-  const shift = { x: Math.max(0, -bounds.x), y: Math.max(0, -bounds.y) };
+  // Guides influence local alignment only. Reserve the visible contents, not
+  // empty space left by a full-height neighboring stack or another group.
+  const shift = { x: -bounds.x, y: -bounds.y };
   for (const node of placed) {
     node.x += shift.x;
     node.y += shift.y;
   }
   for (const [id, route] of routes) routes.set(id, translate(route, shift));
-  const width = Math.max(graph.width ?? 0, bounds.x + bounds.width + shift.x);
-  const height = Math.max(
-    graph.height ?? 0,
-    bounds.y + bounds.height + shift.y,
-  );
+  const { width, height } = bounds;
   const block: Block = {
     id: key("logistics", ids[0]!),
     width,
@@ -314,13 +312,51 @@ export async function arrangeCanvas(
       routes: new Map(),
     };
   });
-  const recipeOwners = new Map(
-    blocks.flatMap((block) =>
-      block.nodes.map((node) => [node.configuration.id, block] as const),
-    ),
+  // Destination groups are laid out first, so upstream shared distribution
+  // can use their actual port heights as guides. Unplaced routers get small
+  // individual guides rather than the old, combined logistics rectangle.
+  const neighbors = new Map<string, Block>(
+    sorted.nodes
+      .filter((node) => node.configuration.kind === "router")
+      .map((node) => [
+        node.configuration.id,
+        {
+          id: key("guide-router", node.configuration.id),
+          nodes: [{ ...node, x: 0, y: 0 }],
+          width: node.width,
+          height: node.height,
+          ports: [],
+          routes: new Map(),
+        } as Block,
+      ]),
   );
-  for (const group of productionStructure(sorted).logistics)
-    blocks.push(await logisticsBlock(sorted, group, elk, recipeOwners));
+  for (const block of blocks)
+    for (const node of block.nodes) neighbors.set(node.configuration.id, block);
+  const groups = productionStructure(sorted).logistics;
+  const groupOwner = new Map(
+    groups.flatMap((ids) => ids.map((id) => [id, ids[0]!] as const)),
+  );
+  const groupSteps = graphStages(
+    groups.map((ids) => ids[0]!),
+    sorted.materialLinks
+      .filter(
+        (link) =>
+          groupOwner.has(link.from.nodeId) &&
+          groupOwner.has(link.to.nodeId) &&
+          groupOwner.get(link.from.nodeId) !== groupOwner.get(link.to.nodeId),
+      )
+      .map((link) => ({
+        from: groupOwner.get(link.from.nodeId)!,
+        to: groupOwner.get(link.to.nodeId)!,
+      })),
+  );
+  for (const group of groups.toSorted(
+    (a, b) => groupSteps.get(b[0]!)! - groupSteps.get(a[0]!)!,
+  )) {
+    const block = await logisticsBlock(sorted, group, elk, neighbors);
+    blocks.push(block);
+    for (const node of block.nodes) neighbors.set(node.configuration.id, block);
+  }
   const owners = new Map(
     blocks.flatMap((block) =>
       block.nodes.map((node) => [node.configuration.id, block] as const),
@@ -356,13 +392,59 @@ export async function arrangeCanvas(
       !owners.get(link.from.nodeId)!.routes.has(link.id),
   );
   const globalLinks = [...external, ...recipeInternal];
+  const blockEdges = external.map((link) => ({
+    from: owners.get(link.from.nodeId)!.id,
+    to: owners.get(link.to.nodeId)!.id,
+  }));
+  // Extra distribution groups must not stagger parallel production recipes.
+  // Find recipe stages through logistics, then share their coarse layout rank.
+  const recipeEdges: { from: string; to: string }[] = [];
+  for (const from of recipes.keys()) {
+    const visited = new Set<string>();
+    const queue = blockEdges
+      .filter((edge) => edge.from === from)
+      .map((edge) => edge.to);
+    for (let i = 0; i < queue.length; i++) {
+      const to = queue[i]!;
+      if (visited.has(to)) continue;
+      visited.add(to);
+      if (recipes.has(to)) recipeEdges.push({ from, to });
+      else
+        queue.push(
+          ...blockEdges
+            .filter((edge) => edge.from === to)
+            .map((edge) => edge.to),
+        );
+    }
+  }
+  const recipeStages = graphStages([...recipes.keys()], recipeEdges);
+  const sameStage = Map.groupBy([...recipeStages], ([, stage]) => stage);
+  const alignmentEdges = [...sameStage.values()].flatMap((siblings) =>
+    siblings.slice(1).flatMap(([id]) => [
+      { from: siblings[0]![0], to: id },
+      { from: id, to: siblings[0]![0] },
+    ]),
+  );
   const stages = graphStages(
     blocks.map((block) => block.id),
-    external.map((link) => ({
-      from: owners.get(link.from.nodeId)!.id,
-      to: owners.get(link.to.nodeId)!.id,
-    })),
+    [...blockEdges, ...alignmentEdges],
   );
+  // Keep simpler destination groups close to their consumers even when other
+  // branches need an extra shared-distribution stage before their balancer.
+  for (const block of blocks.toSorted(
+    (a, b) => stages.get(b.id)! - stages.get(a.id)!,
+  )) {
+    if (recipes.has(block.id)) continue;
+    const children = blockEdges.filter((edge) => edge.from === block.id);
+    if (children.length)
+      stages.set(
+        block.id,
+        Math.max(
+          stages.get(block.id)!,
+          Math.min(...children.map((edge) => stages.get(edge.to)! - 1)),
+        ),
+      );
+  }
   const graph = await elk.layout<ElkNode>({
     id: "factory",
     layoutOptions: {

@@ -161,36 +161,78 @@ function analyzeStructure(document: CanvasDocument) {
       changed = true;
     }
   }
-  // Parallel belts for the same recipe port share a logistics area even when
-  // capacity limits divided them into physically disconnected supply groups.
-  const adjacent = new Map([...routers].map((id) => [id, new Set<string>()]));
-  const recipePorts = new Map<string, string[]>();
   const configurations = new Map(
     nodes.map((node) => [node.configuration.id, node.configuration]),
   );
+  // Ownership stops at the next production recipe. Propagating destinations
+  // through routers keeps cycles intact without absorbing later factory stages.
+  const destinations = new Map(
+    [...routers].map((id) => [id, new Set<string>()]),
+  );
   for (const link of links) {
-    const from = configurations.get(link.from.nodeId);
-    const to = configurations.get(link.to.nodeId);
-    if (routers.has(link.from.nodeId) && routers.has(link.to.nodeId)) {
-      adjacent.get(link.from.nodeId)!.add(link.to.nodeId);
-      adjacent.get(link.to.nodeId)!.add(link.from.nodeId);
+    const target = configurations.get(link.to.nodeId);
+    if (routers.has(link.from.nodeId) && target?.kind === "process")
+      destinations
+        .get(link.from.nodeId)!
+        .add(JSON.stringify([target.processId, link.to.portId]));
+  }
+  changed = true;
+  while (changed) {
+    changed = false;
+    const inherit = (from: string, to: string) => {
+      for (const destination of destinations.get(to)!) {
+        const owned = destinations.get(from)!;
+        if (!owned.has(destination)) {
+          owned.add(destination);
+          changed = true;
+        }
+      }
+    };
+    for (const link of links) {
+      if (!routers.has(link.from.nodeId) || !routers.has(link.to.nodeId))
+        continue;
+      inherit(link.from.nodeId, link.to.nodeId);
+      // Return distributors can rejoin parallel branches outside their cycle.
+      // Keep those complete feedback paths in the same ownership area too.
+      if (feedbackLinks.has(link.id)) inherit(link.to.nodeId, link.from.nodeId);
     }
-    for (const [machine, endpoint, router] of [
-      [from, link.from, link.to.nodeId],
-      [to, link.to, link.from.nodeId],
+  }
+  const ownership = new Map(
+    [...destinations].map(([id, targets]) => [
+      id,
+      JSON.stringify([...targets].sort(compare)),
+    ]),
+  );
+  const adjacent = new Map([...routers].map((id) => [id, new Set<string>()]));
+  const join = (a: string, b: string) => {
+    if (ownership.get(a) !== ownership.get(b)) return;
+    adjacent.get(a)!.add(b);
+    adjacent.get(b)!.add(a);
+  };
+  const recipePorts = new Map<string, string[]>();
+  for (const link of links) {
+    if (routers.has(link.from.nodeId) && routers.has(link.to.nodeId))
+      join(link.from.nodeId, link.to.nodeId);
+    for (const [endpoint, router] of [
+      [link.from, link.to.nodeId],
+      [link.to, link.from.nodeId],
     ] as const) {
+      const machine = configurations.get(endpoint.nodeId);
       if (machine?.kind !== "process" || !routers.has(router)) continue;
-      const key = JSON.stringify([machine.processId, endpoint.portId]);
+      // Parallel supplies can share a group only when they have the same
+      // downstream purpose. Sharing an ingot producer alone is insufficient.
+      const key = JSON.stringify([
+        machine.processId,
+        endpoint.portId,
+        ownership.get(router),
+      ]);
       const siblings = recipePorts.get(key) ?? [];
       siblings.push(router);
       recipePorts.set(key, siblings);
     }
   }
   for (const siblings of recipePorts.values())
-    for (const id of siblings.slice(1)) {
-      adjacent.get(siblings[0]!)!.add(id);
-      adjacent.get(id)!.add(siblings[0]!);
-    }
+    for (const id of siblings.slice(1)) join(siblings[0]!, id);
   const logistics: string[][] = [];
   for (const root of routers) {
     if (logistics.some((group) => group.includes(root))) continue;
@@ -207,5 +249,17 @@ function analyzeStructure(document: CanvasDocument) {
     }
     logistics.push([...group].sort(compare));
   }
-  return { feedbackLinks, returnNodes, logistics };
+  const logisticsDestinations = new Map(
+    logistics.map((ids) => [
+      ids[0]!,
+      [
+        ...new Set(
+          [...destinations.get(ids[0]!)!].map(
+            (target) => (JSON.parse(target) as [string, string])[0],
+          ),
+        ),
+      ].sort(compare),
+    ]),
+  );
+  return { feedbackLinks, returnNodes, logistics, logisticsDestinations };
 }
