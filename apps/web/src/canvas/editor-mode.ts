@@ -5,6 +5,7 @@ import {
   createBasicPlan,
   createDetailedPlan,
   DEFAULT_LOGISTICS_TIERS,
+  type LogisticsTier,
   type MaterialEndpoint,
   type PhysicalConnection,
 } from "@satisfactory-belt/planning";
@@ -92,7 +93,13 @@ function physicalConnection(link: CanvasMaterialLink): PhysicalConnection {
  */
 export function materializeDetailedCanvas(
   document: CanvasDocument,
+  options: Readonly<{
+    tiers?: readonly LogisticsTier[];
+    onStage?: (stage: "Expanding machines" | "Building balancers") => void;
+  }> = {},
 ): DetailedCanvasDocument {
+  const tiers = options.tiers ?? DEFAULT_LOGISTICS_TIERS;
+  options.onStage?.("Expanding machines");
   const plan = createBasicPlan({
     materialLinks: document.materialLinks,
     nodes: document.nodes.map(({ configuration, provenance }) => ({
@@ -152,9 +159,11 @@ export function materializeDetailedCanvas(
   }
 
   const tierFor = (kind: "conveyor" | "pipeline") =>
-    DEFAULT_LOGISTICS_TIERS.filter(({ medium }) => medium === kind).toSorted(
-      (left, right) => right.capacityPerMinute - left.capacityPerMinute,
-    )[0]!;
+    tiers
+      .filter(({ medium }) => medium === kind)
+      .toSorted(
+        (left, right) => right.capacityPerMinute - left.capacityPerMinute,
+      )[0]!;
 
   const connect = (
     from: MaterialEndpoint,
@@ -527,11 +536,12 @@ export function materializeDetailedCanvas(
       ...(provenance ? { provenance } : {}),
     };
   });
+  options.onStage?.("Building balancers");
   const balanced = balanceDetailedConveyors(
     createDetailedPlan({
       connections: materialLinks.map(physicalConnection),
       nodes: detailedNodes,
-      tiers: DEFAULT_LOGISTICS_TIERS,
+      tiers,
     }),
   );
 
@@ -571,7 +581,7 @@ export function materializeDetailedCanvas(
       nodes: balancedNodes,
       version: CANVAS_DOCUMENT_VERSION,
     },
-    DEFAULT_LOGISTICS_TIERS,
+    tiers,
   );
 }
 

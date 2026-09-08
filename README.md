@@ -76,6 +76,15 @@ Splitters, mergers, and pipeline junctions use headerless 128 × 128 cards with 
 muted building icon in the body, visible ports, and compact rate labels. See
 [the compact Router card design](docs/plans/compact-router-cards.md).
 
+The mode switch shows **Create Detailed** when the Basic plan has no Detailed
+version. It opens a conversion dialog with maximum conveyor and pipeline tiers,
+and a plan name when the Basic plan is unsaved. Conversion and auto-arrangement
+run in workers, with stage progress, cancellation, and errors that keep the
+settings available for retry. The finished result opens already arranged. The
+button then becomes **Detailed** and reopens the saved version, including after a
+reload. Basic and Detailed still use linked saved documents; this conversion flow
+does not migrate them into one save record.
+
 Detailed generation and Basic-to-Detailed conversion use conveyor balancers:
 every connected output of an ordinary splitter gets an equal share. Splitter
 trees and mergers combine those shares to meet individual machine demands,
