@@ -22,6 +22,31 @@ function network(edges: string[]): CanvasDocument {
   };
 }
 
+function withRecipes(
+  document: CanvasDocument,
+  recipes: Record<string, string>,
+): CanvasDocument {
+  return {
+    ...document,
+    nodes: document.nodes.map((node) =>
+      recipes[node.configuration.id]
+        ? {
+            ...node,
+            configuration: createNode({
+              id: node.configuration.id,
+              kind: "process",
+              buildableId:
+                recipes[node.configuration.id] === "Recipe_IngotIron_C"
+                  ? "Build_SmelterMk1_C"
+                  : "Build_ConstructorMk1_C",
+              processId: recipes[node.configuration.id]!,
+            }).configuration,
+          }
+        : node,
+    ),
+  };
+}
+
 describe("Production structure", () => {
   it("keeps ordinary distribution, collection and long bypasses solid", () => {
     const document = network(["s-a", "s-b", "a-c", "b-c", "s-c"]);
@@ -79,7 +104,7 @@ describe("Production structure", () => {
       "c-c",
     ]);
   });
-  it("separates destination balancers from shared supply without splitting feedback", () => {
+  it("adopts shared supply without merging destination balancers or splitting feedback", () => {
     const document = network([
       "source-shared",
       "shared-a",
@@ -101,35 +126,17 @@ describe("Production structure", () => {
       rods: "Recipe_IronRod_C",
       alone: "Recipe_IronRod_C",
     };
-    const source = {
-      ...document,
-      nodes: document.nodes.map((node) =>
-        recipes[node.configuration.id]
-          ? {
-              ...node,
-              configuration: createNode({
-                id: node.configuration.id,
-                kind: "process",
-                buildableId:
-                  recipes[node.configuration.id] === "Recipe_IngotIron_C"
-                    ? "Build_SmelterMk1_C"
-                    : "Build_ConstructorMk1_C",
-                processId: recipes[node.configuration.id]!,
-              }).configuration,
-            }
-          : node,
-      ),
-    };
+    const source = withRecipes(document, recipes);
     const result = productionStructure(source);
     expect(result.logistics).toEqual([
-      ["a", "loop", "parallel"],
+      ["a", "loop", "parallel", "shared"],
       ["b", "isolated"],
-      ["shared"],
     ]);
-    expect(result.logisticsDestinations.get("shared")).toEqual([
-      "Recipe_IronPlate_C",
-      "Recipe_IronRod_C",
-    ]);
+    expect(result.logisticsDestinations.has("shared")).toBe(false);
+    // The shared splitter's rod branch crosses the plate group's boundary.
+    expect(
+      result.logistics.find((group) => group.includes("shared")),
+    ).not.toContain("b");
     expect(result.logisticsDestinations.get("a")).toEqual([
       "Recipe_IronPlate_C",
     ]);
@@ -149,6 +156,51 @@ describe("Production structure", () => {
         materialLinks: source.materialLinks.toReversed(),
       }),
     ).toEqual(result);
+  });
+
+  it("absorbs successive shared routers while preserving the host identity", () => {
+    const document = withRecipes(
+      network(["a-b", "a-screws", "b-c", "b-rods", "c-d", "d-plates"]),
+      {
+        plates: "Recipe_IronPlate_C",
+        rods: "Recipe_IronRod_C",
+        screws: "Recipe_Screw_C",
+      },
+    );
+    const result = productionStructure(document);
+    expect(result.logistics).toEqual([["c", "a", "b", "d"]]);
+    expect(result.logisticsDestinations.get("c")).toEqual([
+      "Recipe_IronPlate_C",
+    ]);
+  });
+
+  it("does not create a group cycle by absorbing across an alternate forward path", () => {
+    const document = withRecipes(
+      network([
+        "shared-a",
+        "shared-mid",
+        "shared-screws",
+        "mid-end",
+        "end-a",
+        "end-rods",
+        "a-b",
+        "b-c",
+        "c-plates",
+      ]),
+      {
+        plates: "Recipe_IronPlate_C",
+        rods: "Recipe_IronRod_C",
+        screws: "Recipe_Screw_C",
+      },
+    );
+    const result = productionStructure(document);
+    // The larger plate group is connected directly and through the middle
+    // group. Adopt into the middle group so its forward link stays forward.
+    expect(result.logistics).toEqual([
+      ["a", "b", "c"],
+      ["end", "mid", "shared"],
+    ]);
+    expect(result.feedbackLinks.size).toBe(0);
   });
 
   it("draws screen-sized dashes along rounded corners while leaving the route intact", () => {

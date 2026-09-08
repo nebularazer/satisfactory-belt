@@ -93,9 +93,11 @@ test("arranges shared ingot supply into destination groups", async ({
       "Iron Ingot → Cast Screws",
       "Iron Ingot → Iron Plate",
       "Iron Ingot → Iron Rod",
-      "Iron Ingot shared distribution",
     ]),
   );
+  expect(
+    layout.names.some((name: string) => name.includes("shared distribution")),
+  ).toBe(false);
   await page.screenshot({
     path: testInfo.outputPath("destination-overview.png"),
   });

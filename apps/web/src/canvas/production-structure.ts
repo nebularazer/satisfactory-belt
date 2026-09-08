@@ -249,9 +249,11 @@ function analyzeStructure(document: CanvasDocument) {
     }
     logistics.push([...group].sort(compare));
   }
-  const logisticsDestinations = new Map(
+  // A group describes the main balancing task, not exclusive ownership of
+  // every output. Keep the host's identity/name when it adopts a shared router.
+  const groupDestinations = new Map(
     logistics.map((ids) => [
-      ids[0]!,
+      ids,
       [
         ...new Set(
           [...destinations.get(ids[0]!)!].map(
@@ -261,5 +263,73 @@ function analyzeStructure(document: CanvasDocument) {
       ].sort(compare),
     ]),
   );
+  absorbSingletons(logistics, links);
+  const logisticsDestinations = new Map(
+    logistics.map((ids) => [ids[0]!, groupDestinations.get(ids)!]),
+  );
   return { feedbackLinks, returnNodes, logistics, logisticsDestinations };
+}
+
+/** Fold a lone router into one connected larger area. Other branches remain
+ * ordinary inter-group links; never merge their destination groups together. */
+function absorbSingletons(
+  groups: string[][],
+  links: CanvasDocument["materialLinks"],
+) {
+  const owner = new Map(
+    groups.flatMap((group) => group.map((id) => [id, group] as const)),
+  );
+  let absorbed = true;
+  while (absorbed) {
+    absorbed = false;
+    for (const single of groups.filter((group) => group.length === 1)) {
+      const adjacent = new Map(
+        groups.map((group) => [group, new Set<string[]>()]),
+      );
+      const connections = new Map<string[], number>();
+      for (const link of links) {
+        const from = owner.get(link.from.nodeId),
+          to = owner.get(link.to.nodeId);
+        if (!from || !to || from === to) continue;
+        adjacent.get(from)!.add(to);
+        const neighbor =
+          from === single ? to : to === single ? from : undefined;
+        if (neighbor && neighbor.length > 1)
+          connections.set(neighbor, (connections.get(neighbor) ?? 0) + 1);
+      }
+      // Contracting a direct edge must not turn an alternate forward path into
+      // a cycle between group boxes. Feedback is already enclosed before this pass.
+      const hasIndirectPath = (from: string[], to: string[]) => {
+        const visited = new Set([from]);
+        const queue = [...adjacent.get(from)!].filter((next) => next !== to);
+        for (let i = 0; i < queue.length; i++) {
+          const next = queue[i]!;
+          if (next === to) return true;
+          if (visited.has(next)) continue;
+          visited.add(next);
+          queue.push(...adjacent.get(next)!);
+        }
+        return false;
+      };
+      const host = [...connections.keys()]
+        .filter(
+          (group) =>
+            !hasIndirectPath(single, group) && !hasIndirectPath(group, single),
+        )
+        .sort(
+          (a, b) =>
+            connections.get(b)! - connections.get(a)! ||
+            b.length - a.length ||
+            compare(a[0]!, b[0]!),
+        )[0];
+      if (!host) continue;
+      owner.set(single[0]!, host);
+      // Preserve the original host anchor for saved custom group names.
+      host.push(single[0]!);
+      const [anchor, ...rest] = host;
+      host.splice(0, host.length, anchor!, ...rest.sort(compare));
+      groups.splice(groups.indexOf(single), 1);
+      absorbed = true;
+    }
+  }
 }

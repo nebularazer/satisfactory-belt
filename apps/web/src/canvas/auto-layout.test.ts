@@ -284,9 +284,12 @@ describe("Auto-arrange", () => {
         "Iron Ingot → Cast Screws",
         "Iron Ingot → Iron Plate",
         "Iron Ingot → Iron Rod",
-        "Iron Ingot shared distribution",
       ]),
     );
+    expect(ingotGroups).toHaveLength(3);
+    expect(
+      ingotGroups.map((group) => group.count).sort((a, b) => a - b),
+    ).toEqual([1, 11, 27]);
     for (const id of structure.feedbackLinks) {
       const link = result.materialLinks.find((link) => link.id === id)!;
       expect(

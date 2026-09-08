@@ -23,10 +23,11 @@ Cast Screw constructor stack, with separate feeds and space between the groups.
 ## Destination logistics groups
 
 Ingot distribution is now separated by the recipes it supplies. The same
-10-Modular-Frames/min example has a 10-router screw supply group, a 26-router
-plate supply group, one rod splitter, and two separate shared splitters. The
-39 physical routers and their connections are preserved. Shared branches stay
-upstream; the destination groups sit before their machine stacks.
+10-Modular-Frames/min example has an 11-router screw supply group and a 27-router
+plate supply group, each including its connected shared splitter. Those splitters'
+rod branches leave their host groups normally. The remaining standalone rod
+splitter has no router connection to either larger balancer. All 39 physical
+routers and their connections are preserved.
 
 ![Separate ingot supply groups for screws, plates, and rods](destination-groups.png)
 
@@ -38,10 +39,14 @@ upstream; the destination groups sit before their machine stacks.
   actual port identities, smart rules, priorities, and rates stay unchanged.
 - Group routers by the next recipe inputs they supply. Parallel supplies with
   the same destinations stay together; sharing a producer recipe alone does not
-  join them. Routers serving several recipes form shared distribution groups
-  before the destination balancers. Complete feedback paths stay in one group.
-  Headers identify the destination recipe or shared distribution. Capacity limits
-  still describe separate physical belts.
+  join them. Lone routers join a directly connected larger logistics group,
+  preferring the strongest connection, then larger group size and stable ID.
+  Other branches can leave the host group without merging their destination
+  groups. Absorption preserves the host's name and identity, and cannot create
+  a cycle between group areas. Larger shared networks keep their own groups.
+  Complete feedback paths stay in one group. Headers identify the main
+  destination recipe or shared distribution. Capacity limits still describe
+  separate physical belts.
 - Keep every logistics group in its own non-overlapping area between recipe
   groups. Routers at the same forward depth occupy one column; later steps are
   strictly to the right. Recipe stacks and logistics areas never interleave.
