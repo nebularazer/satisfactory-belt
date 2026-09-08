@@ -200,27 +200,56 @@ describe("Detailed conveyor balancers", () => {
     );
   });
 
-  it("splits a full belt before adding returning balancer shares", () => {
-    const original = factory([12, 12, 12, 12, 12]);
-    const plan = createDetailedPlan({
-      ...original,
-      tiers: DEFAULT_LOGISTICS_TIERS.filter(
-        (tier) => tier.id === "conveyor-mk1",
-      ),
-      connections: original.connections.map((edge) => ({
-        ...edge,
-        tierId: "conveyor-mk1",
-      })),
-    });
-    const balanced = balanceDetailedConveyors(plan);
-    const actual = physicalRates(balanced);
-    expect(Math.max(...actual.values())).toBeCloseTo(60);
-    for (const edge of balanced.connections) {
-      if (edge.to.nodeId.startsWith("smelter:"))
-        expect(actual.get(edge.id)).toBeCloseTo(12, 7);
-    }
-    expect(analyzeDetailedPlan(balanced).diagnostics).toEqual([]);
-  });
+  it.each([
+    { rates: Array.from({ length: 5 }, () => 12) },
+    { rates: Array.from({ length: 7 }, () => 12) },
+    { rates: Array.from({ length: 11 }, () => 12) },
+    { rates: [6, 12, 42] },
+    { rates: [18, 42] },
+  ])(
+    "feeds $rates from a full belt without duplicating destination shares",
+    ({ rates }) => {
+      const total = rates.reduce((sum, rate) => sum + rate, 0);
+      const original = factory(rates);
+      const plan = createDetailedPlan({
+        ...original,
+        tiers: [
+          {
+            id: "test-conveyor",
+            medium: "conveyor",
+            capacityPerMinute: total,
+          },
+        ],
+        connections: original.connections.map((edge) => ({
+          ...edge,
+          tierId: "test-conveyor",
+        })),
+      });
+      const balanced = balanceDetailedConveyors(plan);
+      const actual = physicalRates(balanced);
+      expect(Math.max(...actual.values())).toBeCloseTo(total);
+      for (const edge of balanced.connections) {
+        if (edge.to.nodeId.startsWith("smelter:")) {
+          expect(actual.get(edge.id)).toBeCloseTo(
+            rates[Number(edge.to.nodeId.split(":")[1])]!,
+            7,
+          );
+          if (rates.every((rate) => rate === rates[0]))
+            expect(
+              balanced.nodes.find(
+                (node) => node.configuration.id === edge.from.nodeId,
+              )?.configuration.buildableId,
+            ).toBe("Build_ConveyorAttachmentSplitter_C");
+        }
+      }
+      expect(analyzeDetailedPlan(balanced).diagnostics).toEqual([]);
+      expect(balanceDetailedConveyors(plan)).toEqual(balanced);
+      if (rates.length === 5)
+        expect(
+          balanced.nodes.filter((node) => node.configuration.kind === "router"),
+        ).toHaveLength(8);
+    },
+  );
   it.each([
     {
       rates: Array.from({ length: 16 }, () => 30),
