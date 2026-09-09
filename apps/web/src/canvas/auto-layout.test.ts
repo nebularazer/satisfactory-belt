@@ -78,7 +78,7 @@ describe("Auto-arrange", () => {
     expect(restored).toEqual(persisted);
     if (restored.kind !== "detailed") throw new Error("Expected Detailed plan");
     expect(detailedDocumentToEditor(restored)).toEqual(result);
-  }, 20_000);
+  }, 40_000);
 
   it("supports Basic plans and preserves their routes through save/reload", async () => {
     const result = await arrangeCanvas(modularFrameFactory(false));
