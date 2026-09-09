@@ -82,6 +82,12 @@ export type CanvasEditorAction =
       source: CanvasDocument;
       document: CanvasDocument;
     }
+  | {
+      type: "production.replace";
+      source: CanvasDocument;
+      document: CanvasDocument;
+      sectionId: string;
+    }
   | { type: "document.replace"; document: CanvasDocument }
   | { type: "document.reset" }
   | {
@@ -195,6 +201,10 @@ type IndexedLink = Readonly<{
 }>;
 
 type HistoryEntry = Readonly<{
+  productionSections?: {
+    before?: CanvasDocument["productionSections"];
+    after?: CanvasDocument["productionSections"];
+  };
   groupNames?: { before?: GroupNames; after?: GroupNames };
   after: readonly IndexedNode[];
   afterLinks?: readonly IndexedLink[];
@@ -453,7 +463,13 @@ export function createCanvasEditor(
     if (validateTopology) {
       validateDocument(document, topology);
     }
-    past.push(entry);
+    past.push({
+      ...entry,
+      productionSections: {
+        before: state.document.productionSections,
+        after: document.productionSections,
+      },
+    });
     if (past.length > HISTORY_LIMIT) past.shift();
     future.length = 0;
     spatialIndex.apply(
@@ -684,6 +700,14 @@ export function createCanvasEditor(
         }));
         const document = {
           ...state.document,
+          ...(action.document.productionSections
+            ? {
+                productionSections: [
+                  ...(state.document.productionSections ?? []),
+                  ...action.document.productionSections,
+                ],
+              }
+            : {}),
           nodes: [...state.document.nodes, ...action.document.nodes],
           materialLinks: [
             ...state.document.materialLinks,
@@ -705,9 +729,18 @@ export function createCanvasEditor(
         return;
       }
 
+      case "production.replace":
       case "document.arrange": {
         // A worker result must never overwrite edits made while it was running.
         if (action.source !== state.document || moveTransaction) return;
+        if (action.type === "production.replace" && topology !== "aggregate")
+          return;
+        const selection =
+          action.type === "production.replace"
+            ? (action.document.productionSections?.find(
+                (s) => s.id === action.sectionId,
+              )?.nodeIds ?? [])
+            : state.selectedIds;
         const before = state.document.nodes.map((node, index) => ({
           node,
           index,
@@ -718,7 +751,7 @@ export function createCanvasEditor(
         }));
         commit(
           action.document,
-          state.selectedIds,
+          selection,
           {
             before,
             after,
@@ -731,12 +764,13 @@ export function createCanvasEditor(
               index,
             })),
             beforeSelection: state.selectedIds,
-            afterSelection: state.selectedIds,
+            afterSelection: selection,
             beforeLinkSelection: state.selectedLinkIds,
-            afterLinkSelection: state.selectedLinkIds,
+            afterLinkSelection:
+              action.type === "production.replace" ? [] : state.selectedLinkIds,
           },
-          state.selectedLinkIds,
-          false,
+          action.type === "production.replace" ? [] : state.selectedLinkIds,
+          action.type === "production.replace",
         );
         return;
       }
@@ -1545,6 +1579,14 @@ export function createCanvasEditor(
           const names = entry.groupNames.before;
           document = { ...base, ...(names ? { groupNames: names } : {}) };
         }
+        if (entry.productionSections) {
+          const { productionSections: _sections, ...base } = document;
+          const sections = entry.productionSections.before;
+          document = {
+            ...base,
+            ...(sections ? { productionSections: sections } : {}),
+          };
+        }
         spatialIndex.apply(
           document,
           entry.after.map(({ node }) => node),
@@ -1579,6 +1621,14 @@ export function createCanvasEditor(
           const { groupNames: _names, ...base } = document;
           const names = entry.groupNames.after;
           document = { ...base, ...(names ? { groupNames: names } : {}) };
+        }
+        if (entry.productionSections) {
+          const { productionSections: _sections, ...base } = document;
+          const sections = entry.productionSections.after;
+          document = {
+            ...base,
+            ...(sections ? { productionSections: sections } : {}),
+          };
         }
         spatialIndex.apply(
           document,

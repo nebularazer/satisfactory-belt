@@ -1,6 +1,4 @@
-import ELK from "elkjs/lib/elk-api.js";
-import ElkWorker from "elkjs/lib/elk-worker.min.js?worker";
-import { arrangeCanvas } from "./auto-layout";
+import ArrangementWorker from "./arrangement.worker?worker";
 import type { CanvasDocument } from "./document";
 
 export function requestCanvasArrangement(
@@ -13,7 +11,7 @@ export function requestCanvasArrangement(
       reject(new DOMException("Cancelled", "AbortError"));
       return;
     }
-    const worker = new ElkWorker();
+    const worker = new ArrangementWorker();
     const cleanup = () => {
       worker.terminate();
       clearTimeout(timeout);
@@ -31,15 +29,16 @@ export function requestCanvasArrangement(
     signal.addEventListener("abort", abort, { once: true });
     worker.onerror = () =>
       fail(new Error("Auto-arrange could not start. Please try again."));
-    try {
-      const elk = new ELK({
-        workerFactory: () => worker,
-        algorithms: ["layered"],
-      });
-      void arrangeCanvas(document, elk, topology).then((result) => {
+    worker.onmessage = (
+      event: MessageEvent<{ result?: CanvasDocument; error?: string }>,
+    ) => {
+      if (event.data.result) {
         cleanup();
-        resolve(result);
-      }, fail);
+        resolve(event.data.result);
+      } else fail(new Error(event.data.error ?? "Auto-arrange failed."));
+    };
+    try {
+      worker.postMessage({ document, topology });
     } catch (error) {
       fail(error instanceof Error ? error : new Error("Auto-arrange failed."));
     }

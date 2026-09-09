@@ -1,3 +1,9 @@
+import {
+  attachProductionRequest,
+  prepareProductionReplacement,
+  productionSectionName,
+  type ProductionSection,
+} from "@/auto-build/production-sections";
 import { GroupInspector } from "@/components/group-inspector";
 import { requestCanvasArrangement } from "@/canvas/auto-layout-request";
 import { requestDetailedConversion } from "@/detailed-conversion/request-conversion";
@@ -288,6 +294,7 @@ function CanvasWorkspace({
   const [placement, setPlacement] = useState<NodePickerSelection | null>(null);
   const [autoBuild, setAutoBuild] = useState<{
     itemId: string;
+    section?: ProductionSection;
     at?: Point;
     owner: typeof editor;
   } | null>(null);
@@ -875,6 +882,29 @@ function CanvasWorkspace({
             editor={editor}
             mode={editorMode}
             mobileOpen={mobileNodeInspectorOpen}
+            onEditProductionRequest={(sectionId) => {
+              const document = editor.getState().document;
+              const section = document.productionSections?.find(
+                (s) => s.id === sectionId,
+              );
+              if (!section) return;
+              const members = document.nodes.filter((n) =>
+                section.nodeIds.includes(n.configuration.id),
+              );
+              editor.dispatch({ type: "selection.clear" });
+              for (const node of members)
+                editor.dispatch({
+                  type: "selection.node",
+                  id: node.configuration.id,
+                  additive: true,
+                });
+              canvasRef.current?.fitSelection();
+              setAutoBuild({
+                itemId: section.settings.outputs[0]!.itemId,
+                section,
+                owner: editor,
+              });
+            }}
           />
           <MaterialLinkInspector editor={editor} mode={editorMode} />
           <GroupInspector editor={editor} />
@@ -995,6 +1025,21 @@ function CanvasWorkspace({
         {autoBuild?.owner === editor && (
           <AutoBuildDialog
             itemId={autoBuild.itemId}
+            initialSettings={autoBuild.section?.settings}
+            sectionName={
+              autoBuild.section
+                ? productionSectionName(autoBuild.section)
+                : undefined
+            }
+            sectionNodeCount={
+              autoBuild.section
+                ? editor
+                    .getState()
+                    .document.nodes.filter((n) =>
+                      autoBuild.section!.nodeIds.includes(n.configuration.id),
+                    ).length
+                : undefined
+            }
             onClose={() => setAutoBuild(null)}
             onGenerate={async (settings, signal, onStage) => {
               const source = editor.getState().document;
@@ -1004,11 +1049,58 @@ function CanvasWorkspace({
                 throw new Error(
                   "The canvas changed during generation. Please generate again.",
                 );
-              const document = prepareProductionInsertion(
-                source,
-                result.document,
-                `auto-build:${crypto.randomUUID()}`,
-                autoBuild.at,
+              if (autoBuild.section) {
+                const replacement = prepareProductionReplacement(
+                  source,
+                  autoBuild.section,
+                  result.document,
+                  settings,
+                );
+                const labels = new Map(
+                  source.nodes.map((n) => [n.configuration.id, n.label]),
+                );
+                return {
+                  oldNodeCount: replacement.oldNodeCount,
+                  newNodeCount: replacement.newNodeCount,
+                  retainedConnections: replacement.retained.length,
+                  disconnectedConnections: replacement.disconnected.map(
+                    (l) =>
+                      `${labels.get(l.from.nodeId)} / ${labels.get(l.to.nodeId)}`,
+                  ),
+                  apply: () => {
+                    if (editor.getState().document !== source)
+                      throw new Error(
+                        "The canvas changed. Go back to settings and preview again.",
+                      );
+                    editor.dispatch({
+                      type: "production.replace",
+                      source,
+                      document: replacement.document,
+                      sectionId: autoBuild.section!.id,
+                    });
+                    if (editor.getState().document !== replacement.document)
+                      throw new Error(
+                        "Replacement could not be applied. Preview again.",
+                      );
+                    requestAnimationFrame(() =>
+                      canvasRef.current?.fitSelection(),
+                    );
+                    toast.success(
+                      "Replaced production section. Undo restores the previous request and factory.",
+                    );
+                  },
+                };
+              }
+              const sectionId = `auto-build:${crypto.randomUUID()}`;
+              const document = attachProductionRequest(
+                prepareProductionInsertion(
+                  source,
+                  result.document,
+                  sectionId,
+                  autoBuild.at,
+                ),
+                sectionId,
+                settings,
               );
               editor.dispatch({ type: "document.insert", source, document });
               requestAnimationFrame(() => canvasRef.current?.fitSelection());

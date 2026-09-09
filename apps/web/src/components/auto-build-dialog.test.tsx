@@ -72,3 +72,70 @@ describe("Auto-build dialog", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
+
+it("reopens all saved settings and requires an explicit replacement after preview", async () => {
+  const settings = {
+    outputs: [
+      { itemId: "Desc_ModularFrame_C", ratePerMinute: 10 },
+      { itemId: "Desc_IronPlate_C", ratePerMinute: 20 },
+    ],
+    allowedAlternateIds: ["Recipe_Alternate_Screw_C"],
+    pinnedRecipes: { Desc_IronScrew_C: "Recipe_Alternate_Screw_C" },
+    resourceNodes: [
+      {
+        itemId: "Desc_OreIron_C",
+        buildableId: "Build_MinerMk1_C",
+        impure: 0,
+        normal: 8,
+        pure: 0,
+        maximumClockPercent: 100,
+      },
+    ],
+  };
+  const apply = vi.fn();
+  const onClose = vi.fn();
+  const onGenerate = vi.fn().mockResolvedValue({
+    oldNodeCount: 7,
+    newNodeCount: 6,
+    retainedConnections: 1,
+    disconnectedConnections: ["Iron Rod / Manual assembler"],
+    apply,
+  });
+  render(
+    <AutoBuildDialog
+      itemId="Desc_ModularFrame_C"
+      sectionName="Modular Frame · 10/min"
+      sectionNodeCount={7}
+      initialSettings={settings}
+      onClose={onClose}
+      onGenerate={onGenerate}
+    />,
+  );
+  expect(
+    screen.getByRole("spinbutton", { name: "Modular Frame rate" }),
+  ).toHaveValue(10);
+  expect(
+    screen.getByRole("spinbutton", { name: "Iron Plate rate" }),
+  ).toHaveValue(20);
+  fireEvent.click(screen.getByRole("button", { name: "Preview replacement" }));
+  const replace = await screen.findByRole("button", {
+    name: "Replace and disconnect (1)",
+  });
+  expect(onGenerate.mock.calls[0][0]).toEqual(settings);
+  expect(apply).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Iron Rod / Manual assembler",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Back to settings" }));
+  expect(apply).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("spinbutton", { name: "Iron Plate rate" }),
+  ).toHaveValue(20);
+  fireEvent.click(screen.getByRole("button", { name: "Preview replacement" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: replace.textContent! }),
+  );
+  expect(apply).toHaveBeenCalledOnce();
+  expect(onClose).toHaveBeenCalledOnce();
+});

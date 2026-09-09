@@ -155,3 +155,35 @@ plans get the new spacing on their next Auto-arrange; manual route editing is
 unchanged.
 
 ![Parallel conveyor feeds on separate grid lanes](parallel-feeds.png)
+
+## Saved production requests
+
+New Auto-build sections save their requested outputs, allowed and required
+recipes, and available resource nodes alongside the generated node membership.
+Select a member in Basic mode and use **Edit production request** in its inspector
+to reopen those settings, including after saving or reloading.
+
+Opening a request selects its remaining members. **Preview replacement** generates
+and arranges a candidate without modifying the canvas. The review identifies the
+original request, old/new node counts, retained external connections, and any
+connections whose ports cannot be matched. **Replace section** replaces only
+recorded members and their internal connections; manual edits within that section
+are replaced too. Manually added or duplicated nodes and other generated sections
+remain independent. Existing Detailed versions are not regenerated.
+
+External connections match a unique machine/process and material port, including
+resource purity. Sequence IDs are not sufficient: changing recipes can reuse an
+ID for a different machine. Unmatched connections are listed before replacement;
+the apply button explicitly includes their removal count. Retained boundary
+connections discard stale route geometry and may carry different rates after
+regeneration. A changed canvas invalidates a pending preview. One Undo restores
+the complete prior section, connections, and production request; Redo reapplies it.
+Older plans continue to load but have no editable request to recover.
+
+The complete Auto-arrange calculation runs in a dedicated worker: recipe/group
+placement, ELK, orthogonal routing, and spacing retries. Cancellation and timeout
+terminate that entire worker, allowing the main thread to keep handling input.
+
+![Reviewing replacement targets and external connections](replacement-preview.png)
+
+![Production replacement review on mobile](replacement-preview-mobile.png)

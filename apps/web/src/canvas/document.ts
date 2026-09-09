@@ -1,3 +1,4 @@
+import type { ProductionSection } from "@/auto-build/production-sections";
 import type { GroupNames } from "./group-names";
 import type { ConnectionRoute } from "./connection-route";
 import type { NodeConfiguration } from "@satisfactory-belt/production";
@@ -37,6 +38,7 @@ export function canvasNodeId(node: CanvasNode) {
 }
 
 export type CanvasDocument = Readonly<{
+  productionSections?: readonly ProductionSection[];
   groupNames?: GroupNames;
   kind: "basic";
   materialLinks: readonly CanvasMaterialLink[];
