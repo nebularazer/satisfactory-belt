@@ -1,3 +1,4 @@
+import { groupRouteObstacles } from "./group-boundary";
 import {
   MIN_LINE_GAP,
   PREFERRED_LINE_GAP,
@@ -160,9 +161,7 @@ export function routeBetweenGroups(
     const toGroup = owners.get(to.nodeId)!;
     const obstacles = [
       ...document.nodes.map((node) => ({ ...node, id: node.configuration.id })),
-      ...groups
-        .filter((group) => group !== fromGroup && group !== toGroup)
-        .map((group) => ({ ...group, id: `group:${group.id}` })),
+      ...groupRouteObstacles(groups, from.nodeId, to.nodeId),
     ];
     const padded = obstacles.map((rect) => ({
       ...rect,
@@ -278,11 +277,7 @@ export function spaceLayoutRoutes(
       link.id,
       [
         ...nodes.map((node) => ({ ...node, id: node.configuration.id })),
-        ...groups.filter(
-          (group) =>
-            !group.nodeIds.includes(link.from.nodeId) &&
-            !group.nodeIds.includes(link.to.nodeId),
-        ),
+        ...groupRouteObstacles(groups, link.from.nodeId, link.to.nodeId),
       ],
     ]),
   );

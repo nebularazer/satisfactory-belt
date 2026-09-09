@@ -5,7 +5,7 @@ import { materialPortGeometry } from "./material-port-geometry";
 import { routeIsClear } from "./orthogonal-router";
 import type { CanvasMaterialLink } from "./document";
 import type { Point } from "./geometry";
-import { groupBounds, GROUP_PADDING } from "./group-bounds";
+import { groupBounds } from "./group-bounds";
 
 it("keeps a return local even when unrelated branches extend far below it", () => {
   const nodes = [
@@ -57,9 +57,9 @@ it("includes internal return lanes with the same padding on all four sides", () 
   ];
   const bounds = groupBounds(nodes, [route]);
   expect(bounds).toEqual({
-    x: 68 - GROUP_PADDING,
-    y: 100 - GROUP_PADDING,
-    width: 740 + GROUP_PADDING * 2,
-    height: 150 + GROUP_PADDING * 2,
+    x: 16,
+    y: 48,
+    width: 848,
+    height: 256,
   });
 });

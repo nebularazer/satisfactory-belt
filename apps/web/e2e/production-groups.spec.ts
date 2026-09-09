@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 for (const mode of ["basic", "detailed"] as const)
-  test(`${mode === "basic" ? "hides Basic groups" : "renames Detailed groups with persistent names and bounded zoom labels"}`, async ({
+  test(`${mode === "basic" ? "hides Basic groups" : "renames Detailed groups with summaries, persistent names and vector inspect icons"}`, async ({
     page,
   }, testInfo) => {
     test.setTimeout(60_000);
@@ -82,8 +82,8 @@ for (const mode of ["basic", "detailed"] as const)
       return {
         id: group.id,
         name: group.name,
-        x: (group.x + group.width / 2) * viewport.zoom + viewport.x,
-        y: (group.y + 28) * viewport.zoom + viewport.y,
+        x: (group.x + 16) * viewport.zoom + viewport.x,
+        y: (group.y + 16) * viewport.zoom + viewport.y,
       };
     });
     await page.mouse.click(group.x, group.y);
@@ -100,6 +100,30 @@ for (const mode of ["basic", "detailed"] as const)
       return;
     }
     await expect(inspector).toBeVisible();
+    await expect(
+      inspector.getByRole("heading", { name: "Recipe production" }),
+    ).toBeVisible();
+    await expect(inspector.locator("svg.lucide-scan-eye")).toBeVisible();
+    await inspector
+      .getByRole("textbox", { name: "Group name" })
+      .fill("A".repeat(160));
+    await inspector
+      .getByRole("button", { name: "Save name", exact: true })
+      .click();
+    const title = inspector.getByRole("heading", {
+      name: "A".repeat(160),
+      exact: true,
+    });
+    await expect(title).toBeVisible();
+    const headingBounds = await title.boundingBox();
+    const inspectorBounds = await inspector.boundingBox();
+    expect(headingBounds!.x + headingBounds!.width).toBeLessThan(
+      inspectorBounds!.x + inspectorBounds!.width,
+    );
+    expect(headingBounds!.height).toBeLessThanOrEqual(48);
+    await inspector
+      .getByRole("button", { name: "Reset name", exact: true })
+      .click();
     const name =
       "Northern production — reinforced plate supply and distribution";
     await page.getByRole("textbox", { name: "Group name" }).fill(name);
@@ -115,7 +139,7 @@ for (const mode of ["basic", "detailed"] as const)
     );
     await page.screenshot({ path: testInfo.outputPath("group-overview.png") });
     await page.getByRole("button", { name: "Close group details" }).click();
-    // Center the header before zooming, keeping its full boundary on screen.
+    // Center the inspect icon before zooming, keeping its full boundary on screen.
     await page.mouse.move(group.x, group.y);
     await page.mouse.down({ button: "middle" });
     await page.mouse.move(800, 180, { steps: 6 });

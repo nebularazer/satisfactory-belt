@@ -1,39 +1,23 @@
 import { expect, it } from "vitest";
-import { groupLabelLayout } from "./group-label-layout";
+import { groupInspectIcon } from "./group-label-layout";
+import { groupBounds, GROUP_PADDING } from "./group-bounds";
+import { testCanvasNode } from "./test-fixtures";
 
-const measure = (text: string, size: number) => text.length * size * 0.55;
-it("uses one fixed font size and fits labels inside the header", () => {
-  for (const name of [
-    "Iron Ore Extraction",
-    "Reinforced Iron Plate",
-    "A".repeat(160),
-    "Northern steel processing and distribution facility",
-  ]) {
-    const layout = groupLabelLayout({ name, count: 8, width: 368 }, measure);
-    expect(layout.fontSize).toBe(18);
-    expect(layout.visible).toBe(true);
-    for (const line of layout.text.split("\n"))
-      expect(measure(line, layout.fontSize)).toBeLessThanOrEqual(328);
-    expect(
-      layout.text.split("\n").length * layout.lineHeight,
-    ).toBeLessThanOrEqual(44);
-  }
-});
-it("wraps and truncates based on available width alone", () => {
-  expect(
-    groupLabelLayout(
-      { name: "Reinforced Iron Plate production", count: 3, width: 296 },
-      measure,
-    ).text,
-  ).toContain("\n");
-  expect(
-    groupLabelLayout(
-      {
-        name: "Very long reinforced iron plate production and distribution",
-        count: 3,
-        width: 296,
-      },
-      measure,
-    ).text,
-  ).toContain("…");
+it("snaps all group edges outward and leaves space for the vector inspect icon", () => {
+  const node = testCanvasNode("a", 37, 53);
+  const bounds = groupBounds([node]);
+  for (const edge of [
+    bounds.x,
+    bounds.y,
+    bounds.x + bounds.width,
+    bounds.y + bounds.height,
+  ])
+    expect(Math.abs(edge % 16)).toBe(0);
+  expect(node.x - bounds.x).toBeGreaterThanOrEqual(GROUP_PADDING);
+  expect(node.y - bounds.y).toBeGreaterThanOrEqual(GROUP_PADDING);
+  const icon = groupInspectIcon(bounds);
+  expect(icon.x).toBeGreaterThan(bounds.x);
+  expect(icon.y).toBeGreaterThan(bounds.y);
+  expect(icon.y + icon.height).toBeLessThan(node.y);
+  expect(icon.width).toBe(icon.height);
 });

@@ -3,7 +3,7 @@
 Auto-arrange and Detailed conversion use the same layout. Recipes form vertical
 stacks; parallel steps occupy the same production stage. Physical logistics sit
 between stages, aligned with their connected machine ports. The diagram stays on one editable canvas.
-Group labels, outlines, header selection, and renaming are shown only in Detailed
+Group outlines, inspect icons, summaries, and renaming are shown only in Detailed
 mode; Basic mode shows its recipe cards directly.
 
 These screenshots are from the actual browser conversion workflow: 10 Modular
@@ -44,7 +44,7 @@ routers and their connections are preserved.
   Other branches can leave the host group without merging their destination
   groups. Absorption preserves the host's name and identity, and cannot create
   a cycle between group areas. Larger shared networks keep their own groups.
-  Complete feedback paths stay in one group. Headers identify the main
+  Complete feedback paths stay in one group. The inspector identifies the main
   destination recipe or shared distribution. Capacity limits still describe
   separate physical belts.
 - Keep every logistics group in its own non-overlapping area between recipe
@@ -68,8 +68,10 @@ routers and their connections are preserved.
   between groups, and to feedback returns. Fixed endpoints stay attached.
 - ELK reserves 32px lane gaps initially. If final routes still violate the
   minimum, retry with larger corridor/lane spacing (up to four layouts). Apply
-  only a layout that passes the minimum-gap check. The final route never has to
-  visit a prescribed boundary exit. Longer bypasses can stay outside unrelated
+  only a layout that passes the minimum-gap check. Connections cross only the straight left/right sides of a box, clearing its
+  16px rounded corners. Source and destination top/bottom boundaries are routing
+  barriers, including during lane-spacing adjustments. Vertical runs stay at least
+  one grid cell (16px) from a box side; horizontal links can cross those sides. Longer bypasses can stay outside unrelated
   groups. Crossing reduction remains a bounded heuristic.
 - Identify cycles from topology, then recognize return distributors feeding
   parallel branches. Put routers serving only returns below the forward flow.
@@ -79,8 +81,8 @@ routers and their connections are preserved.
   paths around their connected routers. Candidate paths avoid overlaps and weigh
   length against bends and crossings; unrelated branches below a loop do not force
   it down to the bottom of the entire group.
-- Include internal logistics routes in group bounds, with equal 56px padding on
-  every side. External feeds do not enlarge those bounds. The same bounds reserve
+- Include internal logistics routes in group bounds, with at least 48px padding on
+  every side, snapping all four edges outward to the 16px grid. External feeds do not enlarge those bounds. The same bounds reserve
   layout space, draw outlines, and keep unrelated bypass belts out.
 - Keep cycles between production recipes within a finite stage. Long forward
   bypasses stay solid even if their geometry travels leftward.
@@ -92,23 +94,35 @@ The implementation changes presentation only. It does not replace belts,
 rebalance rates, change machine clocks, or insert/remove physical routers.
 Existing plans adopt it on their next Auto-arrange, which remains undoable.
 
-## Group labels and selection
+## Group inspection and selection
 
-Group headers use a fixed 18px canvas font size at every zoom. Labels use up to
-two lines and truncate to fit the header width; zoom never changes their text,
-font size, wrapping, or visibility. Text texture resolution increases with zoom
-and display density to keep lettering sharp. Hovering reveals the full name.
+Each group has a Lucide ScanEye icon in its upper-left corner, drawn as vector
+paths so it stays sharp with zoom and display density. There is no canvas text
+header. Hover reveals the group name; the click target remains usable when
+zoomed out. Click the icon to select the members and open the group inspector.
 
-Click a header to select its nodes and open the group inspector. Rename or reset
-the group there; names persist in Basic and Detailed saves and through subsequent
-Auto-arrange, with undo/redo support. Clicking a member card inspects that node;
+Logistics summaries show incoming/outgoing rate multiplicities, totals by item
+and destination, buildings, internal connections, belts and pipes by tier, and
+internal feedback return links. Balancer expressions use an inline Lucide
+ArrowRight SVG. Remainder flows identify their downstream recipe; they are not
+reported as waste. Internal recirculation is excluded from boundary throughput.
+Unresolved flow remains explicitly unresolved.
+
+Machine summaries show configured consumption and production (including products
+without outgoing belts), clocks, power, buildings, and boundary connections.
+Rename or reset the group in the inspector; names persist through subsequent
+Auto-arrange and support undo/redo. Clicking a member card inspects that node;
 dragging a selected member moves the group. Thin outlines mark group boundaries,
-with a stronger outline for the selected group. Link strokes are thinner while
-preserving their capacity colors, dashed return style, and click targets.
+with a stronger outline for the selected group. Link strokes preserve capacity
+colors, dashed return style, and click targets.
 
-![Selecting and renaming a group](rename.png)
+![Logistics group throughput, destinations, and inventory](logistics-inspector.png)
 
-![Fixed-size canvas labels rendered sharply at close zoom](labels-close.png)
+![Production summary and group renaming](rename.png)
+
+![Scrollable group inspector on mobile](logistics-inspector-mobile.png)
+
+![Vector inspect icon at close zoom](inspect-close.png)
 
 Basic mode keeps the arranged cards and connections without group decorations.
 

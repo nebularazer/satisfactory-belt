@@ -1,56 +1,22 @@
-import type { Point } from "./geometry";
+import type { Point, Rectangle } from "./geometry";
 import { productionRegions } from "./production-regions";
 import type { CanvasDocument } from "./document";
-import { GROUP_PADDING } from "./group-bounds";
 
-type Region = ReturnType<typeof productionRegions>[number];
-
-/** Same header area at every zoom; long labels never spill into a neighbor. */
-export function groupLabelLayout(
-  region: Pick<Region, "name" | "count" | "width">,
-  measure: (text: string, fontSize: number) => number,
-) {
-  const fontSize = 18;
-  const width = Math.max(0, region.width - 40);
-  const lineHeight = fontSize * 1.1;
-  const maxLines = Math.max(1, Math.floor(44 / lineHeight));
-  const visible = width > 0;
-  const words = `${region.name} · ${region.count}`.split(/\s+/);
-  const lines: string[] = [];
-  let line = "";
-  while (words.length) {
-    const word = words.shift()!;
-    const candidate = line ? `${line} ${word}` : word;
-    if (measure(candidate, fontSize) <= width) {
-      line = candidate;
-      continue;
-    }
-    if (line && lines.length + 1 < maxLines) {
-      lines.push(line);
-      line = "";
-      words.unshift(word);
-      continue;
-    }
-    let truncated = candidate;
-    while (truncated && measure(`${truncated}…`, fontSize) > width)
-      truncated = truncated.slice(0, -1);
-    lines.push(truncated ? `${truncated.trimEnd()}…` : "");
-    return { text: lines.join("\n"), fontSize, lineHeight, visible };
-  }
-  if (line) lines.push(line);
-  return { text: lines.join("\n"), fontSize, lineHeight, visible };
+export function groupInspectIcon(region: Pick<Rectangle, "x" | "y">) {
+  return { x: region.x + 4, y: region.y + 4, width: 24, height: 24 };
 }
-
 export function hitProductionGroup(
   document: CanvasDocument,
   point: Point,
   topology: "aggregate" | "physical" = "physical",
+  zoom = 1,
 ) {
-  return productionRegions(document, topology).find(
-    (region) =>
-      point.x >= region.x &&
-      point.x <= region.x + region.width &&
-      point.y >= region.y &&
-      point.y < region.y + GROUP_PADDING,
-  );
+  return productionRegions(document, topology).find((region) => {
+    const icon = groupInspectIcon(region);
+    const radius = Math.max(16, 12 / zoom);
+    return (
+      Math.abs(point.x - icon.x - icon.width / 2) <= radius &&
+      Math.abs(point.y - icon.y - icon.height / 2) <= radius
+    );
+  });
 }

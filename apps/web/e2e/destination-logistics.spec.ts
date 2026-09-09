@@ -106,6 +106,7 @@ test("arranges shared ingot supply into destination groups", async ({
         ),
       ),
       detail,
+      inspect: { x: ingots[0].x + 16, y: ingots[0].y + 16 },
       names: ingots.map((region: any) => region.name),
       connections: document.connections,
       area: bounds(ingots),
@@ -119,9 +120,9 @@ test("arranges shared ingot supply into destination groups", async ({
   expect(layout.minimumGapCost).toBe(0);
   expect(layout.names).toEqual(
     expect.arrayContaining([
-      "Iron Ingot → Cast Screws",
-      "Iron Ingot → Iron Plate",
-      "Iron Ingot → Iron Rod",
+      "Iron Ingot for Cast Screws",
+      "Iron Ingot for Iron Plate",
+      "Iron Ingot for Iron Rod",
     ]),
   );
   expect(
@@ -131,6 +132,26 @@ test("arranges shared ingot supply into destination groups", async ({
     path: testInfo.outputPath("destination-overview.png"),
   });
   const { area, viewport } = layout;
+  await page.mouse.click(
+    layout.inspect.x * viewport.zoom + viewport.x,
+    layout.inspect.y * viewport.zoom + viewport.y,
+  );
+  const inspector = page.getByRole("complementary", { name: "Group details" });
+  await expect(inspector).toBeVisible();
+  await expect(
+    inspector.getByRole("heading", { name: "Balancer", exact: true }),
+  ).toBeVisible();
+  await expect(
+    inspector.getByText("Remainder", { exact: false }),
+  ).not.toHaveCount(0);
+  await expect(
+    inspector.locator("svg.lucide-arrow-right").first(),
+  ).toBeVisible();
+  expect(await inspector.innerText()).not.toContain("→");
+  await page.screenshot({
+    path: testInfo.outputPath("logistics-inspector.png"),
+  });
+  await inspector.getByRole("button", { name: "Close group details" }).click();
   const center = {
     x: (area.x + area.width / 2) * viewport.zoom + viewport.x,
     y: (area.y + area.height / 2) * viewport.zoom + viewport.y,
@@ -169,5 +190,26 @@ test("arranges shared ingot supply into destination groups", async ({
     .poll(() => page.getByRole("button", { name: /Reset zoom/ }).innerText())
     .toBe(`${Math.round(detailZoom * 100)}%`);
   await page.screenshot({ path: testInfo.outputPath("parallel-feeds.png") });
+  await page.getByRole("button", { name: "Open canvas menu" }).click();
+  await page.getByRole("menuitem", { name: /^Fit all/ }).click();
+  await page.mouse.click(
+    layout.inspect.x * viewport.zoom + viewport.x,
+    layout.inspect.y * viewport.zoom + viewport.y,
+  );
+  await expect(inspector).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const panel = await inspector.boundingBox();
+  expect(panel!.x).toBeGreaterThanOrEqual(0);
+  expect(panel!.width).toBeLessThanOrEqual(390);
+  expect(panel!.y + panel!.height).toBeLessThanOrEqual(845);
+  await page.screenshot({
+    path: testInfo.outputPath("logistics-inspector-mobile.png"),
+  });
+  await inspector
+    .getByRole("textbox", { name: "Group name" })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    inspector.getByRole("textbox", { name: "Group name" }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });

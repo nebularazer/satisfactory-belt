@@ -472,6 +472,7 @@ export function attachCanvasInteractions(
             editor.getState().document,
             worldPoint,
             editor.topology,
+            host.getViewport().zoom,
           )
         : undefined;
     if (hitGroup && !selectionModifier) {
@@ -735,6 +736,7 @@ export function attachCanvasInteractions(
               editor.getState().document,
               worldPoint,
               editor.topology,
+              host.getViewport().zoom,
             )
           : undefined;
       canvas.title = hoverGroup?.name ?? "";
@@ -1002,6 +1004,7 @@ export function attachCanvasInteractions(
       editor.getState().document,
       worldPoint,
       editor.topology,
+      host.getViewport().zoom,
     );
     if (group) {
       editor.dispatch({ type: "selection.group", id: group.id });

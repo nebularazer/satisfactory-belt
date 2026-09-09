@@ -47,6 +47,7 @@ function regions(document: CanvasDocument) {
         nodes,
         label: `${nodes[0]!.configuration.kind === "process" ? (findProductionProcess(nodes[0]!.configuration.processId)?.name ?? nodes[0]!.label) : nodes[0]!.label}`,
         logistics: false,
+        destinationIds: [] as string[],
       })),
     ...structure.logistics.map((ids) => {
       const edge = document.materialLinks.find(
@@ -60,7 +61,7 @@ function regions(document: CanvasDocument) {
           ? findProductionProcess(targets[0]!)?.name
           : undefined;
       const label = destination
-        ? `${item ?? "Logistics"} → ${destination}`
+        ? `${item ?? "Logistics"} for ${destination}`
         : targets.length > 1
           ? `${item ?? "Logistics"} shared distribution`
           : item
@@ -73,6 +74,7 @@ function regions(document: CanvasDocument) {
         ),
         label,
         logistics: true,
+        destinationIds: targets,
       };
     }),
   ];
@@ -109,6 +111,7 @@ function regions(document: CanvasDocument) {
         defaultName: group.label,
         count: group.nodes.length,
         logistics: group.logistics,
+        destinationIds: group.destinationIds,
       },
     ];
   });

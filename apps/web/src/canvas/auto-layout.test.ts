@@ -1,3 +1,4 @@
+import { GROUP_PADDING } from "./group-bounds";
 import { layoutRouteScore } from "./layout-routing";
 import { generateProduction } from "../auto-build/generate-production";
 import { convertDetailed } from "../detailed-conversion/convert";
@@ -61,6 +62,57 @@ function expectAttachedClearRoutes(document: CanvasDocument) {
       layoutRouteScore(link, link.route!, document.materialLinks, routes)[4],
       `Minimum line gap ${link.id}`,
     ).toBe(0);
+  }
+  // No vertical segment may cross a horizontal box edge. Every side crossing
+  // must clear the rounded corner, including paths between distant groups.
+  for (const group of productionRegions(document)) {
+    for (const edge of [
+      group.x,
+      group.y,
+      group.x + group.width,
+      group.y + group.height,
+    ])
+      expect(Math.abs(edge % 16)).toBe(0);
+    for (const link of document.materialLinks)
+      for (let i = 1; i < link.route!.length; i++) {
+        const a = link.route![i - 1]!,
+          b = link.route![i]!;
+        if (
+          a.x === b.x &&
+          Math.min(a.y, b.y) < group.y + group.height &&
+          Math.max(a.y, b.y) > group.y
+        ) {
+          for (const x of [group.x, group.x + group.width])
+            expect(
+              Math.abs(a.x - x),
+              `Border clearance ${link.id}`,
+            ).toBeGreaterThanOrEqual(16);
+        }
+        if (a.x === b.x && a.x > group.x && a.x < group.x + group.width) {
+          for (const y of [group.y, group.y + group.height])
+            expect(
+              Math.min(a.y, b.y) < y && Math.max(a.y, b.y) > y,
+              `Top/bottom crossing ${link.id}`,
+            ).toBe(false);
+        }
+        if (a.y === b.y)
+          for (const x of [group.x, group.x + group.width])
+            if (
+              Math.min(a.x, b.x) < x &&
+              Math.max(a.x, b.x) > x &&
+              a.y >= group.y &&
+              a.y <= group.y + group.height
+            ) {
+              expect(
+                a.y - group.y,
+                `Corner crossing ${link.id}`,
+              ).toBeGreaterThanOrEqual(16);
+              expect(
+                group.y + group.height - a.y,
+                `Corner crossing ${link.id}`,
+              ).toBeGreaterThanOrEqual(16);
+            }
+      }
   }
   const ports = document.nodes.flatMap(materialPortGeometry);
   for (const link of document.materialLinks) {
@@ -138,10 +190,14 @@ function expectLogisticsGroupsAndSteps(document: CanvasDocument) {
       (link) => members.has(link.from.nodeId) && members.has(link.to.nodeId),
     )) {
       for (const point of link.route!) {
-        expect(point.x).toBeGreaterThanOrEqual(region!.x + 56);
-        expect(point.x).toBeLessThanOrEqual(region!.x + region!.width - 56);
-        expect(point.y).toBeGreaterThanOrEqual(region!.y + 56);
-        expect(point.y).toBeLessThanOrEqual(region!.y + region!.height - 56);
+        expect(point.x).toBeGreaterThanOrEqual(region!.x + GROUP_PADDING);
+        expect(point.x).toBeLessThanOrEqual(
+          region!.x + region!.width - GROUP_PADDING,
+        );
+        expect(point.y).toBeGreaterThanOrEqual(region!.y + GROUP_PADDING);
+        expect(point.y).toBeLessThanOrEqual(
+          region!.y + region!.height - GROUP_PADDING,
+        );
       }
     }
     const forward = ids.filter((id) => !structure.returnNodes.has(id));
@@ -291,9 +347,9 @@ describe("Auto-arrange", () => {
     );
     expect(ingotGroups.map((region) => region.defaultName)).toEqual(
       expect.arrayContaining([
-        "Iron Ingot → Cast Screws",
-        "Iron Ingot → Iron Plate",
-        "Iron Ingot → Iron Rod",
+        "Iron Ingot for Cast Screws",
+        "Iron Ingot for Iron Plate",
+        "Iron Ingot for Iron Rod",
       ]),
     );
     expect(ingotGroups).toHaveLength(3);

@@ -6,7 +6,8 @@ export type RouteEndpoint = Readonly<{
   side: "left" | "right";
   nodeId?: string;
 }>;
-export type RouteObstacle = Rectangle & Readonly<{ id: string }>;
+type ObstacleBounds = Rectangle & Readonly<{ blocks?: "vertical" }>;
+export type RouteObstacle = ObstacleBounds & Readonly<{ id: string }>;
 const CLEARANCE = 16;
 const PORT_STUB = 32;
 const EPSILON = 0.01;
@@ -42,7 +43,9 @@ function contains(rect: Rectangle, point: Point) {
   );
 }
 
-function crosses(from: Point, to: Point, rect: Rectangle) {
+function crosses(from: Point, to: Point, rect: ObstacleBounds) {
+  if (rect.blocks === "vertical" && Math.abs(from.y - to.y) < EPSILON)
+    return false;
   if (Math.abs(from.y - to.y) < EPSILON)
     return (
       from.y > rect.y + EPSILON &&
@@ -93,7 +96,7 @@ const distance = (a: Point, b: Point) =>
 function findPath(
   from: Point,
   to: Point,
-  obstacles: readonly Rectangle[],
+  obstacles: readonly ObstacleBounds[],
 ): ConnectionRoute | undefined {
   const clear = (a: Point, b: Point) =>
     !obstacles.some((rect) => crosses(a, b, rect));
@@ -237,6 +240,7 @@ export function routeOrthogonally(
       ),
   );
   const padded = obstacles.map((r) => ({
+    ...r,
     x: r.x - CLEARANCE,
     y: r.y - CLEARANCE,
     width: r.width + CLEARANCE * 2,
@@ -252,7 +256,9 @@ export function routeOrthogonally(
   };
   const anchors = [
     departure,
-    ...via.filter((point) => !padded.some((r) => contains(r, point))),
+    ...via.filter(
+      (point) => !padded.some((r) => !r.blocks && contains(r, point)),
+    ),
     arrival,
   ];
   const middle: Point[] = [];

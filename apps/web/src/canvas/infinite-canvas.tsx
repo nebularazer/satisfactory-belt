@@ -1,16 +1,15 @@
+import { GROUP_RADIUS } from "./group-bounds";
 import {
   selectionFocus,
   MUTED_CANVAS_ALPHA,
   type SelectionFocus,
 } from "./selection-focus";
-import { groupLabelLayout } from "./group-label-layout";
+import { groupInspectIcon } from "./group-label-layout";
 import { routeHandles } from "./route-editing";
 import {
   Application,
   Assets,
   Container,
-  CanvasTextMetrics,
-  TextStyle,
   Graphics,
   GraphicsContext,
   Sprite,
@@ -300,6 +299,15 @@ const LUCIDE_PATHS = {
   zap: "M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z",
 } as const;
 
+// Lucide ScanEye paths (including its circular pupil), kept as vector geometry.
+const GROUP_INSPECT_PATHS = [
+  "M3 7V5a2 2 0 0 1 2-2h2",
+  "M17 3h2a2 2 0 0 1 2 2v2",
+  "M21 17v2a2 2 0 0 1-2 2h-2",
+  "M7 21H5a2 2 0 0 1-2-2v-2",
+  "M13 12a1 1 0 1 0-2 0 1 1 0 0 0 2 0",
+  "M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0",
+];
 const lucideIconContexts = new Map<string, GraphicsContext>();
 
 function createLucideIcon(paths: string | readonly string[], size: number) {
@@ -1030,7 +1038,7 @@ function drawMaterialLinks(
         ? 1
         : MUTED_CANVAS_ALPHA;
     graphics
-      .roundRect(region.x, region.y, region.width, region.height, 16)
+      .roundRect(region.x, region.y, region.width, region.height, GROUP_RADIUS)
       .fill({
         color: dark ? 0xffffff : 0x334155,
         alpha: (region.logistics ? 0.018 : 0.03) * alpha,
@@ -1045,36 +1053,13 @@ function drawMaterialLinks(
         alpha: (state.selectedGroupId === region.id ? 0.85 : 0.18) * alpha,
         width: (state.selectedGroupId === region.id ? 1.5 : 0.75) / zoom,
       });
-    const layout = groupLabelLayout(
-      region,
-      (text, fontSize) =>
-        CanvasTextMetrics.measureText(
-          text,
-          new TextStyle({
-            fontFamily: "Inter Variable, Inter, sans-serif",
-            fontSize,
-            fontWeight: "600",
-          }),
-        ).width,
-    );
-    if (!layout.visible) continue;
-    const label = new Text({
-      resolution: textResolutionForZoom(
-        zoom,
-        Math.min(window.devicePixelRatio, 2),
-      ),
-      text: layout.text,
-      style: {
-        fontFamily: "Inter Variable, Inter, sans-serif",
-        fontSize: layout.fontSize,
-        lineHeight: layout.lineHeight,
-        fontWeight: "600",
-        fill: dark ? 0xa1a9b5 : 0x647184,
-      },
-    });
-    label.alpha = alpha;
-    label.position.set(region.x + 20, region.y + 8);
-    labelLayer.addChild(label);
+    const bounds = groupInspectIcon(region);
+    const icon = createLucideIcon(GROUP_INSPECT_PATHS, bounds.width);
+    icon.visible = true;
+    icon.tint = dark ? 0xa1a9b5 : 0x647184;
+    icon.alpha = alpha;
+    icon.position.set(bounds.x, bounds.y);
+    labelLayer.addChild(icon);
   }
 
   const candidates = moving
