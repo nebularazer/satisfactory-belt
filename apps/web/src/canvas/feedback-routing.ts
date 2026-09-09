@@ -1,3 +1,4 @@
+import { PREFERRED_LINE_GAP } from "./route-spacing";
 import type { CanvasMaterialLink, CanvasNode } from "./document";
 import type { Point } from "./geometry";
 import { materialPortGeometry } from "./material-port-geometry";
@@ -43,7 +44,7 @@ export function routeFeedback(
       (siblings.length -
         1 -
         siblings.findIndex((edge) => edge.id === link.id)) *
-        20;
+        PREFERRED_LINE_GAP;
     if (rejoin) {
       routes.set(
         link.id,
@@ -59,7 +60,7 @@ export function routeFeedback(
         node.configuration.id === from.nodeId ||
         node.configuration.id === to.nodeId,
     );
-    const offset = 32 + index * 20;
+    const offset = PREFERRED_LINE_GAP * (index + 1);
     const fromX = from.point.x + (from.side === "left" ? -offset : offset);
     const toX = to.point.x + (to.side === "left" ? -offset : offset);
     const candidates = [
@@ -77,13 +78,12 @@ export function routeFeedback(
       ),
     ].filter((route) => routeIsClear(route, obstacles, from.nodeId, to.nodeId));
     const score = (route: readonly Point[]) => {
-      const [overlap, crossings, bends, length] = layoutRouteScore(
-        link,
-        route,
-        links,
-        routes,
-      );
-      return [overlap!, length! + crossings! * 48 + bends! * 32];
+      const [overlap, crossings, bends, length, minimum, preferred] =
+        layoutRouteScore(link, route, links, routes);
+      return [
+        overlap! + minimum!,
+        length! + crossings! * 48 + bends! * 32 + preferred!,
+      ];
     };
     candidates.sort((a, b) => {
       const aa = score(a),

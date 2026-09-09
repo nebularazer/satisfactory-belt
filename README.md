@@ -72,8 +72,11 @@ combine all its branches into one group;
 complete feedback paths stay together. Each area has one router column per
 forward step. Neighboring machine stacks guide its height
 and port spacing, leaving room for long clear runs. Belts use separate lanes
-chosen to reduce overlap and crossings, then bends, then length; unrelated group
-interiors stay clear. Every physical node
+on the 16px snapping grid, with a 32px preferred gap and a 16px minimum
+between parallel runs. Short 32px port departures/arrivals are exempt so fixed
+ports stay attached. Normal and feedback routes use the same spacing rule;
+crowded layouts retry with more room. Routing also reduces crossings and bends,
+and keeps unrelated group interiors clear. Every physical node
 and connection remains editable on the same canvas. Feedback belts use separate
 local return lanes with dashed strokes and no arrows; their colors still indicate flow
 and capacity. The connection inspector identifies feedback returns. Positions and

@@ -1,6 +1,11 @@
+import { PREFERRED_LINE_GAP, snapLane, ceilLane } from "./route-spacing";
 import { groupBounds } from "./group-bounds";
 import { routeFeedback } from "./feedback-routing";
-import { routeBetweenGroups } from "./layout-routing";
+import {
+  routeBetweenGroups,
+  spaceLayoutRoutes,
+  layoutRouteScore,
+} from "./layout-routing";
 import { spaceRouterPorts } from "./router-port-spacing";
 import type { ELK, ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api";
 import type {
@@ -24,10 +29,10 @@ const options = {
   "elk.padding": "[top=48,left=48,bottom=48,right=48]",
   "elk.spacing.nodeNode": "64",
   "elk.spacing.edgeNode": "32",
-  "elk.spacing.edgeEdge": "28",
+  "elk.spacing.edgeEdge": String(PREFERRED_LINE_GAP),
   "elk.layered.spacing.nodeNodeBetweenLayers": "128",
   "elk.layered.spacing.edgeNodeBetweenLayers": "40",
-  "elk.layered.spacing.edgeEdgeBetweenLayers": "28",
+  "elk.layered.spacing.edgeEdgeBetweenLayers": String(PREFERRED_LINE_GAP),
   "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
   "elk.layered.mergeEdges": "false",
   "elk.separateConnectedComponents": "true",
@@ -79,7 +84,7 @@ function position(graph: ElkNode, id: string): Point {
   const node = graph.children?.find((child) => child.id === id);
   if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y))
     throw new Error("Could not position every node.");
-  return { x: node.x!, y: node.y! };
+  return { x: snapLane(node.x!), y: snapLane(node.y!) };
 }
 
 /** Lay out a physical logistics network independently of its production stages.
@@ -91,6 +96,7 @@ async function logisticsBlock(
   ids: string[],
   elk: Pick<ELK, "layout">,
   neighbors: ReadonlyMap<string, Block>,
+  laneGap: number,
 ): Promise<Block> {
   const members = new Set(ids);
   const structure = productionStructure(document);
@@ -157,9 +163,12 @@ async function logisticsBlock(
     id: "logistics",
     layoutOptions: {
       ...options,
+      "elk.spacing.edgeEdge": String(laneGap),
+      "elk.layered.spacing.edgeEdgeBetweenLayers": String(laneGap),
+      "elk.spacing.nodeNode": String(64 + laneGap - PREFERRED_LINE_GAP),
       "elk.partitioning.activate": "true",
       "elk.layered.spacing.nodeNodeBetweenLayers": String(
-        128 + feedback.length * 20,
+        128 + feedback.length * laneGap + (laneGap - PREFERRED_LINE_GAP) * 2,
       ),
     },
     children: [
@@ -205,7 +214,11 @@ async function logisticsBlock(
   const placed = nodes.map((node) => {
     if (!structure.returnNodes.has(node.configuration.id))
       return { ...node, ...position(graph, node.configuration.id) };
-    const result = { ...node, x: returnX, y: (graph.height ?? 0) + 80 };
+    const result = {
+      ...node,
+      x: returnX,
+      y: ceilLane((graph.height ?? 0) + 80),
+    };
     returnX += node.width + 96;
     return result;
   });
@@ -218,17 +231,25 @@ async function logisticsBlock(
       .map((edge) => [edge.id, points(edge)]),
   );
   routeFeedback(placed, links, feedback, structure.returnNodes, routes);
+  spaceLayoutRoutes(
+    placed,
+    links.filter(
+      (link) => members.has(link.from.nodeId) && members.has(link.to.nodeId),
+    ),
+    routes,
+  );
   // Reserve internal belts and symmetric padding, including local return lanes.
   const bounds = groupBounds(placed, [...routes.values()]);
   // Guides influence local alignment only. Reserve the visible contents, not
   // empty space left by a full-height neighboring stack or another group.
-  const shift = { x: -bounds.x, y: -bounds.y };
+  const shift = { x: ceilLane(-bounds.x), y: ceilLane(-bounds.y) };
   for (const node of placed) {
     node.x += shift.x;
     node.y += shift.y;
   }
   for (const [id, route] of routes) routes.set(id, translate(route, shift));
-  const { width, height } = bounds;
+  const width = ceilLane(bounds.x + bounds.width + shift.x);
+  const height = ceilLane(bounds.y + bounds.height + shift.y);
   const block: Block = {
     id: key("logistics", ids[0]!),
     width,
@@ -271,6 +292,38 @@ export async function arrangeCanvas(
   elk: Pick<ELK, "layout">,
 ): Promise<CanvasDocument> {
   if (!document.nodes.length) return document;
+  // If a crowded corridor cannot be repaired locally, reserve more space and
+  // recompute the layout. Never quietly accept a sub-grid parallel run.
+  for (const multiplier of [1, 2, 4, 8]) {
+    const result = await arrangeAtSpacing(
+      document,
+      elk,
+      PREFERRED_LINE_GAP * multiplier,
+    );
+    const routes = new Map(
+      result.materialLinks.map((link) => [link.id, link.route!]),
+    );
+    if (
+      result.materialLinks.every(
+        (link) =>
+          layoutRouteScore(
+            link,
+            link.route!,
+            result.materialLinks,
+            routes,
+          )[4]! < 0.01,
+      )
+    )
+      return result;
+  }
+  throw new Error("Could not find a layout with enough space between links.");
+}
+
+async function arrangeAtSpacing(
+  document: CanvasDocument,
+  elk: Pick<ELK, "layout">,
+  laneGap: number,
+): Promise<CanvasDocument> {
   // Stable model order makes repeated arrangements independent of canvas positions.
   const sorted: CanvasDocument = {
     ...document,
@@ -353,7 +406,7 @@ export async function arrangeCanvas(
   for (const group of groups.toSorted(
     (a, b) => groupSteps.get(b[0]!)! - groupSteps.get(a[0]!)!,
   )) {
-    const block = await logisticsBlock(sorted, group, elk, neighbors);
+    const block = await logisticsBlock(sorted, group, elk, neighbors, laneGap);
     blocks.push(block);
     for (const node of block.nodes) neighbors.set(node.configuration.id, block);
   }
@@ -450,7 +503,12 @@ export async function arrangeCanvas(
     layoutOptions: {
       ...options,
       "elk.partitioning.activate": "true",
-      "elk.spacing.nodeNode": "128",
+      "elk.spacing.nodeNode": String(128 + laneGap - PREFERRED_LINE_GAP),
+      "elk.spacing.edgeEdge": String(laneGap),
+      "elk.layered.spacing.edgeEdgeBetweenLayers": String(laneGap),
+      "elk.layered.spacing.nodeNodeBetweenLayers": String(
+        128 + (laneGap - PREFERRED_LINE_GAP) * 2,
+      ),
     },
     children: blocks.map((block) => ({
       id: block.id,

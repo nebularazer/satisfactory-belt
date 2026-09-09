@@ -1,3 +1,4 @@
+import { layoutRouteScore } from "./layout-routing";
 import { generateProduction } from "../auto-build/generate-production";
 import { convertDetailed } from "../detailed-conversion/convert";
 import { productionRegions } from "./production-regions";
@@ -52,6 +53,15 @@ function expectRecipeColumns(document: CanvasDocument) {
 }
 
 function expectAttachedClearRoutes(document: CanvasDocument) {
+  const routes = new Map(
+    document.materialLinks.map((link) => [link.id, link.route!]),
+  );
+  for (const link of document.materialLinks) {
+    expect(
+      layoutRouteScore(link, link.route!, document.materialLinks, routes)[4],
+      `Minimum line gap ${link.id}`,
+    ).toBe(0);
+  }
   const ports = document.nodes.flatMap(materialPortGeometry);
   for (const link of document.materialLinks) {
     const from = ports.find(

@@ -60,11 +60,17 @@ routers and their connections are preserved.
   logistics groups do not stagger recipes belonging to the same production stage. After group
   placement, route connections through free corridors between actual ports.
   Routing obstacles follow visible group bounds, not the unused guide space.
-- Preserve ELK's separate corridor lanes as candidates. In two deterministic
-  sweeps, rank clear routes by overlapping belt length, crossings, bends, and
-  finally length. The final route never has to visit a prescribed boundary exit.
-  Longer bypasses can stay outside unrelated groups. This is a bounded heuristic,
-  not a claim that every factory has a crossing-free layout.
+- Preserve ELK's separate corridor lanes as candidates. Routes use the 16px
+  snapping grid, a 32px preferred parallel gap, and a 16px minimum. Only the
+  first/last 32px at a fixed port are exempt. After initial routing, deterministic
+  lane adjustments prioritize overlap and minimum-gap violations, then crossings,
+  preferred spacing, bends, and length. This applies inside logistics areas,
+  between groups, and to feedback returns. Fixed endpoints stay attached.
+- ELK reserves 32px lane gaps initially. If final routes still violate the
+  minimum, retry with larger corridor/lane spacing (up to four layouts). Apply
+  only a layout that passes the minimum-gap check. The final route never has to
+  visit a prescribed boundary exit. Longer bypasses can stay outside unrelated
+  groups. Crossing reduction remains a bounded heuristic.
 - Identify cycles from topology, then recognize return distributors feeding
   parallel branches. Put routers serving only returns below the forward flow.
   Give return links separate lanes, rounded dashes, and the existing flow colors.
@@ -118,3 +124,12 @@ are drawn separately so reducing opacity cannot expose a colored disk beneath
 the center.
 
 ![Muted ports retain their ring and neutral center](muted-ports.png)
+
+## Parallel link spacing
+
+Grid-aligned parallel feeds around a Reinforced Iron Plate assembler. The same
+spacing policy applies to local balancers and dashed return links. Existing
+plans get the new spacing on their next Auto-arrange; manual route editing is
+unchanged.
+
+![Parallel conveyor feeds on separate grid lanes](parallel-feeds.png)

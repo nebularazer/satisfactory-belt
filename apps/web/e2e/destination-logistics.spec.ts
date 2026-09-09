@@ -57,10 +57,12 @@ test("arranges shared ingot supply into destination groups", async ({
     const modeUrl = "/src/canvas/editor-mode.ts";
     const regionsUrl = "/src/canvas/production-regions.ts";
     const viewportUrl = "/src/canvas/viewport.ts";
+    const routingUrl = "/src/canvas/layout-routing.ts";
     const { createIndexedDbDocumentStorage } = await import(storageUrl);
     const { detailedDocumentToEditor } = await import(modeUrl);
     const { productionRegions } = await import(regionsUrl);
     const { fitRectangleInViewport } = await import(viewportUrl);
+    const { layoutRouteScore } = await import(routingUrl);
     const { document } = await createIndexedDbDocumentStorage().loadWorkspace();
     const canvas = detailedDocumentToEditor(document);
     const regions = productionRegions(canvas);
@@ -77,7 +79,33 @@ test("arranges shared ingot supply into destination groups", async ({
         height: Math.max(...rects.map((r) => r.y + r.height)) - y,
       };
     };
+    const routes = new Map(
+      canvas.materialLinks.map((link: any) => [link.id, link.route]),
+    );
+    const target = canvas.nodes.find(
+      (node: any) =>
+        node.configuration.processId === "Recipe_IronPlateReinforced_C",
+    );
+    const incoming = canvas.materialLinks.filter(
+      (link: any) => link.to.nodeId === target.configuration.id,
+    );
+    const detail = bounds(
+      canvas.nodes.filter(
+        (node: any) =>
+          node === target ||
+          incoming.some(
+            (link: any) => link.from.nodeId === node.configuration.id,
+          ),
+      ),
+    );
     return {
+      minimumGapCost: Math.max(
+        ...canvas.materialLinks.map(
+          (link: any) =>
+            layoutRouteScore(link, link.route, canvas.materialLinks, routes)[4],
+        ),
+      ),
+      detail,
       names: ingots.map((region: any) => region.name),
       connections: document.connections,
       area: bounds(ingots),
@@ -88,6 +116,7 @@ test("arranges shared ingot supply into destination groups", async ({
     };
   });
   expect(layout.connections).toEqual(original);
+  expect(layout.minimumGapCost).toBe(0);
   expect(layout.names).toEqual(
     expect.arrayContaining([
       "Iron Ingot → Cast Screws",
@@ -118,5 +147,27 @@ test("arranges shared ingot supply into destination groups", async ({
   await page.screenshot({
     path: testInfo.outputPath("destination-groups.png"),
   });
+  // Inspect the parallel feeds near an assembler, where close lanes are most
+  // noticeable. The camera is currently centered on the ingot logistics area.
+  const detailCenter = {
+    x: layout.detail.x + layout.detail.width / 2,
+    y: layout.detail.y + layout.detail.height / 2,
+  };
+  await page.mouse.move(
+    900 + (detailCenter.x - area.x - area.width / 2) * zoom,
+    650 + (detailCenter.y - area.y - area.height / 2) * zoom,
+  );
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(900, 650, { steps: 8 });
+  await page.mouse.up({ button: "middle" });
+  const detailZoom = Math.min(
+    1400 / (layout.detail.width + 128),
+    900 / (layout.detail.height + 128),
+  );
+  await page.mouse.wheel(0, -Math.log(detailZoom / zoom) / 0.002);
+  await expect
+    .poll(() => page.getByRole("button", { name: /Reset zoom/ }).innerText())
+    .toBe(`${Math.round(detailZoom * 100)}%`);
+  await page.screenshot({ path: testInfo.outputPath("parallel-feeds.png") });
   expect(errors).toEqual([]);
 });
