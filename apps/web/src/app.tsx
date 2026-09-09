@@ -1,4 +1,14 @@
+import {
+  attachProductionRequest,
+  prepareProductionReplacement,
+  productionSectionName,
+  type ProductionSection,
+} from "@/auto-build/production-sections";
+import { GroupInspector } from "@/components/group-inspector";
 import { requestCanvasArrangement } from "@/canvas/auto-layout-request";
+import { requestDetailedConversion } from "@/detailed-conversion/request-conversion";
+import { requestAutoBuild } from "@/auto-build/request-auto-build";
+import { prepareProductionInsertion } from "@/canvas/insert-production";
 import {
   lazy,
   Suspense,
@@ -30,10 +40,9 @@ import { createCanvasEditor } from "@/canvas/editor";
 import {
   detailedDocumentFromEditor,
   detailedDocumentToEditor,
-  materializeDetailedCanvas,
   type CanvasEditorMode,
 } from "@/canvas/editor-mode";
-import { canvasNodeId } from "@/canvas/document";
+import { canvasNodeId, type CanvasDocument } from "@/canvas/document";
 import type { Point } from "@/canvas/geometry";
 import type { CanvasConnectionRequest } from "@/canvas/interactions";
 import {
@@ -92,6 +101,14 @@ const NodeInspector = lazy(async () => ({
 const MaterialLinkInspector = lazy(async () => ({
   default: (await loadMaterialLinkInspector()).MaterialLinkInspector,
 }));
+const AutoBuildDialog = lazy(async () => ({
+  default: (await import("@/components/auto-build-dialog")).AutoBuildDialog,
+}));
+
+const CreateDetailedDialog = lazy(async () => ({
+  default: (await import("@/components/create-detailed-dialog"))
+    .CreateDetailedDialog,
+}));
 
 function preloadNodePicker() {
   void loadNodePicker();
@@ -146,9 +163,6 @@ function CanvasWorkspace({
   const importInputRef = useRef<HTMLInputElement>(null);
   const initialMode: CanvasEditorMode =
     initialDocument?.kind === "detailed" ? "detailed" : "basic";
-  const detailedTiersRef = useRef(
-    initialDocument?.kind === "detailed" ? initialDocument.tiers : [],
-  );
   const [editorMode, setEditorMode] = useState<CanvasEditorMode>(initialMode);
   const [editor, setEditor] = useState(() =>
     createCanvasEditor({
@@ -162,6 +176,10 @@ function CanvasWorkspace({
         : {}),
       snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
       topology: initialMode === "detailed" ? "physical" : "aggregate",
+      logisticsTiers:
+        initialDocument?.kind === "detailed"
+          ? initialDocument.tiers
+          : undefined,
     }),
   );
   const [arranging, setArranging] = useState(false);
@@ -181,6 +199,7 @@ function CanvasWorkspace({
       const document = await requestCanvasArrangement(
         source,
         controller.signal,
+        editor.topology,
       );
       if (controller.signal.aborted) return;
       editor.dispatch({ type: "document.arrange", source, document });
@@ -273,11 +292,26 @@ function CanvasWorkspace({
     null,
   );
   const [placement, setPlacement] = useState<NodePickerSelection | null>(null);
+  const [autoBuild, setAutoBuild] = useState<{
+    itemId: string;
+    section?: ProductionSection;
+    at?: Point;
+    owner: typeof editor;
+  } | null>(null);
   const [mobileNodeInspectorOpen, setMobileNodeInspectorOpen] = useState(false);
   const [resetCanvasOpen, setResetCanvasOpen] = useState(false);
   const [managePlansOpen, setManagePlansOpen] = useState(false);
   const [savePlanOpen, setSavePlanOpen] = useState(false);
-  const [convertAfterSave, setConvertAfterSave] = useState(false);
+  const [detailedCreation, setDetailedCreation] = useState<{
+    owner: typeof editor;
+    document: CanvasDocument;
+    source: SavedCanvasDocument | null;
+  } | null>(null);
+  useEffect(() => {
+    setDetailedCreation(null);
+  }, [editor]);
+  const [linkedDetailed, setLinkedDetailed] =
+    useState<SavedCanvasDocument | null>(null);
   const [activeSave, setActiveSave] = useState<SavedCanvasDocument | null>(
     initialActiveSave,
   );
@@ -291,20 +325,21 @@ function CanvasWorkspace({
       editorMode === "detailed"
         ? detailedDocumentFromEditor(
             editor.getState().document,
-            detailedTiersRef.current,
+            editor.logisticsTiers,
           )
         : editor.getState().document,
     [editor, editorMode],
   );
   const activateDocument = useCallback((document: CanvasPlanDocument) => {
     const mode = document.kind;
-    if (mode === "detailed") detailedTiersRef.current = document.tiers;
     setEditor(
       createCanvasEditor({
         document:
           mode === "detailed" ? detailedDocumentToEditor(document) : document,
         snapToGrid: readBooleanPreference(CANVAS_PREFERENCES.snapToGrid, true),
         topology: mode === "detailed" ? "physical" : "aggregate",
+        logisticsTiers:
+          document.kind === "detailed" ? document.tiers : undefined,
       }),
     );
     setEditorMode(mode);
@@ -367,45 +402,59 @@ function CanvasWorkspace({
     return () => cancelAnimationFrame(frame);
   }, [editor]);
 
-  const openDetailedPlan = useCallback(
-    async (source: SavedCanvasDocument) => {
-      try {
-        const current = currentPlanDocument();
-        if (current.kind !== "basic") {
-          throw new Error("Only a Basic plan can create a Detailed plan.");
-        }
-        const savedSource = await storage.saveNamed({
-          document: current,
-          id: source.id,
+  useEffect(() => {
+    let active = true;
+    setLinkedDetailed(null);
+    if (activeSave?.document.kind === "basic") {
+      void storage
+        .listNamed()
+        .then((saves) => {
+          if (active)
+            setLinkedDetailed(
+              saves.find(
+                (save) =>
+                  save.document.kind === "detailed" &&
+                  save.sourceSaveId === activeSave.id,
+              ) ?? null,
+            );
+        })
+        .catch(() => {
+          /* Opening the mode reports storage errors. */
         });
-        const saves = await storage.listNamed();
-        const existing = saves.find(
+    }
+    return () => {
+      active = false;
+    };
+  }, [activeSave, managePlansOpen, storage]);
+
+  const openDetailedPlan = useCallback(async () => {
+    try {
+      const current = currentPlanDocument();
+      if (current.kind !== "basic")
+        throw new Error("Only a Basic plan can create a Detailed plan.");
+      const source = activeSaveRef.current;
+      const saves = await storage.listNamed();
+      const existing =
+        source &&
+        saves.find(
           (save) =>
             save.document.kind === "detailed" &&
-            save.sourceSaveId === savedSource.id,
+            save.sourceSaveId === source.id,
         );
-        if (existing) {
-          activateSave(existing);
-          toast.success(`Opened “${existing.name}”.`);
-          return;
-        }
-        const detailed = await storage.saveNamed({
-          document: materializeDetailedCanvas(current),
-          name: availableDetailedPlanName(savedSource.name, saves),
-          sourceSaveId: savedSource.id,
-        });
-        activateSave(detailed);
-        toast.success(`Created “${detailed.name}” as a separate plan.`);
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "The Detailed plan could not be created.",
-        );
+      if (existing) {
+        await storage.saveNamed({ document: current, id: source.id });
+        activateSave(existing);
+        return;
       }
-    },
-    [activateSave, currentPlanDocument, storage],
-  );
+      setDetailedCreation({ owner: editor, document: current, source });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "The Detailed plan could not be opened.",
+      );
+    }
+  }, [activateSave, currentPlanDocument, editor, storage]);
 
   const changeEditorMode = useCallback(
     (mode: CanvasEditorMode) => {
@@ -415,14 +464,7 @@ function CanvasWorkspace({
       setMobileNodeInspectorOpen(false);
 
       if (mode === "detailed") {
-        const source = activeSaveRef.current;
-        if (!source || source.document.kind !== "basic") {
-          setConvertAfterSave(true);
-          setSavePlanOpen(true);
-          toast.info("Save the Basic plan before creating its Detailed copy.");
-          return;
-        }
-        void openDetailedPlan(source);
+        void openDetailedPlan();
         return;
       }
 
@@ -547,7 +589,8 @@ function CanvasWorkspace({
         return;
       }
       event.preventDefault();
-      if (event.repeat || savePlanOpen || managePlansOpen) return;
+      if (event.repeat || savePlanOpen || managePlansOpen || detailedCreation)
+        return;
       if (event.shiftKey) {
         openSavePlan();
       } else {
@@ -556,7 +599,13 @@ function CanvasWorkspace({
     };
     window.addEventListener("keydown", handleSaveShortcut);
     return () => window.removeEventListener("keydown", handleSaveShortcut);
-  }, [managePlansOpen, openSavePlan, saveCurrentPlan, savePlanOpen]);
+  }, [
+    managePlansOpen,
+    openSavePlan,
+    saveCurrentPlan,
+    savePlanOpen,
+    detailedCreation,
+  ]);
 
   const addPendingNode = (selection: NodePickerSelection) => {
     if (!pendingNode) return;
@@ -792,8 +841,16 @@ function CanvasWorkspace({
           />
         </div>
 
-        <div className="pointer-events-auto absolute top-3 left-1/2 max-w-[calc(100vw-5.5rem)] -translate-x-1/2 sm:top-4">
+        <div className="pointer-events-auto absolute top-3 right-3 left-16 sm:top-4 sm:right-auto sm:left-1/2 sm:max-w-[calc(100vw-5.5rem)] sm:-translate-x-1/2">
           <CanvasBuildBar
+            detailedAvailable={
+              editorMode === "detailed" ||
+              (linkedDetailed !== null &&
+                linkedDetailed.sourceSaveId === activeSave?.id)
+            }
+            basicAvailable={
+              editorMode === "basic" || Boolean(activeSave?.sourceSaveId)
+            }
             mode={editorMode}
             onAddMerger={() =>
               setPlacement(
@@ -825,8 +882,32 @@ function CanvasWorkspace({
             editor={editor}
             mode={editorMode}
             mobileOpen={mobileNodeInspectorOpen}
+            onEditProductionRequest={(sectionId) => {
+              const document = editor.getState().document;
+              const section = document.productionSections?.find(
+                (s) => s.id === sectionId,
+              );
+              if (!section) return;
+              const members = document.nodes.filter((n) =>
+                section.nodeIds.includes(n.configuration.id),
+              );
+              editor.dispatch({ type: "selection.clear" });
+              for (const node of members)
+                editor.dispatch({
+                  type: "selection.node",
+                  id: node.configuration.id,
+                  additive: true,
+                });
+              canvasRef.current?.fitSelection();
+              setAutoBuild({
+                itemId: section.settings.outputs[0]!.itemId,
+                section,
+                owner: editor,
+              });
+            }}
           />
           <MaterialLinkInspector editor={editor} mode={editorMode} />
+          <GroupInspector editor={editor} />
         </Suspense>
 
         {!mobileNodeInspectorOpen && (
@@ -873,6 +954,15 @@ function CanvasWorkspace({
       />
       <Suspense fallback={null}>
         <NodePicker
+          onAutoBuild={
+            editorMode === "basic" && !pendingNode?.connection
+              ? (itemId) => {
+                  setAutoBuild({ itemId, at: pendingNode?.at, owner: editor });
+                  setPendingNode(null);
+                  setPlacement(null);
+                }
+              : undefined
+          }
           allowSelection={
             pendingNode?.connection ? allowPendingSelection : undefined
           }
@@ -883,6 +973,145 @@ function CanvasWorkspace({
           onSelect={addPendingNode}
           open={pendingNode !== null}
         />
+        {detailedCreation?.owner === editor && (
+          <CreateDetailedDialog
+            sourceName={detailedCreation.source?.name}
+            onClose={() => setDetailedCreation(null)}
+            onCreate={async (settings, name, signal, onStage) => {
+              const { document: sourceDocument, source } = detailedCreation;
+              const saves = await storage.listNamed();
+              if (
+                !source &&
+                saves.some(
+                  (save) =>
+                    save.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+                )
+              )
+                throw new Error(
+                  "A plan with this name already exists. Choose another name.",
+                );
+              const result = await requestDetailedConversion(
+                sourceDocument,
+                settings,
+                signal,
+                onStage,
+              );
+              signal.throwIfAborted();
+              if (editor.getState().document !== sourceDocument)
+                throw new Error(
+                  "The Basic plan changed during conversion. Close this dialog and create Detailed again.",
+                );
+              onStage("Saving plan");
+              const savedSource = await storage.saveNamed({
+                document: sourceDocument,
+                ...(source ? { id: source.id } : { name }),
+              });
+              // Keep the saved source for retry if saving its Detailed version fails.
+              selectActiveSave(savedSource);
+              setDetailedCreation((current) =>
+                current ? { ...current, source: savedSource } : null,
+              );
+              const detailed = await storage.saveNamed({
+                document: result,
+                name: availableDetailedPlanName(savedSource.name, saves),
+                sourceSaveId: savedSource.id,
+              });
+              activateSave(detailed);
+              setDetailedCreation(null);
+              toast.success("Created and arranged the Detailed plan.");
+            }}
+          />
+        )}
+        {autoBuild?.owner === editor && (
+          <AutoBuildDialog
+            itemId={autoBuild.itemId}
+            initialSettings={autoBuild.section?.settings}
+            sectionName={
+              autoBuild.section
+                ? productionSectionName(autoBuild.section)
+                : undefined
+            }
+            sectionNodeCount={
+              autoBuild.section
+                ? editor
+                    .getState()
+                    .document.nodes.filter((n) =>
+                      autoBuild.section!.nodeIds.includes(n.configuration.id),
+                    ).length
+                : undefined
+            }
+            onClose={() => setAutoBuild(null)}
+            onGenerate={async (settings, signal, onStage) => {
+              const source = editor.getState().document;
+              const result = await requestAutoBuild(settings, signal, onStage);
+              if (signal.aborted) return;
+              if (source !== editor.getState().document)
+                throw new Error(
+                  "The canvas changed during generation. Please generate again.",
+                );
+              if (autoBuild.section) {
+                const replacement = prepareProductionReplacement(
+                  source,
+                  autoBuild.section,
+                  result.document,
+                  settings,
+                );
+                const labels = new Map(
+                  source.nodes.map((n) => [n.configuration.id, n.label]),
+                );
+                return {
+                  oldNodeCount: replacement.oldNodeCount,
+                  newNodeCount: replacement.newNodeCount,
+                  retainedConnections: replacement.retained.length,
+                  disconnectedConnections: replacement.disconnected.map(
+                    (l) =>
+                      `${labels.get(l.from.nodeId)} / ${labels.get(l.to.nodeId)}`,
+                  ),
+                  apply: () => {
+                    if (editor.getState().document !== source)
+                      throw new Error(
+                        "The canvas changed. Go back to settings and preview again.",
+                      );
+                    editor.dispatch({
+                      type: "production.replace",
+                      source,
+                      document: replacement.document,
+                      sectionId: autoBuild.section!.id,
+                    });
+                    if (editor.getState().document !== replacement.document)
+                      throw new Error(
+                        "Replacement could not be applied. Preview again.",
+                      );
+                    requestAnimationFrame(() =>
+                      canvasRef.current?.fitSelection(),
+                    );
+                    toast.success(
+                      "Replaced production section. Undo restores the previous request and factory.",
+                    );
+                  },
+                };
+              }
+              const sectionId = `auto-build:${crypto.randomUUID()}`;
+              const document = attachProductionRequest(
+                prepareProductionInsertion(
+                  source,
+                  result.document,
+                  sectionId,
+                  autoBuild.at,
+                ),
+                sectionId,
+                settings,
+              );
+              editor.dispatch({ type: "document.insert", source, document });
+              requestAnimationFrame(() => canvasRef.current?.fitSelection());
+              toast.success(`Added ${document.nodes.length} production nodes.`);
+              if (result.externalInputs.length)
+                toast.info(
+                  `Supply externally: ${result.externalInputs.map((input) => `${input.name} (${input.ratePerMinute}/min)`).join(", ")}.`,
+                );
+            }}
+          />
+        )}
       </Suspense>
       <ManagePlansDialog
         activeSave={activeSave}
@@ -905,16 +1134,9 @@ function CanvasWorkspace({
       <SavePlanDialog
         activeSave={activeSave}
         currentDocument={currentPlanDocument()}
-        onOpenChange={(open) => {
-          setSavePlanOpen(open);
-          if (!open) setConvertAfterSave(false);
-        }}
+        onOpenChange={setSavePlanOpen}
         onSaved={(save) => {
           selectActiveSave(save);
-          if (convertAfterSave && save.document.kind === "basic") {
-            setConvertAfterSave(false);
-            void openDetailedPlan(save);
-          }
         }}
         open={savePlanOpen}
         sourceSaveId={activeSave?.sourceSaveId}

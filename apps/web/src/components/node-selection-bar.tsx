@@ -18,7 +18,7 @@ export function NodeSelectionBar({
   const node = state.document.nodes.find(
     ({ configuration }) => configuration.id === selectedId,
   );
-  if (!node || state.moveDelta !== null) return null;
+  if (!node || state.moveDelta !== null || state.selectedGroupId) return null;
 
   return (
     <div

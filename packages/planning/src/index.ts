@@ -25,6 +25,8 @@ export {
   type ResolvedDetailedPlan,
 } from "./detailed-plan";
 export { analyzeDetailedPlan } from "./detailed-flow-analysis";
+export { balanceDetailedConveyors } from "./conveyor-balancers";
+export { sizeDetailedConnections } from "./connection-tiers";
 export {
   affectedDetailedRegion,
   createDetailedPlanIndex,

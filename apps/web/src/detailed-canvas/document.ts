@@ -1,3 +1,4 @@
+import { parseGroupNames, type GroupNames } from "@/canvas/group-names";
 import {
   parseConnectionRoute,
   type ConnectionRoute,
@@ -29,6 +30,7 @@ export type DetailedCanvasNode = Omit<CanvasNode, "configuration"> &
   }>;
 
 export type DetailedCanvasDocument = Readonly<{
+  groupNames?: GroupNames;
   connectionRoutes?: Readonly<Record<string, ConnectionRoute>>;
   manualConnectionIds?: readonly string[];
   connections: readonly PhysicalConnection[];
@@ -214,6 +216,9 @@ export function validateDetailedCanvasDocument(
   return {
     ...candidate,
     ...(manualConnectionIds ? { manualConnectionIds } : {}),
+    ...(value.groupNames !== undefined
+      ? { groupNames: parseGroupNames(value.groupNames) }
+      : {}),
     ...(connectionRoutes ? { connectionRoutes } : {}),
     connections: plan.connections,
     nodes: nodes.map((node, index) => ({

@@ -7,10 +7,10 @@ import {
   X,
 } from "lucide-react";
 import { useSyncExternalStore } from "react";
-import { DEFAULT_LOGISTICS_TIERS } from "@satisfactory-belt/planning";
 
 import type { CanvasEditor } from "@/canvas/editor";
 import type { CanvasEditorMode } from "@/canvas/editor-mode";
+import { productionStructure } from "@/canvas/production-structure";
 import { MATERIAL_FLOW_PALETTE } from "@/canvas/material-flow-state";
 import { presentMaterialLinks } from "@/canvas/material-link-presentation";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,11 @@ export function MaterialLinkInspector({
   );
   const logistics = documentLink?.logistics;
   const tiers = logistics
-    ? DEFAULT_LOGISTICS_TIERS.filter(({ medium }) => medium === logistics.kind)
+    ? editor.logisticsTiers
+        .filter(({ medium }) => medium === logistics.kind)
+        .toSorted(
+          (left, right) => left.capacityPerMinute - right.capacityPerMinute,
+        )
     : [];
 
   const palette = MATERIAL_FLOW_PALETTE[link.state];
@@ -152,6 +156,11 @@ export function MaterialLinkInspector({
 
         <div className="mb-4 space-y-2 rounded-lg border border-border p-3">
           <div className="text-xs font-medium">Connection path</div>
+          {productionStructure(state.document).feedbackLinks.has(link.id) && (
+            <p className="text-xs text-muted-foreground">
+              Feedback return · Dashed line. Color indicates flow and capacity.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             Drag the square handles to move a segment. Double-click a line to
             add a bend.

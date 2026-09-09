@@ -1,3 +1,10 @@
+import { GROUP_RADIUS } from "./group-bounds";
+import {
+  selectionFocus,
+  MUTED_CANVAS_ALPHA,
+  type SelectionFocus,
+} from "./selection-focus";
+import { groupInspectIcon } from "./group-label-layout";
 import { routeHandles } from "./route-editing";
 import {
   Application,
@@ -5,6 +12,7 @@ import {
   Container,
   Graphics,
   GraphicsContext,
+  GraphicsPath,
   Sprite,
   Text,
   Texture,
@@ -32,6 +40,9 @@ import {
   attachCanvasInteractions,
   type CanvasConnectionRequest,
 } from "./interactions";
+import { dashedRoute } from "./dashed-route";
+import { productionRegions } from "./production-regions";
+import { productionStructure } from "./production-structure";
 import { materialFlowCanvasColor } from "./material-flow-state";
 import {
   createNodeCardModel,
@@ -289,6 +300,12 @@ const LUCIDE_PATHS = {
   zap: "M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z",
 } as const;
 
+// Lucide Info geometry, with the circle represented as an SVG path.
+const GROUP_INSPECT_PATHS = [
+  "M22 12a10 10 0 1 0-20 0 10 10 0 0 0 20 0",
+  "M12 16v-4",
+  "M12 8h.01",
+];
 const lucideIconContexts = new Map<string, GraphicsContext>();
 
 function createLucideIcon(paths: string | readonly string[], size: number) {
@@ -296,9 +313,16 @@ function createLucideIcon(paths: string | readonly string[], size: number) {
   const key = pathList.join("");
   let context = lucideIconContexts.get(key);
   if (!context) {
-    context = new GraphicsContext().svg(
-      `<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${pathList.map((path) => `<path d="${path}" />`).join("")}</svg>`,
-    );
+    context = new GraphicsContext();
+    // Pixi's SVG style parser drops line caps and joins. Apply Lucide's stroke
+    // explicitly so tiny round-capped paths (such as Info's dot) stay visible.
+    for (const path of pathList)
+      context.beginPath().path(new GraphicsPath(path)).stroke({
+        color: 0xffffff,
+        width: 2,
+        cap: "round",
+        join: "round",
+      });
     lucideIconContexts.set(key, context);
   }
   const graphics = new Graphics({ context });
@@ -358,7 +382,7 @@ function updateMaterialVisual(
       (imageUrl) => Assets.cache.has(imageUrl),
     );
     const texture = displayUrl ? cachedTexture(displayUrl) : undefined;
-    if (display.imageVisualKey !== displayUrl) {
+    if (display.image.texture !== (texture ?? Texture.EMPTY)) {
       display.image.texture = texture ?? Texture.EMPTY;
       display.imageVisualKey = displayUrl;
     }
@@ -406,8 +430,8 @@ function updateMaterialVisual(
   const center = statusColor(material.status);
   display.port
     .clear()
-    .circle(0, 0, 10)
-    .fill({ color: portColor(material.direction) })
+    .circle(0, 0, 9)
+    .stroke({ color: portColor(material.direction), width: 2 })
     .circle(0, 0, 8)
     .fill({ color: dark ? 0x18181b : 0xffffff });
   if (center !== undefined) {
@@ -568,11 +592,11 @@ function updateNodeVisual(
     (imageUrl) => Assets.cache.has(imageUrl),
   );
   const machineTexture = displayUrl ? cachedTexture(displayUrl) : undefined;
-  if (display.machineImageVisualKey !== displayUrl) {
+  if (display.machineImage.texture !== (machineTexture ?? Texture.EMPTY)) {
     display.machineImage.texture = machineTexture ?? Texture.EMPTY;
-    display.machineImage.visible = Boolean(machineTexture);
     display.machineImageVisualKey = displayUrl;
   }
+  display.machineImage.visible = Boolean(machineTexture);
   display.machineImage.setSize(machineImageSize, machineImageSize);
   display.machineImage.position.set(
     layout.hasHeader ? 36 : node.width / 2,
@@ -747,6 +771,10 @@ function recycleNodeDisplay(
   pool: NodeDisplay[],
 ) {
   scene.removeChild(display.container);
+  // A pooled card may return as the same node at the same zoom. Its cleared
+  // textures still need rebuilding even when the document did not change.
+  display.modelNode = undefined;
+  display.visualKey = "";
   display.machineImage.texture = Texture.EMPTY;
   display.machineImageVisualKey = "";
   for (const material of [...display.leftPorts, ...display.rightPorts]) {
@@ -795,6 +823,7 @@ function visibleImageUrls(
 function syncDocument(
   scene: Container,
   state: CanvasEditorState,
+  focus: SelectionFocus | undefined,
   displays: Map<string, NodeDisplay>,
   pool: NodeDisplay[],
   visibleNodes: readonly CanvasNode[],
@@ -894,6 +923,8 @@ function syncDocument(
       displays.set(id, display);
     }
 
+    display.container.alpha =
+      !focus || focus.nodeIds.has(id) ? 1 : MUTED_CANVAS_ALPHA;
     display.baseX = node.x;
     display.baseY = node.y;
     display.node = node;
@@ -976,6 +1007,7 @@ function drawMaterialLinks(
   labelLayer: Container,
   previewGraphics: Graphics,
   state: CanvasEditorState,
+  focus: SelectionFocus | undefined,
   zoom: number,
   visibleLinks: readonly CanvasMaterialLink[],
   topology: CanvasEditor["topology"],
@@ -1003,6 +1035,38 @@ function drawMaterialLinks(
     : state.document;
   const preview = state.connectionPreview;
   const dark = document.documentElement.classList.contains("dark");
+  for (const region of moving
+    ? []
+    : productionRegions(state.document, topology)) {
+    const alpha =
+      !focus || region.nodeIds.some((id) => focus.nodeIds.has(id))
+        ? 1
+        : MUTED_CANVAS_ALPHA;
+    graphics
+      .roundRect(region.x, region.y, region.width, region.height, GROUP_RADIUS)
+      .fill({
+        color: dark ? 0xffffff : 0x334155,
+        alpha: (region.logistics ? 0.018 : 0.03) * alpha,
+      })
+      .stroke({
+        color:
+          state.selectedGroupId === region.id
+            ? BLUEPRINT_COLORS.selected
+            : dark
+              ? 0xa1a9b5
+              : 0x647184,
+        alpha: (state.selectedGroupId === region.id ? 0.85 : 0.18) * alpha,
+        width: (state.selectedGroupId === region.id ? 1.5 : 0.75) / zoom,
+      });
+    const bounds = groupInspectIcon(region);
+    const icon = createLucideIcon(GROUP_INSPECT_PATHS, bounds.width);
+    icon.visible = true;
+    icon.tint = dark ? 0xa1a9b5 : 0x647184;
+    icon.alpha = alpha;
+    icon.position.set(bounds.x, bounds.y);
+    labelLayer.addChild(icon);
+  }
+
   const candidates = moving
     ? [
         ...visibleLinks,
@@ -1024,6 +1088,7 @@ function drawMaterialLinks(
       presentation,
     ]),
   );
+  const { feedbackLinks } = productionStructure(state.document);
   for (const link of candidates) {
     if (link.id === preview?.replacingLinkId) continue;
     const path = getPath(link);
@@ -1031,19 +1096,29 @@ function drawMaterialLinks(
     if (!path || !presentation) continue;
     const isSelected = selected.has(link.id);
     if (isSelected) {
-      drawMaterialPath(graphics, path).stroke({
+      drawMaterialPath(
+        graphics,
+        path,
+        feedbackLinks.has(link.id) ? zoom : undefined,
+      ).stroke({
         alpha: 0.7,
         color: BLUEPRINT_COLORS.selected,
-        width: 7 / zoom,
+        width: 5,
       });
     }
-    drawMaterialPath(graphics, path).stroke({
-      alpha: isSelected ? 1 : 0.88,
+    drawMaterialPath(
+      graphics,
+      path,
+      feedbackLinks.has(link.id) ? zoom : undefined,
+    ).stroke({
+      alpha:
+        (isSelected ? 1 : 0.88) *
+        (!focus || focus.linkIds.has(link.id) ? 1 : MUTED_CANVAS_ALPHA),
       color:
         state.routeEdit?.id === link.id && !state.routeEdit.valid
           ? BLUEPRINT_COLORS.warning
           : materialFlowCanvasColor(presentation.state, dark),
-      width: (isSelected ? 4 : 3) / zoom,
+      width: isSelected ? 2.5 : 1.75,
     });
   }
 
@@ -1055,6 +1130,7 @@ function drawMaterialLinks(
     if (path.route && zoom < 0.45 && !selected.has(link.id)) continue;
     const position = materialLinkLabelPoint(path);
     const label = new Container();
+    label.alpha = !focus || focus.linkIds.has(link.id) ? 1 : MUTED_CANVAS_ALPHA;
     const stateColor = materialFlowCanvasColor(presentation.state, dark);
     const text = new Text({
       style: {
@@ -1163,7 +1239,7 @@ function drawMaterialLinks(
         : previewTargetStatus === "occupied"
           ? BLUEPRINT_COLORS.blocked
           : BLUEPRINT_COLORS.warning,
-    width: 3 / zoom,
+    width: 3,
   });
 }
 
@@ -1239,6 +1315,7 @@ export const InfiniteCanvas = forwardRef<
     if (!app || !scene) return;
 
     const state = editor.getState();
+    const focus = selectionFocus(state);
     const linkGraphics = linkGraphicsRef.current;
     const linkLabelLayer = linkLabelLayerRef.current;
     const previewGraphics = previewGraphicsRef.current;
@@ -1257,6 +1334,7 @@ export const InfiniteCanvas = forwardRef<
         linkLabelLayer,
         previewGraphics,
         state,
+        focus,
         viewportRef.current.zoom,
         visibleLinks,
         editor.topology,
@@ -1266,6 +1344,7 @@ export const InfiniteCanvas = forwardRef<
     syncDocument(
       scene,
       state,
+      focus,
       nodeDisplaysRef.current,
       nodeDisplayPoolRef.current,
       visibleCanvasNodes(state, viewportRef.current, app.screen, editor.query),
@@ -1404,7 +1483,9 @@ export const InfiniteCanvas = forwardRef<
       })
       .then(() => {
         if (!active) {
-          app.destroy(true);
+          // Renderer lifetimes can overlap during mode changes or async init.
+          // Keep shared Pixi pools alive for the active renderer.
+          app.destroy({ removeView: true, releaseGlobalResources: false });
           return;
         }
 
@@ -1639,7 +1720,10 @@ export const InfiniteCanvas = forwardRef<
 
       if (appRef.current === app) {
         appRef.current = null;
-        app.destroy(true, { children: true });
+        app.destroy(
+          { removeView: true, releaseGlobalResources: false },
+          { children: true },
+        );
       }
     };
   }, [editor]);
@@ -1650,7 +1734,15 @@ export const InfiniteCanvas = forwardRef<
 function drawMaterialPath(
   graphics: Graphics,
   path: ReturnType<typeof materialLinkPath> & {},
+  dashZoom?: number,
 ) {
+  if (dashZoom !== undefined) {
+    for (const stroke of dashedRoute(path.route, dashZoom)) {
+      graphics.moveTo(stroke[0]!.x, stroke[0]!.y);
+      for (const point of stroke.slice(1)) graphics.lineTo(point.x, point.y);
+    }
+    return graphics;
+  }
   graphics.moveTo(path.from.x, path.from.y);
   for (let index = 1; index < path.route.length - 1; index++) {
     const previous = path.route[index - 1]!;

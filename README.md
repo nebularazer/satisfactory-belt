@@ -62,8 +62,41 @@ The grid uses a fixed 32-unit interval and its dots are shown by default. Snap a
 the grid dots can be switched off independently in the menu without changing the
 visual scale of the canvas.
 
-Auto-arrange runs ELK in a worker and fits the result on screen. Positions and
-connection paths are saved with the plan. Rate labels appear when zoomed in or
+Auto-arrange runs ELK in a worker and fits the result on screen. Machines using
+one recipe form a vertical stack, and parallel production steps share a stage.
+Logistics are grouped by the next recipes they supply: destination balancers
+sit before their machine stacks. Lone shared routers join a connected larger
+logistics group, and their other branches can leave that group. Larger shared
+distribution networks keep their own areas. Sharing a producer alone does not
+combine all its branches into one group;
+complete feedback paths stay together. Each area has one router column per
+forward step. Neighboring machine stacks guide its height
+and port spacing, leaving room for long clear runs. Belts use separate lanes
+on the 16px snapping grid, with a 32px preferred gap and a 16px minimum
+between parallel runs. Short 32px port departures/arrivals are exempt so fixed
+ports stay attached. Normal and feedback routes use the same spacing rule;
+crowded layouts retry with more room. Routing also reduces crossings and bends,
+and keeps unrelated group interiors clear. Every physical node
+and connection remains editable on the same canvas. Feedback belts use separate
+local return lanes with dashed strokes and no arrows; their colors still indicate flow
+and capacity. The connection inspector identifies feedback returns. Positions and
+connection paths are saved with the plan. Existing plans adopt the layout on their
+next Auto-arrange, with undo/redo available. Basic mode shows the cards directly;
+Detailed mode adds group outlines and labels. Headers use a fixed 18px canvas
+font size, wrap or truncate within their bounds, and remain rendered at every
+zoom with appropriately scaled text resolution. Group bounds include internal
+logistics routes and use the same 56px padding on all sides. Click a header to
+select the group and rename it in the inspector; hover to read its full name.
+Custom Detailed group names survive save/reload and Auto-arrange, with rename/reset undoable.
+On mobile, the build toolbar stays on one row: choose Basic or Detailed from the
+mode menu, add a node directly, or open More build tools for splitters and mergers.
+
+Selecting nodes or a group keeps their immediate connections and neighbors clear
+while fading the rest of the canvas. Selecting a link focuses its two endpoints.
+Faded elements remain clickable; clear the selection to restore full visibility.
+Capacity colors and dashed feedback lines retain their meaning. All targets are
+shown normally while drawing a new connection. Port rings and their neutral centers
+remain visually distinct when muted. Rate labels appear when zoomed in or
 when a connection is selected. New connections and their previews use the same rounded right-angle style and
 route around cards without moving them. Select a connection to drag its square
 segment handles, double-click a segment (or use Add bend in the inspector) for an
@@ -74,7 +107,58 @@ when connected nodes move.
 
 Splitters, mergers, and pipeline junctions use headerless 128 × 128 cards with a
 muted building icon in the body, visible ports, and compact rate labels. See
-[the compact Router card design](docs/plans/compact-router-cards.md).
+[the compact Router card design](docs/plans/compact-router-cards.md). During
+generation and Auto-arrange, splitters and mergers using two ports place them
+in the outer slots, leaving the middle slot unconnected.
+
+The mode switch shows **Create Detailed** when the Basic plan has no Detailed
+version. It opens a conversion dialog with maximum conveyor and pipeline tiers,
+and a plan name when the Basic plan is unsaved. Conversion and auto-arrangement
+run in workers, with stage progress, cancellation, and errors that keep the
+settings available for retry. The selected speed limits apply only to conversion.
+The finished result opens already arranged with every conveyor and pipeline tier
+available for editing. New manual links start at Mk.1; the link inspector changes
+their tier. Existing saves also gain the full tier selection when opened. The
+button then becomes **Detailed** and reopens the saved version, including after a
+reload. Basic and Detailed still use linked saved documents; this conversion flow
+does not migrate them into one save record.
+
+The conversion dialog defaults to Mk.1 conveyors and pipes. Higher maximum
+tiers can be selected; each generated connection uses the lowest available tier
+that carries its flow, including feedback circulation.
+
+Detailed generation and Basic-to-Detailed conversion use conveyor balancers:
+every connected output of an ordinary splitter gets an equal share. Splitter
+trees and mergers combine those shares to meet individual machine demands,
+including different clocks, without relying on manifold backpressure. Ratios
+such as five equal destinations use a return loop; its extra throughput counts
+toward the belt capacity. Supply that exceeds one belt is automatically kept on
+parallel producer feeds. Full-belt return balancers distribute returning material
+across the first branches, keeping internal belts within the selected tier without
+duplicating and then merging half-rate consumer feeds. Conversion preserves
+machine configurations and reports genuine single-port bottlenecks: parallel
+logistics cannot add extra input or output ports to a machine. Unsupported ratios
+produce an error instead of a manifold. Pipeline junctions retain
+their fluid-network behavior. Existing Detailed saves are unchanged; convert the
+Basic plan again to generate the balanced version.
+
+In the Basic canvas, press **N**, search for a recipe, and choose **Auto-build**
+to generate a production plan for its output item. Set one or more output rates,
+allow alternative recipes, or require specific recipes for outputs and ingredients.
+Basic generation connects process groups directly, leaving physical distribution
+to Detailed conversion (self-returning materials still need a routing node because
+Basic links cannot connect a process to itself). Generated machine clocks never
+exceed 100%; the minimum required machine count shares the workload evenly.
+For example, 90 plates/min uses five constructors at 90%, reducing power while
+keeping the same output and machine count. Auto-build extractor clock budgets are also capped at 100%.
+Direct extraction supplies raw resources by default; enabled alternatives get first
+consideration among manufacturing recipes. Available resource nodes can limit each
+generated group to listed mineral and oil nodes, with extractor tiers, purity counts,
+and maximum clocks. The generator places matching extractors and reports capacity
+shortfalls. Water extractors and resource wells remain unrestricted by this budget.
+Generation and arrangement run in workers with cancellable progress. The result is
+added in free space and selected as one undoable operation, preserving existing nodes
+and connections. Clicking the recipe row still adds a single production node.
 
 Rendering is scheduled only when canvas state changes. Node drags update the selected
 Pixi objects transiently and commit the document once when the drag ends, while the

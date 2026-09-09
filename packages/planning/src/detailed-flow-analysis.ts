@@ -1,6 +1,8 @@
 import type { MaterialPort, Node } from "@satisfactory-belt/production";
 
 import { endpointKey, resolveDetailedPlan } from "./detailed-plan";
+import { analyzeBasicFlows } from "./basic-flow-analysis";
+import { createBasicPlan } from "./basic-topology";
 import type {
   ConnectionFlow,
   ConveyorFlowProfile,
@@ -157,6 +159,59 @@ export function analyzeDetailedPlan(plan: DetailedPlan): DetailedFlowAnalysis {
         ),
       ),
     ].toSorted();
+
+    // A single-item conveyor network has the same conservation and equal-split
+    // equations in both projections. Reuse them so reconverging and returning
+    // balancer branches aren't discarded by the spanning-tree approximation.
+    const nodeIds = new Set(
+      component.vertices.map((key) => portEndpoint(key).nodeId),
+    );
+    const networkNodes = resolved.plan.nodes.filter((node) =>
+      nodeIds.has(node.configuration.id),
+    );
+    if (
+      itemIds.length === 1 &&
+      connections.every((connection) => connection.kind === "conveyor") &&
+      networkNodes.every((node) => !node.routingRules?.length)
+    ) {
+      const flow = analyzeBasicFlows(
+        createBasicPlan({ nodes: networkNodes, materialLinks: connections }),
+        {
+          projectUnconnectedOutputs: false,
+          linkCapacities: new Map(
+            connections.map((edge) => [
+              edge.id,
+              resolved.tiers.get(edge.tierId)!.capacityPerMinute,
+            ]),
+          ),
+        },
+      );
+      for (const link of flow.linkFlows) {
+        if (link.ratePerMinute === undefined || !link.itemId) continue;
+        connectionFlows.push({
+          connectionId: link.linkId,
+          itemId: link.itemId,
+          ratePerMinute: link.ratePerMinute,
+        });
+        const connection = connections.find(
+          (candidate) => candidate.id === link.linkId,
+        )!;
+        for (const endpoint of [connection.from, connection.to])
+          suppliedByPortItem.set(
+            `${endpointKey(endpoint)}\u0000${link.itemId}`,
+            link.ratePerMinute,
+          );
+      }
+      diagnostics.push(
+        ...flow.diagnostics
+          .filter((diagnostic) => diagnostic.code.startsWith("basic.network."))
+          .map((diagnostic) => ({
+            ...diagnostic,
+            code: diagnostic.code.replace("basic.", "detailed."),
+          })),
+      );
+      continue;
+    }
 
     for (const itemId of itemIds) {
       const itemEdges = component.edges.filter((edge) =>

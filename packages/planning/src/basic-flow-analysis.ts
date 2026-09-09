@@ -266,7 +266,9 @@ function feasibleLinkRates(
   itemId: string,
   nodes: ReadonlyMap<string, Node>,
   ports: ReadonlyMap<string, MaterialPort>,
-) {
+  projectUnconnectedOutputs: boolean,
+  linkCapacities?: ReadonlyMap<string, number>,
+): Map<string, number> {
   const source = "\u0001basic-flow-source";
   const sink = "\u0001basic-flow-sink";
   const rates = component.vertices.map((vertex) => {
@@ -295,7 +297,12 @@ function feasibleLinkRates(
     if (!edge.link) continue;
     arcByLinkId.set(
       edge.link.id,
-      addResidualArc(graph, edge.from, edge.to, capacity),
+      addResidualArc(
+        graph,
+        edge.from,
+        edge.to,
+        Math.min(capacity, linkCapacities?.get(edge.link.id) ?? Infinity),
+      ),
     );
   }
 
@@ -360,6 +367,7 @@ function feasibleLinkRates(
     if (
       !node ||
       node.kind === "process" ||
+      (!projectUnconnectedOutputs && node.kind === "router") ||
       !port ||
       (port.direction !== "output" && port.direction !== "bidirectional")
     ) {
@@ -383,20 +391,44 @@ function feasibleLinkRates(
     maximizeFlow(graph, source, sink);
   }
 
-  return new Map(
+  const result = new Map(
     [...arcByLinkId].map(([linkId, location]) => [
       linkId,
       Math.max(0, graph.get(location.from)![location.index]!.flow),
     ]),
   );
+  if (linkCapacities?.size) {
+    const unconstrained = feasibleLinkRates(
+      component,
+      itemId,
+      nodes,
+      ports,
+      projectUnconnectedOutputs,
+    );
+    const consumed = (rates: ReadonlyMap<string, number>) =>
+      component.edges.reduce(
+        (sum, edge) =>
+          edge.link && nodes.get(edge.link.to.nodeId)?.kind === "process"
+            ? sum + (rates.get(edge.link.id) ?? 0)
+            : sum,
+        0,
+      );
+    // Keep demand-based overload diagnostics for an infeasible physical plan.
+    // Capacities resolve surplus-source allocation only when demand is met.
+    if (consumed(result) + TOLERANCE < consumed(unconstrained))
+      return unconstrained;
+  }
+  return result;
 }
 
-function solveCyclicLinkRates(
+function solveEqualSplitLinkRates(
   component: Readonly<{ edges: readonly Edge[]; vertices: readonly string[] }>,
   itemId: string,
   links: readonly MaterialLink[],
   nodes: ReadonlyMap<string, Node>,
   ports: ReadonlyMap<string, MaterialPort>,
+  projectUnconnectedOutputs: boolean,
+  linkCapacities?: ReadonlyMap<string, number>,
 ) {
   const orderedLinks = [...links].toSorted((left, right) =>
     left.id.localeCompare(right.id),
@@ -406,7 +438,14 @@ function solveCyclicLinkRates(
   );
   const baselineRates = balanceParallelLinkRates(
     orderedLinks,
-    feasibleLinkRates(component, itemId, nodes, ports),
+    feasibleLinkRates(
+      component,
+      itemId,
+      nodes,
+      ports,
+      projectUnconnectedOutputs,
+      linkCapacities,
+    ),
   );
   const matrix: number[][] = [];
   const rightHandSide: number[] = [];
@@ -483,7 +522,18 @@ function solveCyclicLinkRates(
   );
 }
 
-export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
+export function analyzeBasicFlows(
+  plan: BasicPlan,
+  options: Readonly<{
+    /** Basic plans project surplus onto open router outputs. Physical belts only
+     * carry material through connected outputs. */
+    projectUnconnectedOutputs?: boolean;
+    /** Physical conveyor capacities; omitted for unconstrained Basic plans. */
+    linkCapacities?: ReadonlyMap<string, number>;
+  }> = {},
+): BasicFlowAnalysis {
+  const projectUnconnectedOutputs = options.projectUnconnectedOutputs ?? true;
+  const linkCapacities = options.linkCapacities;
   const validated = createBasicPlan(plan);
   const topology = analyzeBasicPlan(validated);
   const nodes = new Map(
@@ -544,9 +594,20 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
       }
     }
     const hasCycle = hasDirectedNodeCycle(links);
-    const cyclicRates = hasCycle
-      ? solveCyclicLinkRates(component, itemId, links, nodes, ports)
-      : undefined;
+    // Split-and-merge balancers also have multiple paths without a directed
+    // feedback cycle. Conservation alone cannot determine their branch rates.
+    const cyclicRates =
+      component.edges.length >= component.vertices.length
+        ? solveEqualSplitLinkRates(
+            component,
+            itemId,
+            links,
+            nodes,
+            ports,
+            projectUnconnectedOutputs,
+            linkCapacities,
+          )
+        : undefined;
     if (hasCycle && !cyclicRates) {
       for (const link of links) {
         diagnostics.push({
@@ -564,7 +625,14 @@ export function analyzeBasicFlows(plan: BasicPlan): BasicFlowAnalysis {
         rateByLink.set(linkId, rate);
       }
     } else {
-      const feasibleRates = feasibleLinkRates(component, itemId, nodes, ports);
+      const feasibleRates = feasibleLinkRates(
+        component,
+        itemId,
+        nodes,
+        ports,
+        projectUnconnectedOutputs,
+        linkCapacities,
+      );
       for (const [linkId, rate] of balanceParallelLinkRates(
         links,
         feasibleRates,

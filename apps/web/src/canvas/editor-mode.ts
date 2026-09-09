@@ -1,9 +1,13 @@
+import { spaceRouterPorts } from "./router-port-spacing";
 import {
   analyzeBasicPlan,
+  balanceDetailedConveyors,
+  sizeDetailedConnections,
   assertDetailedNodeConfiguration,
   createBasicPlan,
   createDetailedPlan,
   DEFAULT_LOGISTICS_TIERS,
+  type LogisticsTier,
   type MaterialEndpoint,
   type PhysicalConnection,
 } from "@satisfactory-belt/planning";
@@ -91,7 +95,13 @@ function physicalConnection(link: CanvasMaterialLink): PhysicalConnection {
  */
 export function materializeDetailedCanvas(
   document: CanvasDocument,
+  options: Readonly<{
+    tiers?: readonly LogisticsTier[];
+    onStage?: (stage: "Expanding machines" | "Building balancers") => void;
+  }> = {},
 ): DetailedCanvasDocument {
+  const tiers = options.tiers ?? DEFAULT_LOGISTICS_TIERS;
+  options.onStage?.("Expanding machines");
   const plan = createBasicPlan({
     materialLinks: document.materialLinks,
     nodes: document.nodes.map(({ configuration, provenance }) => ({
@@ -151,9 +161,11 @@ export function materializeDetailedCanvas(
   }
 
   const tierFor = (kind: "conveyor" | "pipeline") =>
-    DEFAULT_LOGISTICS_TIERS.filter(({ medium }) => medium === kind).toSorted(
-      (left, right) => right.capacityPerMinute - left.capacityPerMinute,
-    )[0]!;
+    tiers
+      .filter(({ medium }) => medium === kind)
+      .toSorted(
+        (left, right) => right.capacityPerMinute - left.capacityPerMinute,
+      )[0]!;
 
   const connect = (
     from: MaterialEndpoint,
@@ -526,20 +538,55 @@ export function materializeDetailedCanvas(
       ...(provenance ? { provenance } : {}),
     };
   });
-  createDetailedPlan({
-    connections: materialLinks.map(physicalConnection),
-    nodes: detailedNodes,
-    tiers: DEFAULT_LOGISTICS_TIERS,
+  options.onStage?.("Building balancers");
+  const balanced = sizeDetailedConnections(
+    balanceDetailedConveyors(
+      createDetailedPlan({
+        connections: materialLinks.map(physicalConnection),
+        nodes: detailedNodes,
+        tiers,
+      }),
+    ),
+  );
+
+  const physicalById = new Map(
+    physicalNodes.map((node) => [node.configuration.id, node]),
+  );
+  const balancedNodes = balanced.nodes.map(({ configuration }, index) => {
+    const existing = physicalById.get(configuration.id);
+    if (existing) return { ...existing, configuration };
+    const ownerId = configuration.id.slice(
+      0,
+      configuration.id.lastIndexOf(":balance:"),
+    );
+    const owner = physicalById.get(ownerId) ?? physicalNodes[0]!;
+    return canvasNode(
+      owner,
+      configuration,
+      {
+        x: owner.x + (index % 4) * (owner.width + NODE_GAP),
+        y: owner.y + (1 + Math.floor(index / 4)) * (owner.height + NODE_GAP),
+      },
+      configuration.buildableId.includes("Merger") ? "Merger" : "Splitter",
+    );
   });
 
   return detailedDocumentFromEditor(
-    {
+    spaceRouterPorts({
+      ...(document.groupNames ? { groupNames: document.groupNames } : {}),
       kind: "basic",
-      materialLinks,
-      nodes: physicalNodes,
+      materialLinks: balanced.connections.map(
+        ({ from, to, id, kind, tierId }) => ({
+          from,
+          to,
+          id,
+          logistics: { kind, tierId },
+        }),
+      ),
+      nodes: balancedNodes,
       version: CANVAS_DOCUMENT_VERSION,
-    },
-    DEFAULT_LOGISTICS_TIERS,
+    }),
+    tiers,
   );
 }
 
@@ -552,6 +599,7 @@ export function detailedDocumentToEditor(
   document: DetailedCanvasDocument,
 ): CanvasDocument {
   return {
+    ...(document.groupNames ? { groupNames: document.groupNames } : {}),
     kind: "basic",
     materialLinks: document.connections.map(
       ({ from, id, kind, tierId, to }) => ({
@@ -590,6 +638,7 @@ export function detailedDocumentFromEditor(
     .filter((link) => link.routeMode === "manual" && link.route)
     .map(({ id }) => id);
   const detailed: DetailedCanvasDocument = {
+    ...(document.groupNames ? { groupNames: document.groupNames } : {}),
     ...(manualConnectionIds.length ? { manualConnectionIds } : {}),
     ...(Object.keys(connectionRoutes).length ? { connectionRoutes } : {}),
     connections: document.materialLinks.map(physicalConnection),

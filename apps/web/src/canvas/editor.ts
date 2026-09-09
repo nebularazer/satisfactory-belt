@@ -1,3 +1,5 @@
+import { productionRegions } from "./production-regions";
+import { MAX_GROUP_NAME_LENGTH, type GroupNames } from "./group-names";
 import type { ConnectionRoute } from "./connection-route";
 import { addRouteBend, moveRouteSegment } from "./route-editing";
 import { routeIsClear, samePoint, simplifyRoute } from "./orthogonal-router";
@@ -10,6 +12,7 @@ import {
   BasicPlanError,
   createBasicPlan,
   DEFAULT_LOGISTICS_TIERS,
+  type LogisticsTier,
   type MaterialEndpoint,
   type MaterialLink,
 } from "@satisfactory-belt/planning";
@@ -48,6 +51,7 @@ export type CanvasEditorState = Readonly<{
   document: CanvasDocument;
   moveDelta: Point | null;
   routeEdit?: Readonly<{ id: string; route: ConnectionRoute; valid: boolean }>;
+  selectedGroupId?: string;
   selectedLinkIds: readonly string[];
   selectedIds: readonly string[];
   connectionError?: Readonly<{ code: string; message: string }>;
@@ -71,6 +75,19 @@ export type CanvasEditorChange = Readonly<
 >;
 
 export type CanvasEditorAction =
+  | { type: "selection.group"; id: string }
+  | { type: "group.rename"; id: string; name: string }
+  | {
+      type: "document.insert";
+      source: CanvasDocument;
+      document: CanvasDocument;
+    }
+  | {
+      type: "production.replace";
+      source: CanvasDocument;
+      document: CanvasDocument;
+      sectionId: string;
+    }
   | { type: "document.replace"; document: CanvasDocument }
   | { type: "document.reset" }
   | {
@@ -170,6 +187,7 @@ export type CanvasEditor = Readonly<{
   queryLinks: (rectangle: Rectangle) => readonly MaterialLinkPath[];
   subscribe: (listener: (change: CanvasEditorChange) => void) => () => void;
   topology: "aggregate" | "physical";
+  logisticsTiers: readonly LogisticsTier[];
 }>;
 
 type IndexedNode = Readonly<{
@@ -183,6 +201,11 @@ type IndexedLink = Readonly<{
 }>;
 
 type HistoryEntry = Readonly<{
+  productionSections?: {
+    before?: CanvasDocument["productionSections"];
+    after?: CanvasDocument["productionSections"];
+  };
+  groupNames?: { before?: GroupNames; after?: GroupNames };
   after: readonly IndexedNode[];
   afterLinks?: readonly IndexedLink[];
   afterLinkSelection?: readonly string[];
@@ -204,6 +227,7 @@ type CreateCanvasEditorOptions = {
   idFactory?: () => string;
   snapToGrid?: boolean;
   topology?: "aggregate" | "physical";
+  logisticsTiers?: readonly LogisticsTier[];
 };
 
 function validateDocument(
@@ -249,6 +273,7 @@ function validateDocument(
 function defaultLogistics(
   document: CanvasDocument,
   endpoint: MaterialEndpoint,
+  tiers: readonly LogisticsTier[],
 ): CanvasMaterialLink["logistics"] {
   const node = document.nodes.find(
     ({ configuration }) => configuration.id === endpoint.nodeId,
@@ -260,12 +285,13 @@ function defaultLogistics(
     : undefined;
   const kind: "conveyor" | "pipeline" =
     port?.medium === "pipeline" ? "pipeline" : "conveyor";
-  const tier = DEFAULT_LOGISTICS_TIERS.filter(
-    ({ medium }) => medium === kind,
-  ).toSorted(
-    (left, right) => right.capacityPerMinute - left.capacityPerMinute,
-  )[0];
-  return tier ? { kind, tierId: tier.id } : undefined;
+  const tier = tiers
+    .filter(({ medium }) => medium === kind)
+    .toSorted(
+      (left, right) => left.capacityPerMinute - right.capacityPerMinute,
+    )[0];
+  if (!tier) throw new Error(`This plan has no available ${kind} tier.`);
+  return { kind, tierId: tier.id };
 }
 
 function snap(value: number) {
@@ -353,6 +379,15 @@ export function createCanvasEditor(
   );
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const topology = options.topology ?? "aggregate";
+  // Older saves contain only the tiers selected for conversion. Editing always
+  // offers the full catalog while preserving any saved custom definitions.
+  const savedTiers = options.logisticsTiers ?? [];
+  const logisticsTiers = [
+    ...savedTiers,
+    ...DEFAULT_LOGISTICS_TIERS.filter(
+      (tier) => !savedTiers.some((saved) => saved.id === tier.id),
+    ),
+  ];
   const listeners = new Set<(change: CanvasEditorChange) => void>();
   const past: HistoryEntry[] = [];
   const future: HistoryEntry[] = [];
@@ -393,6 +428,20 @@ export function createCanvasEditor(
       canRedo: future.length > 0,
       canUndo: past.length > 0,
     };
+    if (change.kind === "selection" && !("selectedGroupId" in partial))
+      state = { ...state, selectedGroupId: undefined };
+    if (state.selectedGroupId) {
+      const group = productionRegions(state.document, topology).find(
+        (group) => group.id === state.selectedGroupId,
+      );
+      if (
+        !group ||
+        state.selectedLinkIds.length ||
+        group.nodeIds.length !== state.selectedIds.length ||
+        group.nodeIds.some((id) => !state.selectedIds.includes(id))
+      )
+        state = { ...state, selectedGroupId: undefined };
+    }
     const updateTimeMs = performance.now() - dispatchStartedAt;
     listeners.forEach((listener) => listener({ ...change, updateTimeMs }));
   };
@@ -414,7 +463,13 @@ export function createCanvasEditor(
     if (validateTopology) {
       validateDocument(document, topology);
     }
-    past.push(entry);
+    past.push({
+      ...entry,
+      productionSections: {
+        before: state.document.productionSections,
+        after: document.productionSections,
+      },
+    });
     if (past.length > HISTORY_LIMIT) past.shift();
     future.length = 0;
     spatialIndex.apply(
@@ -628,9 +683,64 @@ export function createCanvasEditor(
         return;
       }
 
+      case "document.insert": {
+        if (
+          action.source !== state.document ||
+          moveTransaction ||
+          topology !== "aggregate"
+        )
+          return;
+        const after = action.document.nodes.map((node, index) => ({
+          node,
+          index: state.document.nodes.length + index,
+        }));
+        const afterLinks = action.document.materialLinks.map((link, index) => ({
+          link,
+          index: state.document.materialLinks.length + index,
+        }));
+        const document = {
+          ...state.document,
+          ...(action.document.productionSections
+            ? {
+                productionSections: [
+                  ...(state.document.productionSections ?? []),
+                  ...action.document.productionSections,
+                ],
+              }
+            : {}),
+          nodes: [...state.document.nodes, ...action.document.nodes],
+          materialLinks: [
+            ...state.document.materialLinks,
+            ...action.document.materialLinks,
+          ],
+        };
+        validateDocument(document, topology);
+        const selectedIds = action.document.nodes.map(canvasNodeId);
+        commit(document, selectedIds, {
+          before: [],
+          after,
+          beforeLinks: [],
+          afterLinks,
+          beforeSelection: state.selectedIds,
+          afterSelection: selectedIds,
+          beforeLinkSelection: state.selectedLinkIds,
+          afterLinkSelection: [],
+        });
+        return;
+      }
+
+      case "production.replace":
       case "document.arrange": {
         // A worker result must never overwrite edits made while it was running.
         if (action.source !== state.document || moveTransaction) return;
+        if (action.type === "production.replace" && topology !== "aggregate")
+          return;
+        const selection =
+          action.type === "production.replace"
+            ? (action.document.productionSections?.find(
+                (s) => s.id === action.sectionId,
+              )?.nodeIds ?? [])
+            : state.selectedIds;
         const before = state.document.nodes.map((node, index) => ({
           node,
           index,
@@ -641,7 +751,7 @@ export function createCanvasEditor(
         }));
         commit(
           action.document,
-          state.selectedIds,
+          selection,
           {
             before,
             after,
@@ -654,12 +764,13 @@ export function createCanvasEditor(
               index,
             })),
             beforeSelection: state.selectedIds,
-            afterSelection: state.selectedIds,
+            afterSelection: selection,
             beforeLinkSelection: state.selectedLinkIds,
-            afterLinkSelection: state.selectedLinkIds,
+            afterLinkSelection:
+              action.type === "production.replace" ? [] : state.selectedLinkIds,
           },
-          state.selectedLinkIds,
-          false,
+          action.type === "production.replace" ? [] : state.selectedLinkIds,
+          action.type === "production.replace",
         );
         return;
       }
@@ -709,16 +820,22 @@ export function createCanvasEditor(
         return;
 
       case "link.create": {
-        const link: CanvasMaterialLink = {
-          from: action.from,
-          id: action.id ?? idFactory(),
-          ...(topology === "physical"
-            ? { logistics: defaultLogistics(state.document, action.from) }
-            : {}),
-          to: action.to,
-        };
-        const index = state.document.materialLinks.length;
         try {
+          const link: CanvasMaterialLink = {
+            from: action.from,
+            id: action.id ?? idFactory(),
+            ...(topology === "physical"
+              ? {
+                  logistics: defaultLogistics(
+                    state.document,
+                    action.from,
+                    logisticsTiers,
+                  ),
+                }
+              : {}),
+            to: action.to,
+          };
+          const index = state.document.materialLinks.length;
           const document = {
             ...state.document,
             materialLinks: [...state.document.materialLinks, link],
@@ -886,9 +1003,7 @@ export function createCanvasEditor(
           ({ id }) => id === action.id,
         );
         const link = state.document.materialLinks[index];
-        const tier = DEFAULT_LOGISTICS_TIERS.find(
-          ({ id }) => id === action.tierId,
-        );
+        const tier = logisticsTiers.find(({ id }) => id === action.tierId);
         if (!link?.logistics || !tier || tier.medium !== link.logistics.kind) {
           return;
         }
@@ -1072,6 +1187,60 @@ export function createCanvasEditor(
         return;
       }
 
+      case "selection.group": {
+        const group = productionRegions(state.document, topology).find(
+          (group) => group.id === action.id,
+        );
+        if (!group) return;
+        publish(
+          {
+            selectedGroupId: group.id,
+            selectedIds: group.nodeIds,
+            selectedLinkIds: [],
+          },
+          {
+            kind: "selection",
+            nodeIds: [...state.selectedIds, ...group.nodeIds],
+          },
+        );
+        return;
+      }
+      case "group.rename": {
+        const group = productionRegions(state.document, topology).find(
+          (group) => group.id === action.id,
+        );
+        const name = action.name.trim();
+        if (!group || name.length > MAX_GROUP_NAME_LENGTH) return;
+        const groupNames = { ...state.document.groupNames };
+        if (!name || name === group.defaultName) delete groupNames[group.id];
+        else groupNames[group.id] = name;
+        if (
+          (groupNames[group.id] ?? "") ===
+          (state.document.groupNames?.[group.id] ?? "")
+        )
+          return;
+        const { groupNames: beforeNames, ...base } = state.document;
+        const afterNames = Object.keys(groupNames).length
+          ? groupNames
+          : undefined;
+        commit(
+          { ...base, ...(afterNames ? { groupNames: afterNames } : {}) },
+          state.selectedIds,
+          {
+            before: [],
+            after: [],
+            beforeSelection: state.selectedIds,
+            afterSelection: state.selectedIds,
+            beforeLinkSelection: state.selectedLinkIds,
+            afterLinkSelection: state.selectedLinkIds,
+            groupNames: { before: beforeNames, after: afterNames },
+          },
+          state.selectedLinkIds,
+          false,
+        );
+        return;
+      }
+
       case "selection.clear":
         if (state.selectedIds.length > 0 || state.selectedLinkIds.length > 0) {
           const nodeIds = state.selectedIds;
@@ -1114,7 +1283,7 @@ export function createCanvasEditor(
           : alreadySelected && state.selectedIds.length === 1
             ? state.selectedIds
             : [action.id];
-        if (selectedIds === state.selectedIds) return;
+        if (selectedIds === state.selectedIds && !state.selectedGroupId) return;
         publish(
           {
             selectedIds,
@@ -1398,13 +1567,26 @@ export function createCanvasEditor(
         if (!entry) return;
         future.push(entry);
         moveTransaction = undefined;
-        const document = applyPatch(
+        let document = applyPatch(
           state.document,
           entry.after,
           entry.before,
           entry.afterLinks,
           entry.beforeLinks,
         );
+        if (entry.groupNames) {
+          const { groupNames: _names, ...base } = document;
+          const names = entry.groupNames.before;
+          document = { ...base, ...(names ? { groupNames: names } : {}) };
+        }
+        if (entry.productionSections) {
+          const { productionSections: _sections, ...base } = document;
+          const sections = entry.productionSections.before;
+          document = {
+            ...base,
+            ...(sections ? { productionSections: sections } : {}),
+          };
+        }
         spatialIndex.apply(
           document,
           entry.after.map(({ node }) => node),
@@ -1428,13 +1610,26 @@ export function createCanvasEditor(
         if (!entry) return;
         past.push(entry);
         moveTransaction = undefined;
-        const document = applyPatch(
+        let document = applyPatch(
           state.document,
           entry.before,
           entry.after,
           entry.beforeLinks,
           entry.afterLinks,
         );
+        if (entry.groupNames) {
+          const { groupNames: _names, ...base } = document;
+          const names = entry.groupNames.after;
+          document = { ...base, ...(names ? { groupNames: names } : {}) };
+        }
+        if (entry.productionSections) {
+          const { productionSections: _sections, ...base } = document;
+          const sections = entry.productionSections.after;
+          document = {
+            ...base,
+            ...(sections ? { productionSections: sections } : {}),
+          };
+        }
         spatialIndex.apply(
           document,
           entry.before.map(({ node }) => node),
@@ -1498,5 +1693,6 @@ export function createCanvasEditor(
       return () => listeners.delete(listener);
     },
     topology,
+    logisticsTiers,
   };
 }

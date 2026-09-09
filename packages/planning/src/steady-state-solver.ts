@@ -19,6 +19,7 @@ const TOLERANCE = 1e-8;
 
 type ProcessProfile = Readonly<{
   alternate: boolean;
+  extraction: boolean;
   buildableId: string;
   inputs: readonly RequestedOutput[];
   outputs: readonly RequestedOutput[];
@@ -53,6 +54,8 @@ function profileFor(
   if (node.kind !== "process" || node.profile.materials.kind !== "calculated")
     return undefined;
   return {
+    extraction:
+      process.kind === "extraction" || process.kind === "resource-well",
     alternate:
       process.kind === "recipe"
         ? Boolean(findRecipe(process.recipeId)?.alternate)
@@ -91,6 +94,7 @@ function orderedCandidates(request: PlanningRequest) {
       )
       .map((process) => ({
         alternate: false,
+        extraction: false,
         buildableId: process.buildableId,
         inputs: process.inputs,
         outputs: process.outputs,
@@ -119,6 +123,7 @@ function orderedCandidates(request: PlanningRequest) {
         (explicitOrder.get(right.processId) ?? Number.MAX_SAFE_INTEGER);
       if (explicit) return explicit;
       return (
+        Number(right.extraction) - Number(left.extraction) ||
         Number(left.alternate) - Number(right.alternate) ||
         left.processName.localeCompare(right.processName) ||
         left.processId.localeCompare(right.processId)

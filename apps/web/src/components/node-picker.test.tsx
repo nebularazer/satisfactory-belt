@@ -35,6 +35,32 @@ afterEach(cleanup);
 beforeEach(() => localStorage.clear());
 
 describe("NodePicker", () => {
+  it("auto-builds an output item without selecting or pinning the recipe row", () => {
+    const onAutoBuild = vi.fn();
+    const onSelect = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <NodePicker
+        onAutoBuild={onAutoBuild}
+        onSelect={onSelect}
+        onOpenChange={onOpenChange}
+        open
+      />,
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("Search buildings or recipes..."),
+      { target: { value: "Bolted Frame" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Auto-build Modular Frame",
+      }),
+    );
+    expect(onAutoBuild).toHaveBeenCalledWith("Desc_ModularFrame_C");
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it("limits a dropped Material Link picker to compatible selections", () => {
     render(
       <NodePicker

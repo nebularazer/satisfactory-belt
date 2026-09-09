@@ -1,7 +1,16 @@
+import { GROUP_PADDING } from "./group-bounds";
+import { layoutRouteScore } from "./layout-routing";
+import { generateProduction } from "../auto-build/generate-production";
+import { convertDetailed } from "../detailed-conversion/convert";
+import { productionRegions } from "./production-regions";
+import { graphStages } from "./graph-stages";
+import { productionStructure } from "./production-structure";
+import { presentMaterialFlow } from "./material-link-presentation";
 import { describe, expect, it } from "vitest";
 import ELK from "elkjs/lib/elk.bundled.js";
+import { createNode } from "@satisfactory-belt/production";
 import { arrangeCanvas as computeArrangement } from "./auto-layout";
-import type { CanvasDocument } from "./document";
+import type { CanvasDocument, CanvasNode } from "./document";
 import { createCanvasEditor } from "./editor";
 import {
   detailedDocumentFromEditor,
@@ -20,15 +29,233 @@ import {
 } from "./plan-document-format";
 import { EMPTY_CANVAS_DOCUMENT } from "./document";
 import { testCanvasNode } from "./test-fixtures";
+import { materialPortGeometry } from "./material-port-geometry";
+import { routeIsClear } from "./orthogonal-router";
 
 const arrangeCanvas = (document: CanvasDocument) =>
-  computeArrangement(document, new ELK());
+  computeArrangement(document, new ELK(), "physical");
+
+function expectRecipeColumns(document: CanvasDocument) {
+  const recipes = new Map<string, CanvasNode[]>();
+  for (const node of document.nodes) {
+    if (node.configuration.kind !== "process") continue;
+    const siblings = recipes.get(node.configuration.processId) ?? [];
+    siblings.push(node);
+    recipes.set(node.configuration.processId, siblings);
+  }
+  for (const [recipe, nodes] of recipes) {
+    expect(new Set(nodes.map((node) => node.x)).size, recipe).toBe(1);
+    const stack = nodes.toSorted((a, b) => a.y - b.y);
+    for (let index = 1; index < stack.length; index++) {
+      const previous = stack[index - 1]!;
+      expect(stack[index]!.y - previous.y - previous.height, recipe).toBe(64);
+    }
+  }
+}
+
+function expectAttachedClearRoutes(document: CanvasDocument) {
+  const routes = new Map(
+    document.materialLinks.map((link) => [link.id, link.route!]),
+  );
+  for (const link of document.materialLinks) {
+    expect(
+      layoutRouteScore(link, link.route!, document.materialLinks, routes)[4],
+      `Minimum line gap ${link.id}`,
+    ).toBe(0);
+  }
+  // No vertical segment may cross a horizontal box edge. Every side crossing
+  // must clear the rounded corner, including paths between distant groups.
+  for (const group of productionRegions(document)) {
+    for (const edge of [
+      group.x,
+      group.y,
+      group.x + group.width,
+      group.y + group.height,
+    ])
+      expect(Math.abs(edge % 16)).toBe(0);
+    for (const link of document.materialLinks)
+      for (let i = 1; i < link.route!.length; i++) {
+        const a = link.route![i - 1]!,
+          b = link.route![i]!;
+        if (
+          a.x === b.x &&
+          Math.min(a.y, b.y) < group.y + group.height &&
+          Math.max(a.y, b.y) > group.y
+        ) {
+          for (const x of [group.x, group.x + group.width])
+            expect(
+              Math.abs(a.x - x),
+              `Border clearance ${link.id}`,
+            ).toBeGreaterThanOrEqual(16);
+        }
+        if (a.x === b.x && a.x > group.x && a.x < group.x + group.width) {
+          for (const y of [group.y, group.y + group.height])
+            expect(
+              Math.min(a.y, b.y) < y && Math.max(a.y, b.y) > y,
+              `Top/bottom crossing ${link.id}`,
+            ).toBe(false);
+        }
+        if (a.y === b.y)
+          for (const x of [group.x, group.x + group.width])
+            if (
+              Math.min(a.x, b.x) < x &&
+              Math.max(a.x, b.x) > x &&
+              a.y >= group.y &&
+              a.y <= group.y + group.height
+            ) {
+              expect(
+                a.y - group.y,
+                `Corner crossing ${link.id}`,
+              ).toBeGreaterThanOrEqual(16);
+              expect(
+                group.y + group.height - a.y,
+                `Corner crossing ${link.id}`,
+              ).toBeGreaterThanOrEqual(16);
+            }
+      }
+  }
+  const ports = document.nodes.flatMap(materialPortGeometry);
+  for (const link of document.materialLinks) {
+    const from = ports.find(
+      ({ nodeId, port }) =>
+        nodeId === link.from.nodeId && port.id === link.from.portId,
+    )!;
+    const to = ports.find(
+      ({ nodeId, port }) =>
+        nodeId === link.to.nodeId && port.id === link.to.portId,
+    )!;
+    expect(link.route?.[0], link.id).toEqual(from.point);
+    expect(link.route?.at(-1), link.id).toEqual(to.point);
+    expect(
+      routeIsClear(
+        link.route!,
+        document.nodes.map((node) => ({ ...node, id: node.configuration.id })),
+      ),
+      link.id,
+    ).toBe(true);
+  }
+}
+
+function expectDirectConsumerFeeds(document: CanvasDocument) {
+  const nodes = new Map(
+    document.nodes.map((node) => [node.configuration.id, node]),
+  );
+  for (const link of document.materialLinks) {
+    if (
+      nodes.get(link.from.nodeId)!.configuration.kind !== "router" ||
+      nodes.get(link.to.nodeId)!.configuration.kind !== "process"
+    )
+      continue;
+    const route = link.route!;
+    // A local bend can avoid a port or card. A trip down to a common highway
+    // and back adds hundreds of pixels of unnecessary vertical travel.
+    const verticalTravel = route
+      .slice(1)
+      .reduce(
+        (sum, point, index) => sum + Math.abs(point.y - route[index]!.y),
+        0,
+      );
+    const direct = Math.abs(route.at(-1)!.y - route[0]!.y);
+    const from = route[0]!,
+      to = route.at(-1)!;
+    const regions = productionRegions(document, "physical");
+    const blocked = regions.some(
+      (region) =>
+        !region.nodeIds.includes(link.from.nodeId) &&
+        !region.nodeIds.includes(link.to.nodeId) &&
+        region.x < to.x &&
+        region.x + region.width > from.x &&
+        region.y < Math.max(from.y, to.y) &&
+        region.y + region.height > Math.min(from.y, to.y),
+    );
+    // Long bypasses around other production groups are intentional. Clear
+    // corridors must not acquire a trip to a common exit and back.
+    if (!blocked)
+      expect(verticalTravel - direct, link.id).toBeLessThanOrEqual(128);
+  }
+}
+
+function expectLogisticsGroupsAndSteps(document: CanvasDocument) {
+  const structure = productionStructure(document);
+  const regions = productionRegions(document, "physical");
+  for (const ids of structure.logistics) {
+    const members = new Set(ids);
+    const region = regions.find(
+      (region) =>
+        region.logistics && region.nodeIds.some((id) => members.has(id)),
+    );
+    expect(region, `Missing logistics group ${ids[0]}`).toBeDefined();
+    expect(new Set(region!.nodeIds)).toEqual(members);
+    for (const link of document.materialLinks.filter(
+      (link) => members.has(link.from.nodeId) && members.has(link.to.nodeId),
+    )) {
+      for (const point of link.route!) {
+        expect(point.x).toBeGreaterThanOrEqual(region!.x + GROUP_PADDING);
+        expect(point.x).toBeLessThanOrEqual(
+          region!.x + region!.width - GROUP_PADDING,
+        );
+        expect(point.y).toBeGreaterThanOrEqual(region!.y + GROUP_PADDING);
+        expect(point.y).toBeLessThanOrEqual(
+          region!.y + region!.height - GROUP_PADDING,
+        );
+      }
+    }
+    const forward = ids.filter((id) => !structure.returnNodes.has(id));
+    const edges = document.materialLinks.filter(
+      (link) =>
+        members.has(link.from.nodeId) &&
+        members.has(link.to.nodeId) &&
+        !structure.feedbackLinks.has(link.id),
+    );
+    const steps = graphStages(
+      forward,
+      edges.map((link) => ({ from: link.from.nodeId, to: link.to.nodeId })),
+    );
+    const columns = new Map<number, number>();
+    for (const id of forward) {
+      const node = document.nodes.find((node) => node.configuration.id === id)!;
+      const step = steps.get(id)!;
+      if (columns.has(step))
+        expect(node.x, `Step ${step} of ${ids[0]}`).toBe(columns.get(step));
+      columns.set(step, node.x);
+    }
+    const ordered = [...columns].sort(([a], [b]) => a - b);
+    for (let i = 1; i < ordered.length; i++)
+      expect(ordered[i]![1]).toBeGreaterThan(ordered[i - 1]![1]);
+    for (const node of document.nodes.filter(
+      (node) => !members.has(node.configuration.id),
+    )) {
+      expect(
+        node.x < region!.x + region!.width &&
+          node.x + node.width > region!.x &&
+          node.y < region!.y + region!.height &&
+          node.y + node.height > region!.y,
+      ).toBe(false);
+    }
+  }
+}
 
 describe("Auto-arrange", () => {
   it("lays out the Detailed Modular Frame factory without overlaps or routes through cards", async () => {
     const detailed = materializeDetailedCanvas(modularFrameFactory(false));
-    const source = detailedDocumentToEditor(detailed);
+    const canvas = detailedDocumentToEditor(detailed);
+    const source = {
+      ...canvas,
+      nodes: canvas.nodes.map((node) => ({
+        ...node,
+        portOrder: {
+          input: materialPortGeometry(node)
+            .filter(({ side }) => side === "left")
+            .map(({ port }) => port.id)
+            .toReversed(),
+        },
+      })),
+    };
     const result = await arrangeCanvas(source);
+    expectRecipeColumns(result);
+    expectAttachedClearRoutes(result);
+    expectDirectConsumerFeeds(result);
+    expectLogisticsGroupsAndSteps(result);
     expect(result.nodes.map(({ configuration }) => configuration)).toEqual(
       source.nodes.map(({ configuration }) => configuration),
     );
@@ -80,11 +307,212 @@ describe("Auto-arrange", () => {
     expect(detailedDocumentToEditor(restored)).toEqual(result);
   }, 40_000);
 
+  it("places logistics between recipe stacks and reserves a return lane", async () => {
+    const { document } = generateProduction({
+      outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 10 }],
+      allowedAlternateIds: [],
+      pinnedRecipes: { Desc_IronScrew_C: "Recipe_Alternate_Screw_C" },
+    });
+    const source = detailedDocumentToEditor(
+      convertDetailed(
+        document,
+        { conveyorTierId: "conveyor-mk1", pipelineTierId: "pipeline-mk2" },
+        () => {},
+      ),
+    );
+    const result = await arrangeCanvas(source);
+    expectRecipeColumns(result);
+    expectAttachedClearRoutes(result);
+    expectDirectConsumerFeeds(result);
+    expectLogisticsGroupsAndSteps(result);
+    const parts = result.nodes.filter(
+      (node) =>
+        node.configuration.kind === "process" &&
+        [
+          "Recipe_IronPlate_C",
+          "Recipe_Alternate_Screw_C",
+          "Recipe_IronRod_C",
+        ].includes(node.configuration.processId),
+    );
+    expect(new Set(parts.map((node) => node.x)).size).toBe(1);
+    expect(presentMaterialFlow(result).links).toEqual(
+      presentMaterialFlow(source).links,
+    );
+    const structure = productionStructure(result);
+    const regions = productionRegions(result).filter(
+      (region) => region.logistics,
+    );
+    const ingotGroups = regions.filter((region) =>
+      region.defaultName.startsWith("Iron Ingot"),
+    );
+    expect(ingotGroups.map((region) => region.defaultName)).toEqual(
+      expect.arrayContaining([
+        "Iron Ingot for Cast Screws",
+        "Iron Ingot for Iron Plate",
+        "Iron Ingot for Iron Rod",
+      ]),
+    );
+    expect(ingotGroups).toHaveLength(3);
+    expect(
+      ingotGroups.map((group) => group.count).sort((a, b) => a - b),
+    ).toEqual([1, 11, 27]);
+    for (const id of structure.feedbackLinks) {
+      const link = result.materialLinks.find((link) => link.id === id)!;
+      expect(
+        structure.logistics.some(
+          (group) =>
+            group.includes(link.from.nodeId) && group.includes(link.to.nodeId),
+        ),
+      ).toBe(true);
+    }
+    for (const ids of structure.logistics) {
+      const members = result.nodes.filter((node) =>
+        ids.includes(node.configuration.id),
+      );
+      const left = Math.min(...members.map((node) => node.x));
+      const right = Math.max(...members.map((node) => node.x + node.width));
+      const top = Math.min(...members.map((node) => node.y));
+      const bottom = Math.max(...members.map((node) => node.y + node.height));
+      for (const node of result.nodes.filter(
+        (node) => !ids.includes(node.configuration.id),
+      )) {
+        expect(
+          node.x < right &&
+            node.x + node.width > left &&
+            node.y < bottom &&
+            node.y + node.height > top,
+          node.configuration.id,
+        ).toBe(false);
+      }
+      const forward = members.filter(
+        (node) => !structure.returnNodes.has(node.configuration.id),
+      );
+      for (const node of members.filter((node) =>
+        structure.returnNodes.has(node.configuration.id),
+      ))
+        expect(node.y).toBeGreaterThan(
+          Math.max(...forward.map((node) => node.y + node.height)),
+        );
+    }
+    const flows = presentMaterialFlow(result);
+    const rodReturns = flows.links.filter(
+      (link) =>
+        link.itemId === "Desc_IronRod_C" &&
+        structure.feedbackLinks.has(link.id),
+    );
+    expect(
+      rodReturns.map((link) => link.ratePerMinute).sort((a, b) => a! - b!),
+    ).toEqual([4, 4, 4, 12]);
+    for (const flow of rodReturns.filter((flow) => flow.ratePerMinute === 4)) {
+      const route = result.materialLinks.find(
+        (link) => link.id === flow.id,
+      )!.route!;
+      expect(route[1]!.y).toBe(route[0]!.y);
+      expect(route[1]!.x - route[0]!.x).toBeGreaterThan(128);
+      expect(Math.max(...route.map((point) => point.y))).toBe(route[0]!.y);
+    }
+    for (const node of result.nodes.filter(
+      (node) => node.configuration.kind === "router",
+    )) {
+      for (const direction of ["input", "output"] as const) {
+        const ports = materialPortGeometry(node).filter(
+          ({ port }) => port.direction === direction,
+        );
+        const active = new Set(
+          result.materialLinks
+            .flatMap((link) => [link.from, link.to])
+            .filter((endpoint) => endpoint.nodeId === node.configuration.id)
+            .map((endpoint) => endpoint.portId),
+        );
+        if (
+          ports.length === 3 &&
+          ports.filter(({ port }) => active.has(port.id)).length === 2
+        )
+          expect(active.has(ports[1]!.port.id)).toBe(false);
+      }
+    }
+    const returnRoutes = rodReturns.map(
+      (flow) =>
+        result.materialLinks.find((link) => link.id === flow.id)!.route!,
+    );
+    const vertical = (route: (typeof returnRoutes)[number]) =>
+      route.slice(1).flatMap((to, index) => {
+        const from = route[index]!;
+        return from.x === to.x
+          ? [
+              {
+                x: from.x,
+                top: Math.min(from.y, to.y),
+                bottom: Math.max(from.y, to.y),
+              },
+            ]
+          : [];
+      });
+    for (let i = 0; i < returnRoutes.length; i++)
+      for (const other of returnRoutes.slice(i + 1)) {
+        for (const a of vertical(returnRoutes[i]!))
+          for (const b of vertical(other)) {
+            if (a.x === b.x)
+              expect(
+                Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top),
+              ).toBeLessThanOrEqual(0);
+          }
+      }
+    expect(
+      result.materialLinks.map(({ route: _route, ...link }) => link),
+    ).toEqual(source.materialLinks);
+    expect(await arrangeCanvas(result)).toEqual(result);
+  }, 20_000);
+
   it("supports Basic plans and preserves their routes through save/reload", async () => {
     const result = await arrangeCanvas(modularFrameFactory(false));
     expect(
       parseCanvasPlanDocument(serializeCanvasPlanDocument(result)),
     ).toEqual(result);
+  });
+
+  it("stacks matching recipes with different card sizes and preserves their actual ports", async () => {
+    const factory = modularFrameFactory(false);
+    const smelter = factory.nodes.find(
+      (node) => node.configuration.id === "smelters",
+    )!;
+    const plate = factory.nodes.find(
+      (node) => node.configuration.id === "plates",
+    )!;
+    const source: CanvasDocument = {
+      ...EMPTY_CANVAS_DOCUMENT,
+      nodes: [
+        { ...smelter, width: 320, height: 352 },
+        {
+          ...smelter,
+          configuration: { ...smelter.configuration, id: "second-smelter" },
+          label: "Renamed smelter",
+          width: 256,
+          x: -140,
+          y: 255,
+        },
+        plate,
+      ],
+      materialLinks: ["smelters", "second-smelter"].map((id) => ({
+        id,
+        from: { nodeId: id, portId: "output:Desc_IronIngot_C" },
+        to: { nodeId: "plates", portId: "input:Desc_IronIngot_C" },
+      })),
+    };
+    const result = await arrangeCanvas(source);
+    expectRecipeColumns(result);
+    expectAttachedClearRoutes(result);
+    expect(
+      await arrangeCanvas({
+        ...source,
+        nodes: source.nodes.toReversed(),
+        materialLinks: source.materialLinks.toReversed(),
+      }),
+    ).toEqual({
+      ...result,
+      nodes: result.nodes.toReversed(),
+      materialLinks: result.materialLinks.toReversed(),
+    });
   });
 
   it("handles empty plans, disconnected nodes, and feedback cycles", async () => {
@@ -117,6 +545,44 @@ describe("Auto-arrange", () => {
         (link) => link.route && materialLinkPath(result, link)?.route,
       ),
     ).toBe(true);
+  });
+
+  it("keeps recipe columns and clear routes when grouping introduces a feedback cycle", async () => {
+    const nodes = [
+      ["rubber-1", "Recipe_Alternate_RecycledRubber_C"],
+      ["plastic", "Recipe_Alternate_Plastic_1_C"],
+      ["rubber-2", "Recipe_Alternate_RecycledRubber_C"],
+    ].map(([id, processId]) => ({
+      configuration: createNode({
+        kind: "process",
+        id: id!,
+        processId: processId!,
+        buildableId: "Build_OilRefinery_C",
+      }).configuration,
+      label: id!,
+      x: 0,
+      y: 0,
+      width: 256,
+      height: 256,
+    }));
+    const result = await arrangeCanvas({
+      ...EMPTY_CANVAS_DOCUMENT,
+      nodes,
+      materialLinks: [
+        {
+          id: "rubber",
+          from: { nodeId: "rubber-1", portId: "output:Desc_Rubber_C" },
+          to: { nodeId: "plastic", portId: "input:Desc_Rubber_C" },
+        },
+        {
+          id: "plastic",
+          from: { nodeId: "plastic", portId: "output:Desc_Plastic_C" },
+          to: { nodeId: "rubber-2", portId: "input:Desc_Plastic_C" },
+        },
+      ],
+    });
+    expectRecipeColumns(result);
+    expectAttachedClearRoutes(result);
   });
 
   it("rejects stale results and follows manually moved ports", async () => {

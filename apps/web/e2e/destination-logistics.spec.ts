@@ -1,0 +1,236 @@
+import { expect, test } from "@playwright/test";
+
+test("arranges shared ingot supply into destination groups", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1800, height: 1300 });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  const original = await page.evaluate(async () => {
+    const generateUrl = "/src/auto-build/generate-production.ts";
+    const convertUrl = "/src/detailed-conversion/convert.ts";
+    const storageUrl = "/src/canvas/document-storage.ts";
+    const { generateProduction } = await import(generateUrl);
+    const { convertDetailed } = await import(convertUrl);
+    const { createIndexedDbDocumentStorage } = await import(storageUrl);
+    const { document: basic } = generateProduction({
+      outputs: [{ itemId: "Desc_ModularFrame_C", ratePerMinute: 10 }],
+      allowedAlternateIds: [],
+      pinnedRecipes: { Desc_IronScrew_C: "Recipe_Alternate_Screw_C" },
+    });
+    const detailed = convertDetailed(
+      basic,
+      {
+        conveyorTierId: "conveyor-mk1",
+        pipelineTierId: "pipeline-mk1",
+      },
+      () => {},
+    );
+    await createIndexedDbDocumentStorage().saveWorkspace(detailed);
+    return detailed.connections;
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("application", { name: "Infinite canvas" }),
+  ).toBeVisible();
+  const arrange = page.getByRole("button", {
+    name: "Auto-arrange",
+    exact: true,
+  });
+  await arrange.click();
+  await expect(arrange).toBeEnabled({ timeout: 30_000 });
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const storageUrl = "/src/canvas/document-storage.ts";
+        const { createIndexedDbDocumentStorage } = await import(storageUrl);
+        const { document } =
+          await createIndexedDbDocumentStorage().loadWorkspace();
+        return Object.keys(document.connectionRoutes ?? {}).length;
+      }),
+    )
+    .toBe(original.length);
+  const layout = await page.evaluate(async () => {
+    const storageUrl = "/src/canvas/document-storage.ts";
+    const modeUrl = "/src/canvas/editor-mode.ts";
+    const regionsUrl = "/src/canvas/production-regions.ts";
+    const viewportUrl = "/src/canvas/viewport.ts";
+    const routingUrl = "/src/canvas/layout-routing.ts";
+    const { createIndexedDbDocumentStorage } = await import(storageUrl);
+    const { detailedDocumentToEditor } = await import(modeUrl);
+    const { productionRegions } = await import(regionsUrl);
+    const { fitRectangleInViewport } = await import(viewportUrl);
+    const { layoutRouteScore } = await import(routingUrl);
+    const { document } = await createIndexedDbDocumentStorage().loadWorkspace();
+    const canvas = detailedDocumentToEditor(document);
+    const regions = productionRegions(canvas);
+    const ingots = regions.filter(
+      (region: any) => region.logistics && region.name.startsWith("Iron Ingot"),
+    );
+    const bounds = (rects: any[]) => {
+      const x = Math.min(...rects.map((r) => r.x));
+      const y = Math.min(...rects.map((r) => r.y));
+      return {
+        x,
+        y,
+        width: Math.max(...rects.map((r) => r.x + r.width)) - x,
+        height: Math.max(...rects.map((r) => r.y + r.height)) - y,
+      };
+    };
+    const routes = new Map(
+      canvas.materialLinks.map((link: any) => [link.id, link.route]),
+    );
+    const target = canvas.nodes.find(
+      (node: any) =>
+        node.configuration.processId === "Recipe_IronPlateReinforced_C",
+    );
+    const incoming = canvas.materialLinks.filter(
+      (link: any) => link.to.nodeId === target.configuration.id,
+    );
+    const detail = bounds(
+      canvas.nodes.filter(
+        (node: any) =>
+          node === target ||
+          incoming.some(
+            (link: any) => link.from.nodeId === node.configuration.id,
+          ),
+      ),
+    );
+    return {
+      minimumGapCost: Math.max(
+        ...canvas.materialLinks.map(
+          (link: any) =>
+            layoutRouteScore(link, link.route, canvas.materialLinks, routes)[4],
+        ),
+      ),
+      detail,
+      inspect: { x: ingots[0].x + 28, y: ingots[0].y + 28 },
+      names: ingots.map((region: any) => region.name),
+      connections: document.connections,
+      area: bounds(ingots),
+      viewport: fitRectangleInViewport(bounds(canvas.nodes), {
+        width: innerWidth,
+        height: innerHeight,
+      }),
+    };
+  });
+  expect(layout.connections).toEqual(original);
+  expect(layout.minimumGapCost).toBe(0);
+  expect(layout.names).toEqual(
+    expect.arrayContaining([
+      "Iron Ingot for Cast Screws",
+      "Iron Ingot for Iron Plate",
+      "Iron Ingot for Iron Rod",
+    ]),
+  );
+  expect(
+    layout.names.some((name: string) => name.includes("shared distribution")),
+  ).toBe(false);
+  await page.screenshot({
+    path: testInfo.outputPath("destination-overview.png"),
+  });
+  const { area, viewport } = layout;
+  await page.mouse.click(
+    layout.inspect.x * viewport.zoom + viewport.x,
+    layout.inspect.y * viewport.zoom + viewport.y,
+  );
+  const inspector = page.getByRole("complementary", { name: "Group details" });
+  await expect(inspector).toBeVisible();
+  await expect(
+    inspector.getByRole("heading", { name: "Balancer", exact: true }),
+  ).toBeVisible();
+  await expect(
+    inspector.getByText("Remainder", { exact: false }),
+  ).not.toHaveCount(0);
+  await expect(
+    inspector.locator("svg.lucide-arrow-right").first(),
+  ).toBeVisible();
+  expect(await inspector.innerText()).not.toContain("→");
+  await expect(
+    inspector.getByRole("heading", { name: "Connections", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    inspector.getByRole("columnheader", { name: "Internal", exact: true }),
+  ).toBeVisible();
+  const output = inspector.getByRole("region", {
+    name: "Items out",
+    exact: true,
+  });
+  await expect(output.getByText("Iron Ingot", { exact: true })).toHaveCount(1);
+  await expect(output).toContainText("60 items/min");
+  await expect(output).not.toContainText("Iron Rod");
+  await expect(output).not.toContainText("Cast Screws");
+  await expect
+    .poll(() =>
+      output
+        .locator("img")
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await page.screenshot({
+    path: testInfo.outputPath("logistics-inspector.png"),
+  });
+  await inspector.getByRole("button", { name: "Close group details" }).click();
+  const center = {
+    x: (area.x + area.width / 2) * viewport.zoom + viewport.x,
+    y: (area.y + area.height / 2) * viewport.zoom + viewport.y,
+  };
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(900, 650, { steps: 8 });
+  await page.mouse.up({ button: "middle" });
+  const zoom = Math.min(1600 / area.width, 1100 / area.height);
+  await page.mouse.wheel(0, -Math.log(zoom / viewport.zoom) / 0.002);
+  await expect
+    .poll(() => page.getByRole("button", { name: /Reset zoom/ }).innerText())
+    .toBe(`${Math.round(zoom * 100)}%`);
+  await page.screenshot({
+    path: testInfo.outputPath("destination-groups.png"),
+  });
+  // Inspect the parallel feeds near an assembler, where close lanes are most
+  // noticeable. The camera is currently centered on the ingot logistics area.
+  const detailCenter = {
+    x: layout.detail.x + layout.detail.width / 2,
+    y: layout.detail.y + layout.detail.height / 2,
+  };
+  await page.mouse.move(
+    900 + (detailCenter.x - area.x - area.width / 2) * zoom,
+    650 + (detailCenter.y - area.y - area.height / 2) * zoom,
+  );
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(900, 650, { steps: 8 });
+  await page.mouse.up({ button: "middle" });
+  const detailZoom = Math.min(
+    1400 / (layout.detail.width + 128),
+    900 / (layout.detail.height + 128),
+  );
+  await page.mouse.wheel(0, -Math.log(detailZoom / zoom) / 0.002);
+  await expect
+    .poll(() => page.getByRole("button", { name: /Reset zoom/ }).innerText())
+    .toBe(`${Math.round(detailZoom * 100)}%`);
+  await page.screenshot({ path: testInfo.outputPath("parallel-feeds.png") });
+  await page.getByRole("button", { name: "Open canvas menu" }).click();
+  await page.getByRole("menuitem", { name: /^Fit all/ }).click();
+  await page.mouse.click(
+    layout.inspect.x * viewport.zoom + viewport.x,
+    layout.inspect.y * viewport.zoom + viewport.y,
+  );
+  await expect(inspector).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const panel = await inspector.boundingBox();
+  expect(panel!.x).toBeGreaterThanOrEqual(0);
+  expect(panel!.width).toBeLessThanOrEqual(390);
+  expect(panel!.y + panel!.height).toBeLessThanOrEqual(845);
+  await page.screenshot({
+    path: testInfo.outputPath("logistics-inspector-mobile.png"),
+  });
+  await inspector
+    .getByRole("textbox", { name: "Group name" })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    inspector.getByRole("textbox", { name: "Group name" }),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});

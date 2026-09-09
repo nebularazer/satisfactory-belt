@@ -1144,12 +1144,14 @@ function InspectorContent({
   keyboardEditing,
   mode,
   node,
+  onEditProductionRequest,
   onSheetHandlePointerCancel,
   onSheetHandlePointerDown,
   onSheetHandlePointerMove,
   onSheetHandlePointerUp,
 }: Readonly<{
   editor: CanvasEditor;
+  onEditProductionRequest?: () => void;
   keyboardEditing: boolean;
   mode: CanvasEditorMode;
   node: CanvasNode;
@@ -1239,6 +1241,17 @@ function InspectorContent({
           <RouterControls editor={editor} node={node} />
         )}
         <NodeMetrics editor={editor} node={node} scope={safeScope} />
+        {onEditProductionRequest && (
+          <div className="border-t border-border p-3">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={onEditProductionRequest}
+            >
+              Edit production request
+            </Button>
+          </div>
+        )}
       </ScrollArea>
       <footer
         className={cn(
@@ -1271,10 +1284,12 @@ export function NodeInspector({
   editor,
   mode = "basic",
   mobileOpen = true,
+  onEditProductionRequest,
 }: Readonly<{
   editor: CanvasEditor;
   mode?: CanvasEditorMode;
   mobileOpen?: boolean;
+  onEditProductionRequest?: (sectionId: string) => void;
 }>) {
   const state = useSyncExternalStore(
     editor.subscribe,
@@ -1307,7 +1322,7 @@ export function NodeInspector({
         (candidate) => candidate.configuration.id === selectedId,
       )
     : undefined;
-  if (!node || state.moveDelta !== null) return null;
+  if (!node || state.moveDelta !== null || state.selectedGroupId) return null;
 
   const handleSheetPointerDown = (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -1377,6 +1392,20 @@ export function NodeInspector({
       <InspectorContent
         editor={editor}
         keyboardEditing={keyboardEditing}
+        onEditProductionRequest={
+          mode === "basic" &&
+          onEditProductionRequest &&
+          state.document.productionSections?.some((s) =>
+            s.nodeIds.includes(node.configuration.id),
+          )
+            ? () =>
+                onEditProductionRequest(
+                  state.document.productionSections!.find((s) =>
+                    s.nodeIds.includes(node.configuration.id),
+                  )!.id,
+                )
+            : undefined
+        }
         mode={mode}
         node={node}
         onSheetHandlePointerCancel={(event) => finishSheetDrag(event, true)}
