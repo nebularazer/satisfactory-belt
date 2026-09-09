@@ -193,6 +193,7 @@ function CanvasWorkspace({
       const document = await requestCanvasArrangement(
         source,
         controller.signal,
+        editor.topology,
       );
       if (controller.signal.aborted) return;
       editor.dispatch({ type: "document.arrange", source, document });

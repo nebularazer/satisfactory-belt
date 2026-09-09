@@ -290,6 +290,7 @@ async function logisticsBlock(
 export async function arrangeCanvas(
   document: CanvasDocument,
   elk: Pick<ELK, "layout">,
+  topology: "aggregate" | "physical",
 ): Promise<CanvasDocument> {
   if (!document.nodes.length) return document;
   // If a crowded corridor cannot be repaired locally, reserve more space and
@@ -299,6 +300,7 @@ export async function arrangeCanvas(
       document,
       elk,
       PREFERRED_LINE_GAP * multiplier,
+      topology,
     );
     const routes = new Map(
       result.materialLinks.map((link) => [link.id, link.route!]),
@@ -323,6 +325,7 @@ async function arrangeAtSpacing(
   document: CanvasDocument,
   elk: Pick<ELK, "layout">,
   laneGap: number,
+  topology: "aggregate" | "physical",
 ): Promise<CanvasDocument> {
   // Stable model order makes repeated arrangements independent of canvas positions.
   const sorted: CanvasDocument = {
@@ -589,6 +592,7 @@ async function arrangeAtSpacing(
       };
     }),
     new Map(arranged.materialLinks.map((link) => [link.id, link.route!])),
+    topology,
   );
   return {
     ...arranged,

@@ -137,7 +137,15 @@ export function routeBetweenGroups(
   document: CanvasDocument,
   groups: readonly LayoutGroup[],
   initial: Routes,
+  topology: "aggregate" | "physical" = "physical",
 ): Map<string, readonly Point[]> {
+  // Recipe/logistics blocks guide placement in both modes, but only Detailed
+  // draws group boxes. Basic routes around the actual cards, including links
+  // between members of the same recipe block.
+  const boundaries = topology === "physical" ? groups : [];
+  const nodeById = new Map(
+    document.nodes.map((node) => [node.configuration.id, node]),
+  );
   const owners = new Map(
     groups.flatMap((group) => group.nodeIds.map((id) => [id, group] as const)),
   );
@@ -151,17 +159,25 @@ export function routeBetweenGroups(
     a.id.localeCompare(b.id),
   );
   const external = links.filter(
-    (link) => owners.get(link.from.nodeId) !== owners.get(link.to.nodeId),
+    (link) =>
+      topology === "aggregate" ||
+      owners.get(link.from.nodeId) !== owners.get(link.to.nodeId),
   );
   const candidates = new Map<string, readonly (readonly Point[])[]>();
   for (const link of external) {
     const from = ports.get(portKey(link.from.nodeId, link.from.portId))!;
     const to = ports.get(portKey(link.to.nodeId, link.to.portId))!;
-    const fromGroup = owners.get(from.nodeId)!;
-    const toGroup = owners.get(to.nodeId)!;
+    const fromBounds =
+      topology === "physical"
+        ? owners.get(from.nodeId)!
+        : nodeById.get(from.nodeId)!;
+    const toBounds =
+      topology === "physical"
+        ? owners.get(to.nodeId)!
+        : nodeById.get(to.nodeId)!;
     const obstacles = [
       ...document.nodes.map((node) => ({ ...node, id: node.configuration.id })),
-      ...groupRouteObstacles(groups, from.nodeId, to.nodeId),
+      ...groupRouteObstacles(boundaries, from.nodeId, to.nodeId),
     ];
     const padded = obstacles.map((rect) => ({
       ...rect,
@@ -177,10 +193,10 @@ export function routeBetweenGroups(
     if (
       from.side === "right" &&
       to.side === "left" &&
-      fromGroup.x + fromGroup.width < toGroup.x
+      fromBounds.x + fromBounds.width < toBounds.x
     ) {
-      const start = fromGroup.x + fromGroup.width + 32;
-      const end = toGroup.x - 32;
+      const start = fromBounds.x + fromBounds.width + 32;
+      const end = toBounds.x - 32;
       const lanes = new Set(
         [
           ...seed
@@ -254,7 +270,7 @@ export function routeBetweenGroups(
       }
       routes.set(link.id, chosen);
     }
-  spaceLayoutRoutes(document.nodes, links, routes, groups, external);
+  spaceLayoutRoutes(document.nodes, links, routes, boundaries, external);
   return routes;
 }
 

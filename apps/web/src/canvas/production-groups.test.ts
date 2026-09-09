@@ -17,11 +17,19 @@ import { parseGroupNames } from "./group-names";
 import { hitProductionGroup } from "./group-label-layout";
 
 it("selects, renames, resets and persists production and logistics group names", async () => {
-  const basic = await arrangeCanvas(modularFrameFactory(false), new ELK());
+  const basic = await arrangeCanvas(
+    modularFrameFactory(false),
+    new ELK(),
+    "physical",
+  );
   const detailed = materializeDetailedCanvas(modularFrameFactory(false));
   for (const source of [
     basic,
-    await arrangeCanvas(detailedDocumentToEditor(detailed), new ELK()),
+    await arrangeCanvas(
+      detailedDocumentToEditor(detailed),
+      new ELK(),
+      "physical",
+    ),
   ]) {
     const editor = createCanvasEditor({
       document: source,
@@ -92,7 +100,11 @@ it("rejects malformed saved group names and accepts older saves", () => {
 });
 
 it("does not expose groups or accept group selection in Basic mode", async () => {
-  const document = await arrangeCanvas(modularFrameFactory(false), new ELK());
+  const document = await arrangeCanvas(
+    modularFrameFactory(false),
+    new ELK(),
+    "physical",
+  );
   const group = productionRegions(document, "physical")[0]!;
   expect(productionRegions(document, "aggregate")).toEqual([]);
   const editor = createCanvasEditor({ document });

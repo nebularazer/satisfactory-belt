@@ -64,6 +64,10 @@ export async function requestAutoBuild(
   onStage("Arranging machines");
   return {
     ...result,
-    document: await requestCanvasArrangement(result.document, signal),
+    document: await requestCanvasArrangement(
+      result.document,
+      signal,
+      "aggregate",
+    ),
   };
 }

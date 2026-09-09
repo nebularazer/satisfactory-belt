@@ -139,3 +139,44 @@ it("keeps bypass belts outside unrelated group interiors", () => {
   );
   expect(routeIsClear(result.get(edge.id)!, [obstacle])).toBe(true);
 });
+
+it("routes Basic links around visible cards without enforcing group boundaries", () => {
+  const nodes = [
+    testCanvasNode("a", 0, 0),
+    testCanvasNode("b", 900, 0),
+    testCanvasNode("blocker", 400, 0),
+  ];
+  const edge = link("ab", "a", "b");
+  const from = materialPortGeometry(nodes[0]!).find(
+    (p) => p.port.id === edge.from.portId,
+  )!.point;
+  const to = materialPortGeometry(nodes[1]!).find(
+    (p) => p.port.id === edge.to.portId,
+  )!.point;
+  // Both endpoints share a recipe block; Basic still routes their connection.
+  const groups = [
+    {
+      id: "recipe",
+      x: -100,
+      y: -100,
+      width: 1200,
+      height: 400,
+      nodeIds: ["a", "b", "blocker"],
+    },
+  ];
+  const result = routeBetweenGroups(
+    { ...EMPTY_CANVAS_DOCUMENT, nodes, materialLinks: [edge] },
+    groups,
+    new Map([[edge.id, [from, to]]]),
+    "aggregate",
+  ).get(edge.id)!;
+  expect(result).not.toEqual([from, to]);
+  expect(result[0]).toEqual(from);
+  expect(result.at(-1)).toEqual(to);
+  expect(
+    routeIsClear(
+      result,
+      nodes.map((node) => ({ ...node, id: node.configuration.id })),
+    ),
+  ).toBe(true);
+});

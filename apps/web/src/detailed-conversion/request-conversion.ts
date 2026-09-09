@@ -68,6 +68,7 @@ export async function requestDetailedConversion(
   const arranged = await requestCanvasArrangement(
     detailedDocumentToEditor(result),
     signal,
+    "physical",
   );
   signal.throwIfAborted();
   return detailedDocumentFromEditor(arranged, result.tiers);

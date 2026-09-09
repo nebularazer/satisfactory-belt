@@ -4,7 +4,9 @@ Auto-arrange and Detailed conversion use the same layout. Recipes form vertical
 stacks; parallel steps occupy the same production stage. Physical logistics sit
 between stages, aligned with their connected machine ports. The diagram stays on one editable canvas.
 Group outlines, inspect icons, summaries, and renaming are shown only in Detailed
-mode; Basic mode shows its recipe cards directly.
+mode; Basic mode shows its recipe cards directly. Basic routes around visible
+node cards, without the hidden group boundaries or side-entry constraints used
+by Detailed. Open corridors stay direct, including shared-output branches.
 
 These screenshots are from the actual browser conversion workflow: 10 Modular
 Frames/min, Cast Screws, and Mk.1 belts.

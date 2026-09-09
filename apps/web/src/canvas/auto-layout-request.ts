@@ -6,6 +6,7 @@ import type { CanvasDocument } from "./document";
 export function requestCanvasArrangement(
   document: CanvasDocument,
   signal: AbortSignal,
+  topology: "aggregate" | "physical",
 ): Promise<CanvasDocument> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
@@ -35,7 +36,7 @@ export function requestCanvasArrangement(
         workerFactory: () => worker,
         algorithms: ["layered"],
       });
-      void arrangeCanvas(document, elk).then((result) => {
+      void arrangeCanvas(document, elk, topology).then((result) => {
         cleanup();
         resolve(result);
       }, fail);

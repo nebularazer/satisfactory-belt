@@ -33,7 +33,7 @@ import { materialPortGeometry } from "./material-port-geometry";
 import { routeIsClear } from "./orthogonal-router";
 
 const arrangeCanvas = (document: CanvasDocument) =>
-  computeArrangement(document, new ELK());
+  computeArrangement(document, new ELK(), "physical");
 
 function expectRecipeColumns(document: CanvasDocument) {
   const recipes = new Map<string, CanvasNode[]>();
