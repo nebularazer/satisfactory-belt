@@ -117,7 +117,10 @@ Rename or reset the group in the inspector; names persist through subsequent
 Auto-arrange and support undo/redo. Clicking a member card inspects that node;
 dragging a selected member moves the group. Thin outlines mark group boundaries,
 with a stronger outline for the selected group. Link strokes preserve capacity
-colors, dashed return style, and click targets.
+colors, dashed return style, and click targets. Link strokes, their selection
+highlights, and connection previews scale with the canvas instead of keeping a
+fixed screen thickness. At 100% zoom, normal links are 1.75px, selected links
+2.5px with a 5px highlight, and previews 3px.
 
 ![Logistics group material totals and inventory](logistics-inspector.png)
 

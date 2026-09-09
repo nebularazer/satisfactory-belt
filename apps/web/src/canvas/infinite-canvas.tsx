@@ -1103,7 +1103,7 @@ function drawMaterialLinks(
       ).stroke({
         alpha: 0.7,
         color: BLUEPRINT_COLORS.selected,
-        width: 5 / zoom,
+        width: 5,
       });
     }
     drawMaterialPath(
@@ -1118,7 +1118,7 @@ function drawMaterialLinks(
         state.routeEdit?.id === link.id && !state.routeEdit.valid
           ? BLUEPRINT_COLORS.warning
           : materialFlowCanvasColor(presentation.state, dark),
-      width: (isSelected ? 2.5 : 1.75) / zoom,
+      width: isSelected ? 2.5 : 1.75,
     });
   }
 
@@ -1239,7 +1239,7 @@ function drawMaterialLinks(
         : previewTargetStatus === "occupied"
           ? BLUEPRINT_COLORS.blocked
           : BLUEPRINT_COLORS.warning,
-    width: 3 / zoom,
+    width: 3,
   });
 }
 
