@@ -1,5 +1,5 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { ArrowRight, ScanEye, X } from "lucide-react";
+import { ArrowRight, Info, X } from "lucide-react";
 import type { CanvasEditor } from "@/canvas/editor";
 import { productionRegions } from "@/canvas/production-regions";
 import {
@@ -9,6 +9,11 @@ import {
   groupNumber,
   type FlowRow,
 } from "@/canvas/group-summary";
+import {
+  descriptorImage,
+  imageSrcSet,
+  selectImageUrl,
+} from "@/game/catalog-images";
 import { MAX_GROUP_NAME_LENGTH } from "@/canvas/group-names";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -35,7 +40,7 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
       className="pointer-events-auto absolute right-0 bottom-0 left-0 z-20 flex max-h-[65dvh] flex-col rounded-t-2xl border border-border bg-card text-card-foreground shadow-xl lg:top-4 lg:right-4 lg:bottom-auto lg:left-auto lg:max-h-[calc(100dvh-2rem)] lg:w-[24rem] lg:rounded-xl"
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b p-4">
-        <ScanEye
+        <Info
           aria-hidden="true"
           className="size-5 shrink-0 text-muted-foreground"
         />
@@ -66,9 +71,12 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
             <h3 className="mb-2 font-medium">Balancer</h3>
             {summary.inputs.map((input) => (
               <div key={input.item} className="mb-2 rounded-lg bg-muted/50 p-3">
-                <p className="mb-1 text-xs text-muted-foreground">
-                  {input.item} · {input.unit}
-                </p>
+                <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <MaterialIcon row={input} />
+                  <span>
+                    {input.item} · {input.unit}
+                  </span>
+                </div>
                 <div className="flex flex-wrap items-center gap-2 tabular-nums">
                   <span>{rateExpression(input.rates)}</span>
                   <ArrowRight aria-label="to" className="size-4 shrink-0" />
@@ -86,19 +94,26 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
             ))}
           </section>
         )}
+        {!group.logistics && summary.recipes.join(", ") !== group.name && (
+          <section>
+            <h3 className="font-medium">Recipe</h3>
+            <p className="text-muted-foreground">
+              {summary.recipes.join(", ")}
+            </p>
+          </section>
+        )}
+        <FlowSection
+          title="Items in"
+          rows={group.logistics ? summary.inputs : summary.consumption}
+          showRates={!group.logistics}
+        />
+        <FlowSection
+          title="Items out"
+          rows={group.logistics ? summary.outputTotals : summary.production}
+          showRates={!group.logistics}
+        />
         {!group.logistics && (
           <>
-            <section>
-              <h3 className="font-medium">Recipe</h3>
-              <p className="text-muted-foreground">
-                {summary.recipes.join(", ")}
-              </p>
-            </section>
-            <FlowSection
-              title="Recipe consumption"
-              rows={summary.consumption}
-            />
-            <FlowSection title="Recipe production" rows={summary.production} />
             {summary.clocks.length > 0 && (
               <section>
                 <h3 className="font-medium">Clock speeds</h3>
@@ -109,15 +124,13 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
             )}
             <section>
               <h3 className="font-medium">Power</h3>
-              <p>Consumption: {powerRange(summary.power.consumed)} MW</p>
+              <p>{powerRange(summary.power.consumed)} MW consumed</p>
               {summary.power.produced.maximumMw > 0 && (
-                <p>Generation: {powerRange(summary.power.produced)} MW</p>
+                <p>{powerRange(summary.power.produced)} MW generated</p>
               )}
             </section>
           </>
         )}
-        <FlowSection title="Items in" rows={summary.inputs} />
-        <FlowSection title="Items out" rows={summary.outputs} />
         <section>
           <h3 className="mb-1 font-medium">Buildings</h3>
           <dl>
@@ -130,11 +143,6 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
           </dl>
         </section>
         <section>
-          <h3 className="font-medium">Connections</h3>
-          <p className="text-muted-foreground">
-            {summary.incomingCount} incoming · {summary.internalCount} internal
-            · {summary.outgoingCount} outgoing
-          </p>
           <table className="mt-2 w-full text-left text-xs tabular-nums">
             <caption className="sr-only">
               Belts and pipes by tier and group boundary
@@ -143,7 +151,7 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
               <tr>
                 <th className="py-1 font-medium">Tier</th>
                 <th>In</th>
-                <th>Internal</th>
+                {group.logistics && <th>Internal</th>}
                 <th>Out</th>
               </tr>
             </thead>
@@ -152,7 +160,7 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
                 <tr key={tier.name}>
                   <td className="py-1">{tier.name}</td>
                   <td>{tier.incoming}</td>
-                  <td>{tier.internal}</td>
+                  {group.logistics && <td>{tier.internal}</td>}
                   <td>{tier.outgoing}</td>
                 </tr>
               ))}
@@ -164,14 +172,11 @@ export function GroupInspector({ editor }: { editor: CanvasEditor }) {
             <h3 className="font-medium">Feedback loops</h3>
             <p className="text-muted-foreground">
               {summary.feedbackCount} internal return{" "}
-              {summary.feedbackCount === 1 ? "link" : "links"}. Excluded from
-              items in and out.
+              {summary.feedbackCount === 1 ? "link" : "links"}
             </p>
-            {summary.feedback.map((row) => (
-              <p key={row.item} className="mt-1">
-                {row.item}: {rateExpression(row.rates)} {row.unit}
-              </p>
-            ))}
+            {summary.feedback.length > 0 && (
+              <FlowRows rows={summary.feedback} showRates={false} />
+            )}
           </section>
         )}
         <GroupNameForm
@@ -236,40 +241,64 @@ function powerRange(power: { minimumMw: number; maximumMw: number }) {
     ? groupNumber.format(power.maximumMw)
     : `${groupNumber.format(power.minimumMw)}–${groupNumber.format(power.maximumMw)}`;
 }
+function MaterialIcon({ row }: { row: FlowRow }) {
+  if (!row.itemId) return null;
+  const image = descriptorImage(row.itemId);
+  return (
+    <img
+      alt=""
+      aria-hidden="true"
+      className="size-6 shrink-0 object-contain"
+      decoding="async"
+      sizes="24px"
+      src={selectImageUrl(image, 48)}
+      srcSet={imageSrcSet(image)}
+    />
+  );
+}
 function FlowSection({
   title,
   rows,
+  showRates,
 }: {
   title: string;
   rows: readonly FlowRow[];
+  showRates: boolean;
 }) {
   return (
-    <section>
+    <section aria-label={title}>
       <h3 className="mb-1 font-medium">{title}</h3>
       {!rows.length && <p className="text-xs text-muted-foreground">None</p>}
-      {rows.map((row, index) => (
-        <div key={index} className="mt-2">
-          <div className="flex justify-between gap-3">
-            <span>{row.item}</span>
-            <span className="shrink-0 tabular-nums">
-              {flowTotal(row.rates) === undefined
-                ? "Unresolved"
-                : groupNumber.format(flowTotal(row.rates)!)}{" "}
-              {row.unit}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {rateExpression(row.rates)}
-            {row.remainder ? " · Remainder" : ""}
-          </p>
-          {row.destination && (
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <ArrowRight aria-hidden="true" className="size-3 shrink-0" />
-              {row.destination}
-            </p>
-          )}
-        </div>
-      ))}
+      <FlowRows rows={rows} showRates={showRates} />
     </section>
   );
+}
+function FlowRows({
+  rows,
+  showRates,
+}: {
+  rows: readonly FlowRow[];
+  showRates: boolean;
+}) {
+  return rows.map((row, index) => (
+    <div key={index} className="mt-2 flex items-center gap-2">
+      <MaterialIcon row={row} />
+      <div className="min-w-0 flex-1">
+        <div className="flex justify-between gap-3">
+          <span>{row.item}</span>
+          <span className="shrink-0 tabular-nums">
+            {flowTotal(row.rates) === undefined
+              ? "Unresolved"
+              : groupNumber.format(flowTotal(row.rates)!)}{" "}
+            {row.unit}
+          </span>
+        </div>
+        {showRates && row.rates.length > 1 && (
+          <p className="text-xs text-muted-foreground">
+            {rateExpression(row.rates)}
+          </p>
+        )}
+      </div>
+    </div>
+  ));
 }

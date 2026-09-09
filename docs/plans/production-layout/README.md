@@ -96,27 +96,30 @@ Existing plans adopt it on their next Auto-arrange, which remains undoable.
 
 ## Group inspection and selection
 
-Each group has a Lucide ScanEye icon in its upper-left corner, drawn as vector
-paths so it stays sharp with zoom and display density. There is no canvas text
+Each group has a Lucide Info icon in its upper-left corner, drawn as vector
+paths so it stays sharp with zoom and display density. The 24px icon sits 16px
+inside the group border. There is no canvas text
 header. Hover reveals the group name; the click target remains usable when
 zoomed out. Click the icon to select the members and open the group inspector.
 
-Logistics summaries show incoming/outgoing rate multiplicities, totals by item
-and destination, buildings, internal connections, belts and pipes by tier, and
+Logistics summaries show incoming/outgoing rate multiplicities, totals by item with material icons, buildings, belts and pipes by tier, and
 internal feedback return links. Balancer expressions use an inline Lucide
-ArrowRight SVG. Remainder flows identify their downstream recipe; they are not
-reported as waste. Internal recirculation is excluded from boundary throughput.
+ArrowRight SVG. The balancer expression identifies remainder flow; output totals combine
+destinations into one row per material. Internal recirculation is excluded from boundary throughput.
 Unresolved flow remains explicitly unresolved.
 
 Machine summaries show configured consumption and production (including products
-without outgoing belts), clocks, power, buildings, and boundary connections.
+without outgoing belts), clocks, power, and buildings. These inputs and outputs
+appear once; the recipe name is repeated only when the group has a custom name.
+Both group types retain a tier table without a separate connection summary;
+production tables omit the internal column.
 Rename or reset the group in the inspector; names persist through subsequent
 Auto-arrange and support undo/redo. Clicking a member card inspects that node;
 dragging a selected member moves the group. Thin outlines mark group boundaries,
 with a stronger outline for the selected group. Link strokes preserve capacity
 colors, dashed return style, and click targets.
 
-![Logistics group throughput, destinations, and inventory](logistics-inspector.png)
+![Logistics group material totals and inventory](logistics-inspector.png)
 
 ![Production summary and group renaming](rename.png)
 

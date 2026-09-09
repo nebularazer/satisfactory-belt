@@ -3,7 +3,7 @@ import { productionRegions } from "./production-regions";
 import type { CanvasDocument } from "./document";
 
 export function groupInspectIcon(region: Pick<Rectangle, "x" | "y">) {
-  return { x: region.x + 4, y: region.y + 4, width: 24, height: 24 };
+  return { x: region.x + 16, y: region.y + 16, width: 24, height: 24 };
 }
 export function hitProductionGroup(
   document: CanvasDocument,

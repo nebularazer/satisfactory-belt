@@ -106,7 +106,7 @@ test("arranges shared ingot supply into destination groups", async ({
         ),
       ),
       detail,
-      inspect: { x: ingots[0].x + 16, y: ingots[0].y + 16 },
+      inspect: { x: ingots[0].x + 28, y: ingots[0].y + 28 },
       names: ingots.map((region: any) => region.name),
       connections: document.connections,
       area: bounds(ingots),
@@ -148,6 +148,27 @@ test("arranges shared ingot supply into destination groups", async ({
     inspector.locator("svg.lucide-arrow-right").first(),
   ).toBeVisible();
   expect(await inspector.innerText()).not.toContain("→");
+  await expect(
+    inspector.getByRole("heading", { name: "Connections", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    inspector.getByRole("columnheader", { name: "Internal", exact: true }),
+  ).toBeVisible();
+  const output = inspector.getByRole("region", {
+    name: "Items out",
+    exact: true,
+  });
+  await expect(output.getByText("Iron Ingot", { exact: true })).toHaveCount(1);
+  await expect(output).toContainText("60 items/min");
+  await expect(output).not.toContainText("Iron Rod");
+  await expect(output).not.toContainText("Cast Screws");
+  await expect
+    .poll(() =>
+      output
+        .locator("img")
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
   await page.screenshot({
     path: testInfo.outputPath("logistics-inspector.png"),
   });

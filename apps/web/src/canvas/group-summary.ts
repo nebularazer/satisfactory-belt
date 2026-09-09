@@ -13,6 +13,7 @@ export const groupNumber = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 4,
 });
 export type FlowRow = {
+  itemId?: string;
   item: string;
   unit: string;
   rates: (number | undefined)[];
@@ -96,6 +97,7 @@ export function summarizeGroup(
         .join(", ");
       const key = JSON.stringify([flow.itemId, flow.unit, destination]);
       const row = rows.get(key) ?? {
+        ...(flow.itemId ? { itemId: flow.itemId } : {}),
         item: flow.itemName,
         unit: flow.itemId ? flow.unit : "",
         rates: [],
@@ -147,6 +149,7 @@ export function summarizeGroup(
     for (const rate of rates) {
       const item = findDescriptor(rate.itemId);
       const row = rows.get(rate.itemId) ?? {
+        itemId: rate.itemId,
         item: item?.name ?? rate.itemId,
         unit: item?.form === "solid" ? "items/min" : "m³/min",
         rates: [],
@@ -196,6 +199,7 @@ export function summarizeGroup(
     ],
     inputs: rows(incoming),
     outputs: rows(outgoing, true),
+    outputTotals: rows(outgoing),
     feedback: rows(feedback),
     internalCount: internal.length,
     feedbackCount: feedback.length,

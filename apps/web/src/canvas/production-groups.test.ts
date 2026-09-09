@@ -33,7 +33,7 @@ it("selects, renames, resets and persists production and logistics group names",
       groups.find((group) => group.logistics),
     ].filter((group) => !!group)) {
       expect(
-        hitProductionGroup(source, { x: group.x + 20, y: group.y + 10 })?.id,
+        hitProductionGroup(source, { x: group.x + 28, y: group.y + 28 })?.id,
       ).toBe(group.id);
       editor.dispatch({ type: "selection.group", id: group.id });
       expect(editor.getState().selectedIds).toEqual(group.nodeIds);

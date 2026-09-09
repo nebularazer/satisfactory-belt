@@ -82,8 +82,8 @@ for (const mode of ["basic", "detailed"] as const)
       return {
         id: group.id,
         name: group.name,
-        x: (group.x + 16) * viewport.zoom + viewport.x,
-        y: (group.y + 16) * viewport.zoom + viewport.y,
+        x: (group.x + 28) * viewport.zoom + viewport.x,
+        y: (group.y + 28) * viewport.zoom + viewport.y,
       };
     });
     await page.mouse.click(group.x, group.y);
@@ -101,9 +101,34 @@ for (const mode of ["basic", "detailed"] as const)
     }
     await expect(inspector).toBeVisible();
     await expect(
-      inspector.getByRole("heading", { name: "Recipe production" }),
+      inspector.getByRole("heading", { name: "Items out" }),
     ).toBeVisible();
-    await expect(inspector.locator("svg.lucide-scan-eye")).toBeVisible();
+    await expect(inspector.locator("svg.lucide-info")).toBeVisible();
+    await expect(
+      inspector.getByRole("heading", { name: "Recipe", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      inspector.getByRole("heading", { name: "Connections", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      inspector.getByRole("columnheader", { name: "Internal", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      inspector.getByRole("heading", { name: "Items in", exact: true }),
+    ).toHaveCount(1);
+    const output = inspector.getByRole("region", {
+      name: "Items out",
+      exact: true,
+    });
+    await expect(output.locator("img")).toHaveCount(1);
+    await expect
+      .poll(() =>
+        output
+          .locator("img")
+          .evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    await expect(output).not.toContainText("Iron Ingot");
     await inspector
       .getByRole("textbox", { name: "Group name" })
       .fill("A".repeat(160));

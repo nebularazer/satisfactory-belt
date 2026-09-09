@@ -12,6 +12,7 @@ import {
   Container,
   Graphics,
   GraphicsContext,
+  GraphicsPath,
   Sprite,
   Text,
   Texture,
@@ -299,14 +300,11 @@ const LUCIDE_PATHS = {
   zap: "M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z",
 } as const;
 
-// Lucide ScanEye paths (including its circular pupil), kept as vector geometry.
+// Lucide Info geometry, with the circle represented as an SVG path.
 const GROUP_INSPECT_PATHS = [
-  "M3 7V5a2 2 0 0 1 2-2h2",
-  "M17 3h2a2 2 0 0 1 2 2v2",
-  "M21 17v2a2 2 0 0 1-2 2h-2",
-  "M7 21H5a2 2 0 0 1-2-2v-2",
-  "M13 12a1 1 0 1 0-2 0 1 1 0 0 0 2 0",
-  "M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0",
+  "M22 12a10 10 0 1 0-20 0 10 10 0 0 0 20 0",
+  "M12 16v-4",
+  "M12 8h.01",
 ];
 const lucideIconContexts = new Map<string, GraphicsContext>();
 
@@ -315,9 +313,16 @@ function createLucideIcon(paths: string | readonly string[], size: number) {
   const key = pathList.join("");
   let context = lucideIconContexts.get(key);
   if (!context) {
-    context = new GraphicsContext().svg(
-      `<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${pathList.map((path) => `<path d="${path}" />`).join("")}</svg>`,
-    );
+    context = new GraphicsContext();
+    // Pixi's SVG style parser drops line caps and joins. Apply Lucide's stroke
+    // explicitly so tiny round-capped paths (such as Info's dot) stay visible.
+    for (const path of pathList)
+      context.beginPath().path(new GraphicsPath(path)).stroke({
+        color: 0xffffff,
+        width: 2,
+        cap: "round",
+        join: "round",
+      });
     lucideIconContexts.set(key, context);
   }
   const graphics = new Graphics({ context });
