@@ -4,6 +4,7 @@ This is a performance focused factory planer for the game satisfactory.
 
 ## agent instructions
 - please do not add unrequested suff - make suggestions if needed
+- install shadcn components via the shadcn cli
 
 ## tech stack
 - nodejs 24
@@ -11,7 +12,7 @@ This is a performance focused factory planer for the game satisfactory.
 - pnpm monorepo
 - oxlint and oxfmt
 - elkjs
-- pixijs
+- pixijs (WebGL only - No experimental WebGPU support yet)
 - tailwindcss
 - shadcn/ui (--preset b0)
 - vitest
