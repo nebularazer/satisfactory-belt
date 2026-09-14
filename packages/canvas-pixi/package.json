@@ -1,0 +1,17 @@
+{
+  "name": "@satisfactory-belt/canvas-pixi",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@satisfactory-belt/canvas-core": "workspace:*",
+    "pixi.js": "^8.20.1"
+  }
+}
