@@ -1,4 +1,8 @@
 {
   "files": [],
-  "references": [{ "path": "./apps/web" }]
+  "references": [
+    { "path": "./packages/canvas-core" },
+    { "path": "./packages/canvas-pixi" },
+    { "path": "./apps/web" }
+  ]
 }

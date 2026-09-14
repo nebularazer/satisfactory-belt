@@ -11,5 +11,6 @@
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.app.tsbuildinfo",
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [{ "path": "../../packages/canvas-core" }, { "path": "../../packages/canvas-pixi" }]
 }
