@@ -1,11 +1,21 @@
 import { boundsBetween, contains, fitCamera, intersects, screenToWorld, zoomAt } from "./geometry";
 import type { Bounds, Camera, Point, Size } from "./geometry";
-import { snapToGrid } from "./grid";
+import { SNAP_SIZE, snapToGrid } from "./grid";
 
 /** Geometry belongs to the host. The canvas only retains a temporary move preview. */
 export type CanvasItem = Bounds & Readonly<{ id: string; text: string }>;
 export type ItemMove = Point & Readonly<{ id: string }>;
-export type CanvasCommand = "reset" | "fit" | "zoom-in" | "zoom-out" | "actual-size" | "escape";
+export type CanvasCommand =
+  | "reset"
+  | "fit"
+  | "zoom-in"
+  | "zoom-out"
+  | "actual-size"
+  | "escape"
+  | "move-left"
+  | "move-right"
+  | "move-up"
+  | "move-down";
 export type CanvasPointer = Point &
   Readonly<{ id: number; touch?: boolean; marquee?: boolean; additive?: boolean }>;
 
@@ -308,6 +318,39 @@ export class CanvasController {
   }
 
   command(command: CanvasCommand) {
+    if (
+      command === "move-left" ||
+      command === "move-right" ||
+      command === "move-up" ||
+      command === "move-down"
+    ) {
+      if (this.gesture || this.pinch || this.waitForRelease || this.pointers.size) return;
+      const selected = this.items.filter((item) => this.selection.has(item.id));
+      if (!selected.length) return;
+      const horizontal = command === "move-left" || command === "move-right";
+      const direction = command === "move-left" || command === "move-up" ? -1 : 1;
+      const origin = selected.reduce(
+        (min, item) => Math.min(min, horizontal ? item.x : item.y),
+        Infinity,
+      );
+      // An off-grid selection reaches the next grid line in the requested direction.
+      // One shared offset preserves the group's layout; zoom never changes the step.
+      const offset = this.gridSnapping
+        ? ((direction > 0 ? Math.floor(origin / SNAP_SIZE) : Math.ceil(origin / SNAP_SIZE)) +
+            direction) *
+            SNAP_SIZE -
+          origin
+        : direction;
+      this.onMove(
+        selected.map((item) => ({
+          id: item.id,
+          x: item.x + (horizontal ? offset : 0),
+          y: item.y + (horizontal ? 0 : offset),
+        })),
+      );
+      this.emit();
+      return;
+    }
     if (command === "escape") {
       if (this.gesture || this.pinch || this.waitForRelease) this.cancel();
       else {
@@ -347,6 +390,12 @@ export function commandForKey(event: {
   if (event.ctrlKey || event.metaKey || event.altKey) return undefined;
   if (event.key === "Escape") return "escape";
   if (event.shiftKey && event.code === "Digit1") return "fit";
+  if (!event.shiftKey) {
+    if (event.key === "ArrowLeft") return "move-left";
+    if (event.key === "ArrowRight") return "move-right";
+    if (event.key === "ArrowUp") return "move-up";
+    if (event.key === "ArrowDown") return "move-down";
+  }
   if (event.key === "0") return "reset";
   if (event.key === "+" || event.key === "=") return "zoom-in";
   if (event.key === "-") return "zoom-out";

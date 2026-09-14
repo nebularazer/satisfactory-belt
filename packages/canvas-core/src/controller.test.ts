@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { CanvasController, commandForKey } from "./controller";
-import type { CanvasItem, CanvasPointer } from "./controller";
+import type { CanvasCommand, CanvasItem, CanvasPointer } from "./controller";
 import { fitCamera, MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen, zoomAt } from "./geometry";
 
 const items = [
@@ -232,6 +232,72 @@ describe("grid snapping", () => {
   });
 });
 
+describe("keyboard movement", () => {
+  it.each([
+    ["move-left", 96, 100],
+    ["move-right", 112, 100],
+    ["move-up", 100, 96],
+    ["move-down", 100, 112],
+  ] satisfies [CanvasCommand, number, number][])(
+    "%s reaches the next snap line",
+    (command, x, y) => {
+      const { canvas, onMove } = setup();
+      click(canvas, pointer(120, 120));
+      canvas.command(command);
+      expect(onMove).toHaveBeenCalledExactlyOnceWith([{ id: "a", x, y }]);
+    },
+  );
+
+  it.each([0.1, 2, 8])("moves a selected group in world units at zoom %s", (zoom) => {
+    const { canvas, onMove } = setup();
+    click(canvas, pointer(120, 120));
+    click(canvas, pointer(270, 120, { additive: true }));
+    canvas.zoomTo(zoom);
+    canvas.command("move-right");
+    expect(onMove).toHaveBeenCalledExactlyOnceWith([
+      { id: "a", x: 112, y: 100 },
+      { id: "b", x: 262, y: 100 },
+    ]);
+    canvas.setGridSnapping(false);
+    onMove.mockClear();
+    canvas.command("move-down");
+    expect(onMove).toHaveBeenCalledExactlyOnceWith([
+      { id: "a", x: 100, y: 101 },
+      { id: "b", x: 250, y: 101 },
+    ]);
+  });
+
+  it("applies repeated key presses to the host's latest geometry", () => {
+    const { canvas, onMove } = setup();
+    onMove.mockImplementation((moves) => {
+      canvas.setItems(
+        canvas.getSnapshot().items.map((item) => {
+          const move = moves.find((entry: { id: string }) => entry.id === item.id);
+          return move ? Object.assign({}, item, { x: move.x, y: move.y }) : item;
+        }),
+      );
+    });
+    click(canvas, pointer(120, 120));
+    canvas.command("move-right");
+    canvas.command("move-right");
+    canvas.command("move-down");
+    expect(canvas.getSnapshot().items[0]).toMatchObject({ x: 128, y: 112 });
+    expect([...canvas.getSnapshot().selection]).toEqual(["a"]);
+  });
+
+  it("ignores movement without selection and during an active gesture", () => {
+    const { canvas, onMove } = setup();
+    canvas.command("move-right");
+    click(canvas, pointer(120, 120));
+    canvas.pointerDown(pointer(120, 120));
+    canvas.pointerMove(pointer(140, 140));
+    const before = canvas.getSnapshot();
+    canvas.command("move-down");
+    expect(canvas.getSnapshot()).toEqual(before);
+    expect(onMove).not.toHaveBeenCalled();
+  });
+});
+
 describe("touch gestures", () => {
   it("rolls a drag back on second touch, anchors pinch, and waits for all fingers to release", () => {
     const { canvas, onMove } = setup();
@@ -284,4 +350,22 @@ it("maps view shortcuts without hijacking browser modifier shortcuts", () => {
   expect(commandForKey({ ...key, key: "!", code: "Digit1", shiftKey: true })).toBe("fit");
   expect(commandForKey({ ...key, ctrlKey: true })).toBeUndefined();
   expect(commandForKey({ ...key, metaKey: true })).toBeUndefined();
+});
+
+it("maps only unmodified arrow keys and leaves select-all to the browser", () => {
+  const key = {
+    key: "ArrowLeft",
+    code: "ArrowLeft",
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+  };
+  expect(commandForKey(key)).toBe("move-left");
+  expect(commandForKey({ ...key, key: "ArrowRight" })).toBe("move-right");
+  expect(commandForKey({ ...key, key: "ArrowUp" })).toBe("move-up");
+  expect(commandForKey({ ...key, key: "ArrowDown" })).toBe("move-down");
+  for (const modifier of ["ctrlKey", "metaKey", "altKey", "shiftKey"])
+    expect(commandForKey({ ...key, [modifier]: true })).toBeUndefined();
+  expect(commandForKey({ ...key, key: "a", ctrlKey: true })).toBeUndefined();
 });

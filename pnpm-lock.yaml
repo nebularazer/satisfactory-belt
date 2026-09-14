@@ -38,6 +38,9 @@ importers:
       '@satisfactory-belt/canvas-pixi':
         specifier: workspace:*
         version: link:../../packages/canvas-pixi
+      '@satisfactory-belt/preferences':
+        specifier: workspace:*
+        version: link:../../packages/preferences
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -95,6 +98,8 @@ importers:
       pixi.js:
         specifier: ^8.20.1
         version: 8.20.1
+
+  packages/preferences: {}
 
 packages:
 

@@ -53,7 +53,7 @@ export async function mountCanvas(
   canvas.setAttribute("role", "application");
   canvas.setAttribute(
     "aria-label",
-    "Canvas. Drag empty space to pan. Control or Command and drag to select. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
+    "Canvas. Drag empty space to pan. Control or Command and drag to select. Arrow keys move selected items. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
   );
   canvas.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none;";
   app.stage.eventMode = "none";

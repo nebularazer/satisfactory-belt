@@ -2,6 +2,7 @@ import { CanvasController, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from "@satisfactory-b
 import type { CanvasCommand, CanvasItem } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView } from "@satisfactory-belt/canvas-pixi";
+import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   Grid2X2Icon,
   MaximizeIcon,
@@ -52,7 +53,7 @@ const menuButton = (
   <Button variant="outline" size="icon" className="bg-white shadow-sm" aria-label="Canvas menu" />
 );
 
-export function App() {
+export function App({ preferences }: { preferences: Preferences }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
   const [controller] = useState(createExampleCanvas);
@@ -61,10 +62,14 @@ export function App() {
     controller.subscribe,
     () => controller.getSnapshot().camera.zoom,
   );
-  const gridSnapping = useSyncExternalStore(
-    controller.subscribe,
-    () => controller.getSnapshot().gridSnapping,
-  );
+  const { gridSnapping } = useSyncExternalStore(preferences.subscribe, preferences.getSnapshot);
+
+  useEffect(() => {
+    void preferences.load();
+  }, [preferences]);
+  useEffect(() => {
+    controller.setGridSnapping(gridSnapping);
+  }, [controller, gridSnapping]);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -147,7 +152,7 @@ export function App() {
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
               checked={gridSnapping}
-              onCheckedChange={controller.setGridSnapping}
+              onCheckedChange={preferences.setGridSnapping}
             >
               <Grid2X2Icon className="text-muted-foreground" />
               Snap to grid
