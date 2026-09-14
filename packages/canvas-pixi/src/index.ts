@@ -4,8 +4,10 @@ import {
   intersects,
   worldToScreen,
 } from "@satisfactory-belt/canvas-core";
-import type { CanvasItem, CanvasPointer, CanvasSnapshot } from "@satisfactory-belt/canvas-core";
+import type { CanvasItem, CanvasPointer } from "@satisfactory-belt/canvas-core";
 import { Application, Container, Graphics, Text } from "pixi.js";
+
+import { createGrid } from "./grid";
 
 type ItemView = {
   container: Container;
@@ -32,6 +34,7 @@ export async function mountCanvas(
   await document.fonts.load(`500 14px "${fontFamily}"`);
   if (options.signal?.aborted) return { destroy() {}, focus() {} };
   await app.init({
+    preference: ["webgl"],
     width: Math.max(1, host.clientWidth),
     height: Math.max(1, host.clientHeight),
     background: "#fafafa",
@@ -56,12 +59,11 @@ export async function mountCanvas(
   app.stage.eventMode = "none";
   host.append(canvas);
 
-  const grid = new Graphics();
+  const grid = createGrid();
   const itemsLayer = new Container();
   const overlay = new Graphics();
-  app.stage.addChild(grid, itemsLayer, overlay);
+  app.stage.addChild(grid.view, itemsLayer, overlay);
   const views = new Map<string, ItemView>();
-  let lastGridKey = "";
   let previousItems: readonly CanvasItem[] | null = null;
   let frame = 0;
   let destroyed = false;
@@ -95,29 +97,12 @@ export async function mountCanvas(
     return { container, rectangle, label, clip, item, zoom: -1, selected: false };
   }
 
-  function drawGrid(snapshot: CanvasSnapshot) {
-    const { camera, viewport } = snapshot;
-    const key = `${camera.x},${camera.y},${camera.zoom},${viewport.width},${viewport.height}`;
-    if (key === lastGridKey) return;
-    lastGridKey = key;
-    let spacing = 32 * camera.zoom;
-    while (spacing < 20) spacing *= 2;
-    while (spacing > 64) spacing /= 2;
-    grid.clear();
-    const startX = ((camera.x % spacing) + spacing) % spacing;
-    const startY = ((camera.y % spacing) + spacing) % spacing;
-    for (let x = startX; x < viewport.width; x += spacing) {
-      for (let y = startY; y < viewport.height; y += spacing) grid.circle(x, y, 0.8);
-    }
-    grid.fill("#dcdce2");
-  }
-
   function render() {
     frame = 0;
     if (destroyed) return;
     const snapshot = controller.getSnapshot();
     const { camera, viewport, selection, dragOffset, items, marquee } = snapshot;
-    drawGrid(snapshot);
+    grid.update(snapshot.camera, snapshot.viewport, resolution);
     overlay.clear();
     if (items !== previousItems) {
       const ids = new Set(items.map((item) => item.id));
@@ -357,6 +342,7 @@ export async function mountCanvas(
     options.signal?.removeEventListener("abort", destroy);
     cancelAnimationFrame(frame);
     views.clear();
+    grid.destroy();
     app.destroy(true, { children: true, texture: true, textureSource: true });
   }
   options.signal?.addEventListener("abort", destroy, { once: true });

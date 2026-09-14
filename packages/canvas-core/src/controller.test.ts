@@ -97,6 +97,7 @@ describe("pointer interactions", () => {
 
   it("previews group movement in world units and commits only on release", () => {
     const { canvas, onMove } = setup();
+    canvas.setGridSnapping(false);
     click(canvas, pointer(120, 120));
     click(canvas, pointer(270, 120, { additive: true }));
     canvas.zoomTo(2, { x: 0, y: 0 });
@@ -171,6 +172,63 @@ describe("pointer interactions", () => {
     canvas.pointerUp(pointer(140, 140));
     expect(canvas.getSnapshot().selection.size).toBe(0);
     expect(onMove).not.toHaveBeenCalled();
+  });
+});
+
+describe("grid snapping", () => {
+  it.each([0.1, 1, 2, 8])("snaps absolute positions at %s zoom after panning", (zoom) => {
+    const { canvas, onMove } = setup();
+    expect(canvas.getSnapshot().gridSnapping).toBe(true);
+    drag(canvas, pointer(400, 400), pointer(437, 421));
+    canvas.zoomTo(zoom, { x: 0, y: 0 });
+    const camera = canvas.getSnapshot().camera;
+    const start = worldToScreen({ x: 120, y: 120 }, camera);
+    // Preserve the 20-unit grab offset; the unsnapped item origin would be (-18, -34).
+    const end = worldToScreen({ x: 2, y: -14 }, camera);
+    canvas.pointerDown(pointer(start.x, start.y));
+    canvas.pointerMove(pointer(end.x, end.y));
+    expect(canvas.getSnapshot().dragOffset).toEqual({ x: -116, y: -132 });
+    expect(onMove).not.toHaveBeenCalled();
+    canvas.pointerUp(pointer(end.x, end.y));
+    expect(onMove).toHaveBeenCalledExactlyOnceWith([{ id: "a", x: -16, y: -32 }]);
+  });
+
+  it("anchors a snapped group to the grabbed item and preserves off-grid relative spacing", () => {
+    const { canvas, onMove } = setup();
+    click(canvas, pointer(120, 120));
+    click(canvas, pointer(270, 120, { additive: true }));
+    drag(canvas, pointer(270, 120), pointer(293, 131));
+    expect(onMove).toHaveBeenCalledExactlyOnceWith([
+      { id: "a", x: 122, y: 112 },
+      { id: "b", x: 272, y: 112 },
+    ]);
+  });
+
+  it("updates the preview when toggled without moving items until release", () => {
+    const { canvas, onMove } = setup();
+    const listener = vi.fn();
+    canvas.subscribe(listener);
+    canvas.pointerDown(pointer(120, 120));
+    canvas.pointerMove(pointer(130, 130));
+    expect(canvas.getSnapshot().dragOffset).toEqual({ x: 12, y: 12 });
+    canvas.setGridSnapping(false);
+    expect(canvas.getSnapshot().dragOffset).toEqual({ x: 10, y: 10 });
+    expect(canvas.getSnapshot().items).toEqual(items);
+    expect(onMove).not.toHaveBeenCalled();
+    canvas.setGridSnapping(true);
+    expect(canvas.getSnapshot().dragOffset).toEqual({ x: 12, y: 12 });
+    canvas.setGridSnapping(false);
+    canvas.pointerUp(pointer(130, 130));
+    expect(onMove).toHaveBeenCalledExactlyOnceWith([{ id: "a", x: 110, y: 110 }]);
+    canvas.command("reset");
+    expect(canvas.getSnapshot().gridSnapping).toBe(false);
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it("snaps touch drags to half-cells", () => {
+    const { canvas, onMove } = setup();
+    drag(canvas, pointer(120, 120, { touch: true }), pointer(133, 144, { touch: true }));
+    expect(onMove).toHaveBeenCalledExactlyOnceWith([{ id: "a", x: 112, y: 128 }]);
   });
 });
 

@@ -1,5 +1,6 @@
 import { boundsBetween, contains, fitCamera, intersects, screenToWorld, zoomAt } from "./geometry";
 import type { Bounds, Camera, Point, Size } from "./geometry";
+import { snapToGrid } from "./grid";
 
 /** Geometry belongs to the host. The canvas only retains a temporary move preview. */
 export type CanvasItem = Bounds & Readonly<{ id: string; text: string }>;
@@ -12,11 +13,12 @@ type Gesture = {
   kind: "pan" | "drag" | "marquee";
   pointerId: number;
   start: Point;
-  last: Point;
+  last: CanvasPointer;
   camera: Camera;
   selection: ReadonlySet<string>;
   moved: boolean;
   additive: boolean;
+  dragOrigin: Point | null;
 };
 
 type Pinch = {
@@ -33,6 +35,7 @@ export type CanvasSnapshot = Readonly<{
   viewport: Size;
   selection: ReadonlySet<string>;
   dragOffset: Point;
+  gridSnapping: boolean;
   marquee: Bounds | null;
   interaction: "idle" | "pan" | "drag" | "marquee" | "pinch";
 }>;
@@ -47,6 +50,7 @@ export class CanvasController {
   private viewport: Size = { width: 0, height: 0 };
   private selection: ReadonlySet<string> = new Set();
   private dragOffset: Point = ZERO;
+  private gridSnapping = true;
   private marquee: Bounds | null = null;
   private gesture: Gesture | null = null;
   private pinch: Pinch | null = null;
@@ -69,6 +73,7 @@ export class CanvasController {
     viewport: this.viewport,
     selection: this.selection,
     dragOffset: this.dragOffset,
+    gridSnapping: this.gridSnapping,
     marquee: this.marquee,
     interaction: this.pinch ? "pinch" : (this.gesture?.kind ?? "idle"),
   });
@@ -83,6 +88,13 @@ export class CanvasController {
   private emit() {
     for (const listener of this.listeners) listener();
   }
+
+  setGridSnapping = (enabled: boolean) => {
+    if (this.gridSnapping === enabled) return;
+    this.gridSnapping = enabled;
+    if (this.gesture?.kind === "drag" && this.gesture.moved) this.pointerMove(this.gesture.last);
+    else this.emit();
+  };
 
   setItems(items: readonly CanvasItem[]) {
     this.cancel();
@@ -169,6 +181,7 @@ export class CanvasController {
       selection: previousSelection,
       moved: false,
       additive: pointer.additive ?? false,
+      dragOrigin: kind === "drag" && item ? { x: item.x, y: item.y } : null,
     };
     this.emit();
   }
@@ -208,7 +221,15 @@ export class CanvasController {
         y: gesture.camera.y + delta.y,
       };
     } else if (gesture.kind === "drag") {
-      this.dragOffset = { x: delta.x / this.camera.zoom, y: delta.y / this.camera.zoom };
+      const offset = { x: delta.x / gesture.camera.zoom, y: delta.y / gesture.camera.zoom };
+      const origin = gesture.dragOrigin!;
+      // Snap the grabbed item's origin, preserving pointer offset and group spacing.
+      this.dragOffset = this.gridSnapping
+        ? {
+            x: snapToGrid(origin.x + offset.x) - origin.x,
+            y: snapToGrid(origin.y + offset.y) - origin.y,
+          }
+        : offset;
     } else {
       this.marquee = boundsBetween(
         screenToWorld(gesture.start, this.camera),

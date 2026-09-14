@@ -1,17 +1,26 @@
-import { CanvasController, MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
+import { CanvasController, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
 import type { CanvasCommand, CanvasItem } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView } from "@satisfactory-belt/canvas-pixi";
-import { MaximizeIcon, MenuIcon, MinusIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
+import {
+  Grid2X2Icon,
+  MaximizeIcon,
+  MenuIcon,
+  MinusIcon,
+  PlusIcon,
+  RotateCcwIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -20,10 +29,10 @@ function createExampleCanvas() {
   let items: readonly CanvasItem[] = Array.from({ length: 6 }, (_, index) => ({
     id: `rectangle-${index + 1}`,
     text: `Rectangle ${String(index + 1).padStart(2, "0")}`,
-    x: 160 + (index % 3) * 280,
-    y: 160 + Math.floor(index / 3) * 200,
-    width: 224,
-    height: 132,
+    x: (5 + (index % 3) * 9) * GRID_SIZE,
+    y: (5 + Math.floor(index / 3) * 6) * GRID_SIZE,
+    width: 7 * GRID_SIZE,
+    height: 4 * GRID_SIZE,
   }));
   const controller = new CanvasController({
     items,
@@ -51,6 +60,10 @@ export function App() {
   const zoom = useSyncExternalStore(
     controller.subscribe,
     () => controller.getSnapshot().camera.zoom,
+  );
+  const gridSnapping = useSyncExternalStore(
+    controller.subscribe,
+    () => controller.getSnapshot().gridSnapping,
   );
 
   useEffect(() => {
@@ -131,6 +144,14 @@ export function App() {
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={gridSnapping}
+              onCheckedChange={controller.setGridSnapping}
+            >
+              <Grid2X2Icon className="text-muted-foreground" />
+              Snap to grid
+            </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
