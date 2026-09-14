@@ -133,6 +133,32 @@ describe("pointer interactions", () => {
     expect(canvas.getSnapshot().camera).toEqual({ x: 0, y: 0, zoom: 1 });
   });
 
+  it("toggles items on marquee-modifier clicks, including small pointer motion", () => {
+    const { canvas, onMove } = setup();
+    click(canvas, pointer(120, 120));
+    drag(canvas, pointer(270, 120, { marquee: true }), pointer(272, 121));
+    expect([...canvas.getSnapshot().selection]).toEqual(["a", "b"]);
+    click(canvas, pointer(120, 120, { marquee: true }));
+    expect([...canvas.getSnapshot().selection]).toEqual(["b"]);
+    click(canvas, pointer(400, 400, { marquee: true }));
+    expect(canvas.getSnapshot().selection.size).toBe(0);
+    expect(onMove).not.toHaveBeenCalled();
+  });
+
+  it("replaces selection on marquee drag and restores it on cancellation", () => {
+    const { canvas, onMove } = setup();
+    click(canvas, pointer(120, 120));
+    canvas.pointerDown(pointer(270, 120, { marquee: true }));
+    expect([...canvas.getSnapshot().selection]).toEqual(["a"]);
+    canvas.pointerMove(pointer(360, 190));
+    expect([...canvas.getSnapshot().selection]).toEqual(["b"]);
+    canvas.cancel();
+    expect([...canvas.getSnapshot().selection]).toEqual(["a"]);
+    drag(canvas, pointer(270, 120, { marquee: true }), pointer(360, 190));
+    expect([...canvas.getSnapshot().selection]).toEqual(["b"]);
+    expect(onMove).not.toHaveBeenCalled();
+  });
+
   it("supports additive marquee without retaining stale preview hits", () => {
     const { canvas } = setup();
     click(canvas, pointer(120, 120));

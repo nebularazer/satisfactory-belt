@@ -58,7 +58,7 @@ export async function mountCanvas(
   canvas.setAttribute("role", "application");
   canvas.setAttribute(
     "aria-label",
-    "Canvas. Drag empty space to pan. Control or Command and drag to select. Arrow keys move selected items. Control or Command Z undoes; add Shift to redo. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
+    "Canvas. Drag empty space to pan. Shift and drag to select; Shift-click toggles an item. Arrow keys move selected items. Control or Command Z undoes; add Shift to redo. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
   );
   canvas.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none;";
   app.stage.eventMode = "none";
@@ -205,8 +205,7 @@ export async function mountCanvas(
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
       touch: event.pointerType === "touch",
-      marquee: event.ctrlKey || event.metaKey,
-      additive: event.shiftKey,
+      marquee: event.shiftKey,
     };
   }
 
@@ -240,12 +239,11 @@ export async function mountCanvas(
     (event) => {
       if (captured.has(event.pointerId)) controller.pointerMove(normalize(event));
       else if (event.pointerType !== "touch")
-        canvas.style.cursor =
-          event.ctrlKey || event.metaKey
-            ? "crosshair"
-            : controller.hitTest(normalize(event))
-              ? "move"
-              : "default";
+        canvas.style.cursor = event.shiftKey
+          ? "crosshair"
+          : controller.hitTest(normalize(event))
+            ? "move"
+            : "default";
     },
     { signal: events.signal },
   );
@@ -268,7 +266,6 @@ export async function mountCanvas(
     },
     { signal: events.signal },
   );
-  // macOS Control-click would otherwise open the native menu during marquee selection.
   canvas.addEventListener(
     "contextmenu",
     (event) => {

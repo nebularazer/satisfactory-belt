@@ -1,4 +1,4 @@
-import { MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
+import { historyCommandForKey, MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
 import type { CanvasCommand } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView } from "@satisfactory-belt/canvas-pixi";
@@ -14,6 +14,7 @@ import {
   Redo2Icon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -85,12 +86,28 @@ export function App({ preferences }: { preferences: Preferences }) {
     canvasFocus,
     undo,
     redo,
+    workspaceKeyDown,
   } = useMemo(() => {
     function zoomControl(command: CanvasCommand) {
       controller.command(command);
       view.current?.focus();
     }
     return {
+      workspaceKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+        // Canvas shortcuts are handled by the renderer; also support focused controls
+        // and portalled menus without processing the same shortcut twice.
+        if (event.defaultPrevented || event.nativeEvent.isComposing) return;
+        const target = event.target;
+        if (
+          target instanceof HTMLElement &&
+          (target.isContentEditable || target.closest("input, textarea, select, [role='textbox']"))
+        )
+          return;
+        const command = historyCommandForKey(event);
+        if (!command) return;
+        event.preventDefault();
+        historyCommand(command);
+      },
       undo: () => {
         historyCommand("undo");
         view.current?.focus();
@@ -111,7 +128,11 @@ export function App({ preferences }: { preferences: Preferences }) {
   }, [controller, historyCommand]);
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-[#fafafa]">
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Workspace shortcuts bubble from the canvas, controls, and portalled menus; preserve the main landmark.
+    <main
+      className="relative h-dvh w-full overflow-hidden bg-[#fafafa]"
+      onKeyDown={workspaceKeyDown}
+    >
       <div ref={host} className="absolute inset-0" />
       <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))]">
         <DropdownMenu>

@@ -280,11 +280,15 @@ export class CanvasController {
               y: item.y + this.dragOffset.y,
             }))
         : [];
-    if (
-      !gesture.moved &&
-      (gesture.kind === "pan" || gesture.kind === "marquee") &&
-      !gesture.additive
-    )
+    if (!gesture.moved && gesture.kind === "marquee") {
+      const item = this.hitTest(gesture.start);
+      if (item) {
+        const next = new Set(gesture.selection);
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+        this.selection = next;
+      } else if (!gesture.additive) this.selection = new Set();
+    } else if (!gesture.moved && gesture.kind === "pan" && !gesture.additive)
       this.selection = new Set();
     this.gesture = null;
     this.dragOffset = ZERO;
