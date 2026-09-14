@@ -32,6 +32,7 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
           powerConsumptionExponent: 1.321929,
         },
       },
+      fixedProducers: {},
       recipes: {
         Recipe: {
           id: "Recipe",
@@ -77,6 +78,33 @@ describe("game data validation", () => {
       catalog.recipes.Recipe.products[0].amount = value;
       expect(() => validateGameData(catalog, icons)).toThrow("amount");
     }
+  });
+  it("validates fixed producer output, interval, power and references", () => {
+    const { catalog, icons } = fixture();
+    const producer = {
+      id: "Tree",
+      name: "Tree",
+      description: "",
+      descriptorId: "TreeDescriptor",
+      iconId: hash,
+      durationSeconds: 4,
+      products: [{ itemId: "Item", amount: 1 }],
+      powerMegawatts: 0,
+      canOverclock: false,
+      events: ["EV_Christmas"],
+    };
+    catalog.fixedProducers.Tree = producer;
+    expect(() => validateGameData(catalog, icons)).not.toThrow();
+    producer.durationSeconds = 0;
+    expect(() => validateGameData(catalog, icons)).toThrow("duration");
+    producer.durationSeconds = 4;
+    producer.products = [{ itemId: "Missing", amount: 1 }];
+    expect(() => validateGameData(catalog, icons)).toThrow("Missing item");
+    producer.products = [{ itemId: "Item", amount: 0 }];
+    expect(() => validateGameData(catalog, icons)).toThrow("amount");
+    producer.products = [{ itemId: "Item", amount: 1 }];
+    producer.iconId = "Missing";
+    expect(() => validateGameData(catalog, icons)).toThrow("Missing icon");
   });
   it("rejects missing items, machines and images", () => {
     const { catalog, icons } = fixture();

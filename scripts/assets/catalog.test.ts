@@ -74,6 +74,40 @@ describe("manufacturing catalog", () => {
       { id: "Recipe_Hand_C", reason: "handcrafting" },
     ]);
   });
+  it("adds the Gift Tree as an event-restricted fixed producer, independent of translated names", () => {
+    const docs = fixture();
+    docs[0]!.Classes.push({
+      ClassName: "Desc_Gift_C",
+      mDisplayName: "Geschenk",
+      mDescription: "",
+      mForm: "RF_SOLID",
+    });
+    docs[1]!.Classes.push({ ClassName: "Desc_TreeGiftProducer_C" });
+    docs.push(
+      group("FGBuildableFactorySimpleProducer", [
+        {
+          ClassName: "Build_TreeGiftProducer_C",
+          mDisplayName: "Geschenkbaum",
+          mDescription: "",
+          mTimeToProduceItem: "4.000000",
+          mPowerConsumption: "0.000000",
+          mCanChangePotential: "False",
+          mEventType: "EV_Christmas",
+        },
+      ]),
+    );
+    const { catalog } = parseCatalog(docs, source);
+    const tree = catalog.fixedProducers.Build_TreeGiftProducer_C!;
+    expect(tree.products).toEqual([{ itemId: "Desc_Gift_C", amount: 1 }]);
+    expect(60 / tree.durationSeconds).toBe(15);
+    expect(tree.powerMegawatts).toBe(0);
+    expect(tree.canOverclock).toBe(false);
+    expect(tree.events).toEqual(["EV_Christmas"]);
+    expect(tree.iconId).toBe("Desc_TreeGiftProducer_C");
+    expect(catalog.machines.Build_TreeGiftProducer_C).toBeUndefined();
+    docs[0]!.Classes = docs[0]!.Classes.filter((entry) => entry.ClassName !== "Desc_Gift_C");
+    expect(() => parseCatalog(docs, source)).toThrow("Missing Gift Tree descriptor or gift item");
+  });
   it("accepts a recipe with no ingredients", () => {
     const docs = fixture();
     docs[3]!.Classes[0]!.mIngredients = "";

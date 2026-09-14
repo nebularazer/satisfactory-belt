@@ -1,4 +1,11 @@
-import type { GameCatalog, Ingredient, Item, Machine, Recipe } from "@satisfactory-belt/game-data";
+import type {
+  FixedProducer,
+  GameCatalog,
+  Ingredient,
+  Item,
+  Machine,
+  Recipe,
+} from "@satisfactory-belt/game-data";
 
 import { classId, parseUnreal } from "./unreal.ts";
 
@@ -32,6 +39,7 @@ export function parseCatalog(
   const items: Record<string, Item> = {};
   const machines: Record<string, Machine> = {};
   const recipes: Record<string, Recipe> = {};
+  const fixedProducers: Record<string, FixedProducer> = {};
   const excludedRecipes: ExcludedRecipe[] = [];
   for (const [id, { native, data }] of classes) {
     if (typeof data.mForm === "string" && data.mForm !== "RF_INVALID") {
@@ -51,6 +59,31 @@ export function parseCatalog(
         form,
         unit: form === "solid" ? "item" : "m3",
         iconId: id,
+      };
+    }
+    if (native === "FGBuildableFactorySimpleProducer") {
+      // Docs exposes the interval but omits the output class/count. This explicit
+      // Gift Tree mapping is one Desc_Gift_C per interval; never infer it from translated text.
+      if (id !== "Build_TreeGiftProducer_C")
+        throw new Error(`Unknown fixed producer ${id}; add its output mapping.`);
+      const descriptorId = "Desc_TreeGiftProducer_C";
+      if (
+        classes.get(descriptorId)?.native !== "FGBuildingDescriptor" ||
+        !classes.has("Desc_Gift_C")
+      )
+        throw new Error(`Missing Gift Tree descriptor or gift item.`);
+      const event = string(data, "mEventType");
+      fixedProducers[id] = {
+        id,
+        descriptorId,
+        iconId: descriptorId,
+        name: string(data, "mDisplayName"),
+        description: string(data, "mDescription"),
+        durationSeconds: number(data, "mTimeToProduceItem"),
+        products: [{ itemId: "Desc_Gift_C", amount: 1 }],
+        powerMegawatts: number(data, "mPowerConsumption"),
+        canOverclock: boolean(data, "mCanChangePotential"),
+        events: event === "EV_None" ? [] : [event],
       };
     }
     if (native === "FGBuildableManufacturer" || native === "FGBuildableManufacturerVariablePower") {
@@ -133,6 +166,7 @@ export function parseCatalog(
       source,
       items: sorted(items),
       machines: sorted(machines),
+      fixedProducers: sorted(fixedProducers),
       recipes: sorted(recipes),
     },
     excludedRecipes: excludedRecipes.toSorted((a, b) => a.id.localeCompare(b.id, "en")),
@@ -179,6 +213,12 @@ function number(data: Record<string, unknown>, field: string): number {
   )
     throw new Error(`Invalid number in ${String(data.ClassName)}.${field}.`);
   return Number(value);
+}
+function boolean(data: Record<string, unknown>, field: string): boolean {
+  const value = string(data, field);
+  if (value !== "True" && value !== "False")
+    throw new Error(`Invalid boolean in ${String(data.ClassName)}.${field}.`);
+  return value === "True";
 }
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

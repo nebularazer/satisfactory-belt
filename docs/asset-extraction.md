@@ -196,7 +196,7 @@ high-quality chroma subsampling and alpha quality 100. Raw extracted PNGs remain
 
 Every run creates a new gitignored `.assets/prepared/<locale>-<suffix>/` directory:
 
-- `catalog.json`: compact items, manufacturing machines and automated recipes,
+- `catalog.json`: compact items, manufacturing machines, fixed producers and automated recipes,
   keyed by game class ID, with locale and source JSON SHA-256.
 - `icons.json`: icon IDs mapped to WebP variants at 64, 128 and 256 pixels, including
   relative paths, dimensions, byte sizes and SHA-256 hashes.
@@ -210,7 +210,7 @@ The reusable types and semantic validator live in `packages/game-data`, exported
 Generated data and image files stay under `.assets/` for now; the web app does not
 import them. Steam access is only needed when obtaining new source files.
 
-An item's or machine's `iconId` indexes `icons.json`'s `icons` object. Its `variants`
+An item's, machine's or fixed producer's `iconId` indexes `icons.json`'s `icons` object. Its `variants`
 object has keys `64`, `128`, and `256`. Paths are relative to the prepared directory;
 choosing public URLs, `srcset`, lazy loading and Pixi texture loading belongs to UI
 integration later. Smaller variants reduce the pixels that need decoding; WebP
@@ -235,13 +235,22 @@ compression alone does not reduce GPU texture memory.
 - Fixed machine power is in MW. Variable-power machines are explicitly marked and
   recipes retain the source constant/factor parameters; zero base power is not
   presented as free operation. Power simulation and clock-speed behavior are later work.
-- Mining, water/oil extraction, power generation and the FICSMAS gift producer use
-  different game systems and are not synthesized into manufacturing recipes here.
-  The full source JSON is preserved for extending the model later.
+- `fixedProducers` includes the FICSMAS Gift Tree separately from manufacturing
+  machines and recipes. Its source interval is 4 seconds, power use is 0 MW,
+  `mCanChangePotential` disables overclocking, and `mEventType` restricts it to
+  `EV_Christmas`. The dump omits its output class/count, so the parser explicitly
+  maps this known producer to one `Desc_Gift_C` per interval (15 gifts/minute).
+  Unknown simple producers fail until their output mapping is supplied. Its icon
+  is prepared at all three WebP sizes.
+- Mining, water/oil extraction and power generation are not synthesized into
+  manufacturing recipes here. Decorative FICSMAS buildings remain excluded from
+  preparation, while their extracted PNGs remain available. The full source JSON
+  is preserved for extending the model later.
 
 The current dump has 195 items, 291 manufacturing recipes and 11 manufacturing
-machines; 581 other `FGRecipe` entries are excluded. Data validation checks quantities,
-durations, units, and every item/machine/icon reference. Source PNG hashes are checked
+machines plus one fixed producer; 581 other `FGRecipe` entries are excluded.
+Data validation checks quantities, durations, units, and every item/machine/producer/icon
+reference. Source PNG hashes are checked
 against the extraction report; each generated WebP is fully decoded to validate its
 size and unchanged transparency. Four workers bound image-processing concurrency.
 Failures leave the run marked `incomplete`; a failed run must not be consumed.
@@ -276,23 +285,23 @@ Validated on Debian Linux ARM64 with Steam manifest `4522661880264054134`:
 
 Preparation of that extraction was also validated on this host:
 
-- 195 items, 291 recipes and 11 machines; 206 descriptor references resolve to
-  203 unique image contents and 609 WebP files.
-- Quality-90 WebP totals **4.61 MiB across all three sizes**. The comparison below
-  uses the same 203 images and resized pixels in each format (bytes):
+- 195 items, 291 recipes, 11 machines and the Gift Tree; 207 descriptor references
+  resolve to 204 unique image contents and 612 WebP files.
+- Quality-90 WebP totals **4.65 MiB across all three sizes**. The comparison below
+  uses the same 204 images and resized pixels in each format (bytes):
 
 | Size |       PNG | Lossless WebP | Quality-90 WebP |
 | ---- | --------: | ------------: | --------------: |
-| 64   | 1,498,626 |     1,118,908 |         564,768 |
-| 128  | 5,006,609 |     3,121,702 |       1,370,216 |
-| 256  | 9,593,437 |     6,358,900 |       2,904,048 |
+| 64   | 1,503,987 |     1,134,164 |         567,586 |
+| 128  | 4,976,661 |     3,168,194 |       1,378,368 |
+| 256  | 9,658,007 |     6,106,738 |       2,925,746 |
 
-- All 609 written files were read back, fully decoded and checked against their
+- All 612 written files were read back, fully decoded and checked against their
   manifest hashes, dimensions and byte sizes. The converter also checked alpha
   preservation against the resized source pixels.
 - Representative quality-90/lossless samples were visually compared. Quality 90
   was selected for its smaller files; it introduces small color/detail differences.
-- 18 focused tests passed for extraction, Unreal field parsing, catalog semantics,
+- 20 focused tests passed for extraction, Unreal field parsing, catalog semantics,
   partial-export rejection, deduplication and image conversion. Type, lint and
   formatting checks passed. Incomplete extraction inputs are rejected.
 

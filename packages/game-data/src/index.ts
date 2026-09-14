@@ -30,6 +30,20 @@ export interface Machine {
   powerConsumptionExponent: number;
 }
 
+/** A building that produces a fixed output without selecting a manufacturing recipe. */
+export interface FixedProducer {
+  id: string;
+  name: string;
+  description: string;
+  descriptorId: string;
+  iconId: string;
+  durationSeconds: number;
+  products: Ingredient[];
+  powerMegawatts: number;
+  canOverclock: boolean;
+  events: string[];
+}
+
 export interface Recipe {
   id: string;
   name: string;
@@ -49,6 +63,7 @@ export interface GameCatalog {
   source: { locale: string; docsSha256: string };
   items: Record<string, Item>;
   machines: Record<string, Machine>;
+  fixedProducers: Record<string, FixedProducer>;
   recipes: Record<string, Recipe>;
 }
 
@@ -93,6 +108,32 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
     check(nonnegative(machine.powerConsumptionExponent), `Invalid power exponent for ${id}.`);
     if (machine.power.kind === "fixed")
       check(nonnegative(machine.power.megawatts), `Invalid power for ${id}.`);
+  }
+  for (const [id, producer] of Object.entries(catalog.fixedProducers)) {
+    check(id === producer.id && Boolean(producer.name.trim()), `Invalid fixed producer ${id}.`);
+    check(iconIds.has(producer.iconId), `Missing icon for ${id}.`);
+    check(
+      Number.isFinite(producer.durationSeconds) && producer.durationSeconds > 0,
+      `Invalid duration for ${id}.`,
+    );
+    check(nonnegative(producer.powerMegawatts), `Invalid power for ${id}.`);
+    check(typeof producer.canOverclock === "boolean", `Invalid overclocking flag for ${id}.`);
+    check(
+      producer.events.every((event) => /^EV_[A-Za-z0-9_]+$/.test(event)),
+      `Invalid event for ${id}.`,
+    );
+    check(producer.products.length > 0, `Missing products for ${id}.`);
+    check(
+      new Set(producer.products.map((entry) => entry.itemId)).size === producer.products.length,
+      `Duplicate product in ${id}.`,
+    );
+    for (const product of producer.products) {
+      check(
+        Object.hasOwn(catalog.items, product.itemId),
+        `Missing item ${product.itemId} in ${id}.`,
+      );
+      check(Number.isFinite(product.amount) && product.amount > 0, `Invalid amount in ${id}.`);
+    }
   }
   for (const [id, recipe] of Object.entries(catalog.recipes)) {
     check(id === recipe.id && Boolean(recipe.name.trim()), `Invalid recipe ${id}.`);

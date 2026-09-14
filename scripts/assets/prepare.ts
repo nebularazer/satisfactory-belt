@@ -62,11 +62,12 @@ Setup and scope: docs/asset-extraction.md`);
     JSON.parse(await readFile(join(input, "icons/extraction-result.json"), "utf8")),
     sourceManifest,
   );
-  const needed = new Set(
-    [...Object.values(catalog.items), ...Object.values(catalog.machines)].map(
-      (entry) => entry.iconId,
-    ),
-  );
+  const entities = [
+    ...Object.values(catalog.items),
+    ...Object.values(catalog.machines),
+    ...Object.values(catalog.fixedProducers),
+  ];
+  const needed = new Set(entities.map((entry) => entry.iconId));
   const byDescriptor = new Map(sourceIcons.map((icon) => [icon.className, icon]));
   const sources = [...needed].toSorted().map((descriptorId) => {
     const icon = byDescriptor.get(descriptorId);
@@ -84,7 +85,7 @@ Setup and scope: docs/asset-extraction.md`);
   const metadata = { input, sourceExtraction: extraction, encoding, sharpVersions: sharp.versions };
   await writeJson("preparation.json", { ...metadata, status: "incomplete" }, true);
   console.log(
-    `Output: ${output}\nCatalog: ${Object.keys(catalog.items).length} items, ${Object.keys(catalog.recipes).length} recipes, ${Object.keys(catalog.machines).length} machines.`,
+    `Output: ${output}\nCatalog: ${Object.keys(catalog.items).length} items, ${Object.keys(catalog.recipes).length} recipes, ${Object.keys(catalog.machines).length} machines, ${Object.keys(catalog.fixedProducers).length} fixed producers.`,
   );
   const { manifest, descriptorIcons, stats } = await prepareImages(
     sources,
@@ -92,7 +93,7 @@ Setup and scope: docs/asset-extraction.md`);
     encoding,
     values.compare,
   );
-  for (const entry of [...Object.values(catalog.items), ...Object.values(catalog.machines)]) {
+  for (const entry of entities) {
     const iconId = descriptorIcons.get(entry.iconId);
     if (!iconId) throw new Error(`Missing prepared icon for ${entry.id}.`);
     entry.iconId = iconId;
