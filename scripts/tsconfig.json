@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    {
+      "path": "../packages/game-data"
+    }
+  ]
+}

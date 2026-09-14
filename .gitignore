@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # custom
 .dev
+
+# Local game downloads, extraction tools and output
+/.assets/
