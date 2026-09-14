@@ -2,6 +2,8 @@
   "name": "satisfactory-belt",
   "private": true,
   "scripts": {
+    "assets:extract": "tsx scripts/assets/extract.ts",
+    "assets:prepare": "tsx scripts/assets/prepare.ts",
     "dev": "pnpm --filter @satisfactory-belt/web dev",
     "dev:https": "pnpm --filter @satisfactory-belt/web dev:https",
     "build": "pnpm -r build",
@@ -13,9 +15,13 @@
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
+    "@satisfactory-belt/game-data": "workspace:*",
+    "@types/node": "^24.13.4",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.82.0",
     "oxlint-tsgolint": "^7.0.2001",
+    "sharp": "0.35.4",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   },

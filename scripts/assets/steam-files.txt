@@ -1,0 +1,4 @@
+CommunityResources/Docs/en-US.json
+CommunityResources/FactoryGame.usmap
+CommunityResources/CustomVersions.json
+regex:^FactoryGame/Content/Paks/[^/]+\.(pak|utoc|ucas)$
