@@ -1,10 +1,18 @@
-import { historyCommandForKey, MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
+import {
+  clipboardCommandForKey,
+  deleteCommandForKey,
+  historyCommandForKey,
+  MAX_ZOOM,
+  MIN_ZOOM,
+} from "@satisfactory-belt/canvas-core";
 import type { CanvasCommand } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
-import type { CanvasView } from "@satisfactory-belt/canvas-pixi";
+import type { CanvasView, RenderPerformance } from "@satisfactory-belt/canvas-pixi";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
+  ActivityIcon,
   Grid2X2Icon,
+  Grid3X3Icon,
   MaximizeIcon,
   MenuIcon,
   MinusIcon,
@@ -16,6 +24,7 @@ import {
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 
+import { PerformanceBar } from "@/components/performance-bar";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -37,14 +46,19 @@ const menuButton = (
 export function App({ preferences }: { preferences: Preferences }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
-  const [{ controller, history, historyCommand }] = useState(createExampleCanvas);
+  const [{ controller, history, historyCommand, clipboardCommand, deleteSelection }] =
+    useState(createExampleCanvas);
   const { canUndo, canRedo } = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const [error, setError] = useState<string | null>(null);
+  const [performanceMonitor, setPerformanceMonitor] = useState<RenderPerformance | null>(null);
   const zoom = useSyncExternalStore(
     controller.subscribe,
     () => controller.getSnapshot().camera.zoom,
   );
-  const { gridSnapping } = useSyncExternalStore(preferences.subscribe, preferences.getSnapshot);
+  const { gridSnapping, showGrid, showPerformance } = useSyncExternalStore(
+    preferences.subscribe,
+    preferences.getSnapshot,
+  );
 
   useEffect(() => {
     void preferences.load();
@@ -52,6 +66,14 @@ export function App({ preferences }: { preferences: Preferences }) {
   useEffect(() => {
     controller.setGridSnapping(gridSnapping);
   }, [controller, gridSnapping]);
+
+  useEffect(() => {
+    view.current?.setShowGrid(showGrid);
+  }, [showGrid]);
+
+  useEffect(() => {
+    view.current?.setShowPerformance(showPerformance);
+  }, [showPerformance]);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -63,6 +85,9 @@ export function App({ preferences }: { preferences: Preferences }) {
       .then((mounted) => {
         if (abort.signal.aborted) return;
         view.current = mounted;
+        mounted.setShowGrid(preferences.getSnapshot().showGrid);
+        mounted.setShowPerformance(preferences.getSnapshot().showPerformance);
+        setPerformanceMonitor(mounted.performance);
         mounted.focus();
       })
       .catch((reason: unknown) => {
@@ -73,7 +98,7 @@ export function App({ preferences }: { preferences: Preferences }) {
       abort.abort();
       view.current = null;
     };
-  }, [controller, historyCommand]);
+  }, [controller, historyCommand, preferences]);
 
   const {
     reset,
@@ -94,8 +119,8 @@ export function App({ preferences }: { preferences: Preferences }) {
     }
     return {
       workspaceKeyDown: (event: KeyboardEvent<HTMLElement>) => {
-        // Canvas shortcuts are handled by the renderer; also support focused controls
-        // and portalled menus without processing the same shortcut twice.
+        // Document shortcuts also support focused controls and portalled menus.
+        // History may already have been handled by the renderer.
         if (event.defaultPrevented || event.nativeEvent.isComposing) return;
         const target = event.target;
         if (
@@ -103,6 +128,17 @@ export function App({ preferences }: { preferences: Preferences }) {
           (target.isContentEditable || target.closest("input, textarea, select, [role='textbox']"))
         )
           return;
+        if (deleteCommandForKey(event)) {
+          event.preventDefault();
+          if (!event.repeat) deleteSelection();
+          return;
+        }
+        const clipboard = clipboardCommandForKey(event);
+        if (clipboard) {
+          event.preventDefault();
+          if (!event.repeat) clipboardCommand(clipboard);
+          return;
+        }
         const command = historyCommandForKey(event);
         if (!command) return;
         event.preventDefault();
@@ -125,7 +161,7 @@ export function App({ preferences }: { preferences: Preferences }) {
       actualSize: () => zoomControl("actual-size"),
       canvasFocus: () => host.current?.querySelector("canvas") ?? null,
     };
-  }, [controller, historyCommand]);
+  }, [controller, historyCommand, clipboardCommand, deleteSelection]);
 
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Workspace shortcuts bubble from the canvas, controls, and portalled menus; preserve the main landmark.
@@ -171,12 +207,24 @@ export function App({ preferences }: { preferences: Preferences }) {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={showGrid} onCheckedChange={preferences.setShowGrid}>
+              <Grid3X3Icon className="text-muted-foreground" />
+              Show grid
+            </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={gridSnapping}
               onCheckedChange={preferences.setGridSnapping}
             >
               <Grid2X2Icon className="text-muted-foreground" />
               Snap to grid
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={showPerformance}
+              onCheckedChange={preferences.setShowPerformance}
+            >
+              <ActivityIcon className="text-muted-foreground" />
+              Show performance
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -236,6 +284,7 @@ export function App({ preferences }: { preferences: Preferences }) {
           </Button>
         </ButtonGroup>
       </div>
+      {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">
           Unable to start the canvas: {error}

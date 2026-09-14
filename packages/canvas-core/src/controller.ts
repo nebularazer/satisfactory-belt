@@ -115,6 +115,12 @@ export class CanvasController {
     this.emit();
   }
 
+  setSelection(ids: ReadonlySet<string>) {
+    this.cancel();
+    this.selection = new Set(this.items.filter((item) => ids.has(item.id)).map((item) => item.id));
+    this.emit();
+  }
+
   resize(viewport: Size) {
     if (viewport.width === this.viewport.width && viewport.height === this.viewport.height) return;
     this.cancel();
@@ -418,5 +424,31 @@ export function historyCommandForKey(event: {
   const key = event.key.toLowerCase();
   if (key === "z") return event.shiftKey ? "redo" : "undo";
   if (key === "y" && event.ctrlKey && !event.metaKey && !event.shiftKey) return "redo";
+  return undefined;
+}
+
+export function clipboardCommandForKey(event: {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}): "copy" | "paste" | undefined {
+  if (event.altKey || event.shiftKey || (!event.ctrlKey && !event.metaKey)) return undefined;
+  const key = event.key.toLowerCase();
+  if (key === "c") return "copy";
+  if (key === "v") return "paste";
+  return undefined;
+}
+
+export function deleteCommandForKey(event: {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}): "delete" | undefined {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return undefined;
+  if (event.key === "Delete" || event.key === "Backspace") return "delete";
   return undefined;
 }

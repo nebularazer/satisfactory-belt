@@ -9,6 +9,9 @@ import type { CanvasItem, CanvasPointer } from "@satisfactory-belt/canvas-core";
 import { Application, Container, Graphics, Text } from "pixi.js";
 
 import { createGrid } from "./grid";
+import { RenderPerformance } from "./performance";
+
+export { RenderPerformance } from "./performance";
 
 type ItemView = {
   container: Container;
@@ -22,7 +25,13 @@ type ItemView = {
 
 const MARQUEE_FILL = { color: "#6960d9", alpha: 0.09 };
 
-export type CanvasView = { destroy: () => void; focus: () => void };
+export type CanvasView = {
+  destroy: () => void;
+  focus: () => void;
+  setShowGrid: (visible: boolean) => void;
+  performance: RenderPerformance;
+  setShowPerformance: (visible: boolean) => void;
+};
 
 /** Owns browser resources; abort also cleans up an initialization still in flight. */
 export async function mountCanvas(
@@ -34,10 +43,18 @@ export async function mountCanvas(
     onHistoryCommand?: (command: "undo" | "redo") => void;
   } = {},
 ): Promise<CanvasView> {
+  const monitor = new RenderPerformance();
+  const abortedView: CanvasView = {
+    destroy() {},
+    focus() {},
+    setShowGrid() {},
+    setShowPerformance() {},
+    performance: monitor,
+  };
   const app = new Application();
   const fontFamily = options.fontFamily ?? "sans-serif";
   await document.fonts.load(`500 14px "${fontFamily}"`);
-  if (options.signal?.aborted) return { destroy() {}, focus() {} };
+  if (options.signal?.aborted) return abortedView;
   await app.init({
     preference: ["webgl"],
     width: Math.max(1, host.clientWidth),
@@ -50,7 +67,7 @@ export async function mountCanvas(
   });
   if (options.signal?.aborted) {
     app.destroy(true, { children: true, texture: true, textureSource: true });
-    return { destroy() {}, focus() {} };
+    return abortedView;
   }
 
   const canvas = app.canvas;
@@ -73,6 +90,7 @@ export async function mountCanvas(
   let frame = 0;
   let destroyed = false;
   let contextLost = false;
+  let showPerformance = false;
   let keyboardGroup: { code: string; token: object } | null = null;
   let resolution = window.devicePixelRatio || 1;
   const events = new AbortController();
@@ -107,9 +125,11 @@ export async function mountCanvas(
   function render() {
     frame = 0;
     if (destroyed || contextLost) return;
+    const started = monitor.enabled ? performance.now() : undefined;
+    let visibleItems = 0;
     const snapshot = controller.getSnapshot();
     const { camera, viewport, selection, dragOffset, items, marquee } = snapshot;
-    grid.update(snapshot.camera, snapshot.viewport, resolution);
+    if (grid.view.visible) grid.update(camera, viewport, resolution);
     overlay.clear();
     if (items !== previousItems) {
       const ids = new Set(items.map((item) => item.id));
@@ -135,6 +155,7 @@ export async function mountCanvas(
         if (view) view.container.visible = false;
         continue;
       }
+      if (started !== undefined) visibleItems++;
       if (!view) {
         view = createItem(item);
         views.set(item.id, view);
@@ -196,6 +217,16 @@ export async function mountCanvas(
             ? "crosshair"
             : "default";
     app.render();
+    if (started !== undefined)
+      monitor.record(performance.now() - started, visibleItems, items.length);
+  }
+
+  function syncPerformance() {
+    const enabled = showPerformance && !document.hidden && !contextLost && !destroyed;
+    if (monitor.enabled === enabled) return;
+    let visibleItems = 0;
+    if (enabled) for (const view of views.values()) if (view.container.visible) visibleItems++;
+    monitor.setEnabled(enabled, visibleItems, controller.getSnapshot().items.length);
   }
 
   function normalize(event: PointerEvent): CanvasPointer {
@@ -327,6 +358,7 @@ export async function mountCanvas(
     (event) => {
       event.preventDefault();
       contextLost = true;
+      syncPerformance();
       cancelAnimationFrame(frame);
       frame = 0;
       cancel();
@@ -337,6 +369,7 @@ export async function mountCanvas(
     "webglcontextrestored",
     () => {
       contextLost = false;
+      syncPerformance();
       // Pixi releases the source canvases after text upload; the restored GPU textures
       // are empty until their managed text entries are regenerated.
       for (const view of views.values()) view.label.unload();
@@ -350,6 +383,7 @@ export async function mountCanvas(
     "visibilitychange",
     () => {
       if (document.hidden) cancel();
+      syncPerformance();
     },
     { signal: events.signal },
   );
@@ -384,6 +418,7 @@ export async function mountCanvas(
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    monitor.destroy();
     events.abort();
     cancel();
     unsubscribe();
@@ -396,5 +431,19 @@ export async function mountCanvas(
     app.destroy(true, { children: true, texture: true, textureSource: true });
   }
   options.signal?.addEventListener("abort", destroy, { once: true });
-  return { destroy, focus: () => canvas.focus({ preventScroll: true }) };
+  return {
+    destroy,
+    performance: monitor,
+    setShowPerformance(visible) {
+      if (destroyed) return;
+      showPerformance = visible;
+      syncPerformance();
+    },
+    focus: () => canvas.focus({ preventScroll: true }),
+    setShowGrid(visible) {
+      if (destroyed || grid.view.visible === visible) return;
+      grid.view.visible = visible;
+      invalidate();
+    },
+  };
 }

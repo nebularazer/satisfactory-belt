@@ -1,8 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CanvasController, commandForKey, historyCommandForKey } from "./controller";
+import {
+  CanvasController,
+  clipboardCommandForKey,
+  commandForKey,
+  deleteCommandForKey,
+  historyCommandForKey,
+} from "./controller";
 import type { CanvasCommand, CanvasItem, CanvasPointer } from "./controller";
 import { fitCamera, MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen, zoomAt } from "./geometry";
+
+it.each(["Delete", "Backspace"])("maps unmodified %s to deletion", (key) => {
+  const event = { key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+  expect(deleteCommandForKey(event)).toBe("delete");
+  for (const modifier of ["ctrlKey", "metaKey", "altKey", "shiftKey"]) {
+    expect(deleteCommandForKey({ ...event, [modifier]: true })).toBeUndefined();
+  }
+  expect(deleteCommandForKey({ ...event, key: "a" })).toBeUndefined();
+});
 
 const items = [
   { id: "a", x: 100, y: 100, width: 100, height: 80, text: "A" },
@@ -31,6 +46,31 @@ function drag(canvas: CanvasController, start: CanvasPointer, end: CanvasPointer
   canvas.pointerMove(end);
   canvas.pointerUp(end);
 }
+
+it("replaces selection with existing IDs and cancels a pending drag", () => {
+  const { canvas, onMove } = setup();
+  canvas.pointerDown(pointer(120, 120));
+  canvas.pointerMove(pointer(180, 180));
+  const ids = new Set(["b", "missing"]);
+  canvas.setSelection(ids);
+  ids.clear();
+  canvas.pointerUp(pointer(180, 180));
+  expect(canvas.getSnapshot().selection).toEqual(new Set(["b"]));
+  expect(canvas.getSnapshot().interaction).toBe("idle");
+  expect(onMove).not.toHaveBeenCalled();
+});
+
+it("maps Control/Command copy and paste while preserving other shortcuts", () => {
+  const key = { key: "c", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false };
+  expect(clipboardCommandForKey(key)).toBeUndefined();
+  for (const modifier of ["ctrlKey", "metaKey"]) {
+    expect(clipboardCommandForKey({ ...key, [modifier]: true })).toBe("copy");
+    expect(clipboardCommandForKey({ ...key, [modifier]: true, key: "V" })).toBe("paste");
+    expect(clipboardCommandForKey({ ...key, [modifier]: true, key: "x" })).toBeUndefined();
+    expect(clipboardCommandForKey({ ...key, [modifier]: true, altKey: true })).toBeUndefined();
+    expect(clipboardCommandForKey({ ...key, [modifier]: true, shiftKey: true })).toBeUndefined();
+  }
+});
 
 describe("camera", () => {
   it("preserves the world point under the zoom anchor, including zoom limits", () => {

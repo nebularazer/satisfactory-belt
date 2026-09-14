@@ -1,4 +1,4 @@
-import type { PreferenceStore } from "@satisfactory-belt/preferences";
+import type { PreferenceStore, UserPreferences } from "@satisfactory-belt/preferences";
 
 const KEY = "satisfactory-belt:user-preferences";
 
@@ -16,12 +16,18 @@ export function createBrowserPreferenceStore(
       } catch {
         return {};
       }
-      return saved !== null &&
-        typeof saved === "object" &&
-        "gridSnapping" in saved &&
-        typeof saved.gridSnapping === "boolean"
-        ? { gridSnapping: saved.gridSnapping }
-        : {};
+      if (saved === null || typeof saved !== "object") return {};
+      return {
+        ...("gridSnapping" in saved && typeof saved.gridSnapping === "boolean"
+          ? { gridSnapping: saved.gridSnapping }
+          : {}),
+        ...("showGrid" in saved && typeof saved.showGrid === "boolean"
+          ? { showGrid: saved.showGrid }
+          : {}),
+        ...("showPerformance" in saved && typeof saved.showPerformance === "boolean"
+          ? { showPerformance: saved.showPerformance }
+          : {}),
+      } satisfies Partial<UserPreferences>;
     },
     async save(preferences) {
       storage().setItem(KEY, JSON.stringify(preferences));
