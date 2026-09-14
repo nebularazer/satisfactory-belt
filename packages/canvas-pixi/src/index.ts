@@ -1,6 +1,7 @@
 import {
   CanvasController,
   commandForKey,
+  historyCommandForKey,
   intersects,
   worldToScreen,
 } from "@satisfactory-belt/canvas-core";
@@ -27,7 +28,11 @@ export type CanvasView = { destroy: () => void; focus: () => void };
 export async function mountCanvas(
   host: HTMLElement,
   controller: CanvasController,
-  options: { signal?: AbortSignal; fontFamily?: string } = {},
+  options: {
+    signal?: AbortSignal;
+    fontFamily?: string;
+    onHistoryCommand?: (command: "undo" | "redo") => void;
+  } = {},
 ): Promise<CanvasView> {
   const app = new Application();
   const fontFamily = options.fontFamily ?? "sans-serif";
@@ -53,7 +58,7 @@ export async function mountCanvas(
   canvas.setAttribute("role", "application");
   canvas.setAttribute(
     "aria-label",
-    "Canvas. Drag empty space to pan. Control or Command and drag to select. Arrow keys move selected items. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
+    "Canvas. Drag empty space to pan. Control or Command and drag to select. Arrow keys move selected items. Control or Command Z undoes; add Shift to redo. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
   );
   canvas.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none;";
   app.stage.eventMode = "none";
@@ -67,12 +72,14 @@ export async function mountCanvas(
   let previousItems: readonly CanvasItem[] | null = null;
   let frame = 0;
   let destroyed = false;
+  let contextLost = false;
+  let keyboardGroup: { code: string; token: object } | null = null;
   let resolution = window.devicePixelRatio || 1;
   const events = new AbortController();
   const captured = new Set<number>();
 
   function invalidate() {
-    if (!destroyed && !frame) frame = requestAnimationFrame(render);
+    if (!destroyed && !contextLost && !frame) frame = requestAnimationFrame(render);
   }
 
   function textResolution(zoom: number) {
@@ -99,7 +106,7 @@ export async function mountCanvas(
 
   function render() {
     frame = 0;
-    if (destroyed) return;
+    if (destroyed || contextLost) return;
     const snapshot = controller.getSnapshot();
     const { camera, viewport, selection, dragOffset, items, marquee } = snapshot;
     grid.update(snapshot.camera, snapshot.viewport, resolution);
@@ -209,6 +216,7 @@ export async function mountCanvas(
   }
 
   function cancel() {
+    keyboardGroup = null;
     controller.cancel();
     releasePointers();
   }
@@ -217,6 +225,7 @@ export async function mountCanvas(
     "pointerdown",
     (event) => {
       if (event.button !== 0) return;
+      keyboardGroup = null;
       event.preventDefault();
       canvas.focus({ preventScroll: true });
       canvas.setPointerCapture(event.pointerId);
@@ -286,11 +295,54 @@ export async function mountCanvas(
     "keydown",
     (event) => {
       if (event.target !== canvas || event.isComposing) return;
+      const historyCommand = historyCommandForKey(event);
+      if (historyCommand && options.onHistoryCommand) {
+        event.preventDefault();
+        cancel();
+        options.onHistoryCommand(historyCommand);
+        return;
+      }
       const command = commandForKey(event);
       if (!command) return;
       event.preventDefault();
-      controller.command(command);
-      releasePointers();
+      if (command.startsWith("move-")) {
+        if (!event.repeat || keyboardGroup?.code !== event.code)
+          keyboardGroup = { code: event.code, token: {} };
+        controller.command(command, { group: keyboardGroup.token });
+      } else {
+        keyboardGroup = null;
+        controller.command(command);
+        releasePointers();
+      }
+    },
+    { signal: events.signal },
+  );
+  canvas.addEventListener(
+    "keyup",
+    (event) => {
+      if (keyboardGroup?.code === event.code) keyboardGroup = null;
+    },
+    { signal: events.signal },
+  );
+  canvas.addEventListener(
+    "webglcontextlost",
+    (event) => {
+      event.preventDefault();
+      contextLost = true;
+      cancelAnimationFrame(frame);
+      frame = 0;
+      cancel();
+    },
+    { signal: events.signal },
+  );
+  canvas.addEventListener(
+    "webglcontextrestored",
+    () => {
+      contextLost = false;
+      // Pixi releases the source canvases after text upload; the restored GPU textures
+      // are empty until their managed text entries are regenerated.
+      for (const view of views.values()) view.label.unload();
+      invalidate();
     },
     { signal: events.signal },
   );

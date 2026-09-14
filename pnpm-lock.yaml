@@ -38,6 +38,9 @@ importers:
       '@satisfactory-belt/canvas-pixi':
         specifier: workspace:*
         version: link:../../packages/canvas-pixi
+      '@satisfactory-belt/edit-history':
+        specifier: workspace:*
+        version: link:../../packages/edit-history
       '@satisfactory-belt/preferences':
         specifier: workspace:*
         version: link:../../packages/preferences
@@ -98,6 +101,8 @@ importers:
       pixi.js:
         specifier: ^8.20.1
         version: 8.20.1
+
+  packages/edit-history: {}
 
   packages/preferences: {}
 

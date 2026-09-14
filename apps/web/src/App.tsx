@@ -1,5 +1,5 @@
-import { CanvasController, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
-import type { CanvasCommand, CanvasItem } from "@satisfactory-belt/canvas-core";
+import { MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
+import type { CanvasCommand } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView } from "@satisfactory-belt/canvas-pixi";
 import type { Preferences } from "@satisfactory-belt/preferences";
@@ -10,6 +10,8 @@ import {
   MinusIcon,
   PlusIcon,
   RotateCcwIcon,
+  Undo2Icon,
+  Redo2Icon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -25,29 +27,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-function createExampleCanvas() {
-  let items: readonly CanvasItem[] = Array.from({ length: 6 }, (_, index) => ({
-    id: `rectangle-${index + 1}`,
-    text: `Rectangle ${String(index + 1).padStart(2, "0")}`,
-    x: (5 + (index % 3) * 9) * GRID_SIZE,
-    y: (5 + Math.floor(index / 3) * 6) * GRID_SIZE,
-    width: 7 * GRID_SIZE,
-    height: 4 * GRID_SIZE,
-  }));
-  const controller = new CanvasController({
-    items,
-    onMove(moves) {
-      const positions = new Map(moves.map((move) => [move.id, move]));
-      items = items.map((item) => {
-        const position = positions.get(item.id);
-        return position ? { ...item, x: position.x, y: position.y } : item;
-      });
-      controller.setItems(items);
-    },
-  });
-  return controller;
-}
+import { createExampleCanvas } from "@/lib/example-canvas";
 
 const menuButton = (
   <Button variant="outline" size="icon" className="bg-white shadow-sm" aria-label="Canvas menu" />
@@ -56,7 +36,8 @@ const menuButton = (
 export function App({ preferences }: { preferences: Preferences }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
-  const [controller] = useState(createExampleCanvas);
+  const [{ controller, history, historyCommand }] = useState(createExampleCanvas);
+  const { canUndo, canRedo } = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const [error, setError] = useState<string | null>(null);
   const zoom = useSyncExternalStore(
     controller.subscribe,
@@ -76,6 +57,7 @@ export function App({ preferences }: { preferences: Preferences }) {
     void mountCanvas(host.current!, controller, {
       signal: abort.signal,
       fontFamily: "Inter Variable",
+      onHistoryCommand: historyCommand,
     })
       .then((mounted) => {
         if (abort.signal.aborted) return;
@@ -90,25 +72,43 @@ export function App({ preferences }: { preferences: Preferences }) {
       abort.abort();
       view.current = null;
     };
-  }, [controller]);
+  }, [controller, historyCommand]);
 
-  const { reset, fit, zoomIn, zoomOut, controlZoomIn, controlZoomOut, actualSize, canvasFocus } =
-    useMemo(() => {
-      function zoomControl(command: CanvasCommand) {
-        controller.command(command);
+  const {
+    reset,
+    fit,
+    zoomIn,
+    zoomOut,
+    controlZoomIn,
+    controlZoomOut,
+    actualSize,
+    canvasFocus,
+    undo,
+    redo,
+  } = useMemo(() => {
+    function zoomControl(command: CanvasCommand) {
+      controller.command(command);
+      view.current?.focus();
+    }
+    return {
+      undo: () => {
+        historyCommand("undo");
         view.current?.focus();
-      }
-      return {
-        reset: () => controller.command("reset"),
-        fit: () => controller.command("fit"),
-        zoomIn: () => controller.command("zoom-in"),
-        zoomOut: () => controller.command("zoom-out"),
-        controlZoomIn: () => zoomControl("zoom-in"),
-        controlZoomOut: () => zoomControl("zoom-out"),
-        actualSize: () => zoomControl("actual-size"),
-        canvasFocus: () => host.current?.querySelector("canvas") ?? null,
-      };
-    }, [controller]);
+      },
+      redo: () => {
+        historyCommand("redo");
+        view.current?.focus();
+      },
+      reset: () => controller.command("reset"),
+      fit: () => controller.command("fit"),
+      zoomIn: () => controller.command("zoom-in"),
+      zoomOut: () => controller.command("zoom-out"),
+      controlZoomIn: () => zoomControl("zoom-in"),
+      controlZoomOut: () => zoomControl("zoom-out"),
+      actualSize: () => zoomControl("actual-size"),
+      canvasFocus: () => host.current?.querySelector("canvas") ?? null,
+    };
+  }, [controller, historyCommand]);
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-[#fafafa]">
@@ -160,40 +160,61 @@ export function App({ preferences }: { preferences: Preferences }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <ButtonGroup
-        aria-label="Zoom controls"
-        className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] rounded-lg bg-white shadow-sm"
-      >
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Zoom out"
-          title="Zoom out (−)"
-          disabled={zoom <= MIN_ZOOM}
-          onClick={controlZoomOut}
-        >
-          <MinusIcon />
-        </Button>
-        <Button
-          variant="outline"
-          className="tabular-nums"
-          aria-label={`Zoom ${Math.round(zoom * 100)}%. Restore 100%`}
-          title="Restore 100%"
-          onClick={actualSize}
-        >
-          {Math.round(zoom * 100)}%
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Zoom in"
-          title="Zoom in (+)"
-          disabled={zoom >= MAX_ZOOM}
-          onClick={controlZoomIn}
-        >
-          <PlusIcon />
-        </Button>
-      </ButtonGroup>
+      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] flex items-center gap-2">
+        <ButtonGroup aria-label="Zoom controls" className="rounded-lg bg-white shadow-sm">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Zoom out"
+            title="Zoom out (−)"
+            disabled={zoom <= MIN_ZOOM}
+            onClick={controlZoomOut}
+          >
+            <MinusIcon />
+          </Button>
+          <Button
+            variant="outline"
+            className="tabular-nums"
+            aria-label={`Zoom ${Math.round(zoom * 100)}%. Restore 100%`}
+            title="Restore 100%"
+            onClick={actualSize}
+          >
+            {Math.round(zoom * 100)}%
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Zoom in"
+            title="Zoom in (+)"
+            disabled={zoom >= MAX_ZOOM}
+            onClick={controlZoomIn}
+          >
+            <PlusIcon />
+          </Button>
+        </ButtonGroup>
+        <ButtonGroup aria-label="History controls" className="rounded-lg bg-white shadow-sm">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Undo"
+            title="Undo (Ctrl/Cmd+Z)"
+            disabled={!canUndo}
+            onClick={undo}
+          >
+            <Undo2Icon />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Redo"
+            title="Redo (Ctrl/Cmd+Shift+Z)"
+            disabled={!canRedo}
+            onClick={redo}
+          >
+            <Redo2Icon />
+          </Button>
+        </ButtonGroup>
+      </div>
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">
           Unable to start the canvas: {error}

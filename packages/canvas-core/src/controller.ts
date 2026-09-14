@@ -5,6 +5,7 @@ import { SNAP_SIZE, snapToGrid } from "./grid";
 /** Geometry belongs to the host. The canvas only retains a temporary move preview. */
 export type CanvasItem = Bounds & Readonly<{ id: string; text: string }>;
 export type ItemMove = Point & Readonly<{ id: string }>;
+export type MoveContext = Readonly<{ group: object }>;
 export type CanvasCommand =
   | "reset"
   | "fit"
@@ -67,11 +68,11 @@ export class CanvasController {
   private pointers = new Map<number, CanvasPointer>();
   private waitForRelease = false;
   private listeners = new Set<() => void>();
-  private onMove: (moves: readonly ItemMove[]) => void;
+  private onMove: (moves: readonly ItemMove[], context?: MoveContext) => void;
 
   constructor(options: {
     items: readonly CanvasItem[];
-    onMove: (moves: readonly ItemMove[]) => void;
+    onMove: (moves: readonly ItemMove[], context?: MoveContext) => void;
   }) {
     this.items = options.items;
     this.onMove = options.onMove;
@@ -317,7 +318,7 @@ export class CanvasController {
     this.emit();
   }
 
-  command(command: CanvasCommand) {
+  command(command: CanvasCommand, context?: MoveContext) {
     if (
       command === "move-left" ||
       command === "move-right" ||
@@ -341,13 +342,13 @@ export class CanvasController {
             SNAP_SIZE -
           origin
         : direction;
-      this.onMove(
-        selected.map((item) => ({
-          id: item.id,
-          x: item.x + (horizontal ? offset : 0),
-          y: item.y + (horizontal ? 0 : offset),
-        })),
-      );
+      const moves = selected.map((item) => ({
+        id: item.id,
+        x: item.x + (horizontal ? offset : 0),
+        y: item.y + (horizontal ? 0 : offset),
+      }));
+      if (context) this.onMove(moves, context);
+      else this.onMove(moves);
       this.emit();
       return;
     }
@@ -399,5 +400,19 @@ export function commandForKey(event: {
   if (event.key === "0") return "reset";
   if (event.key === "+" || event.key === "=") return "zoom-in";
   if (event.key === "-") return "zoom-out";
+  return undefined;
+}
+
+export function historyCommandForKey(event: {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}): "undo" | "redo" | undefined {
+  if (event.altKey || (!event.ctrlKey && !event.metaKey)) return undefined;
+  const key = event.key.toLowerCase();
+  if (key === "z") return event.shiftKey ? "redo" : "undo";
+  if (key === "y" && event.ctrlKey && !event.metaKey && !event.shiftKey) return "redo";
   return undefined;
 }

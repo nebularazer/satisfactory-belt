@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CanvasController, commandForKey } from "./controller";
+import { CanvasController, commandForKey, historyCommandForKey } from "./controller";
 import type { CanvasCommand, CanvasItem, CanvasPointer } from "./controller";
 import { fitCamera, MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen, zoomAt } from "./geometry";
 
@@ -368,4 +368,16 @@ it("maps only unmodified arrow keys and leaves select-all to the browser", () =>
   for (const modifier of ["ctrlKey", "metaKey", "altKey", "shiftKey"])
     expect(commandForKey({ ...key, [modifier]: true })).toBeUndefined();
   expect(commandForKey({ ...key, key: "a", ctrlKey: true })).toBeUndefined();
+});
+
+it("maps undo/redo shortcuts for Control and Command without plain-key interception", () => {
+  const key = { key: "z", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false };
+  expect(historyCommandForKey(key)).toBeUndefined();
+  expect(historyCommandForKey({ ...key, ctrlKey: true })).toBe("undo");
+  expect(historyCommandForKey({ ...key, metaKey: true })).toBe("undo");
+  expect(historyCommandForKey({ ...key, key: "Z", metaKey: true, shiftKey: true })).toBe("redo");
+  expect(historyCommandForKey({ ...key, ctrlKey: true, shiftKey: true })).toBe("redo");
+  expect(historyCommandForKey({ ...key, key: "y", ctrlKey: true })).toBe("redo");
+  expect(historyCommandForKey({ ...key, key: "y", metaKey: true })).toBeUndefined();
+  expect(historyCommandForKey({ ...key, ctrlKey: true, altKey: true })).toBeUndefined();
 });

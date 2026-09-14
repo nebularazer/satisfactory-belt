@@ -15,6 +15,7 @@
   "references": [
     { "path": "../../packages/canvas-core" },
     { "path": "../../packages/canvas-pixi" },
-    { "path": "../../packages/preferences" }
+    { "path": "../../packages/preferences" },
+    { "path": "../../packages/edit-history" }
   ]
 }

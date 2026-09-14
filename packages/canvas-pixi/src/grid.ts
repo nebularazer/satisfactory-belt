@@ -1,6 +1,6 @@
 import type { Camera, Size } from "@satisfactory-belt/canvas-core";
 import { GRID_SIZE } from "@satisfactory-belt/canvas-core";
-import { Mesh, MeshGeometry, Shader, UniformGroup } from "pixi.js";
+import { Geometry, Mesh, Shader, UniformGroup } from "pixi.js";
 
 const vertex = `
 precision highp float;
@@ -36,10 +36,16 @@ export function createGrid() {
     gl: { vertex, fragment },
     resources: { gridUniforms: uniforms },
   });
-  const geometry = new MeshGeometry({
-    positions: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
-    uvs: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
-    indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+  const geometry = new Geometry({
+    attributes: {
+      aPosition: {
+        buffer: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+        format: "float32x2",
+        stride: 8,
+        offset: 0,
+      },
+    },
+    indexBuffer: new Uint16Array([0, 1, 2, 0, 2, 3]),
   });
   const view = new Mesh({ geometry, shader, eventMode: "none" });
   let destroyed = false;
@@ -61,7 +67,7 @@ export function createGrid() {
     if (destroyed) return;
     destroyed = true;
     view.destroy();
-    geometry.destroy();
+    geometry.destroy(true);
     // Shader programs are cached by Pixi and may be shared by another mounted canvas.
     shader.destroy();
   }
