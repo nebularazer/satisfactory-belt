@@ -413,3 +413,62 @@ it("retains extraction settings through movement, copy/paste and undo and refres
   expect(getDisplay(miner.id)?.title).toBe("Copper Ore");
   expect(getDisplay(miner.id)?.ports[0]?.iconId).toBe("Copper");
 });
+
+it("keeps transient port selection across movement and metadata edits, but clears removed ports", () => {
+  const { controller, history, historyCommand, deleteSelection, catalog } = createTestEditor();
+  const anchor = { nodeId: "machine-1", portKey: "output:Desc_WAT1_C" };
+  controller.selectPort(anchor);
+  expect(history.getSnapshot().canUndo).toBe(false);
+  const compatible = controller.getPortSnapshot().compatible;
+  controller.command("move-right");
+  expect(controller.getPortSnapshot().anchor).toEqual(anchor);
+  expect(controller.getPortSnapshot().compatible).toBe(compatible);
+  historyCommand("undo");
+  expect(controller.getPortSnapshot().anchor).toEqual(anchor);
+  history.update((nodes) =>
+    nodes.map((node) => (node.id === anchor.nodeId ? { ...node, machineCount: 5 } : node)),
+  );
+  expect(controller.getPortSnapshot().anchor).toEqual(anchor);
+  deleteSelection();
+  expect(controller.getPortSnapshot().anchor).toBeNull();
+  historyCommand("undo");
+  expect(controller.getPortSnapshot().anchor).toBeNull();
+  controller.selectPort(anchor);
+  catalog.recipes.Empty = { ...catalog.recipes.Recipe!, id: "Empty", products: [] };
+  history.update((nodes) =>
+    nodes.map((node) => (node.id === anchor.nodeId ? { ...node, recipeId: "Empty" } : node)),
+  );
+  expect(controller.getPortSnapshot().anchor).toBeNull();
+});
+
+it("publishes logistics wildcard targets and revalidates preview after slot changes", () => {
+  const { controller, history, catalog } = createTestEditor();
+  for (const kind of ["splitter", "merger"] as const)
+    catalog.logistics[kind] = {
+      id: kind,
+      name: kind,
+      kind,
+      description: "",
+      descriptorId: kind,
+      iconId: kind,
+    };
+  history.update((nodes) => [
+    ...nodes,
+    { kind: "logistics", id: "logistics", partId: "merger", x: 1200, y: 160 },
+  ]);
+  const anchor = { nodeId: "machine-1", portKey: "output:Desc_WAT1_C" };
+  const target = { nodeId: "logistics", portKey: "input:2" };
+  controller.selectPort(anchor);
+  expect(controller.getPortSnapshot().compatible.size).toBe(3);
+  controller.selectPort(target);
+  expect(controller.getPortSnapshot().preview).toEqual(target);
+  history.update((nodes) =>
+    nodes.map((node) => (node.kind === "logistics" ? { ...node, partId: "splitter" } : node)),
+  );
+  expect(controller.getPortSnapshot().anchor).toEqual(anchor);
+  expect(controller.getPortSnapshot().preview).toBeNull();
+  expect(controller.getPortSnapshot().compatible.size).toBe(1);
+  controller.clearPorts();
+  controller.selectPort({ nodeId: "logistics", portKey: "input:0" });
+  expect(controller.getPortSnapshot().compatible.size).toBe(6);
+});

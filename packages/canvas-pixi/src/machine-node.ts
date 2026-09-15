@@ -1,14 +1,9 @@
-import {
-  FOOTER_Y,
-  HEADER_HEIGHT,
-  NODE_SIZE,
-  PIPE_PORT_RADIUS,
-  PORT_RADIUS,
-} from "@satisfactory-belt/factory-core";
+import { FOOTER_Y, HEADER_HEIGHT, NODE_SIZE } from "@satisfactory-belt/factory-core";
 import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import { CanvasTextMetrics, Container, Graphics, Sprite, Text } from "pixi.js";
 
 import type { IconCache } from "./icon-cache";
+import { PortHighlights } from "./port-highlights";
 import { CANVAS_PALETTES } from "./theme";
 import type { CanvasPalette } from "./theme";
 
@@ -21,6 +16,7 @@ const CLOCK = '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>';
 type IconView = { sprite: Sprite; placeholder: Graphics; id: string; size: number };
 
 export class MachineNodeView {
+  readonly portHighlights: PortHighlights;
   readonly container = new Container({ eventMode: "none" });
   private background = new Graphics();
   private content = new Container({ eventMode: "none" });
@@ -36,7 +32,8 @@ export class MachineNodeView {
   constructor(fontFamily: string, cache: IconCache) {
     this.fontFamily = fontFamily;
     this.cache = cache;
-    this.container.addChild(this.background, this.content);
+    this.portHighlights = new PortHighlights();
+    this.container.addChild(this.background, this.content, this.portHighlights.view);
   }
 
   update(
@@ -61,8 +58,8 @@ export class MachineNodeView {
         .roundRect(0, 0, display.size, display.size, 8)
         .fill(this.palette.card)
         .stroke({
-          color: selected ? this.palette.selection : this.palette.border,
-          width: (selected ? 1.5 : 1) / zoom,
+          color: selected ? this.palette.highlight : this.palette.separator,
+          width: 1,
         });
       this.zoom = zoom;
       this.selected = selected;
@@ -88,11 +85,12 @@ export class MachineNodeView {
     if (display.layout === "logistics") {
       this.icon(display.machineIconId, display.size / 2, display.size / 2, 64, 0.7);
     } else {
+      // Stop at the inner edge of the one-unit node border.
       const lines = new Graphics()
-        .moveTo(0, HEADER_HEIGHT)
-        .lineTo(NODE_SIZE, HEADER_HEIGHT)
-        .moveTo(0, FOOTER_Y)
-        .lineTo(NODE_SIZE, FOOTER_Y)
+        .moveTo(0.5, HEADER_HEIGHT)
+        .lineTo(NODE_SIZE - 0.5, HEADER_HEIGHT)
+        .moveTo(0.5, FOOTER_Y)
+        .lineTo(NODE_SIZE - 0.5, FOOTER_Y)
         .stroke({ color: this.palette.separator, width: 1 });
       this.content.addChild(lines);
       this.icon(display.machineIconId, 32, 32, 40);
@@ -100,26 +98,10 @@ export class MachineNodeView {
       this.label(display.subtitle, 64, 44, 176, 12, "400", this.palette.muted);
     }
 
-    const markers = new Graphics();
     for (const port of display.ports) {
-      const colors = this.palette[port.direction];
-      if (port.transport === "pipe") {
-        markers.poly([
-          port.x,
-          port.y - PIPE_PORT_RADIUS,
-          port.x + PIPE_PORT_RADIUS,
-          port.y,
-          port.x,
-          port.y + PIPE_PORT_RADIUS,
-          port.x - PIPE_PORT_RADIUS,
-          port.y,
-        ]);
-      } else markers.circle(port.x, port.y, PORT_RADIUS);
-      markers.fill(colors.fill).stroke({ color: colors.stroke, width: 2 });
       if (port.iconId)
         this.icon(port.iconId, port.direction === "input" ? 28 : display.size - 28, port.y, 24);
     }
-    this.content.addChild(markers);
     if (display.layout === "logistics") return;
     this.symbol(ZAP, 12, 232, this.palette.power.stroke, this.palette.power.fill);
     this.label(display.powerLabel, 32, 240, 80, 11, "500", this.palette.footer);

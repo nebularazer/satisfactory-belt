@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { KeyboardEvent } from "react";
 
 import { PerformanceBar } from "@/components/performance-bar";
+import { PortChooser } from "@/components/port-chooser";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -367,6 +368,7 @@ function CanvasWorkspace({
           </Button>
         </ButtonGroup>
       </div>
+      <PortChooser controller={controller} getDisplay={getDisplay} assets={assets} />
       {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">

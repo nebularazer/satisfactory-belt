@@ -1,6 +1,6 @@
 # Port selection and compatible targets
 
-Proposed next step after the machine-node design. Implement port selection,
+Port selection follows the machine-node design. Implement port selection,
 touch handling and compatibility highlights first. Actual links, routing and
 connection history belong to the subsequent connection step.
 
@@ -35,7 +35,9 @@ this preview action after validating the pair again.
 | Escape                                           | Clear port mode first; a subsequent Escape uses normal canvas behavior     |
 
 The inspector shows the material icon/name, input/output label, machine/recipe,
-transport type, and compatible-target count. Show full, untruncated names here;
+transport type, and compatible-target count. Logistics ports show “Any solid material”,
+the splitter/merger name and numbered input/output slot, using the machine icon.
+Show full, untruncated names here;
 do not add full-name hover tooltips to the nodes. With no matches, say “No compatible
 inputs” or “No compatible outputs”; selecting such a port is still valid.
 Keep the inspector compact: selected-node port controls, selected-port details,
@@ -142,15 +144,27 @@ and reduced zoom. This follows [W3C's guidance on using color](https://www.w3.or
 ## Compatibility rules
 
 Identify a port by `{ nodeId, portKey }`, using the existing keys such as
-`input:Desc_Water_C`. Do not use array indices, icon IDs, localized names or screen
-coordinates as identity.
+`input:Desc_Water_C`. Logistics slots retain their existing keys (`input:0`,
+`output:0`, `output:1`, etc.); the number identifies a stable physical slot, not
+its position in a display array. Do not use array indices, icon IDs, localized
+names or screen coordinates as identity.
 
 Normalize a proposed pair into output → input, then require:
 
 1. Both ports still exist and belong to different nodes.
 2. Exactly one is an output and the other an input.
-3. Both have the same `itemId`.
-4. Both have the same transport type (`belt` or `pipe`).
+3. Both have the same transport type (`belt` or `pipe`).
+4. Both have the same `itemId`, **or** either is a logistics belt port with
+   `itemId: null`, meaning **any solid material**.
+
+Include splitter and merger ports in canvas selection, the chooser, inspector,
+and compatibility highlights. Unassigned logistics inputs accept any solid-material
+output over a belt; unassigned logistics outputs can supply any solid-material
+belt input. Two opposite-direction logistics belt ports on different nodes are
+also compatible. A wildcard never accepts fluids or gases over pipes. Selecting
+a preview pair does not assign or propagate material through a splitter/merger.
+Concrete machine ports still require matching items even when logistics nodes
+are present; a splitter does not make Iron Ore compatible with Iron Plate.
 
 For example, a Water Extractor output can target Cooling System's Water input.
 It cannot target its Nitrogen Gas input, although both use pipes. An Iron Ore
@@ -172,7 +186,8 @@ actual connections are introduced and validated again at connection commit time.
 
 1. **Domain rules in `factory-core`.** Add stable port references and a pure
    `getPortCompatibility(anchor, candidate)` result. Expose semantic port metadata
-   independently of labels/styles. Index ports by item, transport and direction;
+   independently of labels/styles. Index ports by item, transport and direction,
+   including any-solid belt buckets;
    rebuild when node configuration changes, not on pointer movement or camera
    changes. The host resolves IDs from the current document before evaluating.
 
@@ -218,18 +233,19 @@ actual connections are introduced and validated again at connection commit time.
    automation can test pointer sequences, but also check finger occlusion and
    pinch behavior on a real touch device before calling touch support complete.
 
-| Regression case                                            | Expected result                                 |
-| ---------------------------------------------------------- | ----------------------------------------------- |
-| Slight finger movement, then release                       | One port selection, no node move                |
-| Swipe starting on a port                                   | Pan; no selection or preview-pair commit        |
-| Second finger during a port press                          | Pinch; no accidental port activation on release |
-| Ambiguous hit between adjacent ports                       | Chooser; no arbitrary target selected           |
-| Port hidden beneath a node                                 | Not selectable through the covering card        |
-| Pan/pinch after choosing a source                          | Source persists; highlights track camera        |
-| Compatible and incompatible pipe materials                 | Only the same material is highlighted           |
-| Delete/undo/change a source's recipe or extracted resource | Revalidate IDs and remove stale highlights      |
-| Keyboard use inside inspector                              | Port navigation; no accidental node nudges      |
-| Idle with many compatible targets                          | Zero recurring canvas renders                   |
+| Regression case                                            | Expected result                                           |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| Slight finger movement, then release                       | One port selection, no node move                          |
+| Swipe starting on a port                                   | Pan; no selection or preview-pair commit                  |
+| Second finger during a port press                          | Pinch; no accidental port activation on release           |
+| Ambiguous hit between adjacent ports                       | Chooser; no arbitrary target selected                     |
+| Port hidden beneath a node                                 | Not selectable through the covering card                  |
+| Pan/pinch after choosing a source                          | Source persists; highlights track camera                  |
+| Logistics ports and solid/pipe targets                     | Belt solids and other logistics ports match; pipes do not |
+| Compatible and incompatible pipe materials                 | Only the same material is highlighted                     |
+| Delete/undo/change a source's recipe or extracted resource | Revalidate IDs and remove stale highlights                |
+| Keyboard use inside inspector                              | Port navigation; no accidental node nudges                |
+| Idle with many compatible targets                          | Zero recurring canvas renders                             |
 
 Acceptance: a user can select a port, identify every compatible counterpart and
 choose a preview target using taps alone, with reliable cancellation and no

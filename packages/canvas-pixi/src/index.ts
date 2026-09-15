@@ -136,7 +136,7 @@ export async function mountCanvas(
       const width = item.width * camera.zoom;
       const height = item.height * camera.zoom;
       let view = views.get(item.id);
-      const margin = (Math.max(PORT_RADIUS, PIPE_PORT_RADIUS) + 1) * camera.zoom;
+      const margin = (Math.max(PORT_RADIUS, PIPE_PORT_RADIUS) + 1) * camera.zoom + 64;
       if (
         !intersects(
           {
@@ -161,8 +161,10 @@ export async function mountCanvas(
       view.container.visible = true;
       view.container.position.set(position.x, position.y);
       const display = options.getDisplay(item.id);
-      if (display) view.update(display, camera.zoom, resolution, selected, palette);
-      else view.container.visible = false;
+      if (display) {
+        view.update(display, camera.zoom, resolution, selected, palette);
+        view.portHighlights.update(item.id, display, snapshot.ports, palette);
+      } else view.container.visible = false;
     }
 
     itemsLayer.sortableChildren = true;
@@ -182,7 +184,9 @@ export async function mountCanvas(
           ? "move"
           : snapshot.interaction === "marquee"
             ? "crosshair"
-            : "default";
+            : snapshot.ports.hover.length || snapshot.ports.pending.length
+              ? "pointer"
+              : "default";
     app.render();
     if (started !== undefined)
       monitor.record(performance.now() - started, visibleItems, items.length);
@@ -236,13 +240,17 @@ export async function mountCanvas(
     "pointermove",
     (event) => {
       if (captured.has(event.pointerId)) controller.pointerMove(normalize(event));
-      else if (event.pointerType !== "touch")
+      else if (event.pointerType !== "touch") {
+        controller.hoverPort(normalize(event));
         canvas.style.cursor =
           event.shiftKey || event.ctrlKey || event.metaKey
             ? "crosshair"
-            : controller.hitTest(normalize(event))
-              ? "move"
-              : "default";
+            : controller.getPortSnapshot().hover.length
+              ? "pointer"
+              : controller.hitTest(normalize(event))
+                ? "move"
+                : "default";
+      }
     },
     { signal: events.signal },
   );
@@ -257,6 +265,9 @@ export async function mountCanvas(
     { signal: events.signal },
   );
 
+  canvas.addEventListener("pointerleave", () => controller.hoverPort(null), {
+    signal: events.signal,
+  });
   canvas.addEventListener("pointercancel", cancel, { signal: events.signal });
   canvas.addEventListener(
     "lostpointercapture",
@@ -387,6 +398,7 @@ export async function mountCanvas(
     monitor.destroy();
     events.abort();
     cancel();
+    controller.clearPorts();
     unsubscribe();
     observer.disconnect();
     densityQuery.removeEventListener("change", onDensityChange);
