@@ -1,3 +1,4 @@
+import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { PreferenceStore, UserPreferences } from "@satisfactory-belt/preferences";
 
 const KEY = "satisfactory-belt:user-preferences";
@@ -18,6 +19,7 @@ export function createBrowserPreferenceStore(
       }
       if (saved === null || typeof saved !== "object") return {};
       return {
+        ...("theme" in saved && isThemePreference(saved.theme) ? { theme: saved.theme } : {}),
         ...("gridSnapping" in saved && typeof saved.gridSnapping === "boolean"
           ? { gridSnapping: saved.gridSnapping }
           : {}),

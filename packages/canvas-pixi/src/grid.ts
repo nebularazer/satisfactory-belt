@@ -18,15 +18,17 @@ varying vec2 vScreen;
 uniform vec2 uOffset;
 uniform float uSpacing;
 uniform float uPixelSize;
+uniform vec3 uColor;
 void main() {
   vec2 cell = mod(vScreen - uOffset + uSpacing * 0.5, uSpacing) - uSpacing * 0.5;
   float coverage = 1.0 - smoothstep(0.8 - uPixelSize * 0.5, 0.8 + uPixelSize * 0.5, length(cell));
-  gl_FragColor = vec4(vec3(204.0, 205.0, 214.0) / 255.0 * coverage, coverage);
+  gl_FragColor = vec4(uColor * coverage, coverage);
 }`;
 
 /** A root-level viewport background: one quad, no per-dot geometry or texture uploads. */
-export function createGrid() {
+export function createGrid(color: readonly number[]) {
   const uniforms = new UniformGroup({
+    uColor: { value: new Float32Array(color), type: "vec3<f32>" },
     uViewport: { value: new Float32Array([1, 1]), type: "vec2<f32>" },
     uOffset: { value: new Float32Array(2), type: "vec2<f32>" },
     uSpacing: { value: GRID_SIZE, type: "f32" },
@@ -72,5 +74,9 @@ export function createGrid() {
     shader.destroy();
   }
 
-  return { view, update, destroy };
+  function setColor(nextColor: readonly number[]) {
+    uniforms.uniforms.uColor.set(nextColor);
+  }
+
+  return { view, update, setColor, destroy };
 }

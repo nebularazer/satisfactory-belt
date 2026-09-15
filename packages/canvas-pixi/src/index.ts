@@ -15,14 +15,17 @@ import { createGrid } from "./grid";
 import { IconCache } from "./icon-cache";
 import { MachineNodeView } from "./machine-node";
 import { RenderPerformance } from "./performance";
+import { CANVAS_PALETTES } from "./theme";
+import type { CanvasTheme } from "./theme";
+
+export type { CanvasTheme } from "./theme";
 
 export { RenderPerformance } from "./performance";
-
-const MARQUEE_FILL = { color: "#6960d9", alpha: 0.09 };
 
 export type CanvasView = {
   destroy: () => void;
   focus: () => void;
+  setTheme: (theme: CanvasTheme) => void;
   setShowGrid: (visible: boolean) => void;
   performance: RenderPerformance;
   setShowPerformance: (visible: boolean) => void;
@@ -36,6 +39,7 @@ export async function mountCanvas(
     getDisplay: (id: string) => NodeDisplay | undefined;
     iconManifest: IconManifest;
     assetBaseUrl: string;
+    theme?: CanvasTheme;
     signal?: AbortSignal;
     fontFamily?: string;
     onHistoryCommand?: (command: "undo" | "redo") => void;
@@ -45,10 +49,12 @@ export async function mountCanvas(
   const abortedView: CanvasView = {
     destroy() {},
     focus() {},
+    setTheme() {},
     setShowGrid() {},
     setShowPerformance() {},
     performance: monitor,
   };
+  let palette = CANVAS_PALETTES[options.theme ?? "light"];
   const app = new Application();
   const fontFamily = options.fontFamily ?? "sans-serif";
   await Promise.all(
@@ -59,7 +65,7 @@ export async function mountCanvas(
     preference: ["webgl"],
     width: Math.max(1, host.clientWidth),
     height: Math.max(1, host.clientHeight),
-    background: "#fafafa",
+    background: palette.background,
     antialias: true,
     autoStart: false,
     autoDensity: true,
@@ -81,7 +87,7 @@ export async function mountCanvas(
   app.stage.eventMode = "none";
   host.append(canvas);
 
-  const grid = createGrid();
+  const grid = createGrid(palette.grid);
   const itemsLayer = new Container();
   const overlay = new Graphics();
   app.stage.addChild(grid.view, itemsLayer, overlay);
@@ -155,7 +161,7 @@ export async function mountCanvas(
       view.container.visible = true;
       view.container.position.set(position.x, position.y);
       const display = options.getDisplay(item.id);
-      if (display) view.update(display, camera.zoom, resolution, selected);
+      if (display) view.update(display, camera.zoom, resolution, selected, palette);
       else view.container.visible = false;
     }
 
@@ -166,8 +172,8 @@ export async function mountCanvas(
       overlay
         .rect(position.x, position.y, marquee.width * camera.zoom, marquee.height * camera.zoom)
         // oxlint-disable-next-line unicorn/no-array-fill-with-reference-type -- Pixi Graphics.fill accepts a style; this is not Array.fill.
-        .fill(MARQUEE_FILL)
-        .stroke({ color: "#6960d9", width: 1 });
+        .fill({ color: palette.selection, alpha: 0.09 })
+        .stroke({ color: palette.selection, width: 1 });
     }
     canvas.style.cursor =
       snapshot.interaction === "pan" || snapshot.interaction === "pinch"
@@ -395,6 +401,14 @@ export async function mountCanvas(
   return {
     destroy,
     performance: monitor,
+    setTheme(theme) {
+      const next = CANVAS_PALETTES[theme];
+      if (destroyed || palette === next) return;
+      palette = next;
+      app.renderer.background.color = palette.background;
+      grid.setColor(palette.grid);
+      invalidate();
+    },
     setShowPerformance(visible) {
       if (destroyed) return;
       showPerformance = visible;

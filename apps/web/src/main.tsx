@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
 import { createBrowserPreferenceStore } from "./lib/browser-preference-store";
+import { createBrowserTheme } from "./lib/browser-theme";
 
 import "./index.css";
 
@@ -17,8 +18,11 @@ const preferences = new Preferences(createBrowserPreferenceStore(), (error) => {
   console.warn("Unable to persist user preferences; this session remains usable.", error);
 });
 
-createRoot(root).render(
-  <StrictMode>
-    <App preferences={preferences} />
-  </StrictMode>,
-);
+void preferences.load().then(() => {
+  const theme = createBrowserTheme(preferences);
+  createRoot(root).render(
+    <StrictMode>
+      <App preferences={preferences} theme={theme} />
+    </StrictMode>,
+  );
+});

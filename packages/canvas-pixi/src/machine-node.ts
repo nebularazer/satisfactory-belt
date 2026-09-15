@@ -9,18 +9,14 @@ import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import { CanvasTextMetrics, Container, Graphics, Sprite, Text } from "pixi.js";
 
 import type { IconCache } from "./icon-cache";
+import { CANVAS_PALETTES } from "./theme";
+import type { CanvasPalette } from "./theme";
 
 // Lucide Zap and Clock SVG paths, ISC license, from lucide-react 1.45.0.
 // Separate arc flags/numbers explicitly for Pixi’s SVG parser.
 const ZAP =
   '<path d="M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z"/>';
-const CLOCK = '<circle cx="12" cy="12" r="10" fill="#e2f3fb"/><path d="M12 6v6l4 2"/>';
-
-// Inspired by the game's orange inputs and green/teal outputs, adapted to white cards.
-const PORT_COLORS = {
-  input: { stroke: "#d77732", fill: "#fff0df" },
-  output: { stroke: "#239c83", fill: "#e1f5ed" },
-} as const;
+const CLOCK = '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>';
 
 type IconView = { sprite: Sprite; placeholder: Graphics; id: string; size: number };
 
@@ -31,6 +27,7 @@ export class MachineNodeView {
   private texts: Text[] = [];
   private icons: IconView[] = [];
   private display: NodeDisplay | null = null;
+  private palette: CanvasPalette = CANVAS_PALETTES.light;
   private selected = false;
   private zoom = -1;
   private fontFamily: string;
@@ -42,8 +39,15 @@ export class MachineNodeView {
     this.container.addChild(this.background, this.content);
   }
 
-  update(display: NodeDisplay, zoom: number, resolution: number, selected: boolean) {
-    const changed = this.display !== display;
+  update(
+    display: NodeDisplay,
+    zoom: number,
+    resolution: number,
+    selected: boolean,
+    palette: CanvasPalette,
+  ) {
+    const changed = this.display !== display || this.palette !== palette;
+    this.palette = palette;
     if (changed) {
       this.content.removeChildren().forEach((child) => child.destroy({ children: true }));
       this.texts = [];
@@ -55,8 +59,11 @@ export class MachineNodeView {
       this.background
         .clear()
         .roundRect(0, 0, display.size, display.size, 8)
-        .fill("#ffffff")
-        .stroke({ color: selected ? "#6960d9" : "#d8d9e0", width: (selected ? 1.5 : 1) / zoom });
+        .fill(this.palette.card)
+        .stroke({
+          color: selected ? this.palette.selection : this.palette.border,
+          width: (selected ? 1.5 : 1) / zoom,
+        });
       this.zoom = zoom;
       this.selected = selected;
       this.container.scale.set(zoom);
@@ -86,16 +93,16 @@ export class MachineNodeView {
         .lineTo(NODE_SIZE, HEADER_HEIGHT)
         .moveTo(0, FOOTER_Y)
         .lineTo(NODE_SIZE, FOOTER_Y)
-        .stroke({ color: "#ececf0", width: 1 });
+        .stroke({ color: this.palette.separator, width: 1 });
       this.content.addChild(lines);
       this.icon(display.machineIconId, 32, 32, 40);
-      this.label(display.title, 64, 23, 176, 15, "600", "#30313b");
-      this.label(display.subtitle, 64, 44, 176, 12, "400", "#757681");
+      this.label(display.title, 64, 23, 176, 15, "600", this.palette.title);
+      this.label(display.subtitle, 64, 44, 176, 12, "400", this.palette.muted);
     }
 
     const markers = new Graphics();
     for (const port of display.ports) {
-      const colors = PORT_COLORS[port.direction];
+      const colors = this.palette[port.direction];
       if (port.transport === "pipe") {
         markers.poly([
           port.x,
@@ -114,11 +121,11 @@ export class MachineNodeView {
     }
     this.content.addChild(markers);
     if (display.layout === "logistics") return;
-    this.symbol(ZAP, 12, 232, "#cd921a", "#f7ce65");
-    this.label(display.powerLabel, 32, 240, 80, 11, "500", "#656774");
+    this.symbol(ZAP, 12, 232, this.palette.power.stroke, this.palette.power.fill);
+    this.label(display.powerLabel, 32, 240, 80, 11, "500", this.palette.footer);
     if (display.clockLabel) {
-      this.symbol(CLOCK, 120, 232, "#3299b5");
-      this.label(display.clockLabel, 140, 240, 49, 11, "500", "#656774");
+      this.symbol(CLOCK, 120, 232, this.palette.clock.stroke, this.palette.clock.fill);
+      this.label(display.clockLabel, 140, 240, 49, 11, "500", this.palette.footer);
     }
     if (display.sloops) {
       this.icon(display.sloops.iconId, 207, 240, 18);
@@ -129,7 +136,7 @@ export class MachineNodeView {
         27,
         11,
         "500",
-        display.sloops.used ? "#6960d9" : "#656774",
+        display.sloops.used ? this.palette.selection : this.palette.footer,
       );
     }
   }
@@ -172,8 +179,8 @@ export class MachineNodeView {
   private icon(id: string, x: number, y: number, size: number, opacity = 1) {
     const placeholder = new Graphics()
       .roundRect(x - size / 2, y - size / 2, size, size, 4)
-      .fill("#f0f0f3")
-      .stroke({ color: "#d8d9e0", width: 1 });
+      .fill(this.palette.placeholder)
+      .stroke({ color: this.palette.border, width: 1 });
     const sprite = new Sprite({ anchor: 0.5 });
     sprite.position.set(x, y);
     sprite.alpha = opacity;
