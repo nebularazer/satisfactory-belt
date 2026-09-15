@@ -71,7 +71,7 @@ function fixture() {
           name: id,
           description: "",
           form: "solid",
-        sinkable: false,
+          sinkable: false,
           unit: "item",
           iconId: `${id}-icon`,
         },

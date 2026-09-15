@@ -12,6 +12,7 @@ import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
+  SearchIcon,
   Grid2X2Icon,
   Grid3X3Icon,
   MaximizeIcon,
@@ -28,6 +29,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 
+import { CatalogSearch } from "@/components/catalog-search";
 import { PerformanceBar } from "@/components/performance-bar";
 import { PortChooser } from "@/components/port-chooser";
 import { Button } from "@/components/ui/button";
@@ -50,6 +52,9 @@ import { createExampleFactory } from "@/lib/example-factory";
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
+
+const searchMenuFocus = () =>
+  document.querySelector<HTMLButtonElement>('button[aria-label="Canvas menu"]');
 
 const menuButton = (
   <Button
@@ -97,6 +102,8 @@ function CanvasWorkspace({
   theme: BrowserTheme;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
   const view = useRef<CanvasView | null>(null);
   const [{ controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay }] =
     useState(() => createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)));
@@ -187,7 +194,7 @@ function CanvasWorkspace({
       workspaceKeyDown: (event: KeyboardEvent<HTMLElement>) => {
         // Document shortcuts also support focused controls and portalled menus.
         // History may already have been handled by the renderer.
-        if (event.defaultPrevented || event.nativeEvent.isComposing) return;
+        if (searchOpen || event.defaultPrevented || event.nativeEvent.isComposing) return;
         const target = event.target;
         if (
           target instanceof HTMLElement &&
@@ -227,7 +234,7 @@ function CanvasWorkspace({
       actualSize: () => zoomControl("actual-size"),
       canvasFocus: () => host.current?.querySelector("canvas") ?? null,
     };
-  }, [controller, historyCommand, clipboardCommand, deleteSelection]);
+  }, [controller, historyCommand, clipboardCommand, deleteSelection, searchOpen]);
 
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Workspace shortcuts bubble from the canvas, controls, and portalled menus; preserve the main landmark.
@@ -235,6 +242,12 @@ function CanvasWorkspace({
       className="relative h-dvh w-full overflow-hidden bg-[#fafafa] dark:bg-[#18181b]"
       onKeyDown={workspaceKeyDown}
     >
+      <CatalogSearch
+        assets={assets}
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        finalFocus={searchMenuFocus}
+      />
       <div ref={host} className="absolute inset-0" />
       <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))]">
         <DropdownMenu>
@@ -243,6 +256,10 @@ function CanvasWorkspace({
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-50" sideOffset={8} finalFocus={canvasFocus}>
             <DropdownMenuGroup>
+              <DropdownMenuItem onClick={openSearch}>
+                <SearchIcon className="text-muted-foreground" />
+                Search catalog
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={reset}>
                 <RotateCcwIcon className="text-muted-foreground" />
                 Reset view

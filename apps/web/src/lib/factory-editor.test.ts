@@ -372,7 +372,7 @@ it("retains extraction settings through movement, copy/paste and undo and refres
       name: `${id} Ore`,
       description: "",
       form: "solid",
-        sinkable: false,
+      sinkable: false,
       unit: "item",
       iconId: id,
     };
