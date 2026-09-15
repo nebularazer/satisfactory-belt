@@ -2,6 +2,9 @@ import { GRID_SIZE, SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
+import { validateSplitterProgram } from "./splitters";
+import type { SplitterProgram } from "./splitters";
+
 export const NODE_SIZE = 8 * GRID_SIZE;
 export const LOGISTICS_NODE_SIZE = 4 * GRID_SIZE;
 export const HEADER_HEIGHT = 2 * GRID_SIZE;
@@ -23,6 +26,7 @@ export type ManufacturingNode = NodeBase &
 export type FactoryNode =
   | ManufacturingNode
   | LogisticsNode
+  | (NodeBase & Readonly<{ kind: "sink"; sinkId: string }>)
   | (NodeBase &
       Readonly<{
         kind: "extractor";
@@ -42,15 +46,16 @@ export type LogisticsNode = Readonly<{
   x: number;
   y: number;
   partId: string;
+  program?: SplitterProgram;
 }>;
 
 export type PortDisplay = Readonly<{
   key: string;
   direction: "input" | "output";
   transport: "belt" | "pipe";
-  itemId: string;
+  itemId: string | null;
   name: string;
-  iconId: string;
+  iconId: string | null;
   x: number;
   y: number;
 }>;
@@ -101,9 +106,10 @@ export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): Nod
     throw new Error(`Invalid position on ${node.id}.`);
   const part = catalog.logistics[node.partId];
   if (!part) throw new Error(`Missing logistics part ${node.partId}.`);
+  validateSplitterProgram(part.kind, node.program, catalog);
   const ports: LogisticsDisplay["ports"][number][] = [];
   for (const direction of ["input", "output"] as const) {
-    const count = (part.kind === "splitter") === (direction === "output") ? 3 : 1;
+    const count = (part.kind !== "merger") === (direction === "output") ? 3 : 1;
     for (let slot = 0; slot < count; slot++) {
       ports.push({
         key: `${direction}:${slot}`,
@@ -165,6 +171,37 @@ export function resolveMachineNode(
         y: rows[index]!,
       };
     });
+  }
+  if (node.kind === "sink") {
+    const sink = catalog.sinks[node.sinkId];
+    if (!sink) throw new Error(`Missing AWESOME Sink ${node.sinkId}.`);
+    const power: PowerDisplay = {
+      kind: "known",
+      megawatts: node.machineCount * sink.powerMegawatts,
+    };
+    return {
+      layout: "machine",
+      size: NODE_SIZE,
+      title: sink.name,
+      subtitle: `${node.machineCount}× ${sink.name}`,
+      machineIconId: sink.iconId,
+      ports: [
+        {
+          key: "input:0",
+          direction: "input",
+          transport: "belt",
+          itemId: null,
+          iconId: null,
+          name: "Sinkable materials",
+          x: 0,
+          y: portRows(1)[0]!,
+        },
+      ],
+      power,
+      powerLabel: formatPower(power),
+      clockLabel: null,
+      sloops: null,
+    };
   }
   if (node.kind === "extractor") {
     const extractor = catalog.extractors[node.extractorId];
@@ -268,3 +305,7 @@ export function resolveMachineNode(
   };
 }
 export * from "./ports";
+export * from "./links";
+
+export * from "./splitters";
+export * from "./semantic-ports";

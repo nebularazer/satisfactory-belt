@@ -69,6 +69,28 @@ export function createExampleFactory(catalog: GameCatalog): readonly FactoryNode
       x: 35 * GRID_SIZE,
       y: 11 * GRID_SIZE,
     },
+    {
+      kind: "logistics",
+      id: "smart-splitter",
+      partId: "Build_ConveyorAttachmentSplitterSmart_C",
+      x: 35 * GRID_SIZE,
+      y: 17 * GRID_SIZE,
+    },
+    {
+      kind: "logistics",
+      id: "programmable-splitter",
+      partId: "Build_ConveyorAttachmentSplitterProgrammable_C",
+      x: 35 * GRID_SIZE,
+      y: 23 * GRID_SIZE,
+    },
+    {
+      kind: "sink",
+      id: "awesome-sink",
+      sinkId: "Build_ResourceSink_C",
+      machineCount: 1,
+      x: 35 * GRID_SIZE,
+      y: 29 * GRID_SIZE,
+    },
   );
   return nodes;
 }

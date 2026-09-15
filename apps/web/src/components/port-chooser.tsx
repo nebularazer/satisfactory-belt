@@ -38,7 +38,7 @@ export function PortChooser({
   function label(ref: PortReference | null) {
     const data = describe(ref);
     return data
-      ? `${data.port.itemId === null ? `Any solid material · ${data.port.name}` : `${data.port.name} · ${data.port.direction}`} · ${data.node.title}${data.node.layout === "machine" ? ` · ${data.node.subtitle}` : ""}`
+      ? `${data.port.itemId === null ? `${data.node.layout === "machine" ? "" : "Any solid material · "}${data.port.name}` : `${data.port.name} · ${data.port.direction}`} · ${data.node.title}${data.node.layout === "machine" ? ` · ${data.node.subtitle}` : ""}`
       : "";
   }
   function icon(ref: PortReference) {

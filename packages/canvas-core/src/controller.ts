@@ -1,6 +1,14 @@
 import { boundsBetween, contains, fitCamera, intersects, screenToWorld, zoomAt } from "./geometry";
 import type { Bounds, Camera, Point, Size } from "./geometry";
 import { SNAP_SIZE, snapToGrid } from "./grid";
+import {
+  emptyLinkSelection,
+  hitTestLinks,
+  segmentGuides,
+  routeLink,
+  translateGuides,
+} from "./links";
+import type { CanvasLink, LinkHit, LinkSelection, RouteGuide } from "./links";
 import { emptyPortSelection, hitTestPorts, portId, samePort } from "./ports";
 import type { CanvasPort, PortCompatibility, PortReference, PortSelection } from "./ports";
 
@@ -23,7 +31,8 @@ export type CanvasPointer = Point &
   Readonly<{ id: number; touch?: boolean; marquee?: boolean; additive?: boolean }>;
 
 type Gesture = {
-  kind: "pan" | "drag" | "marquee" | "port";
+  kind: "pan" | "drag" | "marquee" | "port" | "link" | "segment";
+  linkHits?: readonly LinkHit[];
   pointerId: number;
   start: Point;
   last: CanvasPointer;
@@ -44,6 +53,8 @@ type Pinch = {
 
 export type CanvasSnapshot = Readonly<{
   ports: PortSelection;
+  links: readonly CanvasLink[];
+  linkSelection: LinkSelection;
   items: readonly CanvasItem[];
   camera: Camera;
   viewport: Size;
@@ -51,7 +62,7 @@ export type CanvasSnapshot = Readonly<{
   dragOffset: Point;
   gridSnapping: boolean;
   marquee: Bounds | null;
-  interaction: "idle" | "pan" | "drag" | "marquee" | "pinch" | "port";
+  interaction: "idle" | "pan" | "drag" | "marquee" | "pinch" | "port" | "link" | "segment";
 }>;
 
 const ORIGIN: Camera = { x: 0, y: 0, zoom: 1 };
@@ -59,6 +70,17 @@ const ZERO: Point = { x: 0, y: 0 };
 const DRAG_THRESHOLD = 4;
 
 export class CanvasController {
+  private links: readonly CanvasLink[] = [];
+  private linkState: LinkSelection = emptyLinkSelection();
+  private linkPreviewCache: {
+    links: readonly CanvasLink[];
+    preview: LinkSelection["preview"];
+    offset: Point;
+    selection: ReadonlySet<string>;
+    result: readonly CanvasLink[];
+  } | null = null;
+  private onConnect?: (a: PortReference, b: PortReference) => PortCompatibility;
+  private onRoute?: (id: string, guides: readonly RouteGuide[]) => void;
   private portGeometry: readonly CanvasPort[] = [];
   private portState: PortSelection = emptyPortSelection();
   private hoverPoint: CanvasPointer | null = null;
@@ -83,14 +105,20 @@ export class CanvasController {
 
   constructor(options: {
     items: readonly CanvasItem[];
+    onConnect?: (a: PortReference, b: PortReference) => PortCompatibility;
+    onRoute?: (id: string, guides: readonly RouteGuide[]) => void;
     onMove: (moves: readonly ItemMove[], context?: MoveContext) => void;
   }) {
+    this.onConnect = options.onConnect;
+    this.onRoute = options.onRoute;
     this.items = options.items;
     this.onMove = options.onMove;
   }
 
   getSnapshot = (): CanvasSnapshot => ({
     ports: this.portState,
+    links: this.getVisibleLinks(),
+    linkSelection: this.linkState,
     items: this.items,
     camera: this.camera,
     viewport: this.viewport,
@@ -115,6 +143,74 @@ export class CanvasController {
         this.portState = { ...this.portState, hover };
     }
     for (const listener of this.listeners) listener();
+  }
+
+  getLinkSnapshot = () => this.linkState;
+  setLinks(links: readonly CanvasLink[]) {
+    this.links = links;
+    if (this.linkState.selected && !links.some((link) => link.id === this.linkState.selected))
+      this.linkState = emptyLinkSelection();
+  }
+  selectLink = (id: string) => {
+    if (!this.links.some((link) => link.id === id)) return;
+    this.cancel(false);
+    this.selection = new Set();
+    this.portState = emptyPortSelection();
+    this.linkState = { selected: id, focusedSegment: null, chooser: null, preview: null };
+    this.emit();
+  };
+  chooseLinkHit = (hit: LinkHit) => {
+    this.selectLink(hit.id);
+    this.linkState = { ...this.linkState, focusedSegment: hit.segment };
+    this.emit();
+  };
+  dismissLinkChooser = () => {
+    this.linkState = { ...this.linkState, chooser: null };
+    this.emit();
+  };
+  private getVisibleLinks(): readonly CanvasLink[] {
+    if (!this.dragOffset.x && !this.dragOffset.y && !this.linkState.preview) return this.links;
+    const cached = this.linkPreviewCache;
+    if (
+      cached &&
+      cached.links === this.links &&
+      cached.preview === this.linkState.preview &&
+      cached.offset === this.dragOffset &&
+      cached.selection === this.selection
+    )
+      return cached.result;
+    const result = this.links.map((link) => {
+      const sourceMoved = this.selection.has(link.output.nodeId),
+        targetMoved = this.selection.has(link.input.nodeId);
+      const preview = this.linkState.preview?.id === link.id ? this.linkState.preview : null;
+      if (
+        !preview &&
+        ((!this.dragOffset.x && !this.dragOffset.y) || (!sourceMoved && !targetMoved))
+      )
+        return link;
+      const move = (point: Point, moved: boolean) =>
+        moved ? { x: point.x + this.dragOffset.x, y: point.y + this.dragOffset.y } : point;
+      const guides =
+        preview?.guides ??
+        (sourceMoved && targetMoved ? translateGuides(link.guides, this.dragOffset) : link.guides);
+      return {
+        ...link,
+        points: routeLink(
+          move(link.points[0]!, sourceMoved),
+          move(link.points.at(-1)!, targetMoved),
+          [],
+          guides,
+        ),
+      };
+    });
+    this.linkPreviewCache = {
+      links: this.links,
+      preview: this.linkState.preview,
+      offset: this.dragOffset,
+      selection: this.selection,
+      result,
+    };
+    return result;
   }
 
   getPortSnapshot = () => this.portState;
@@ -177,6 +273,7 @@ export class CanvasController {
   selectPort = (ref: PortReference) => {
     const port = this.portGeometry.find((entry) => samePort(entry, ref));
     if (!port) return;
+    this.linkState = emptyLinkSelection();
     const anchor = this.portGeometry.find((entry) => samePort(entry, this.portState.anchor));
     if (samePort(anchor ?? null, port)) {
       this.clearPorts();
@@ -190,7 +287,14 @@ export class CanvasController {
         compatible: new Set(this.targets(ref).map(portId)),
       };
     } else {
-      const result = this.compatibility(anchor, port);
+      let result = this.compatibility(anchor, port);
+      if (result.compatible && this.onConnect) {
+        result = this.onConnect(anchor, port);
+        if (result.compatible) {
+          this.clearPorts();
+          return;
+        }
+      }
       this.portState = {
         ...this.portState,
         chooser: null,
@@ -204,7 +308,8 @@ export class CanvasController {
   setGridSnapping = (enabled: boolean) => {
     if (this.gridSnapping === enabled) return;
     this.gridSnapping = enabled;
-    if (this.gesture?.kind === "drag" && this.gesture.moved) this.pointerMove(this.gesture.last);
+    if ((this.gesture?.kind === "drag" || this.gesture?.kind === "segment") && this.gesture.moved)
+      this.pointerMove(this.gesture.last);
     else this.emit();
   };
 
@@ -221,6 +326,7 @@ export class CanvasController {
   setSelection(ids: ReadonlySet<string>) {
     this.cancel();
     this.portState = emptyPortSelection();
+    this.linkState = emptyLinkSelection();
     this.selection = new Set(this.items.filter((item) => ids.has(item.id)).map((item) => item.id));
     this.emit();
   }
@@ -237,6 +343,49 @@ export class CanvasController {
     }
     this.viewport = viewport;
     this.emit();
+  }
+
+  getCursor(pointer = this.hoverPoint): string {
+    if (this.pinch || this.gesture?.kind === "pan") return "grabbing";
+    if (this.gesture?.kind === "drag") return "move";
+    if (this.gesture?.kind === "marquee" || pointer?.marquee) return "crosshair";
+    if (this.gesture?.kind === "segment") {
+      const hit = this.gesture.linkHits![0]!;
+      const points = this.links.find((link) => link.id === hit.id)?.points;
+      return points && points[hit.segment]!.x === points[hit.segment + 1]!.x
+        ? "col-resize"
+        : "row-resize";
+    }
+    if (!pointer) return "default";
+    const ports = this.portHits(pointer);
+    if (ports.length) {
+      const anchor = this.portGeometry.find((port) => samePort(port, this.portState.anchor));
+      const invalid =
+        anchor &&
+        ports.every(
+          (port) =>
+            port.direction !== anchor.direction && !this.compatibility(anchor, port).compatible,
+        );
+      return invalid ? "not-allowed" : "pointer";
+    }
+    if (this.hitTest(pointer)) return "move";
+    const handles = hitTestLinks(
+      pointer,
+      !!pointer.touch,
+      this.camera,
+      this.links,
+      this.linkState.selected,
+      true,
+    );
+    if (handles.length === 1) {
+      const hit = handles[0]!,
+        points = this.links.find((link) => link.id === hit.id)!.points;
+      return points[hit.segment]!.x === points[hit.segment + 1]!.x ? "col-resize" : "row-resize";
+    }
+    return hitTestLinks(pointer, !!pointer.touch, this.camera, this.links, this.linkState.selected)
+      .length
+      ? "pointer"
+      : "default";
   }
 
   hitTest(screen: Point): CanvasItem | undefined {
@@ -262,6 +411,7 @@ export class CanvasController {
         this.selection = selection;
       this.dragOffset = ZERO;
       this.marquee = null;
+      this.linkState = { ...this.linkState, preview: null, chooser: null };
       this.gesture = null;
       this.portState = { ...this.portState, pending: [], chooser: null, hover: [] };
       this.pinch = {
@@ -280,13 +430,37 @@ export class CanvasController {
     let kind: Gesture["kind"] = "pan";
     const candidates = !pointer.marquee && !pointer.additive ? this.portHits(pointer) : [];
     this.portState = { ...this.portState, chooser: null };
+    this.linkState = { ...this.linkState, chooser: null };
+    let handles =
+      !pointer.marquee && !pointer.additive && !item
+        ? hitTestLinks(
+            pointer,
+            !!pointer.touch,
+            this.camera,
+            this.links,
+            this.linkState.selected,
+            true,
+          )
+        : [];
+    const focused = handles.find((hit) => hit.segment === this.linkState.focusedSegment);
+    if (focused) handles = [focused];
+    const linkHits = handles.length
+      ? handles
+      : !item && !pointer.marquee && !pointer.additive
+        ? hitTestLinks(pointer, !!pointer.touch, this.camera, this.links, this.linkState.selected)
+        : [];
     if (candidates.length) {
       kind = "port";
       this.portState = { ...this.portState, pending: candidates };
+    } else if (linkHits.length) {
+      kind = handles.length === 1 ? "segment" : "link";
+      this.portState = emptyPortSelection();
     } else if (pointer.marquee) {
+      this.linkState = emptyLinkSelection();
       kind = "marquee";
       this.portState = emptyPortSelection();
     } else if (item) {
+      this.linkState = emptyLinkSelection();
       this.portState = emptyPortSelection();
       if (pointer.additive) {
         const next = new Set(this.selection);
@@ -304,6 +478,7 @@ export class CanvasController {
     }
     this.gesture = {
       kind,
+      linkHits,
       pointerId: pointer.id,
       start: pointer,
       last: pointer,
@@ -350,12 +525,30 @@ export class CanvasController {
     )
       return;
     gesture.moved = true;
-    if (gesture.kind === "port") {
+    if (gesture.kind === "port" || gesture.kind === "link") {
       gesture.kind = "pan";
       this.portState = { ...this.portState, pending: [], hover: [] };
     }
     const delta = { x: pointer.x - gesture.start.x, y: pointer.y - gesture.start.y };
-    if (gesture.kind === "pan") {
+    if (gesture.kind === "segment") {
+      const hit = gesture.linkHits![0]!;
+      const link = this.links.find((entry) => entry.id === hit.id)!;
+      const a = link.points[hit.segment]!,
+        b = link.points[hit.segment + 1]!;
+      const axis = a.x === b.x ? "x" : "y";
+      const value = a[axis] + delta[axis] / gesture.camera.zoom;
+      this.linkState = {
+        ...this.linkState,
+        preview: {
+          id: link.id,
+          guides: segmentGuides(
+            link.points,
+            hit.segment,
+            this.gridSnapping ? snapToGrid(value) : value,
+          ),
+        },
+      };
+    } else if (gesture.kind === "pan") {
       this.camera = {
         ...gesture.camera,
         x: gesture.camera.x + delta.x,
@@ -400,6 +593,19 @@ export class CanvasController {
     }
     const gesture = this.gesture;
     if (!gesture || gesture.pointerId !== pointer.id) return;
+    if (gesture.kind === "segment" || gesture.kind === "link") {
+      this.gesture = null;
+      const preview = this.linkState.preview;
+      this.linkState = { ...this.linkState, preview: null };
+      if (gesture.moved && preview) this.onRoute?.(preview.id, preview.guides);
+      else {
+        const hits = gesture.linkHits!;
+        if (hits.length === 1) this.selectLink(hits[0]!.id);
+        else this.linkState = { ...this.linkState, chooser: { point: pointer, candidates: hits } };
+      }
+      this.emit();
+      return;
+    }
     if (gesture.kind === "port") {
       const candidates = this.portState.pending;
       this.gesture = null;
@@ -431,6 +637,7 @@ export class CanvasController {
       } else if (!gesture.additive) this.selection = new Set();
     } else if (!gesture.moved && gesture.kind === "pan" && !gesture.additive) {
       this.selection = new Set();
+      this.linkState = emptyLinkSelection();
       this.portState = emptyPortSelection();
     }
     this.gesture = null;
@@ -444,6 +651,7 @@ export class CanvasController {
   cancel(notify = true) {
     const transient = this.portState.pending.length || this.portState.hover.length;
     this.hoverPoint = null;
+    this.linkState = { ...this.linkState, preview: null };
     this.portState = { ...this.portState, pending: [], hover: [] };
     const active = this.gesture ?? this.pinch;
     if (active) {
@@ -511,6 +719,7 @@ export class CanvasController {
       if (this.gesture || this.pinch || this.waitForRelease) this.cancel();
       else {
         this.selection = new Set();
+        this.linkState = emptyLinkSelection();
         this.emit();
       }
       return;

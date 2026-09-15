@@ -28,6 +28,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 
+import { LinkChooser } from "@/components/link-chooser";
 import { PerformanceBar } from "@/components/performance-bar";
 import { PortChooser } from "@/components/port-chooser";
 import { Button } from "@/components/ui/button";
@@ -98,8 +99,11 @@ function CanvasWorkspace({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
-  const [{ controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay }] =
-    useState(() => createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)));
+  const [editor] = useState(() =>
+    createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)),
+  );
+  const { controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay } =
+    editor;
   const { canUndo, canRedo } = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [performanceMonitor, setPerformanceMonitor] = useState<RenderPerformance | null>(null);
@@ -368,6 +372,7 @@ function CanvasWorkspace({
           </Button>
         </ButtonGroup>
       </div>
+      <LinkChooser editor={editor} assets={assets} />
       <PortChooser controller={controller} getDisplay={getDisplay} assets={assets} />
       {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
       {error && (

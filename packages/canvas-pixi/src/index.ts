@@ -14,6 +14,7 @@ import { Application, Container, Graphics } from "pixi.js";
 import { createGrid } from "./grid";
 import { IconCache } from "./icon-cache";
 import { MachineNodeView } from "./machine-node";
+import { drawMaterialLinks } from "./material-links";
 import { RenderPerformance } from "./performance";
 import { CANVAS_PALETTES } from "./theme";
 import type { CanvasTheme } from "./theme";
@@ -81,16 +82,18 @@ export async function mountCanvas(
   canvas.setAttribute("role", "application");
   canvas.setAttribute(
     "aria-label",
-    "Canvas. Drag empty space to pan. Shift, Control, or Command and drag to select; modifier-click toggles an item. Arrow keys move selected items. Control or Command Z undoes; add Shift to redo. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
+    "Canvas. Select a port, then a compatible port to connect. Select a link to move its segment handles. Delete removes selected nodes or links. Drag empty space to pan. Shift, Control, or Command and drag to select; modifier-click toggles an item. Arrow keys move selected items. Control or Command Z undoes; add Shift to redo. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
   );
   canvas.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none;";
   app.stage.eventMode = "none";
   host.append(canvas);
 
   const grid = createGrid(palette.grid);
+  const linksLayer = new Graphics();
+  const linkHandlesLayer = new Graphics();
   const itemsLayer = new Container();
   const overlay = new Graphics();
-  app.stage.addChild(grid.view, itemsLayer, overlay);
+  app.stage.addChild(grid.view, linksLayer, linkHandlesLayer, itemsLayer, overlay);
   const views = new Map<string, MachineNodeView>();
   const icons = new IconCache(options.iconManifest, options.assetBaseUrl, invalidate);
   let previousItems: readonly CanvasItem[] | null = null;
@@ -116,6 +119,7 @@ export async function mountCanvas(
     const { camera, viewport, selection, dragOffset, items, marquee } = snapshot;
     if (grid.view.visible) grid.update(camera, viewport, resolution);
     overlay.clear();
+    drawMaterialLinks(linksLayer, linkHandlesLayer, snapshot, palette);
     if (items !== previousItems) {
       const ids = new Set(items.map((item) => item.id));
       for (const [id, view] of views) {
@@ -177,16 +181,7 @@ export async function mountCanvas(
         .fill({ color: palette.selection, alpha: 0.09 })
         .stroke({ color: palette.selection, width: 1 });
     }
-    canvas.style.cursor =
-      snapshot.interaction === "pan" || snapshot.interaction === "pinch"
-        ? "grabbing"
-        : snapshot.interaction === "drag"
-          ? "move"
-          : snapshot.interaction === "marquee"
-            ? "crosshair"
-            : snapshot.ports.hover.length || snapshot.ports.pending.length
-              ? "pointer"
-              : "default";
+    canvas.style.cursor = controller.getCursor();
     app.render();
     if (started !== undefined)
       monitor.record(performance.now() - started, visibleItems, items.length);
@@ -242,14 +237,7 @@ export async function mountCanvas(
       if (captured.has(event.pointerId)) controller.pointerMove(normalize(event));
       else if (event.pointerType !== "touch") {
         controller.hoverPort(normalize(event));
-        canvas.style.cursor =
-          event.shiftKey || event.ctrlKey || event.metaKey
-            ? "crosshair"
-            : controller.getPortSnapshot().hover.length
-              ? "pointer"
-              : controller.hitTest(normalize(event))
-                ? "move"
-                : "default";
+        canvas.style.cursor = controller.getCursor(normalize(event));
       }
     },
     { signal: events.signal },
