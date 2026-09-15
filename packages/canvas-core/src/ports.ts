@@ -30,7 +30,7 @@ export const emptyPortSelection = (): PortSelection => ({
   compatible: new Set(),
 });
 
-/** Project CSS-pixel hit areas in document draw order, respecting covering cards. */
+/** Pick the nearest visible port within its CSS-pixel hit area, independent of compatibility. */
 export function hitTestPorts(
   point: Point,
   touch: boolean,
@@ -53,16 +53,23 @@ export function hitTestPorts(
     };
   });
   const order = new Map(cards.map((card, index) => [card.id, index]));
-  return ports.filter((port) => {
+  let nearest: CanvasPort | undefined;
+  let nearestDistance = Infinity;
+  for (const port of ports) {
     const index = order.get(port.nodeId);
-    if (index === undefined) return false;
+    if (index === undefined) continue;
     const card = cards[index]!;
     const anchor = { x: card.x + port.x * camera.zoom, y: card.y + port.y * camera.zoom };
     const radius = Math.max(touch ? 22 : 12, port.radius * camera.zoom);
-    if (Math.abs(point.x - anchor.x) > radius || Math.abs(point.y - anchor.y) > radius)
-      return false;
-    return !cards
-      .slice(index + 1)
-      .some((cover) => contains(cover, anchor) || contains(cover, point));
-  });
+    if (Math.abs(point.x - anchor.x) > radius || Math.abs(point.y - anchor.y) > radius) continue;
+    if (cards.slice(index + 1).some((cover) => contains(cover, anchor) || contains(cover, point)))
+      continue;
+    const distance = (point.x - anchor.x) ** 2 + (point.y - anchor.y) ** 2;
+    // Equal distances retain document port order, so the target is deterministic.
+    if (distance < nearestDistance) {
+      nearest = port;
+      nearestDistance = distance;
+    }
+  }
+  return nearest ? [nearest] : [];
 }
