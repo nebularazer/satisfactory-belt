@@ -234,7 +234,6 @@ export class CanvasController {
     this.portState = {
       ...this.portState,
       pending: [],
-      chooser: null,
       compatible: new Set(anchor ? targets(anchor).map(portId) : []),
       preview:
         anchor && this.portState.preview && compatibility(anchor, this.portState.preview).compatible
@@ -281,11 +280,6 @@ export class CanvasController {
     this.emit();
   }
 
-  dismissPortChooser = () => {
-    this.portState = { ...this.portState, chooser: null };
-    this.emit();
-  };
-
   clearPorts = () => {
     this.portState = emptyPortSelection();
     this.emit();
@@ -318,7 +312,6 @@ export class CanvasController {
       }
       this.portState = {
         ...this.portState,
-        chooser: null,
         pending: [],
         preview: result.compatible ? ref : this.portState.preview,
       };
@@ -437,7 +430,7 @@ export class CanvasController {
       this.linkState = { ...this.linkState, preview: null, chooser: null };
       if (this.gesture?.sourcePort) this.portState = emptyPortSelection();
       this.gesture = null;
-      this.portState = { ...this.portState, pending: [], chooser: null, hover: [] };
+      this.portState = { ...this.portState, pending: [], hover: [] };
       this.pinch = {
         camera: this.camera,
         center: midpoint(a, b),
@@ -453,7 +446,6 @@ export class CanvasController {
     const item = this.hitTest(pointer);
     let kind: Gesture["kind"] = "pan";
     const candidates = !pointer.marquee && !pointer.additive ? this.portHits(pointer) : [];
-    this.portState = { ...this.portState, chooser: null };
     this.linkState = { ...this.linkState, chooser: null };
     let handles =
       !pointer.marquee && !pointer.additive && !item
@@ -661,10 +653,7 @@ export class CanvasController {
       this.gesture = null;
       this.portState = { ...this.portState, pending: [] };
       if (candidates.length === 1) this.selectPort(candidates[0]!);
-      else if (candidates.length > 1) {
-        this.portState = { ...this.portState, chooser: { point: pointer, candidates } };
-        this.emit();
-      }
+      else this.emit();
       return;
     }
     const moves =
@@ -762,7 +751,7 @@ export class CanvasController {
       return;
     }
     if (command === "escape") {
-      if (this.portState.anchor || this.portState.chooser || this.portState.pending.length) {
+      if (this.portState.anchor || this.portState.pending.length) {
         this.cancel();
         this.clearPorts();
         return;

@@ -12,8 +12,8 @@ Suggested future mode names remain Flow plan and Build plan.
 - Tap a port, then a compatible counterpart, or drag between them to create one undoable link.
 - Port dragging previews the route and snaps to a single compatible target. Empty,
   invalid, or ambiguous drops cancel; Escape, pointer cancellation, and a second
-  touch also cancel. Small movements remain taps; ambiguous source ports retain
-  the tap chooser and pan on swipes.
+  touch also cancel. Small movements remain taps; ambiguous port taps do nothing
+  and swipes over ambiguous source ports pan. Zoom in to distinguish nearby ports.
 - Invalid targets cannot create links. Hovering an invalid opposite-direction
   port shows a `not-allowed` cursor; attempts retain the anchor without a red
   outline or error card.

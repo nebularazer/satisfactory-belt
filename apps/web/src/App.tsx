@@ -30,7 +30,6 @@ import type { KeyboardEvent } from "react";
 
 import { LinkChooser } from "@/components/link-chooser";
 import { PerformanceBar } from "@/components/performance-bar";
-import { PortChooser } from "@/components/port-chooser";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -373,7 +372,6 @@ function CanvasWorkspace({
         </ButtonGroup>
       </div>
       <LinkChooser editor={editor} assets={assets} />
-      <PortChooser controller={controller} getDisplay={getDisplay} assets={assets} />
       {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">

@@ -20,7 +20,6 @@ export type PortSelection = Readonly<{
   preview: PortReference | null;
   hover: readonly PortReference[];
   pending: readonly PortReference[];
-  chooser: Readonly<{ point: Point; candidates: readonly PortReference[] }> | null;
   compatible: ReadonlySet<string>;
 }>;
 export const emptyPortSelection = (): PortSelection => ({
@@ -28,7 +27,6 @@ export const emptyPortSelection = (): PortSelection => ({
   preview: null,
   hover: [],
   pending: [],
-  chooser: null,
   compatible: new Set(),
 });
 

@@ -112,11 +112,12 @@ it("second finger cancels a pending press and suppresses remaining finger taps",
   expect(canvas.getPortSnapshot().preview).toBeNull();
   expect(canvas.getPortSnapshot().anchor).toMatchObject(ports[0]);
 });
-it("ambiguous touch opens a chooser without choosing by compatibility", () => {
+it("ambiguous touch leaves the anchor unchanged without selecting a target", () => {
   const { canvas } = setup();
   tap(canvas);
   tap(canvas, pointer(200, 56, true));
-  expect(canvas.getPortSnapshot().chooser?.candidates).toHaveLength(2);
+  expect(canvas.getPortSnapshot().anchor).toMatchObject(ports[0]);
+  expect(canvas.getPortSnapshot().pending).toEqual([]);
   expect(canvas.getPortSnapshot().preview).toBeNull();
   canvas.selectPort(ports[2]);
   expect(canvas.getPortSnapshot().preview).toBeNull();
