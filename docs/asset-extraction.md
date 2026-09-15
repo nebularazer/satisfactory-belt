@@ -2,7 +2,7 @@
 
 Run commands from the repository root unless a command explicitly changes directories.
 Downloads, tool binaries and extracted assets belong in the gitignored
-`.assets/` directory. Nothing is imported into the application yet.
+`.assets/` directory. For browser integration, see [machine node setup](machine-node-design.md#running-this-implementation).
 
 The workflow is manual setup/download followed by `pnpm assets:extract`. An existing
 Satisfactory installation can be used with `--game-dir /path/to/Satisfactory`, skipping
@@ -196,7 +196,7 @@ high-quality chroma subsampling and alpha quality 100. Raw extracted PNGs remain
 
 Every run creates a new gitignored `.assets/prepared/<locale>-<suffix>/` directory:
 
-- `catalog.json`: compact items, manufacturing machines, fixed producers and automated recipes,
+- `catalog.json`: compact items, manufacturing machines, fixed producers, extractors, logistics parts and automated recipes,
   keyed by game class ID, with locale and source JSON SHA-256.
 - `icons.json`: icon IDs mapped to WebP variants at 64, 128 and 256 pixels, including
   relative paths, dimensions, byte sizes and SHA-256 hashes.
@@ -207,13 +207,14 @@ Every run creates a new gitignored `.assets/prepared/<locale>-<suffix>/` directo
 
 The reusable types and semantic validator live in `packages/game-data`, exported as
 `@satisfactory-belt/game-data`. The package has no browser or image-encoding dependency.
-Generated data and image files stay under `.assets/` for now; the web app does not
-import them. Steam access is only needed when obtaining new source files.
+Generated data and image files stay under `.assets/`. Use `pnpm assets:stage --input
+.assets/prepared/<completed-run>` to validate and copy them into the gitignored web
+public directory. Steam access is only needed when obtaining new source files.
 
-An item's, machine's or fixed producer's `iconId` indexes `icons.json`'s `icons` object. Its `variants`
+An item's or building's `iconId` indexes `icons.json`'s `icons` object. Its `variants`
 object has keys `64`, `128`, and `256`. Paths are relative to the prepared directory;
-choosing public URLs, `srcset`, lazy loading and Pixi texture loading belongs to UI
-integration later. Smaller variants reduce the pixels that need decoding; WebP
+the staging command serves them under the app base path and the Pixi icon cache
+loads suitable variants on demand. Smaller variants reduce the pixels that need decoding; WebP
 compression alone does not reduce GPU texture memory.
 
 ### Catalog scope and units
@@ -234,7 +235,8 @@ compression alone does not reduce GPU texture memory.
   apply milestone/research unlocks or filter by the current event/date.
 - Fixed machine power is in MW. Variable-power machines are explicitly marked and
   recipes retain the source constant/factor parameters; zero base power is not
-  presented as free operation. Power simulation and clock-speed behavior are later work.
+  presented as free operation. The catalog also retains clock capability, Sloop slot
+  counts and production boost coefficients for machine-card footer values.
 - `fixedProducers` includes the FICSMAS Gift Tree separately from manufacturing
   machines and recipes. Its source interval is 4 seconds, power use is 0 MW,
   `mCanChangePotential` disables overclocking, and `mEventType` restricts it to
@@ -242,13 +244,22 @@ compression alone does not reduce GPU texture memory.
   maps this known producer to one `Desc_Gift_C` per interval (15 gifts/minute).
   Unknown simple producers fail until their output mapping is supplied. Its icon
   is prepared at all three WebP sizes.
-- Mining, water/oil extraction and power generation are not synthesized into
-  manufacturing recipes here. Decorative FICSMAS buildings remain excluded from
+- `extractors` contains Miner Mk.1–3, Water Extractor and Oil Extractor separately
+  from recipes. Allowed resources come from `FGResourceDescriptor` entries,
+  `mAllowedResourceForms` and any explicit `mAllowedResources` restriction. Each
+  extractor retains its machine icon, power and clock capability. Resource purity
+  and extraction rates are not calculated by the drawing model. Power generation
+  is not included. Decorative FICSMAS buildings remain excluded from
   preparation, while their extracted PNGs remain available. The full source JSON
   is preserved for extending the model later.
 
+- `logistics` includes the basic Conveyor Splitter and Conveyor Merger, their
+  building names and images. Port material and distribution are not inferred
+  from their descriptions. Pipe junctions are reserved for the future link model.
+
 The current dump has 195 items, 291 manufacturing recipes and 11 manufacturing
-machines plus one fixed producer; 581 other `FGRecipe` entries are excluded.
+machines plus one fixed producer, five extractors and two logistics parts;
+581 other `FGRecipe` entries are excluded.
 Data validation checks quantities, durations, units, and every item/machine/producer/icon
 reference. Source PNG hashes are checked
 against the extraction report; each generated WebP is fully decoded to validate its
@@ -283,7 +294,7 @@ Validated on Debian Linux ARM64 with Steam manifest `4522661880264054134`:
   with zero failures, using `GAME_UE5_6` and the upstream mapping fallback.
 - Iron Plate and Constructor samples were visually inspected.
 
-Preparation of that extraction was also validated on this host:
+The initial manufacturing-only preparation of that extraction was validated on this host:
 
 - 195 items, 291 recipes, 11 machines and the Gift Tree; 207 descriptor references
   resolve to 204 unique image contents and 612 WebP files.
@@ -305,9 +316,12 @@ Preparation of that extraction was also validated on this host:
   partial-export rejection, deduplication and image conversion. Type, lint and
   formatting checks passed. Incomplete extraction inputs are rejected.
 
+The subsequent `en-US-UZnzvS` preparation adds the five extractor machine images:
+209 unique images in 627 WebP files, totaling 4.76 MiB across all three sizes.
+
 The extraction wrapper also checks each output against the upstream report. A fresh
 output directory prevents old PNGs from masking failures. The original game JSON and
-Steam downloads remain in `.assets/`; no extracted assets are imported into the app.
+Steam downloads remain in `.assets/`; only explicitly staged prepared assets reach the app.
 
 Tool references: [DepotDownloader](https://github.com/SteamRE/DepotDownloader),
 [SatisfactoryTools extractor source](https://github.com/SatisfactoryTools/AssetsExtractor/tree/baa45041da5d6d43987638836c650d67b8f1267d/extractor-net).

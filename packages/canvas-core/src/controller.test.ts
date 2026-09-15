@@ -20,8 +20,8 @@ it.each(["Delete", "Backspace"])("maps unmodified %s to deletion", (key) => {
 });
 
 const items = [
-  { id: "a", x: 100, y: 100, width: 100, height: 80, text: "A" },
-  { id: "b", x: 250, y: 100, width: 100, height: 80, text: "B" },
+  { id: "a", x: 100, y: 100, width: 100, height: 80 },
+  { id: "b", x: 250, y: 100, width: 100, height: 80 },
 ] as const satisfies readonly CanvasItem[];
 const pointer = (x: number, y: number, extra: Partial<CanvasPointer> = {}): CanvasPointer => ({
   id: 1,

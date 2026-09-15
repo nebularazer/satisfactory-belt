@@ -66,6 +66,8 @@ Setup and scope: docs/asset-extraction.md`);
     ...Object.values(catalog.items),
     ...Object.values(catalog.machines),
     ...Object.values(catalog.fixedProducers),
+    ...Object.values(catalog.extractors),
+    ...Object.values(catalog.logistics),
   ];
   const needed = new Set(entities.map((entry) => entry.iconId));
   const byDescriptor = new Map(sourceIcons.map((icon) => [icon.className, icon]));
@@ -85,7 +87,7 @@ Setup and scope: docs/asset-extraction.md`);
   const metadata = { input, sourceExtraction: extraction, encoding, sharpVersions: sharp.versions };
   await writeJson("preparation.json", { ...metadata, status: "incomplete" }, true);
   console.log(
-    `Output: ${output}\nCatalog: ${Object.keys(catalog.items).length} items, ${Object.keys(catalog.recipes).length} recipes, ${Object.keys(catalog.machines).length} machines, ${Object.keys(catalog.fixedProducers).length} fixed producers.`,
+    `Output: ${output}\nCatalog: ${Object.keys(catalog.items).length} items, ${Object.keys(catalog.recipes).length} recipes, ${Object.keys(catalog.machines).length} machines, ${Object.keys(catalog.fixedProducers).length} fixed producers, ${Object.keys(catalog.extractors).length} extractors.`,
   );
   const { manifest, descriptorIcons, stats } = await prepareImages(
     sources,

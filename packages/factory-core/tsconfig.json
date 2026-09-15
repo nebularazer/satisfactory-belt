@@ -6,14 +6,10 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "outDir": "./dist",
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "rootDir": "./src",
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo"
   },
-  "references": [
-    { "path": "../canvas-core" },
-    { "path": "../factory-core" },
-    { "path": "../game-data" }
-  ],
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [{ "path": "../game-data" }, { "path": "../canvas-core" }]
 }

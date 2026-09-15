@@ -1,5 +1,5 @@
 {
-  "name": "@satisfactory-belt/canvas-pixi",
+  "name": "@satisfactory-belt/factory-core",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,6 @@
   },
   "dependencies": {
     "@satisfactory-belt/canvas-core": "workspace:*",
-    "@satisfactory-belt/factory-core": "workspace:*",
-    "@satisfactory-belt/game-data": "workspace:*",
-    "pixi.js": "^8.20.1"
+    "@satisfactory-belt/game-data": "workspace:*"
   }
 }

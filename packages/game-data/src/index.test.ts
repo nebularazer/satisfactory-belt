@@ -9,6 +9,8 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
   return {
     catalog: {
       schemaVersion: 1,
+      extractors: {},
+      logistics: {},
       source: { locale: "en-US", docsSha256: hash },
       items: {
         Item: {
@@ -30,6 +32,9 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
           manufacturingSpeed: 1,
           power: { kind: "fixed", megawatts: 4 },
           powerConsumptionExponent: 1.321929,
+          canOverclock: true,
+          sloopSlots: 1,
+          productionBoost: { base: 1, perSloop: 1, powerExponent: 2 },
         },
       },
       fixedProducers: {},
@@ -65,6 +70,51 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
   };
 }
 describe("game data validation", () => {
+  it("rejects logistics parts with missing images or invalid identities", () => {
+    const { catalog, icons } = fixture();
+    catalog.logistics.Part = {
+      id: "Part",
+      name: "Splitter",
+      description: "",
+      descriptorId: "Desc_Part",
+      iconId: hash,
+      kind: "splitter",
+    };
+    expect(() => validateGameData(catalog, icons)).not.toThrow();
+    catalog.logistics.Part.iconId = "missing";
+    expect(() => validateGameData(catalog, icons)).toThrow("Missing icon");
+    catalog.logistics.Part.iconId = hash;
+    catalog.logistics.Part.id = "other";
+    expect(() => validateGameData(catalog, icons)).toThrow("Invalid logistics part");
+  });
+  it("validates extractor resources, power and image references", () => {
+    const { catalog, icons } = fixture();
+    const extractor = {
+      id: "Miner",
+      name: "Miner",
+      description: "",
+      descriptorId: "Desc_Miner",
+      iconId: hash,
+      resourceIds: ["Item"],
+      powerMegawatts: 5,
+      powerConsumptionExponent: 1.321929,
+      canOverclock: true,
+    };
+    catalog.extractors.Miner = extractor;
+    expect(() => validateGameData(catalog, icons)).not.toThrow();
+    extractor.resourceIds = ["Missing"];
+    expect(() => validateGameData(catalog, icons)).toThrow("Missing resource");
+    extractor.resourceIds = [];
+    expect(() => validateGameData(catalog, icons)).toThrow("Invalid resources");
+    extractor.resourceIds = ["Item", "Item"];
+    expect(() => validateGameData(catalog, icons)).toThrow("Invalid resources");
+    extractor.resourceIds = ["Item"];
+    extractor.powerMegawatts = -1;
+    expect(() => validateGameData(catalog, icons)).toThrow("Invalid power");
+    extractor.powerMegawatts = 5;
+    extractor.iconId = "Missing";
+    expect(() => validateGameData(catalog, icons)).toThrow("Missing icon");
+  });
   it("allows recipes with no ingredients and complete references", () => {
     const { catalog, icons } = fixture();
     expect(() => validateGameData(catalog, icons)).not.toThrow();

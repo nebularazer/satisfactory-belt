@@ -3,7 +3,7 @@ import type { Bounds, Camera, Point, Size } from "./geometry";
 import { SNAP_SIZE, snapToGrid } from "./grid";
 
 /** Geometry belongs to the host. The canvas only retains a temporary move preview. */
-export type CanvasItem = Bounds & Readonly<{ id: string; text: string }>;
+export type CanvasItem = Bounds & Readonly<{ id: string }>;
 export type ItemMove = Point & Readonly<{ id: string }>;
 export type MoveContext = Readonly<{ group: object }>;
 export type CanvasCommand =
