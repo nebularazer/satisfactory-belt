@@ -60,16 +60,11 @@ it.each(["escape", "cancel", "pinch"])(
     expect(onRoute).not.toHaveBeenCalled();
   },
 );
-it("asks about overlapping lines and respects cards covering links", () => {
+it("selects the topmost line on exact ties and respects cards covering links", () => {
   const { controller, link } = setup();
   controller.setLinks([link, { ...link, id: "second" }]);
   controller.pointerDown({ id: 1, x: 300, y: 100 });
   controller.pointerUp({ id: 1, x: 300, y: 100 });
-  expect(controller.getLinkSnapshot().chooser?.candidates.map((h) => h.id)).toEqual([
-    "link",
-    "second",
-  ]);
-  controller.chooseLinkHit({ id: "second", segment: 1 });
   expect(controller.getLinkSnapshot().selected).toBe("second");
   controller.setItems([{ id: "cover", x: 280, y: 80, width: 40, height: 40 }]);
   controller.pointerDown({ id: 1, x: 300, y: 100 });

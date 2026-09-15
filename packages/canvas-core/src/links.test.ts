@@ -51,7 +51,7 @@ it("moves a straight link's interior segment and retains its constraint when an 
   expect(moved.some((p) => p.y === 160)).toBe(true);
   expect(translateGuides(guides, { x: 32, y: 48 })).toEqual([{ axis: "y", position: 208 }]);
 });
-it("hits links with both endpoints offscreen and returns all overlapping candidates", () => {
+it("hits offscreen links and selects the topmost line on exact ties", () => {
   const points = routeLink({ x: -400, y: 40 }, { x: 1600, y: 40 });
   const a: CanvasLink = { id: "a", output, input, points },
     b = { ...a, id: "b" };
@@ -59,7 +59,7 @@ it("hits links with both endpoints offscreen and returns all overlapping candida
     hitTestLinks({ x: 200, y: 40 }, false, { x: 0, y: 0, zoom: 1 }, [a, b], null).map(
       (hit) => hit.id,
     ),
-  ).toEqual(["a", "b"]);
+  ).toEqual(["b"]);
   expect(hitTestLinks({ x: 200, y: 60 }, true, { x: 0, y: 0, zoom: 1 }, [a], null)).toHaveLength(1);
   expect(hitTestLinks({ x: 200, y: 60 }, false, { x: 0, y: 0, zoom: 1 }, [a], null)).toHaveLength(
     0,
@@ -121,4 +121,71 @@ it("routes a backward connection through the gap below its target instead of ove
     .reduce((sum, p, i) => sum + Math.abs(p.x - points[i].x) + Math.abs(p.y - points[i].y), 0);
   expect(length).toBe(608);
   expect(Math.min(...points.map((p) => p.y))).toBe(64);
+});
+
+it.each([0.5, 1, 2])(
+  "selects the nearest line at zoom %s even when a farther link is selected",
+  (zoom) => {
+    const a: CanvasLink = {
+      id: "a",
+      output,
+      input,
+      points: [
+        { x: 0, y: 40 },
+        { x: 200, y: 40 },
+      ],
+    };
+    const b = {
+      ...a,
+      id: "b",
+      points: [
+        { x: 0, y: 48 },
+        { x: 200, y: 48 },
+      ],
+    };
+    const camera = { x: 30, y: 20, zoom };
+    expect(
+      hitTestLinks({ x: 30 + 100 * zoom, y: 20 + 43 * zoom }, true, camera, [a, b], "b"),
+    ).toEqual([{ id: "a", segment: 0 }]);
+    expect(
+      hitTestLinks({ x: 30 + 100 * zoom, y: 20 + 44 * zoom }, true, camera, [a, b], "a"),
+    ).toEqual([{ id: "a", segment: 0 }]);
+  },
+);
+
+it("selects the nearest segment of a folded link, including zero-length segments", () => {
+  const link: CanvasLink = {
+    id: "folded",
+    output,
+    input,
+    points: [
+      { x: 0, y: 40 },
+      { x: 100, y: 40 },
+      { x: 100, y: 48 },
+      { x: 100, y: 48 },
+      { x: 0, y: 48 },
+    ],
+  };
+  expect(hitTestLinks({ x: 50, y: 47 }, true, { x: 0, y: 0, zoom: 1 }, [link], null)).toEqual([
+    { id: "folded", segment: 3 },
+  ]);
+});
+
+it("selects the nearest route handle when touch targets overlap", () => {
+  const link: CanvasLink = {
+    id: "short",
+    output,
+    input,
+    points: [
+      { x: 0, y: 0 },
+      { x: 24, y: 0 },
+      { x: 40, y: 0 },
+      { x: 40, y: 16 },
+      { x: 56, y: 16 },
+      { x: 80, y: 16 },
+    ],
+  };
+  expect(
+    hitTestLinks({ x: 47, y: 15 }, true, { x: 0, y: 0, zoom: 1 }, [link], link.id, true),
+  ).toEqual([{ id: "short", segment: 3 }]);
 });

@@ -22,8 +22,9 @@ Suggested future mode names remain Flow plan and Build plan.
   levels, increasing to three pixels with the selection color when selected.
 - Selecting a link exposes draggable interior segments. The existing central
   gesture coordinator handles taps, pans, segment movement and pinch cancellation.
-- Ambiguous overlapping links use a temporary chooser. There is no material
-  inspector card or inspector menu entry.
+- Overlapping lines and route handles select the nearest target directly. Exact
+  line ties keep the selected link, or choose the topmost line. There are no overlap
+  chooser dialogs, material inspector cards, or inspector menu entries.
 - Delete/Backspace removes the selected link. Deleting nodes also removes their
   incident links in the same history entry.
 - Copy/paste includes links whose two endpoint nodes are copied, remapping IDs
@@ -115,7 +116,7 @@ including paths crossing the viewport with both endpoints offscreen.
 - Factory editor: atomic edits, history, clipboard and route caching.
 - `canvas-core`: orthogonal geometry, hit testing and gestures.
 - `canvas-pixi`: border-matched path and handle rendering.
-- Web app: temporary overlapping-hit chooser.
+- Canvas core: nearest-target hit testing for ports, lines, and route handles.
 
 ## Validation
 

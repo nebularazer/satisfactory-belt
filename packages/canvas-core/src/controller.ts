@@ -159,16 +159,7 @@ export class CanvasController {
     this.cancel(false);
     this.selection = new Set();
     this.portState = emptyPortSelection();
-    this.linkState = { selected: id, focusedSegment: null, chooser: null, preview: null };
-    this.emit();
-  };
-  chooseLinkHit = (hit: LinkHit) => {
-    this.selectLink(hit.id);
-    this.linkState = { ...this.linkState, focusedSegment: hit.segment };
-    this.emit();
-  };
-  dismissLinkChooser = () => {
-    this.linkState = { ...this.linkState, chooser: null };
+    this.linkState = { selected: id, preview: null };
     this.emit();
   };
   private getVisibleLinks(): readonly CanvasLink[] {
@@ -427,7 +418,7 @@ export class CanvasController {
         this.selection = selection;
       this.dragOffset = ZERO;
       this.marquee = null;
-      this.linkState = { ...this.linkState, preview: null, chooser: null };
+      this.linkState = { ...this.linkState, preview: null };
       if (this.gesture?.sourcePort) this.portState = emptyPortSelection();
       this.gesture = null;
       this.portState = { ...this.portState, pending: [], hover: [] };
@@ -446,8 +437,7 @@ export class CanvasController {
     const item = this.hitTest(pointer);
     let kind: Gesture["kind"] = "pan";
     const candidates = !pointer.marquee && !pointer.additive ? this.portHits(pointer) : [];
-    this.linkState = { ...this.linkState, chooser: null };
-    let handles =
+    const handles =
       !pointer.marquee && !pointer.additive && !item
         ? hitTestLinks(
             pointer,
@@ -458,8 +448,6 @@ export class CanvasController {
             true,
           )
         : [];
-    const focused = handles.find((hit) => hit.segment === this.linkState.focusedSegment);
-    if (focused) handles = [focused];
     const linkHits = handles.length
       ? handles
       : !item && !pointer.marquee && !pointer.additive
@@ -634,7 +622,6 @@ export class CanvasController {
       else {
         const hits = gesture.linkHits!;
         if (hits.length === 1) this.selectLink(hits[0]!.id);
-        else this.linkState = { ...this.linkState, chooser: { point: pointer, candidates: hits } };
       }
       this.emit();
       return;

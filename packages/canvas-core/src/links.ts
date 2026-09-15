@@ -1,4 +1,4 @@
-import { boundsBetween, intersects, screenToWorld } from "./geometry";
+import { intersects, screenToWorld } from "./geometry";
 import type { Bounds, Camera, Point } from "./geometry";
 import type { PortReference } from "./ports";
 
@@ -14,14 +14,10 @@ export type CanvasLink = Readonly<{
 export type LinkHit = Readonly<{ id: string; segment: number }>;
 export type LinkSelection = Readonly<{
   selected: string | null;
-  focusedSegment: number | null;
-  chooser: Readonly<{ point: Point; candidates: readonly LinkHit[] }> | null;
   preview: Readonly<{ id: string; guides: readonly RouteGuide[] }> | null;
 }>;
 export const emptyLinkSelection = (): LinkSelection => ({
   selected: null,
-  focusedSegment: null,
-  chooser: null,
   preview: null,
 });
 const STUB = 24;
@@ -201,13 +197,27 @@ export function hitTestLinks(
 ): readonly LinkHit[] {
   const point = screenToWorld(screen, camera),
     radius = (touch ? 22 : 8) / camera.zoom;
-  const hits: LinkHit[] = [];
+  let nearest: LinkHit | undefined;
+  let nearestDistance = Infinity;
+  const consider = (hit: LinkHit, distance: number) => {
+    // Keep the selected link on exact ties, otherwise prefer the topmost line.
+    if (
+      distance < nearestDistance ||
+      (distance === nearestDistance && hit.id !== nearest?.id && nearest?.id !== selected)
+    ) {
+      nearest = hit;
+      nearestDistance = distance;
+    }
+  };
   for (const link of links) {
     if (handlesOnly) {
       if (link.id !== selected) continue;
-      for (const handle of linkHandles(link))
-        if (Math.abs(point.x - handle.x) <= radius && Math.abs(point.y - handle.y) <= radius)
-          hits.push(handle);
+      for (const handle of linkHandles(link)) {
+        const dx = point.x - handle.x,
+          dy = point.y - handle.y;
+        if (Math.abs(dx) <= radius && Math.abs(dy) <= radius)
+          consider({ id: link.id, segment: handle.segment }, dx * dx + dy * dy);
+      }
       continue;
     }
     if (
@@ -221,18 +231,16 @@ export function hitTestLinks(
       continue;
     for (let i = 0; i < link.points.length - 1; i++) {
       const a = link.points[i]!,
-        b = link.points[i + 1]!,
-        box = boundsBetween(a, b);
-      if (
-        point.x >= box.x - radius &&
-        point.x <= box.x + box.width + radius &&
-        point.y >= box.y - radius &&
-        point.y <= box.y + box.height + radius
-      ) {
-        hits.push({ id: link.id, segment: i });
-        break;
-      }
+        b = link.points[i + 1]!;
+      const dx = b.x - a.x,
+        dy = b.y - a.y;
+      const lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared
+        ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared))
+        : 0;
+      const distance = (point.x - a.x - t * dx) ** 2 + (point.y - a.y - t * dy) ** 2;
+      if (distance <= radius * radius) consider({ id: link.id, segment: i }, distance);
     }
   }
-  return hits;
+  return nearest ? [nearest] : [];
 }

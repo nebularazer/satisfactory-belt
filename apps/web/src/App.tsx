@@ -28,7 +28,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 
-import { LinkChooser } from "@/components/link-chooser";
 import { PerformanceBar } from "@/components/performance-bar";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -371,7 +370,6 @@ function CanvasWorkspace({
           </Button>
         </ButtonGroup>
       </div>
-      <LinkChooser editor={editor} assets={assets} />
       {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">
