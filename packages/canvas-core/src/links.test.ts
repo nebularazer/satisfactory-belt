@@ -189,3 +189,37 @@ it("selects the nearest route handle when touch targets overlap", () => {
     hitTestLinks({ x: 47, y: 15 }, true, { x: 0, y: 0, zoom: 1 }, [link], link.id, true),
   ).toEqual([{ id: "short", segment: 3 }]);
 });
+
+it("takes the shorter corridor between staggered obstacles in either obstacle order", () => {
+  const obstacles = [
+    { x: 160, y: 0, width: 96, height: 224 },
+    { x: 288, y: 160, width: 96, height: 224 },
+  ];
+  const start = { x: 0, y: 120 },
+    end = { x: 560, y: 280 };
+  const points = routeLink(start, end, obstacles);
+  orthogonal(points);
+  expect(points).toEqual(routeLink(start, end, obstacles.toReversed()));
+  const length = points
+    .slice(1)
+    .reduce((sum, p, i) => sum + Math.abs(p.x - points[i].x) + Math.abs(p.y - points[i].y), 0);
+  expect(length).toBe(896);
+  expect(points.some((p) => p.x >= 268 && p.x <= 276)).toBe(true);
+  for (const box of obstacles) {
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1],
+        b = points[i];
+      const crosses =
+        a.y === b.y
+          ? a.y > box.y - 12 &&
+            a.y < box.y + box.height + 12 &&
+            Math.max(a.x, b.x) > box.x - 12 &&
+            Math.min(a.x, b.x) < box.x + box.width + 12
+          : a.x > box.x - 12 &&
+            a.x < box.x + box.width + 12 &&
+            Math.max(a.y, b.y) > box.y - 12 &&
+            Math.min(a.y, b.y) < box.y + box.height + 12;
+      expect(crosses).toBe(false);
+    }
+  }
+});

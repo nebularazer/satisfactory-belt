@@ -61,7 +61,111 @@ function cost(points: readonly Point[]) {
     .reduce((sum, p, i) => sum + Math.abs(p.x - points[i]!.x) + Math.abs(p.y - points[i]!.y), 0);
 }
 
-/** Fixed-position orthogonal routing. Bounded detour search has a deterministic fallback. */
+type Entry = {
+  id: number;
+  distance: number;
+  estimate: number;
+  bends: number;
+  axis: number;
+  previous?: Entry;
+};
+const earlier = (a: Entry, b: Entry) =>
+  a.estimate < b.estimate || (a.estimate === b.estimate && a.bends < b.bends);
+
+/** Search obstacle-edge coordinates, allowing several turns through staggered gaps. */
+function shortestDetour(start: Point, end: Point, boxes: readonly Bounds[]): Point[] | null {
+  const xs = [...new Set([start.x, end.x, ...boxes.flatMap((b) => [b.x, b.x + b.width])])].sort(
+    (a, b) => a - b,
+  );
+  const ys = [...new Set([start.y, end.y, ...boxes.flatMap((b) => [b.y, b.y + b.height])])].sort(
+    (a, b) => a - b,
+  );
+  const width = xs.length;
+  const point = (id: number) => ({ x: xs[id % width]!, y: ys[Math.floor(id / width)]! });
+  const source = ys.indexOf(start.y) * width + xs.indexOf(start.x);
+  const target = ys.indexOf(end.y) * width + xs.indexOf(end.x);
+  const heap: Entry[] = [];
+  const push = (entry: Entry) => {
+    heap.push(entry);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const parent = Math.floor((i - 1) / 2);
+      if (!earlier(entry, heap[parent]!)) break;
+      heap[i] = heap[parent]!;
+      i = parent;
+    }
+    heap[i] = entry;
+  };
+  const pop = () => {
+    const first = heap[0]!;
+    const last = heap.pop()!;
+    if (heap.length) {
+      let i = 0;
+      while (i * 2 + 1 < heap.length) {
+        let child = i * 2 + 1;
+        if (child + 1 < heap.length && earlier(heap[child + 1]!, heap[child]!)) child++;
+        if (!earlier(heap[child]!, last)) break;
+        heap[i] = heap[child]!;
+        i = child;
+      }
+      heap[i] = last;
+    }
+    return first;
+  };
+  const best = new Map<number, Entry>();
+  push({ id: source, distance: 0, estimate: 0, bends: 0, axis: 0 });
+  while (heap.length) {
+    const current = pop();
+    if (
+      best.has(current.id * 3 + current.axis) &&
+      best.get(current.id * 3 + current.axis) !== current
+    )
+      continue;
+    if (current.id === target) {
+      const path: Point[] = [];
+      for (let step: Entry | undefined = current; step; step = step.previous)
+        path.push(point(step.id));
+      return path.toReversed();
+    }
+    const a = point(current.id),
+      col = current.id % width,
+      row = Math.floor(current.id / width);
+    const neighbors = [
+      ...(col > 0 ? [current.id - 1] : []),
+      ...(col + 1 < width ? [current.id + 1] : []),
+      ...(row > 0 ? [current.id - width] : []),
+      ...(row + 1 < ys.length ? [current.id + width] : []),
+    ];
+    for (const id of neighbors) {
+      const b = point(id);
+      if (boxes.some((box) => blocked(a, b, box))) continue;
+      const axis = a.x === b.x ? 2 : 1;
+      const distance = current.distance + Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+      const bends = current.bends + (current.axis && current.axis !== axis ? 1 : 0);
+      const key = id * 3 + axis,
+        previous = best.get(key);
+      if (
+        previous &&
+        (previous.distance < distance ||
+          (previous.distance === distance && previous.bends <= bends))
+      )
+        continue;
+      const entry: Entry = {
+        id,
+        axis,
+        distance,
+        bends,
+        previous: current,
+        estimate: distance + Math.abs(b.x - end.x) + Math.abs(b.y - end.y),
+      };
+      best.set(key, entry);
+      push(entry);
+    }
+  }
+  return null;
+}
+
+/** Orthogonal routing through obstacle-edge corridors; explicit guides retain user control. */
 export function routeLink(
   source: Point,
   target: Point,
@@ -128,36 +232,16 @@ export function routeLink(
     clean([start, { x: end.x, y: start.y }, end]),
     clean([start, { x: start.x, y: middleY }, { x: end.x, y: middleY }, end]),
   ];
-  const visited = new Set<string>();
-  for (let attempts = 0; queue.length && attempts < 256; attempts++) {
-    queue.sort((a, b) => cost(a) - cost(b));
-    const path = queue.shift()!;
-    const key = JSON.stringify(path);
-    if (visited.has(key)) continue;
-    visited.add(key);
-    let collision: { index: number; box: Bounds } | undefined;
-    for (let i = 1; i < path.length && !collision; i++) {
-      const box = boxes.find((b) => blocked(path[i - 1]!, path[i]!, b));
-      if (box) collision = { index: i, box };
-    }
-    if (!collision) return [source, ...path, target];
-    const { index, box } = collision,
-      a = path[index - 1]!,
-      b = path[index]!;
-    const horizontal = a.y === b.y;
-    for (const position of horizontal ? [box.y, box.y + box.height] : [box.x, box.x + box.width]) {
-      const detour = horizontal
-        ? [
-            { x: a.x, y: position },
-            { x: b.x, y: position },
-          ]
-        : [
-            { x: position, y: a.y },
-            { x: position, y: b.y },
-          ];
-      queue.push(clean([...path.slice(0, index), ...detour, ...path.slice(index)]));
-    }
-  }
+  const clear = (path: readonly Point[]) =>
+    path.slice(1).every((p, i) => boxes.every((box) => !blocked(path[i]!, p, box)));
+  // Preserve the centered path when it already has the shortest possible length.
+  const direct = queue.find(
+    (path) => clear(path) && cost(path) === Math.abs(start.x - end.x) + Math.abs(start.y - end.y),
+  );
+  if (direct) return [source, ...direct, target];
+  const path = shortestDetour(start, end, boxes);
+  if (path) return [source, ...clean(path), target];
+
   return [source, ...clean(fallback), target];
 }
 

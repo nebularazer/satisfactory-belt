@@ -92,11 +92,12 @@ Assets were prepared from `.assets/extracted/en-US-fm8YO8` and staged from
 
 ## Routing
 
-The pure router keeps node positions fixed. It compares centered, horizontal-first,
-vertical-first and gap routes by length before expanding obstacle detours. Equal
-lengths retain the centered default. Endpoint stubs shorten for close neighbors.
-The detour search is capped at 256 attempts per affected route; if no clear path is
-found within that budget, a deterministic orthogonal fallback can cross cards.
+The pure router keeps node positions fixed. Unobstructed shortest routes retain
+the centered default. Otherwise, an A* search finds a shortest orthogonal route
+through obstacle-edge corridors, preferring fewer bends on equal-length paths.
+Endpoint stubs shorten for close neighbors. If overlapping nodes leave no route
+from a port stub, the deterministic fallback can still cross cards. Automatic
+bends are not yet constrained to the snapping grid.
 
 Manual adjustments store axis-position guides. Keep endpoint stubs separate from
 the editable interior when simplifying a route: combining them previously removed
