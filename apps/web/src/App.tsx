@@ -8,6 +8,7 @@ import {
 import type { CanvasCommand } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView, RenderPerformance } from "@satisfactory-belt/canvas-pixi";
+import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
@@ -16,12 +17,15 @@ import {
   MaximizeIcon,
   MenuIcon,
   MinusIcon,
+  MonitorIcon,
+  MoonIcon,
+  SunIcon,
   PlusIcon,
   RotateCcwIcon,
   Undo2Icon,
   Redo2Icon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 
 import { PerformanceBar } from "@/components/performance-bar";
@@ -33,20 +37,29 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { BrowserTheme } from "@/lib/browser-theme";
 import { createExampleFactory } from "@/lib/example-factory";
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
 
 const menuButton = (
-  <Button variant="outline" size="icon" className="bg-white shadow-sm" aria-label="Canvas menu" />
+  <Button
+    variant="outline"
+    size="icon"
+    className="bg-background shadow-sm"
+    aria-label="Canvas menu"
+  />
 );
 
-export function App({ preferences }: { preferences: Preferences }) {
+export function App({ preferences, theme }: { preferences: Preferences; theme: BrowserTheme }) {
   const [assets, setAssets] = useState<GameAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -70,15 +83,17 @@ export function App({ preferences }: { preferences: Preferences }) {
         </p>
       </main>
     );
-  return <CanvasWorkspace preferences={preferences} assets={assets} />;
+  return <CanvasWorkspace preferences={preferences} assets={assets} theme={theme} />;
 }
 
 function CanvasWorkspace({
   preferences,
   assets,
+  theme,
 }: {
   preferences: Preferences;
   assets: GameAssets;
+  theme: BrowserTheme;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
@@ -91,14 +106,23 @@ function CanvasWorkspace({
     controller.subscribe,
     () => controller.getSnapshot().camera.zoom,
   );
-  const { gridSnapping, showGrid, showPerformance } = useSyncExternalStore(
-    preferences.subscribe,
-    preferences.getSnapshot,
+  const changeTheme = useCallback(
+    (value: unknown) => {
+      if (isThemePreference(value)) preferences.setTheme(value);
+    },
+    [preferences],
   );
+  const resolvedTheme = useSyncExternalStore(theme.subscribe, theme.getSnapshot);
+  const {
+    gridSnapping,
+    showGrid,
+    showPerformance,
+    theme: themePreference,
+  } = useSyncExternalStore(preferences.subscribe, preferences.getSnapshot);
 
   useEffect(() => {
-    void preferences.load();
-  }, [preferences]);
+    view.current?.setTheme(resolvedTheme);
+  }, [resolvedTheme]);
   useEffect(() => {
     controller.setGridSnapping(gridSnapping);
   }, [controller, gridSnapping]);
@@ -115,6 +139,7 @@ function CanvasWorkspace({
     const abort = new AbortController();
     void mountCanvas(host.current!, controller, {
       signal: abort.signal,
+      theme: theme.getSnapshot(),
       getDisplay,
       iconManifest: assets.icons,
       assetBaseUrl: assets.baseUrl,
@@ -124,6 +149,7 @@ function CanvasWorkspace({
       .then((mounted) => {
         if (abort.signal.aborted) return;
         view.current = mounted;
+        mounted.setTheme(theme.getSnapshot());
         mounted.setShowGrid(preferences.getSnapshot().showGrid);
         mounted.setShowPerformance(preferences.getSnapshot().showPerformance);
         setPerformanceMonitor(mounted.performance);
@@ -137,7 +163,7 @@ function CanvasWorkspace({
       abort.abort();
       view.current = null;
     };
-  }, [controller, historyCommand, preferences, assets, getDisplay]);
+  }, [controller, historyCommand, preferences, assets, getDisplay, theme]);
 
   const {
     reset,
@@ -205,7 +231,7 @@ function CanvasWorkspace({
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Workspace shortcuts bubble from the canvas, controls, and portalled menus; preserve the main landmark.
     <main
-      className="relative h-dvh w-full overflow-hidden bg-[#fafafa]"
+      className="relative h-dvh w-full overflow-hidden bg-[#fafafa] dark:bg-[#18181b]"
       onKeyDown={workspaceKeyDown}
     >
       <div ref={host} className="absolute inset-0" />
@@ -258,6 +284,24 @@ function CanvasWorkspace({
               Snap to grid
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={themePreference} onValueChange={changeTheme}>
+                <DropdownMenuRadioItem value="light">
+                  <SunIcon className="text-muted-foreground" />
+                  Light
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="system">
+                  <MonitorIcon className="text-muted-foreground" />
+                  System
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="dark">
+                  <MoonIcon className="text-muted-foreground" />
+                  Dark
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
               checked={showPerformance}
               onCheckedChange={preferences.setShowPerformance}
@@ -269,7 +313,7 @@ function CanvasWorkspace({
         </DropdownMenu>
       </div>
       <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] flex items-center gap-2">
-        <ButtonGroup aria-label="Zoom controls" className="rounded-lg bg-white shadow-sm">
+        <ButtonGroup aria-label="Zoom controls" className="rounded-lg bg-background shadow-sm">
           <Button
             variant="outline"
             size="icon"
@@ -300,7 +344,7 @@ function CanvasWorkspace({
             <PlusIcon />
           </Button>
         </ButtonGroup>
-        <ButtonGroup aria-label="History controls" className="rounded-lg bg-white shadow-sm">
+        <ButtonGroup aria-label="History controls" className="rounded-lg bg-background shadow-sm">
           <Button
             variant="outline"
             size="icon"

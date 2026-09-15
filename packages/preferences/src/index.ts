@@ -1,4 +1,11 @@
+export type ThemePreference = "light" | "system" | "dark";
+
+export function isThemePreference(value: unknown): value is ThemePreference {
+  return value === "light" || value === "system" || value === "dark";
+}
+
 export type UserPreferences = Readonly<{
+  theme: ThemePreference;
   gridSnapping: boolean;
   showGrid: boolean;
   showPerformance: boolean;
@@ -12,7 +19,12 @@ export interface PreferenceStore {
 
 /** Immediate local updates, ordered persistence, and protection against stale async loads. */
 export class Preferences {
-  private value: UserPreferences = { gridSnapping: true, showGrid: true, showPerformance: false };
+  private value: UserPreferences = {
+    theme: "system",
+    gridSnapping: true,
+    showGrid: true,
+    showPerformance: false,
+  };
   private store: PreferenceStore;
   private onError: (error: unknown) => void;
   private listeners = new Set<() => void>();
@@ -48,19 +60,26 @@ export class Preferences {
             typeof saved.showPerformance === "boolean"
               ? saved.showPerformance
               : this.value.showPerformance;
+          const theme = isThemePreference(saved.theme) ? saved.theme : this.value.theme;
           if (
+            theme === this.value.theme &&
             gridSnapping === this.value.gridSnapping &&
             showGrid === this.value.showGrid &&
             showPerformance === this.value.showPerformance
           )
             return;
-          this.value = { gridSnapping, showGrid, showPerformance };
+          this.value = { theme, gridSnapping, showGrid, showPerformance };
           this.emit();
         }
       })
       .catch(this.onError);
     return this.loading;
   }
+
+  setTheme = (theme: ThemePreference) => {
+    if (theme === this.value.theme) return;
+    this.update({ ...this.value, theme });
+  };
 
   setGridSnapping = (gridSnapping: boolean) => {
     if (gridSnapping === this.value.gridSnapping) return;

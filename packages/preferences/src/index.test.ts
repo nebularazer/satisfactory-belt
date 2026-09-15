@@ -43,6 +43,7 @@ it("does not let a delayed load overwrite a newer user choice", async () => {
     gridSnapping: false,
     showGrid: true,
     showPerformance: false,
+    theme: "system",
   });
 });
 
@@ -64,8 +65,8 @@ it("serializes slow writes while updating the UI immediately", async () => {
   firstSave.resolve();
   await vi.waitFor(() => expect(store.save).toHaveBeenCalledTimes(2));
   expect(store.save.mock.calls).toEqual([
-    [{ gridSnapping: false, showGrid: true, showPerformance: false }],
-    [{ gridSnapping: true, showGrid: true, showPerformance: false }],
+    [{ gridSnapping: false, showGrid: true, showPerformance: false, theme: "system" }],
+    [{ gridSnapping: true, showGrid: true, showPerformance: false, theme: "system" }],
   ]);
 });
 
@@ -98,6 +99,7 @@ it("loads hidden-grid preferences and saves visibility independently of snapping
     gridSnapping: true,
     showGrid: false,
     showPerformance: false,
+    theme: "system",
   });
   preferences.setShowGrid(false);
   expect(store.save).not.toHaveBeenCalled();
@@ -107,11 +109,12 @@ it("loads hidden-grid preferences and saves visibility independently of snapping
     gridSnapping: false,
     showGrid: true,
     showPerformance: false,
+    theme: "system",
   });
   await vi.waitFor(() => expect(store.save).toHaveBeenCalledTimes(2));
   expect(store.save.mock.calls).toEqual([
-    [{ gridSnapping: false, showGrid: false, showPerformance: false }],
-    [{ gridSnapping: false, showGrid: true, showPerformance: false }],
+    [{ gridSnapping: false, showGrid: false, showPerformance: false, theme: "system" }],
+    [{ gridSnapping: false, showGrid: true, showPerformance: false, theme: "system" }],
   ]);
 });
 
@@ -127,11 +130,13 @@ it("keeps a grid visibility choice made while saved preferences are loading", as
     gridSnapping: true,
     showGrid: false,
     showPerformance: false,
+    theme: "system",
   });
   expect(store.save).toHaveBeenCalledWith({
     gridSnapping: true,
     showGrid: false,
     showPerformance: false,
+    theme: "system",
   });
 });
 
@@ -146,6 +151,7 @@ it("loads and toggles performance visibility without changing grid preferences",
     gridSnapping: true,
     showGrid: false,
     showPerformance: true,
+    theme: "system",
   });
   preferences.setShowPerformance(true);
   expect(store.save).not.toHaveBeenCalled();
@@ -155,6 +161,37 @@ it("loads and toggles performance visibility without changing grid preferences",
       gridSnapping: true,
       showGrid: false,
       showPerformance: false,
+      theme: "system",
     }),
   );
+});
+
+it("defaults to system, restores a saved theme, and persists explicit choices", async () => {
+  const store = { load: async () => ({ theme: "dark" as const }), save: vi.fn(async () => {}) };
+  const preferences = new Preferences(store, vi.fn());
+  expect(preferences.getSnapshot().theme).toBe("system");
+  await preferences.load();
+  expect(preferences.getSnapshot().theme).toBe("dark");
+  preferences.setTheme("dark");
+  expect(store.save).not.toHaveBeenCalled();
+  preferences.setTheme("light");
+  preferences.setTheme("system");
+  await vi.waitFor(() => expect(store.save).toHaveBeenCalledTimes(2));
+  expect(store.save.mock.calls).toEqual([
+    [{ theme: "light", gridSnapping: true, showGrid: true, showPerformance: false }],
+    [{ theme: "system", gridSnapping: true, showGrid: true, showPerformance: false }],
+  ]);
+});
+
+it("keeps a theme choice made while saved preferences are loading", async () => {
+  const loaded = deferred<Partial<UserPreferences>>();
+  const preferences = new Preferences(
+    { load: () => loaded.promise, save: async () => {} },
+    vi.fn(),
+  );
+  const loading = preferences.load();
+  preferences.setTheme("light");
+  loaded.resolve({ theme: "dark" });
+  await loading;
+  expect(preferences.getSnapshot().theme).toBe("light");
 });
