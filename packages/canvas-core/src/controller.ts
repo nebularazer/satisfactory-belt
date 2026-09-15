@@ -136,7 +136,6 @@ export class CanvasController {
       ...this.portState,
       pending: [],
       chooser: null,
-      attempted: null,
       compatible: new Set(anchor ? targets(anchor).map(portId) : []),
       preview:
         anchor && this.portState.preview && compatibility(anchor, this.portState.preview).compatible
@@ -197,7 +196,6 @@ export class CanvasController {
         chooser: null,
         pending: [],
         preview: result.compatible ? ref : this.portState.preview,
-        attempted: result.compatible ? null : { port: ref, reason: result.reason },
       };
     }
     this.emit();

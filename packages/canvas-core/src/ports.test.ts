@@ -69,7 +69,7 @@ it("ambiguous touch opens a chooser without choosing by compatibility", () => {
   expect(canvas.getPortSnapshot().chooser?.candidates).toHaveLength(2);
   expect(canvas.getPortSnapshot().preview).toBeNull();
   canvas.selectPort(ports[2]);
-  expect(canvas.getPortSnapshot().attempted?.reason).toBe("different-material");
+  expect(canvas.getPortSnapshot().preview).toBeNull();
   expect(canvas.getPortSnapshot().anchor).toMatchObject(ports[0]);
   canvas.selectPort(ports[1]);
   expect(canvas.getPortSnapshot().preview).toEqual(ports[1]);
@@ -135,4 +135,16 @@ it("expanded targets cannot reach through a covering card body", () => {
       { x: 0, y: 0 },
     ),
   ).toEqual([]);
+});
+
+it.each([194, 200, 206])("port hit area owns x=%s across the node border", (x) => {
+  const { canvas, move } = setup();
+  canvas.hoverPort(pointer(x));
+  expect(canvas.getPortSnapshot().hover).toEqual([ports[1]]);
+  canvas.pointerDown(pointer(x));
+  expect(canvas.getPortSnapshot().pending).toEqual([ports[1]]);
+  expect(canvas.getSnapshot().interaction).not.toBe("drag");
+  canvas.pointerUp(pointer(x));
+  expect(canvas.getPortSnapshot().anchor).toEqual(ports[1]);
+  expect(move).not.toHaveBeenCalled();
 });

@@ -21,7 +21,6 @@ export type PortSelection = Readonly<{
   hover: readonly PortReference[];
   pending: readonly PortReference[];
   chooser: Readonly<{ point: Point; candidates: readonly PortReference[] }> | null;
-  attempted: Readonly<{ port: PortReference; reason: string }> | null;
   compatible: ReadonlySet<string>;
 }>;
 export const emptyPortSelection = (): PortSelection => ({
@@ -30,7 +29,6 @@ export const emptyPortSelection = (): PortSelection => ({
   hover: [],
   pending: [],
   chooser: null,
-  attempted: null,
   compatible: new Set(),
 });
 
@@ -70,20 +68,3 @@ export function hitTestPorts(
       .some((cover) => contains(cover, anchor) || contains(cover, point));
   });
 }
-
-/** Shared interaction colors; direction identity remains on the original glyph. */
-export const PORT_PALETTE = {
-  hover: "#64748b",
-  anchor: "#6960d9",
-  compatible: "#2563eb",
-  active: "#1d4ed8",
-  invalid: "#b91c1c",
-} as const;
-
-export const PORT_TINTS = {
-  hover: "#f1f5f9",
-  anchor: "#f0edff",
-  compatible: "#eff6ff",
-  active: "#dbeafe",
-  invalid: "#fef2f2",
-} as const;

@@ -163,7 +163,7 @@ export async function mountCanvas(
       const display = options.getDisplay(item.id);
       if (display) {
         view.update(display, camera.zoom, resolution, selected, palette);
-        view.portHighlights.update(item.id, display, camera.zoom, snapshot.ports);
+        view.portHighlights.update(item.id, display, snapshot.ports, palette);
       } else view.container.visible = false;
     }
 
@@ -184,7 +184,9 @@ export async function mountCanvas(
           ? "move"
           : snapshot.interaction === "marquee"
             ? "crosshair"
-            : "default";
+            : snapshot.ports.hover.length || snapshot.ports.pending.length
+              ? "pointer"
+              : "default";
     app.render();
     if (started !== undefined)
       monitor.record(performance.now() - started, visibleItems, items.length);
@@ -243,9 +245,11 @@ export async function mountCanvas(
         canvas.style.cursor =
           event.shiftKey || event.ctrlKey || event.metaKey
             ? "crosshair"
-            : controller.hitTest(normalize(event))
-              ? "move"
-              : "default";
+            : controller.getPortSnapshot().hover.length
+              ? "pointer"
+              : controller.hitTest(normalize(event))
+                ? "move"
+                : "default";
       }
     },
     { signal: events.signal },
