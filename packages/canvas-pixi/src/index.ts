@@ -161,7 +161,9 @@ export async function mountCanvas(
         itemsLayer.addChild(view.container);
         views.set(item.id, view);
       }
-      view.container.zIndex = index;
+      // Lift the dragged group above stationary nodes while preserving its internal order.
+      view.container.zIndex =
+        index + (snapshot.interaction === "drag" && selected ? items.length : 0);
       view.container.visible = true;
       view.container.position.set(position.x, position.y);
       const display = options.getDisplay(item.id);
