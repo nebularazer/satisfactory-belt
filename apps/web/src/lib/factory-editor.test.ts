@@ -743,3 +743,25 @@ it("uses Sink acceptance in the editor and preserves Sink nodes through copy, de
   historyCommand("undo");
   expect(history.getSnapshot().state.nodes.at(-1)).toEqual(pasted);
 });
+
+it("commits a port drag as one undoable connection without moving either node", () => {
+  const { controller, history, historyCommand, getDisplay, output, input } = createLinkedEditor();
+  const before = history.getSnapshot().state;
+  const point = (ref: typeof output) => {
+    const node = before.nodes.find((entry) => entry.id === ref.nodeId)!;
+    const port = getDisplay(ref.nodeId)!.ports.find((entry) => entry.key === ref.portKey)!;
+    return { id: 1, x: node.x + port.x, y: node.y + port.y };
+  };
+  controller.pointerDown(point(output));
+  controller.pointerMove(point(input));
+  expect(history.getSnapshot().state).toBe(before);
+  expect(controller.getSnapshot().connectionPreview).not.toBeNull();
+  controller.pointerUp(point(input));
+  const connected = history.getSnapshot().state;
+  expect(connected.links).toHaveLength(1);
+  expect(connected.nodes).toBe(before.nodes);
+  historyCommand("undo");
+  expect(history.getSnapshot().state).toBe(before);
+  historyCommand("redo");
+  expect(history.getSnapshot().state).toBe(connected);
+});

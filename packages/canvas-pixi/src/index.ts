@@ -82,7 +82,7 @@ export async function mountCanvas(
   canvas.setAttribute("role", "application");
   canvas.setAttribute(
     "aria-label",
-    "Canvas. Select a port, then a compatible port to connect. Select a link to move its segment handles. Delete removes selected nodes or links. Drag empty space to pan. Shift, Control, or Command and drag to select; modifier-click toggles an item. Arrow keys move selected items. Control or Command Z undoes; add Shift to redo. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
+    "Canvas. Drag between compatible ports or select them in turn to connect. Select a link to move its segment handles. Delete removes selected nodes or links. Drag empty space to pan. Shift, Control, or Command and drag to select; modifier-click toggles an item. Arrow keys move selected items. Control or Command Z undoes; add Shift to redo. Scroll to zoom. 0 resets the view, Shift 1 fits all, plus and minus zoom.",
   );
   canvas.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none;";
   app.stage.eventMode = "none";

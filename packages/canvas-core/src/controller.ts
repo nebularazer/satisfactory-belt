@@ -33,6 +33,7 @@ export type CanvasPointer = Point &
 type Gesture = {
   kind: "pan" | "drag" | "marquee" | "port" | "link" | "segment";
   linkHits?: readonly LinkHit[];
+  sourcePort?: CanvasPort;
   pointerId: number;
   start: Point;
   last: CanvasPointer;
@@ -53,6 +54,7 @@ type Pinch = {
 
 export type CanvasSnapshot = Readonly<{
   ports: PortSelection;
+  connectionPreview: readonly Point[] | null;
   links: readonly CanvasLink[];
   linkSelection: LinkSelection;
   items: readonly CanvasItem[];
@@ -117,6 +119,7 @@ export class CanvasController {
 
   getSnapshot = (): CanvasSnapshot => ({
     ports: this.portState,
+    connectionPreview: this.connectionPreview(),
     links: this.getVisibleLinks(),
     linkSelection: this.linkState,
     items: this.items,
@@ -238,6 +241,24 @@ export class CanvasController {
           ? this.portState.preview
           : null,
     };
+  }
+
+  private connectionPreview(): readonly Point[] | null {
+    const gesture = this.gesture;
+    if (!gesture?.sourcePort) return null;
+    const source = gesture.sourcePort;
+    const position = (port: CanvasPort): Point => {
+      const item = this.items.find((entry) => entry.id === port.nodeId)!;
+      return { x: item.x + port.x, y: item.y + port.y };
+    };
+    const targets = this.portHits(gesture.last);
+    const target =
+      targets.length === 1 && this.compatibility(source, targets[0]!).compatible
+        ? position(targets[0]!)
+        : screenToWorld(gesture.last, this.camera);
+    return source.direction === "output"
+      ? routeLink(position(source), target, this.items)
+      : routeLink(target, position(source), this.items);
   }
 
   private portHits(pointer: CanvasPointer) {
@@ -364,10 +385,12 @@ export class CanvasController {
         anchor &&
         ports.every(
           (port) =>
-            port.direction !== anchor.direction && !this.compatibility(anchor, port).compatible,
+            (this.gesture?.sourcePort || port.direction !== anchor.direction) &&
+            !this.compatibility(anchor, port).compatible,
         );
       return invalid ? "not-allowed" : "pointer";
     }
+    if (this.gesture?.sourcePort) return "crosshair";
     if (this.hitTest(pointer)) return "move";
     const handles = hitTestLinks(
       pointer,
@@ -412,6 +435,7 @@ export class CanvasController {
       this.dragOffset = ZERO;
       this.marquee = null;
       this.linkState = { ...this.linkState, preview: null, chooser: null };
+      if (this.gesture?.sourcePort) this.portState = emptyPortSelection();
       this.gesture = null;
       this.portState = { ...this.portState, pending: [], chooser: null, hover: [] };
       this.pinch = {
@@ -525,6 +549,23 @@ export class CanvasController {
     )
       return;
     gesture.moved = true;
+    if (gesture.kind === "port" && !gesture.sourcePort && this.portState.pending.length === 1) {
+      const source = this.portGeometry.find((port) => samePort(port, this.portState.pending[0]!));
+      if (source) {
+        gesture.sourcePort = source;
+        this.linkState = emptyLinkSelection();
+        this.portState = {
+          ...emptyPortSelection(),
+          anchor: source,
+          compatible: new Set(this.targets(source).map(portId)),
+        };
+      }
+    }
+    if (gesture.sourcePort) {
+      this.portState = { ...this.portState, hover: this.portHits(pointer) };
+      this.emit();
+      return;
+    }
     if (gesture.kind === "port" || gesture.kind === "link") {
       gesture.kind = "pan";
       this.portState = { ...this.portState, pending: [], hover: [] };
@@ -606,6 +647,15 @@ export class CanvasController {
       this.emit();
       return;
     }
+    if (gesture.sourcePort) {
+      const targets = this.portHits(pointer);
+      this.gesture = null;
+      this.portState = emptyPortSelection();
+      if (targets.length === 1 && this.compatibility(gesture.sourcePort, targets[0]!).compatible)
+        this.onConnect?.(gesture.sourcePort, targets[0]!);
+      this.emit();
+      return;
+    }
     if (gesture.kind === "port") {
       const candidates = this.portState.pending;
       this.gesture = null;
@@ -650,6 +700,7 @@ export class CanvasController {
 
   cancel(notify = true) {
     const transient = this.portState.pending.length || this.portState.hover.length;
+    if (this.gesture?.sourcePort) this.portState = emptyPortSelection();
     this.hoverPoint = null;
     this.linkState = { ...this.linkState, preview: null };
     this.portState = { ...this.portState, pending: [], hover: [] };

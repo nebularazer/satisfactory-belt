@@ -13,9 +13,14 @@ const items = [
   { id: "b", x: 200, y: 0, width: 100, height: 100 },
 ];
 const pointer = (x: number, y = 40, touch = false, id = 1) => ({ x, y, touch, id });
-function setup() {
+function setup(connect = false) {
   const move = vi.fn();
-  const canvas = new CanvasController({ items, onMove: move });
+  const onConnect = vi.fn(() => ({ compatible: true as const, output: ports[0], input: ports[1] }));
+  const canvas = new CanvasController({
+    items,
+    onMove: move,
+    onConnect: connect ? onConnect : undefined,
+  });
   canvas.setPorts(
     ports,
     (a, b) =>
@@ -24,7 +29,7 @@ function setup() {
         : { compatible: false, reason: "different-material" },
     () => [ports[1]],
   );
-  return { canvas, move };
+  return { canvas, move, onConnect };
 }
 function tap(canvas: CanvasController, p = pointer(100)) {
   canvas.pointerDown(p);
@@ -40,15 +45,60 @@ it("commits only on release, allows touch movement, never moves the node", () =>
   expect([...canvas.getSnapshot().selection]).toEqual(["a"]);
   expect(move).not.toHaveBeenCalled();
 });
-it("swipes pan from the original press and preserve a committed anchor", () => {
-  const { canvas, move } = setup();
+it("port drags cancel on empty space without panning or keeping an anchor", () => {
+  const { canvas, move, onConnect } = setup(true);
   tap(canvas);
   canvas.pointerDown(pointer(200, 40, true));
-  canvas.pointerUp(pointer(230, 40, true));
-  expect(canvas.getSnapshot().camera.x).toBe(30);
-  expect(canvas.getPortSnapshot().anchor).toMatchObject(ports[0]);
-  expect(canvas.getPortSnapshot().preview).toBeNull();
+  canvas.pointerUp(pointer(240, 40, true));
+  expect(canvas.getSnapshot().camera.x).toBe(0);
+  expect(canvas.getPortSnapshot().anchor).toBeNull();
+  expect(canvas.getSnapshot().connectionPreview).toBeNull();
   expect(move).not.toHaveBeenCalled();
+  expect(onConnect).not.toHaveBeenCalled();
+});
+it.each([false, true])("drags a connection in either direction with touch=%s", (touch) => {
+  for (const [start, end] of [
+    [100, 200],
+    [200, 100],
+  ]) {
+    const { canvas, move, onConnect } = setup(true);
+    canvas.pointerDown(pointer(start, 40, touch));
+    canvas.pointerMove(pointer(start + 2, 40, touch));
+    expect(canvas.getSnapshot().connectionPreview).toBeNull();
+    canvas.pointerMove(pointer(end, 40, touch));
+    const points = canvas.getSnapshot().connectionPreview!;
+    expect(points[0]).toEqual({ x: 100, y: 40 });
+    expect(points.at(-1)).toEqual({ x: 200, y: 40 });
+    expect(onConnect).not.toHaveBeenCalled();
+    canvas.pointerUp(pointer(end, 40, touch));
+    expect(onConnect).toHaveBeenCalledTimes(1);
+    expect(move).not.toHaveBeenCalled();
+    expect(canvas.getSnapshot().connectionPreview).toBeNull();
+    expect(canvas.getPortSnapshot().anchor).toBeNull();
+  }
+});
+it("rejects an invalid drop with a forbidden cursor", () => {
+  const { canvas, onConnect } = setup(true);
+  canvas.pointerDown(pointer(100));
+  canvas.pointerMove(pointer(200, 72));
+  expect(canvas.getCursor()).toBe("not-allowed");
+  canvas.pointerUp(pointer(200, 72));
+  expect(onConnect).not.toHaveBeenCalled();
+  expect(canvas.getSnapshot().connectionPreview).toBeNull();
+});
+it.each(["escape", "cancel", "pinch"])("cancels port dragging on %s", (action) => {
+  const { canvas, onConnect } = setup(true);
+  canvas.pointerDown(pointer(100, 40, true));
+  canvas.pointerMove(pointer(150, 40, true));
+  expect(canvas.getSnapshot().connectionPreview).not.toBeNull();
+  if (action === "escape") canvas.command("escape");
+  else if (action === "cancel") canvas.cancel();
+  else canvas.pointerDown(pointer(250, 40, true, 2));
+  expect(canvas.getSnapshot().connectionPreview).toBeNull();
+  expect(canvas.getPortSnapshot().anchor).toBeNull();
+  canvas.pointerUp(pointer(200, 40, true));
+  canvas.pointerUp(pointer(250, 40, true, 2));
+  expect(onConnect).not.toHaveBeenCalled();
 });
 it("second finger cancels a pending press and suppresses remaining finger taps", () => {
   const { canvas } = setup();

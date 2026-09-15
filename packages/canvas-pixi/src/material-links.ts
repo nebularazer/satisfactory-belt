@@ -24,7 +24,9 @@ export function drawMaterialLinks(
   lines.clear();
   handles.clear();
   const { camera, viewport, links, linkSelection } = snapshot;
-  for (const link of links) {
+  const preview = snapshot.connectionPreview;
+  const rendered = preview ? [...links, { id: null, points: preview }] : links;
+  for (const link of rendered) {
     const bounds = routeBounds(link.points),
       position = worldToScreen(bounds, camera);
     if (
@@ -35,8 +37,8 @@ export function drawMaterialLinks(
     )
       continue;
     const points = link.points.map((point) => worldToScreen(point, camera));
-    const selected = linkSelection.selected === link.id;
-    const color = selected ? palette.selection : palette.footer;
+    const selected = link.id !== null && linkSelection.selected === link.id;
+    const color = selected || link.id === null ? palette.selection : palette.footer;
     lines.moveTo(points[0]!.x, points[0]!.y);
     for (let i = 1; i < points.length - 1; i++) {
       const a = points[i - 1]!,
@@ -53,7 +55,7 @@ export function drawMaterialLinks(
     }
     const end = points.at(-1)!;
     lines.lineTo(end.x, end.y).stroke({ color, width: selected ? 3 : 2 });
-    if (!selected) continue;
+    if (!selected || link.id === null) continue;
     for (const handle of linkHandles(link)) {
       const p = worldToScreen(handle, camera);
       handles
