@@ -179,17 +179,19 @@ Use the completed output directory printed by step 4. Preparation runs locally w
 Node/tsx and Sharp (installed by `pnpm install`); Docker and Steam are not involved.
 
 ```bash
-pnpm assets:prepare --input .assets/extracted/REPLACE_WITH_COMPLETED_RUN --compare
+pnpm assets:prepare --input .assets/extracted/REPLACE_WITH_COMPLETED_RUN
 ```
 
 For the extraction validated here:
 
 ```bash
-pnpm assets:prepare --input .assets/extracted/en-US-WSmSpy --compare
+pnpm assets:prepare --input .assets/extracted/en-US-WSmSpy
 ```
 
 `--compare` adds a size comparison against PNG and lossless WebP using the same
-resized pixels. Omit it for subsequent runs to avoid the extra encoding work.
+resized pixels. It deliberately bypasses cache reads to measure fresh encodes of
+all formats, while populating the cache for the selected output encoding. Omit
+it for routine runs to reuse previous conversions.
 `--encoding lossless` preserves visible pixels exactly; the default is `quality90`.
 Both modes preserve the alpha channel. Encoding uses effort 6; quality90 also uses
 high-quality chroma subsampling and alpha quality 100. Raw extracted PNGs remain available.
@@ -203,7 +205,32 @@ Every run creates a new gitignored `.assets/prepared/<locale>-<suffix>/` directo
 - `icons/<sha256>.webp`: files named by their encoded content. Identical decoded
   source pixels share one icon ID; matching encoded variants share one file.
 - `preparation.json`: completion status, source extraction metadata, encoder versions,
-  size totals/comparison and excluded recipe IDs with reasons.
+  size totals/comparison, reused/converted image counts and excluded recipe IDs with reasons.
+
+Image conversions persist in the gitignored `.assets/cache/images/` directory.
+The cache is keyed by the decoded source RGBA hash, pipeline version, output
+sizes, encoding settings and Sharp/dependency versions. Every run still verifies
+source PNG hashes and rebuilds the catalog. Images with unchanged pixels reuse
+their validated 64/128/256px WebP files, even if their descriptor names or source
+PNG compression changed. A new image requires only its own conversion.
+
+The first run populates the cache; prepared directories from before this feature
+are not imported automatically. Subsequent normal runs report how many unique
+images were reused or converted. Cache reads check metadata, file lengths and
+SHA-256 hashes. Missing, incomplete or corrupt entries are rebuilt individually;
+filesystem permission and disk errors still fail the run. Cache files are
+published atomically, with metadata written last. Prepared outputs receive
+independent files, so later cache damage cannot modify an earlier completed run.
+The cache is disposable; removing it simply makes the next preparation rebuild
+its conversions. Bump the pipeline version when changing normalization, resizing
+or validation semantics that are not already represented in the cache key.
+
+Local validation: the initial cache population converted 211 images into 633
+WebP files. A subsequent normal preparation reused all 211 images with zero
+conversions in approximately 1.5 seconds. Its catalog and icon manifest matched
+the fresh run byte for byte, and staging verified all generated image files.
+Focused tests also cover adding/changing a source, cache corruption and incomplete
+entries, conversion-version isolation, concurrent publication and comparison mode.
 
 The reusable types and semantic validator live in `packages/game-data`, exported as
 `@satisfactory-belt/game-data`. The package has no browser or image-encoding dependency.

@@ -28,7 +28,8 @@ async function main() {
 pnpm assets:prepare --input .assets/extracted/<run> [--encoding quality90|lossless] [--compare]
 
 Writes a fresh gitignored .assets/prepared/<locale>-<suffix>/ directory.
---compare reports PNG, lossless WebP and quality-90 WebP sizes for the selected icons.
+Reuses validated image conversions from .assets/cache/images/.
+--compare bypasses cache reads to measure PNG, lossless WebP and quality-90 WebP sizes.
 Setup and scope: docs/asset-extraction.md`);
     return;
   }
@@ -94,6 +95,7 @@ Setup and scope: docs/asset-extraction.md`);
     output,
     encoding,
     values.compare,
+    join(root, ".assets/cache/images"),
   );
   for (const entry of entities) {
     const iconId = descriptorIcons.get(entry.iconId);
@@ -109,7 +111,7 @@ Setup and scope: docs/asset-extraction.md`);
     true,
   );
   console.log(
-    `Prepared ${stats.uniqueImages} unique images in ${stats.outputFiles} WebP files (${(stats.outputBytes / 1024 / 1024).toFixed(2)} MiB across all sizes).\nResults: ${output}`,
+    `Prepared ${stats.uniqueImages} unique images (${stats.reusedImages} reused, ${stats.convertedImages} converted) in ${stats.outputFiles} WebP files (${(stats.outputBytes / 1024 / 1024).toFixed(2)} MiB across all sizes).\nResults: ${output}`,
   );
   if (stats.comparison) console.table(stats.comparison);
 }

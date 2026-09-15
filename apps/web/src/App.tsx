@@ -37,7 +37,8 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createExampleCanvas } from "@/lib/example-canvas";
+import { createExampleFactory } from "@/lib/example-factory";
+import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
 
@@ -82,7 +83,7 @@ function CanvasWorkspace({
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
   const [{ controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay }] =
-    useState(() => createExampleCanvas(assets.catalog));
+    useState(() => createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)));
   const { canUndo, canRedo } = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [performanceMonitor, setPerformanceMonitor] = useState<RenderPerformance | null>(null);
