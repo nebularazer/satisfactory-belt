@@ -5,7 +5,7 @@ import {
   PIPE_PORT_RADIUS,
   PORT_RADIUS,
 } from "@satisfactory-belt/factory-core";
-import type { MachineDisplay } from "@satisfactory-belt/factory-core";
+import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import { CanvasTextMetrics, Container, Graphics, Sprite, Text } from "pixi.js";
 
 import type { IconCache } from "./icon-cache";
@@ -30,7 +30,7 @@ export class MachineNodeView {
   private content = new Container({ eventMode: "none" });
   private texts: Text[] = [];
   private icons: IconView[] = [];
-  private display: MachineDisplay | null = null;
+  private display: NodeDisplay | null = null;
   private selected = false;
   private zoom = -1;
   private fontFamily: string;
@@ -42,18 +42,19 @@ export class MachineNodeView {
     this.container.addChild(this.background, this.content);
   }
 
-  update(display: MachineDisplay, zoom: number, resolution: number, selected: boolean) {
-    if (this.display !== display) {
+  update(display: NodeDisplay, zoom: number, resolution: number, selected: boolean) {
+    const changed = this.display !== display;
+    if (changed) {
       this.content.removeChildren().forEach((child) => child.destroy({ children: true }));
       this.texts = [];
       this.icons = [];
       this.build(display);
       this.display = display;
     }
-    if (this.zoom !== zoom || this.selected !== selected) {
+    if (changed || this.zoom !== zoom || this.selected !== selected) {
       this.background
         .clear()
-        .roundRect(0, 0, NODE_SIZE, NODE_SIZE, 8)
+        .roundRect(0, 0, display.size, display.size, 8)
         .fill("#ffffff")
         .stroke({ color: selected ? "#6960d9" : "#d8d9e0", width: (selected ? 1.5 : 1) / zoom });
       this.zoom = zoom;
@@ -76,17 +77,21 @@ export class MachineNodeView {
     }
   }
 
-  private build(display: MachineDisplay) {
-    const lines = new Graphics()
-      .moveTo(0, HEADER_HEIGHT)
-      .lineTo(NODE_SIZE, HEADER_HEIGHT)
-      .moveTo(0, FOOTER_Y)
-      .lineTo(NODE_SIZE, FOOTER_Y)
-      .stroke({ color: "#ececf0", width: 1 });
-    this.content.addChild(lines);
-    this.icon(display.machineIconId, 32, 32, 40);
-    this.label(display.title, 64, 23, 176, 15, "600", "#30313b");
-    this.label(display.subtitle, 64, 44, 176, 12, "400", "#757681");
+  private build(display: NodeDisplay) {
+    if (display.layout === "logistics") {
+      this.icon(display.machineIconId, display.size / 2, display.size / 2, 64, 0.7);
+    } else {
+      const lines = new Graphics()
+        .moveTo(0, HEADER_HEIGHT)
+        .lineTo(NODE_SIZE, HEADER_HEIGHT)
+        .moveTo(0, FOOTER_Y)
+        .lineTo(NODE_SIZE, FOOTER_Y)
+        .stroke({ color: "#ececf0", width: 1 });
+      this.content.addChild(lines);
+      this.icon(display.machineIconId, 32, 32, 40);
+      this.label(display.title, 64, 23, 176, 15, "600", "#30313b");
+      this.label(display.subtitle, 64, 44, 176, 12, "400", "#757681");
+    }
 
     const markers = new Graphics();
     for (const port of display.ports) {
@@ -104,9 +109,11 @@ export class MachineNodeView {
         ]);
       } else markers.circle(port.x, port.y, PORT_RADIUS);
       markers.fill(colors.fill).stroke({ color: colors.stroke, width: 2 });
-      this.icon(port.iconId, port.direction === "input" ? 28 : NODE_SIZE - 28, port.y, 24);
+      if (port.iconId)
+        this.icon(port.iconId, port.direction === "input" ? 28 : display.size - 28, port.y, 24);
     }
     this.content.addChild(markers);
+    if (display.layout === "logistics") return;
     this.symbol(ZAP, 12, 232, "#cd921a", "#f7ce65");
     this.label(display.powerLabel, 32, 240, 80, 11, "500", "#656774");
     if (display.clockLabel) {
@@ -162,13 +169,14 @@ export class MachineNodeView {
     this.content.addChild(label);
   }
 
-  private icon(id: string, x: number, y: number, size: number) {
+  private icon(id: string, x: number, y: number, size: number, opacity = 1) {
     const placeholder = new Graphics()
       .roundRect(x - size / 2, y - size / 2, size, size, 4)
       .fill("#f0f0f3")
       .stroke({ color: "#d8d9e0", width: 1 });
     const sprite = new Sprite({ anchor: 0.5 });
     sprite.position.set(x, y);
+    sprite.alpha = opacity;
     sprite.visible = false;
     this.content.addChild(placeholder, sprite);
     this.icons.push({ sprite, placeholder, id, size });

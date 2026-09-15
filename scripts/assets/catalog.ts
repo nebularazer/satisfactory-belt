@@ -4,6 +4,7 @@ import type {
   GameCatalog,
   Ingredient,
   Item,
+  LogisticsPart,
   Machine,
   Recipe,
 } from "@satisfactory-belt/game-data";
@@ -42,8 +43,22 @@ export function parseCatalog(
   const recipes: Record<string, Recipe> = {};
   const fixedProducers: Record<string, FixedProducer> = {};
   const extractors: Record<string, Extractor> = {};
+  const logistics: Record<string, LogisticsPart> = {};
   const excludedRecipes: ExcludedRecipe[] = [];
   for (const [id, { native, data }] of classes) {
+    if (native === "FGBuildableAttachmentSplitter" || native === "FGBuildableAttachmentMerger") {
+      const descriptorId = id.replace(/^Build_/, "Desc_");
+      if (classes.get(descriptorId)?.native !== "FGBuildingDescriptor")
+        throw new Error(`Missing building descriptor for ${id}.`);
+      logistics[id] = {
+        id,
+        descriptorId,
+        iconId: descriptorId,
+        name: string(data, "mDisplayName"),
+        description: string(data, "mDescription"),
+        kind: native === "FGBuildableAttachmentSplitter" ? "splitter" : "merger",
+      };
+    }
     if (typeof data.mForm === "string" && data.mForm !== "RF_INVALID") {
       const form =
         data.mForm === "RF_SOLID"
@@ -209,6 +224,7 @@ export function parseCatalog(
       machines: sorted(machines),
       fixedProducers: sorted(fixedProducers),
       extractors: sorted(extractors),
+      logistics: sorted(logistics),
       recipes: sorted(recipes),
     },
     excludedRecipes: excludedRecipes.toSorted((a, b) => a.id.localeCompare(b.id, "en")),

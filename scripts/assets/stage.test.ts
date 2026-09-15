@@ -20,6 +20,7 @@ it("stages verified artifacts and retains the previous assets when the next inpu
     const catalog = {
       schemaVersion: 1,
       extractors: {},
+      logistics: {},
       source: { locale: "en", docsSha256: hash },
       items: {},
       machines: {},

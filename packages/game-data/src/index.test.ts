@@ -10,6 +10,7 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
     catalog: {
       schemaVersion: 1,
       extractors: {},
+      logistics: {},
       source: { locale: "en-US", docsSha256: hash },
       items: {
         Item: {
@@ -69,6 +70,23 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
   };
 }
 describe("game data validation", () => {
+  it("rejects logistics parts with missing images or invalid identities", () => {
+    const { catalog, icons } = fixture();
+    catalog.logistics.Part = {
+      id: "Part",
+      name: "Splitter",
+      description: "",
+      descriptorId: "Desc_Part",
+      iconId: hash,
+      kind: "splitter",
+    };
+    expect(() => validateGameData(catalog, icons)).not.toThrow();
+    catalog.logistics.Part.iconId = "missing";
+    expect(() => validateGameData(catalog, icons)).toThrow("Missing icon");
+    catalog.logistics.Part.iconId = hash;
+    catalog.logistics.Part.id = "other";
+    expect(() => validateGameData(catalog, icons)).toThrow("Invalid logistics part");
+  });
   it("validates extractor resources, power and image references", () => {
     const { catalog, icons } = fixture();
     const extractor = {

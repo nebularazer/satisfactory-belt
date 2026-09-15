@@ -58,6 +58,29 @@ function fixture() {
   ];
 }
 describe("manufacturing catalog", () => {
+  it.each(["Splitter", "Merger"])(
+    "extracts %s imagery and kind independently of translated names",
+    (part) => {
+      const docs = fixture();
+      docs[1]!.Classes.push({ ClassName: `Desc_${part}_C` });
+      docs.push(
+        group(`FGBuildableAttachment${part}`, [
+          { ClassName: `Build_${part}_C`, mDisplayName: "Translated part", mDescription: "" },
+        ]),
+      );
+      const { catalog } = parseCatalog(docs, source);
+      expect(catalog.logistics[`Build_${part}_C`]).toEqual({
+        id: `Build_${part}_C`,
+        descriptorId: `Desc_${part}_C`,
+        iconId: `Desc_${part}_C`,
+        name: "Translated part",
+        description: "",
+        kind: part.toLowerCase(),
+      });
+      docs[1]!.Classes.pop();
+      expect(() => parseCatalog(docs, source)).toThrow("Missing building descriptor");
+    },
+  );
   it("normalizes fluids and gases, retains multiple outputs, events and variable power", () => {
     const { catalog, excludedRecipes } = parseCatalog(fixture(), source);
     const result = catalog.recipes.Recipe_Test_C!;

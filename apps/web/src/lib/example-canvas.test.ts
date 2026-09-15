@@ -220,6 +220,7 @@ function createExampleCanvas() {
   const catalog: GameCatalog = {
     schemaVersion: 1,
     extractors: {},
+    logistics: {},
     source: { locale: "en", docsSha256: "a".repeat(64) },
     items: {
       Desc_WAT1_C: {
@@ -283,7 +284,8 @@ it("reuses card content on movement and publishes new content before geometry no
   expect(getDisplay("machine-1")).toBe(display);
   let observed: string | undefined;
   const unsubscribe = controller.subscribe(() => {
-    observed = getDisplay("machine-1")?.subtitle;
+    const current = getDisplay("machine-1");
+    observed = current?.layout === "machine" ? current.subtitle : undefined;
   });
   history.update((nodes) =>
     nodes.map((node) => (node.id === "machine-1" ? { ...node, machineCount: 4 } : node)),
@@ -291,6 +293,52 @@ it("reuses card content on movement and publishes new content before geometry no
   expect(observed).toBe("4× Assembler");
   expect(getDisplay("machine-1")).not.toBe(display);
   unsubscribe();
+});
+
+it("preserves logistics identity and compact bounds through editing beside machines", () => {
+  const {
+    catalog,
+    controller,
+    history,
+    clipboardCommand,
+    historyCommand,
+    getDisplay,
+    deleteSelection,
+  } = createExampleCanvas();
+  for (const kind of ["splitter", "merger"] as const)
+    catalog.logistics[kind] = {
+      id: kind,
+      name: kind,
+      kind,
+      description: "",
+      descriptorId: kind,
+      iconId: kind,
+    };
+  const node = { kind: "logistics", id: "splitter", partId: "splitter", x: 1024, y: 160 } as const;
+  history.update((nodes) => [...nodes, node]);
+  expect(controller.getSnapshot().items.find((item) => item.id === node.id)).toMatchObject({
+    width: 128,
+    height: 128,
+  });
+  controller.setSelection(new Set([node.id]));
+  const display = getDisplay(node.id);
+  controller.command("move-right");
+  expect(getDisplay(node.id)).toBe(display);
+  clipboardCommand("copy");
+  clipboardCommand("paste");
+  const pasted = history.getSnapshot().state.at(-1)!;
+  expect(pasted).toMatchObject({ ...node, id: expect.any(String), x: 1072, y: 192 });
+  expect(pasted.id).not.toBe(node.id);
+  deleteSelection();
+  expect(getDisplay(pasted.id)).toBeUndefined();
+  historyCommand("undo");
+  expect(getDisplay(pasted.id)).toEqual(display);
+  historyCommand("redo");
+  expect(getDisplay(pasted.id)).toBeUndefined();
+  history.update((nodes) =>
+    nodes.map((entry) => (entry.kind === "logistics" ? { ...entry, partId: "merger" } : entry)),
+  );
+  expect(getDisplay(node.id)?.ports.filter((port) => port.direction === "input")).toHaveLength(3);
 });
 
 it("retains extraction settings through movement, copy/paste and undo and refreshes resource changes", () => {

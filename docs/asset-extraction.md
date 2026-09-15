@@ -196,7 +196,7 @@ high-quality chroma subsampling and alpha quality 100. Raw extracted PNGs remain
 
 Every run creates a new gitignored `.assets/prepared/<locale>-<suffix>/` directory:
 
-- `catalog.json`: compact items, manufacturing machines, fixed producers, extractors and automated recipes,
+- `catalog.json`: compact items, manufacturing machines, fixed producers, extractors, logistics parts and automated recipes,
   keyed by game class ID, with locale and source JSON SHA-256.
 - `icons.json`: icon IDs mapped to WebP variants at 64, 128 and 256 pixels, including
   relative paths, dimensions, byte sizes and SHA-256 hashes.
@@ -211,7 +211,7 @@ Generated data and image files stay under `.assets/`. Use `pnpm assets:stage --i
 .assets/prepared/<completed-run>` to validate and copy them into the gitignored web
 public directory. Steam access is only needed when obtaining new source files.
 
-An item's, machine's or fixed producer's `iconId` indexes `icons.json`'s `icons` object. Its `variants`
+An item's or building's `iconId` indexes `icons.json`'s `icons` object. Its `variants`
 object has keys `64`, `128`, and `256`. Paths are relative to the prepared directory;
 the staging command serves them under the app base path and the Pixi icon cache
 loads suitable variants on demand. Smaller variants reduce the pixels that need decoding; WebP
@@ -253,8 +253,13 @@ compression alone does not reduce GPU texture memory.
   preparation, while their extracted PNGs remain available. The full source JSON
   is preserved for extending the model later.
 
+- `logistics` includes the basic Conveyor Splitter and Conveyor Merger, their
+  building names and images. Port material and distribution are not inferred
+  from their descriptions. Pipe junctions are reserved for the future link model.
+
 The current dump has 195 items, 291 manufacturing recipes and 11 manufacturing
-machines plus one fixed producer and five extractors; 581 other `FGRecipe` entries are excluded.
+machines plus one fixed producer, five extractors and two logistics parts;
+581 other `FGRecipe` entries are excluded.
 Data validation checks quantities, durations, units, and every item/machine/producer/icon
 reference. Source PNG hashes are checked
 against the extraction report; each generated WebP is fully decoded to validate its

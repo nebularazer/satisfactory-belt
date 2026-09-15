@@ -61,6 +61,16 @@ export interface Extractor {
   canOverclock: boolean;
 }
 
+/** Belt attachments; port counts describe planner slots on each side. */
+export interface LogisticsPart {
+  id: string;
+  name: string;
+  description: string;
+  descriptorId: string;
+  iconId: string;
+  kind: "splitter" | "merger";
+}
+
 export interface Recipe {
   id: string;
   name: string;
@@ -82,6 +92,7 @@ export interface GameCatalog {
   machines: Record<string, Machine>;
   fixedProducers: Record<string, FixedProducer>;
   extractors: Record<string, Extractor>;
+  logistics: Record<string, LogisticsPart>;
   recipes: Record<string, Recipe>;
 }
 
@@ -179,6 +190,11 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
     );
     for (const resourceId of extractor.resourceIds)
       check(Object.hasOwn(catalog.items, resourceId), `Missing resource ${resourceId} for ${id}.`);
+  }
+  for (const [id, part] of Object.entries(catalog.logistics)) {
+    check(id === part.id && Boolean(part.name.trim()), `Invalid logistics part ${id}.`);
+    check(part.kind === "splitter" || part.kind === "merger", `Invalid logistics kind for ${id}.`);
+    check(iconIds.has(part.iconId), `Missing icon for ${id}.`);
   }
   for (const [id, recipe] of Object.entries(catalog.recipes)) {
     check(id === recipe.id && Boolean(recipe.name.trim()), `Invalid recipe ${id}.`);

@@ -13,7 +13,9 @@ selecting an input highlights outputs that can supply it. Material always flows
 from output to input, regardless of which end was selected first.
 
 In the selection step, tapping a compatible target selects a preview pair and
-shows both material names in a small inspector. It does not create an edge or
+shows the selected endpoints in a small inspector. Keep this temporary preview
+to existing highlights and a short target label, with no separate preview editor
+or confirmation workflow. It does not create an edge or
 pretend a connection has been made. Keep the original anchor selected until the
 user clears it or chooses another anchor. Later, the connection command replaces
 this preview action after validating the pair again.
@@ -33,15 +35,17 @@ this preview action after validating the pair again.
 | Escape                                           | Clear port mode first; a subsequent Escape uses normal canvas behavior     |
 
 The inspector shows the material icon/name, input/output label, machine/recipe,
-transport type, and compatible-target count. With no matches, say “No compatible
+transport type, and compatible-target count. Show full, untruncated names here;
+do not add full-name hover tooltips to the nodes. With no matches, say “No compatible
 inputs” or “No compatible outputs”; selecting such a port is still valid.
-The inspector also exposes a scrollable list of matching ports with machine names,
-so distant targets are accessible without zooming in and out to find them.
-Choosing a target row brings that node into view while preserving zoom.
+Keep the inspector compact: selected-node port controls, selected-port details,
+compatible-target count, preview-target label and Clear. Provide simple previous/next
+node controls so keyboard users can reach another node's ports while retaining the
+anchor. Defer machine search, global target browsing and automatic camera navigation.
 
 ## Touch targets and gesture ownership
 
-The card stays 256 × 256 with its existing port anchors and glyphs. Interaction
+Use each node's published bounds and existing port anchors and glyphs. Interaction
 areas are measured in **CSS pixels**, independent of zoom and device pixel ratio:
 
 - Mouse/pen: aim for a 24 × 24 minimum hit area around the port; never make the
@@ -69,9 +73,9 @@ body. Collect candidates under the pointer:
    remains an alternative way to select its ports.
 
 At 100% zoom, port centers are only 32px apart; at 50% they are 16px apart. The
-chooser must therefore be part of the first implementation. At very low zoom,
-group ambiguous candidates by node and provide the full port list for the chosen
-node. The chooser is a popover on larger screens and a bottom sheet on narrow
+chooser must therefore be part of the first implementation. Use a flat scrollable
+candidate list with node and port labels, including at low zoom. Defer grouped
+browsing. The chooser is a popover on larger screens and a bottom sheet on narrow
 screens, placed clear of the finger and device safe areas. Do not require a long
 press, hover, or precision drag to complete any port operation.
 
@@ -129,7 +133,7 @@ separate focus indicator without hiding any semantic state.
 
 At zoom levels where rings or badges would overlap, omit badges and show a thin
 matching-node outline plus match count; retain individual markers where they fit.
-The inspector's full-size target rows remain usable at every zoom. Highlights
+The inspector's full-size port rows remain usable at every zoom. Highlights
 are static, with no pulsing animation or permanent render loop.
 
 Pair colors with outline patterns, symbols and text; verify contrast at normal
@@ -196,14 +200,16 @@ actual connections are introduced and validated again at connection commit time.
    in culling; invalidate only when visible state changes.
 
 5. **Shared inspector and chooser in the web app.** Reuse one DOM panel, with
-   accessible 48px rows for the active node/nearby candidates and compatible
-   targets. Provide a keyboard-accessible machine selector in this inspector,
-   then roving focus through input/output rows. Enter/Space selects, Escape
+   accessible 48px rows for the inspected node's ports and ambiguous candidates.
+   Provide simple keyboard-accessible previous/next node controls without changing
+   the anchor, then roving focus through input/output rows. Enter/Space selects, Escape
    cancels, and Tab enters/leaves the controls normally. Announce material,
    direction, transport and compatibility reason. Do not intercept arrow keys
    as node movement while focus is inside these controls. Install any required
-   shadcn primitives via its CLI. Virtualize long target lists if measurements
-   justify it; never create a DOM control for every port on the canvas.
+   shadcn primitives via its CLI. Keep preview UI to a target label and the
+   existing highlights. Defer machine search, global target lists, automatic camera
+   navigation and grouped candidate browsing; never create a DOM control for every
+   port on the canvas.
 
 6. **Focused verification.** Test the compatibility truth table, stable IDs,
    lifecycle after edits, and the gesture transitions below. Inspect desktop,

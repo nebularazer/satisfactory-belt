@@ -7,7 +7,7 @@ import {
 } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem, CanvasPointer } from "@satisfactory-belt/canvas-core";
 import { PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
-import type { MachineDisplay } from "@satisfactory-belt/factory-core";
+import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import type { IconManifest } from "@satisfactory-belt/game-data";
 import { Application, Container, Graphics } from "pixi.js";
 
@@ -33,7 +33,7 @@ export async function mountCanvas(
   host: HTMLElement,
   controller: CanvasController,
   options: {
-    getDisplay: (id: string) => MachineDisplay | undefined;
+    getDisplay: (id: string) => NodeDisplay | undefined;
     iconManifest: IconManifest;
     assetBaseUrl: string;
     signal?: AbortSignal;

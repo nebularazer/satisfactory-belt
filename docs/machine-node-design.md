@@ -214,9 +214,9 @@ single clock percentage misleading and need a separate design later.
 
 These are recommendations to choose from, not additional implementation scope:
 
-- **Material names on hover/focus.** Icons alone can be difficult to distinguish;
-  a shared detail surface could expose material names and untruncated recipe names.
-  Provide a keyboard-accessible equivalent when adding this interaction.
+- **Full names in the planned inspector.** Show untruncated node, recipe and
+  material names in the inspector with touch and keyboard access. Do not add
+  full-name hover tooltips to the nodes.
 - **Rates beside materials.** Reserve the empty space inward of each icon for a
   future `30/min` or `60 m³/min`. Add rates when the calculation model exists.
 - **An alternate-recipe badge.** The catalog already marks alternates. A small
@@ -235,7 +235,7 @@ the densest recipe before adding more body content.
 
 ## Running this implementation
 
-Prepare assets again if your previous catalog predates the Sloop capability fields,
+Prepare assets again if your previous catalog predates the logistics definitions,
 then stage the completed output directory printed by preparation:
 
 ```bash
@@ -244,7 +244,7 @@ pnpm assets:stage --input .assets/prepared/REPLACE_WITH_COMPLETED_RUN
 pnpm dev
 ```
 
-The latest local run is `.assets/prepared/en-US-UZnzvS`, including extractor images. Staging
+The latest local run is `.assets/prepared/en-US-9lQx5t`, including logistics images. Staging
 checks catalog references and every icon file's size and hash before replacing the
 previous browser assets. Staged assets are gitignored; stage them before a build
 that needs to include the game catalog and icons. No Steam access is needed for
@@ -256,6 +256,28 @@ interaction bounds; `canvas-pixi` owns machine views and their shared icon cache
 together. Copy/paste retains all machine settings. Ports remain decorative.
 
 ## Validation
+
+### Compact logistics additions
+
+Conveyor Splitter and Conveyor Merger render as body-only 128 × 128 squares.
+The game image is centered at 64 × 64 with 70% opacity. Their belt ports retain
+the machine port size and colors, with three slots at 32, 64 and 96 units on
+the multi-port side and one centered opposite port. Each has four total ports.
+
+The catalog's `logistics` entries supply names, images and splitter/merger kinds.
+Logistics nodes use stable slot keys and null material/icon IDs until connections
+provide material information. `resolveFactoryNode` projects either node layout;
+mixed-size bounds flow through the existing canvas editing and renderer.
+The demo includes one splitter and one merger alongside the 12 machine examples.
+Pipe junctions remain future link geometry, without standalone nodes.
+
+The logistics update passed 64 relevant tests, formatting, lint, type checking
+and the production build. Chromium inspection covered all 14 cards, logistics
+dragging, clipboard, deletion, undo and zoom changes with no page or asset errors.
+The canvas returned to zero idle renders. Assets were prepared and staged from
+`.assets/prepared/en-US-9lQx5t` (211 unique images).
+
+### Machine validation
 
 - The initial implementation passed 94 focused tests for geometry, document editing, rendering performance
   accounting, game data, catalog extraction and asset staging.

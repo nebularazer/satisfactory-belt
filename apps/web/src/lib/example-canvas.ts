@@ -1,23 +1,23 @@
 import { CanvasController, GRID_SIZE, snapToGrid } from "@satisfactory-belt/canvas-core";
 import { EditHistory } from "@satisfactory-belt/edit-history";
-import { nodeBounds, resolveMachineNode } from "@satisfactory-belt/factory-core";
-import type { FactoryNode, MachineDisplay } from "@satisfactory-belt/factory-core";
+import { nodeBounds, resolveFactoryNode } from "@satisfactory-belt/factory-core";
+import type { FactoryNode, NodeDisplay } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 /** The host owns document edits and the workspace-local clipboard. */
 export function createExampleCanvas(catalog: GameCatalog, initialNodes = exampleNodes(catalog)) {
   const history = new EditHistory<readonly FactoryNode[]>(initialNodes);
-  let displays = new Map<string, MachineDisplay>();
+  let displays = new Map<string, NodeDisplay>();
   let previousNodes = new Map<string, FactoryNode>();
   function project(nodes: readonly FactoryNode[]) {
-    const nextDisplays = new Map<string, MachineDisplay>();
+    const nextDisplays = new Map<string, NodeDisplay>();
     for (const node of nodes) {
       const previous = previousNodes.get(node.id);
       // Movement changes document positions, not card content.
       const unchanged = previous && sameConfiguration(previous, node);
       nextDisplays.set(
         node.id,
-        unchanged ? displays.get(node.id)! : resolveMachineNode(node, catalog),
+        unchanged ? displays.get(node.id)! : resolveFactoryNode(node, catalog),
       );
     }
     displays = nextDisplays;
@@ -109,6 +109,8 @@ export function createExampleCanvas(catalog: GameCatalog, initialNodes = example
 }
 
 function sameConfiguration(a: FactoryNode, b: FactoryNode): boolean {
+  if (a.kind === "logistics" || b.kind === "logistics")
+    return a.kind === "logistics" && b.kind === "logistics" && a.partId === b.partId;
   if (a.kind !== b.kind || a.machineCount !== b.machineCount) return false;
   if (a.kind === "fixed-producer" && b.kind === "fixed-producer")
     return a.producerId === b.producerId;
@@ -179,5 +181,21 @@ function exampleNodes(catalog: GameCatalog): readonly FactoryNode[] {
       y: (5 + Math.floor(index / 3) * 10) * GRID_SIZE,
     });
   }
+  nodes.push(
+    {
+      kind: "logistics",
+      id: "splitter",
+      partId: "Build_ConveyorAttachmentSplitter_C",
+      x: 35 * GRID_SIZE,
+      y: 5 * GRID_SIZE,
+    },
+    {
+      kind: "logistics",
+      id: "merger",
+      partId: "Build_ConveyorAttachmentMerger_C",
+      x: 35 * GRID_SIZE,
+      y: 11 * GRID_SIZE,
+    },
+  );
   return nodes;
 }

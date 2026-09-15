@@ -3,6 +3,7 @@ import type { CanvasItem } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
 export const NODE_SIZE = 8 * GRID_SIZE;
+export const LOGISTICS_NODE_SIZE = 4 * GRID_SIZE;
 export const HEADER_HEIGHT = 2 * GRID_SIZE;
 export const FOOTER_Y = 7 * GRID_SIZE;
 export const PORT_RADIUS = 7;
@@ -21,6 +22,7 @@ export type ManufacturingNode = NodeBase &
   }>;
 export type FactoryNode =
   | ManufacturingNode
+  | LogisticsNode
   | (NodeBase &
       Readonly<{
         kind: "extractor";
@@ -33,6 +35,14 @@ export type FactoryNode =
         kind: "fixed-producer";
         producerId: string;
       }>);
+
+export type LogisticsNode = Readonly<{
+  kind: "logistics";
+  id: string;
+  x: number;
+  y: number;
+  partId: string;
+}>;
 
 export type PortDisplay = Readonly<{
   key: string;
@@ -49,6 +59,8 @@ export type PowerDisplay =
   | Readonly<{ kind: "unknown" }>
   | Readonly<{ kind: "variable" }>;
 export type MachineDisplay = Readonly<{
+  layout: "machine";
+  size: number;
   title: string;
   subtitle: string;
   machineIconId: string;
@@ -58,6 +70,17 @@ export type MachineDisplay = Readonly<{
   clockLabel: string | null;
   sloops: Readonly<{ used: number; slots: number; iconId: string }> | null;
 }>;
+export type LogisticsDisplay = Readonly<{
+  layout: "logistics";
+  size: number;
+  title: string;
+  machineIconId: string;
+  ports: readonly (Omit<PortDisplay, "itemId" | "iconId"> & {
+    itemId: null;
+    iconId: null;
+  })[];
+}>;
+export type NodeDisplay = MachineDisplay | LogisticsDisplay;
 
 /** Center independently on each side, keeping every anchor on the snap lattice. */
 export function portRows(count: number): readonly number[] {
@@ -68,7 +91,39 @@ export function portRows(count: number): readonly number[] {
 }
 
 export function nodeBounds(node: FactoryNode): CanvasItem {
-  return { id: node.id, x: node.x, y: node.y, width: NODE_SIZE, height: NODE_SIZE };
+  const size = node.kind === "logistics" ? LOGISTICS_NODE_SIZE : NODE_SIZE;
+  return { id: node.id, x: node.x, y: node.y, width: size, height: size };
+}
+
+export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): NodeDisplay {
+  if (node.kind !== "logistics") return resolveMachineNode(node, catalog);
+  if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
+    throw new Error(`Invalid position on ${node.id}.`);
+  const part = catalog.logistics[node.partId];
+  if (!part) throw new Error(`Missing logistics part ${node.partId}.`);
+  const ports: LogisticsDisplay["ports"][number][] = [];
+  for (const direction of ["input", "output"] as const) {
+    const count = (part.kind === "splitter") === (direction === "output") ? 3 : 1;
+    for (let slot = 0; slot < count; slot++) {
+      ports.push({
+        key: `${direction}:${slot}`,
+        direction,
+        transport: "belt",
+        itemId: null,
+        iconId: null,
+        name: `${direction === "input" ? "Input" : "Output"} ${slot + 1}`,
+        x: direction === "input" ? 0 : LOGISTICS_NODE_SIZE,
+        y: LOGISTICS_NODE_SIZE / 2 + (slot - (count - 1) / 2) * GRID_SIZE,
+      });
+    }
+  }
+  return {
+    layout: "logistics",
+    size: LOGISTICS_NODE_SIZE,
+    title: part.name,
+    machineIconId: part.iconId,
+    ports,
+  };
 }
 
 const numberLabel = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
@@ -83,7 +138,10 @@ export function formatPower(power: PowerDisplay): string {
   return `${value} MW`;
 }
 
-export function resolveMachineNode(node: FactoryNode, catalog: GameCatalog): MachineDisplay {
+export function resolveMachineNode(
+  node: Exclude<FactoryNode, LogisticsNode>,
+  catalog: GameCatalog,
+): MachineDisplay {
   if (!Number.isSafeInteger(node.machineCount) || node.machineCount < 1)
     throw new Error(`Invalid machine count on ${node.id}.`);
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
@@ -129,6 +187,8 @@ export function resolveMachineNode(node: FactoryNode, catalog: GameCatalog): Mac
         (node.clockPercent / 100) ** extractor.powerConsumptionExponent,
     };
     return {
+      layout: "machine",
+      size: NODE_SIZE,
       title: output[0]!.name,
       subtitle: `${node.machineCount}× ${extractor.name}`,
       machineIconId: extractor.iconId,
@@ -147,6 +207,8 @@ export function resolveMachineNode(node: FactoryNode, catalog: GameCatalog): Mac
       megawatts: node.machineCount * producer.powerMegawatts,
     };
     return {
+      layout: "machine",
+      size: NODE_SIZE,
       title: producer.name,
       subtitle: `${node.machineCount}× ${producer.name}`,
       machineIconId: producer.iconId,
@@ -190,6 +252,8 @@ export function resolveMachineNode(node: FactoryNode, catalog: GameCatalog): Mac
   const sloopIcon = catalog.items[SLOOP_ITEM_ID]?.iconId;
   if (machine.sloopSlots > 0 && !sloopIcon) throw new Error("Missing Somersloop item icon.");
   return {
+    layout: "machine",
+    size: NODE_SIZE,
     title: recipe.name,
     subtitle: `${node.machineCount}× ${machine.name}`,
     machineIconId: machine.iconId,

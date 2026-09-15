@@ -2,8 +2,48 @@ import { SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { describe, expect, it } from "vitest";
 
-import { formatPower, nodeBounds, portRows, resolveMachineNode } from "./index";
+import { formatPower, nodeBounds, portRows, resolveMachineNode, resolveFactoryNode } from "./index";
 import type { ManufacturingNode } from "./index";
+
+it.each(["splitter", "merger"] as const)(
+  "projects %s slots on a compact snapping square without assigning material",
+  (kind) => {
+    const { catalog } = fixture();
+    catalog.logistics.part = {
+      id: "part",
+      kind,
+      name: kind,
+      description: "",
+      descriptorId: "Desc_Part",
+      iconId: "part-icon",
+    };
+    const node = { id: "logistic", kind: "logistics", partId: "part", x: 16, y: -32 } as const;
+    expect(nodeBounds(node)).toEqual({ id: node.id, x: 16, y: -32, width: 128, height: 128 });
+    const display = resolveFactoryNode(node, catalog);
+    expect(display).toMatchObject({ layout: "logistics", size: 128, machineIconId: "part-icon" });
+    expect(display.ports).toHaveLength(4);
+    expect(new Set(display.ports.map((port) => port.key)).size).toBe(4);
+    for (const direction of ["input", "output"] as const) {
+      const ports = display.ports.filter((port) => port.direction === direction);
+      const multiple = (kind === "splitter") === (direction === "output");
+      expect(ports.map((port) => port.y)).toEqual(multiple ? [32, 64, 96] : [64]);
+      for (const port of ports) {
+        expect(port).toMatchObject({
+          transport: "belt",
+          itemId: null,
+          iconId: null,
+          x: direction === "input" ? 0 : 128,
+        });
+        expect((node.x + port.x) % SNAP_SIZE).toBe(0);
+        expect((node.y + port.y) % SNAP_SIZE).toBe(0);
+      }
+    }
+    expect(() => resolveFactoryNode({ ...node, partId: "missing" }, catalog)).toThrow(
+      "Missing logistics",
+    );
+    expect(() => resolveFactoryNode({ ...node, x: NaN }, catalog)).toThrow("Invalid position");
+  },
+);
 
 function fixture() {
   const node: ManufacturingNode = {
@@ -20,6 +60,7 @@ function fixture() {
   const catalog: GameCatalog = {
     schemaVersion: 1,
     extractors: {},
+    logistics: {},
     source: { locale: "en", docsSha256: "a".repeat(64) },
     items: Object.fromEntries(
       ["Iron", "Screw", "Plate", "Water", "Desc_WAT1_C"].map((id) => [
