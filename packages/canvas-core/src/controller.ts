@@ -1,6 +1,8 @@
 import { boundsBetween, contains, fitCamera, intersects, screenToWorld, zoomAt } from "./geometry";
 import type { Bounds, Camera, Point, Size } from "./geometry";
 import { SNAP_SIZE, snapToGrid } from "./grid";
+import { emptyPortSelection, hitTestPorts, portId, samePort } from "./ports";
+import type { CanvasPort, PortCompatibility, PortReference, PortSelection } from "./ports";
 
 /** Geometry belongs to the host. The canvas only retains a temporary move preview. */
 export type CanvasItem = Bounds & Readonly<{ id: string }>;
@@ -21,7 +23,7 @@ export type CanvasPointer = Point &
   Readonly<{ id: number; touch?: boolean; marquee?: boolean; additive?: boolean }>;
 
 type Gesture = {
-  kind: "pan" | "drag" | "marquee";
+  kind: "pan" | "drag" | "marquee" | "port";
   pointerId: number;
   start: Point;
   last: CanvasPointer;
@@ -41,6 +43,7 @@ type Pinch = {
 };
 
 export type CanvasSnapshot = Readonly<{
+  ports: PortSelection;
   items: readonly CanvasItem[];
   camera: Camera;
   viewport: Size;
@@ -48,7 +51,7 @@ export type CanvasSnapshot = Readonly<{
   dragOffset: Point;
   gridSnapping: boolean;
   marquee: Bounds | null;
-  interaction: "idle" | "pan" | "drag" | "marquee" | "pinch";
+  interaction: "idle" | "pan" | "drag" | "marquee" | "pinch" | "port";
 }>;
 
 const ORIGIN: Camera = { x: 0, y: 0, zoom: 1 };
@@ -56,6 +59,14 @@ const ZERO: Point = { x: 0, y: 0 };
 const DRAG_THRESHOLD = 4;
 
 export class CanvasController {
+  private portGeometry: readonly CanvasPort[] = [];
+  private portState: PortSelection = emptyPortSelection();
+  private hoverPoint: CanvasPointer | null = null;
+  private compatibility: (a: PortReference, b: PortReference) => PortCompatibility = () => ({
+    compatible: false,
+    reason: "missing-port",
+  });
+  private targets: (a: PortReference) => readonly PortReference[] = () => [];
   private items: readonly CanvasItem[];
   private camera: Camera = ORIGIN;
   private viewport: Size = { width: 0, height: 0 };
@@ -79,6 +90,7 @@ export class CanvasController {
   }
 
   getSnapshot = (): CanvasSnapshot => ({
+    ports: this.portState,
     items: this.items,
     camera: this.camera,
     viewport: this.viewport,
@@ -97,8 +109,99 @@ export class CanvasController {
   };
 
   private emit() {
+    if (this.hoverPoint && !this.gesture && !this.pinch) {
+      const hover = this.portHits(this.hoverPoint);
+      if (hover.map(portId).join() !== this.portState.hover.map(portId).join())
+        this.portState = { ...this.portState, hover };
+    }
     for (const listener of this.listeners) listener();
   }
+
+  getPortSnapshot = () => this.portState;
+
+  /** Publish port metadata before setItems emits the matching document revision. */
+  setPorts(
+    ports: readonly CanvasPort[],
+    compatibility = this.compatibility,
+    targets = this.targets,
+  ) {
+    this.portGeometry = ports;
+    this.compatibility = compatibility;
+    this.targets = targets;
+    const exists = (ref: PortReference) => ports.some((port) => samePort(port, ref));
+    if (this.portState.anchor && !exists(this.portState.anchor))
+      this.portState = emptyPortSelection();
+    const anchor = this.portState.anchor;
+    this.portState = {
+      ...this.portState,
+      pending: [],
+      chooser: null,
+      attempted: null,
+      compatible: new Set(anchor ? targets(anchor).map(portId) : []),
+      preview:
+        anchor && this.portState.preview && compatibility(anchor, this.portState.preview).compatible
+          ? this.portState.preview
+          : null,
+    };
+  }
+
+  private portHits(pointer: CanvasPointer) {
+    return hitTestPorts(
+      pointer,
+      pointer.touch ?? false,
+      this.camera,
+      this.items,
+      this.portGeometry,
+      this.selection,
+      this.dragOffset,
+    );
+  }
+
+  hoverPort(pointer: CanvasPointer | null) {
+    this.hoverPoint = pointer;
+    const hover = pointer ? this.portHits(pointer) : [];
+    if (hover.map(portId).join() === this.portState.hover.map(portId).join()) return;
+    this.portState = { ...this.portState, hover };
+    this.emit();
+  }
+
+  dismissPortChooser = () => {
+    this.portState = { ...this.portState, chooser: null };
+    this.emit();
+  };
+
+  clearPorts = () => {
+    this.portState = emptyPortSelection();
+    this.emit();
+  };
+
+  selectPort = (ref: PortReference) => {
+    const port = this.portGeometry.find((entry) => samePort(entry, ref));
+    if (!port) return;
+    const anchor = this.portGeometry.find((entry) => samePort(entry, this.portState.anchor));
+    if (samePort(anchor ?? null, port)) {
+      this.clearPorts();
+      return;
+    }
+    if (!anchor || anchor.direction === port.direction) {
+      this.selection = new Set([port.nodeId]);
+      this.portState = {
+        ...emptyPortSelection(),
+        anchor: ref,
+        compatible: new Set(this.targets(ref).map(portId)),
+      };
+    } else {
+      const result = this.compatibility(anchor, port);
+      this.portState = {
+        ...this.portState,
+        chooser: null,
+        pending: [],
+        preview: result.compatible ? ref : this.portState.preview,
+        attempted: result.compatible ? null : { port: ref, reason: result.reason },
+      };
+    }
+    this.emit();
+  };
 
   setGridSnapping = (enabled: boolean) => {
     if (this.gridSnapping === enabled) return;
@@ -108,7 +211,9 @@ export class CanvasController {
   };
 
   setItems(items: readonly CanvasItem[]) {
-    this.cancel();
+    const hoverPoint = this.hoverPoint;
+    this.cancel(false);
+    this.hoverPoint = hoverPoint;
     this.items = items;
     const ids = new Set(items.map((item) => item.id));
     this.selection = new Set([...this.selection].filter((id) => ids.has(id)));
@@ -117,6 +222,7 @@ export class CanvasController {
 
   setSelection(ids: ReadonlySet<string>) {
     this.cancel();
+    this.portState = emptyPortSelection();
     this.selection = new Set(this.items.filter((item) => ids.has(item.id)).map((item) => item.id));
     this.emit();
   }
@@ -145,6 +251,7 @@ export class CanvasController {
   }
 
   pointerDown(pointer: CanvasPointer) {
+    this.hoverPoint = pointer.touch ? null : pointer;
     this.pointers.set(pointer.id, pointer);
     if (this.waitForRelease) return;
     const touches = [...this.pointers.values()].filter((entry) => entry.touch);
@@ -158,6 +265,7 @@ export class CanvasController {
       this.dragOffset = ZERO;
       this.marquee = null;
       this.gesture = null;
+      this.portState = { ...this.portState, pending: [], chooser: null, hover: [] };
       this.pinch = {
         camera: this.camera,
         center: midpoint(a, b),
@@ -172,9 +280,16 @@ export class CanvasController {
     const previousSelection = this.selection;
     const item = this.hitTest(pointer);
     let kind: Gesture["kind"] = "pan";
-    if (pointer.marquee) {
+    const candidates = !pointer.marquee && !pointer.additive ? this.portHits(pointer) : [];
+    this.portState = { ...this.portState, chooser: null };
+    if (candidates.length) {
+      kind = "port";
+      this.portState = { ...this.portState, pending: candidates };
+    } else if (pointer.marquee) {
       kind = "marquee";
+      this.portState = emptyPortSelection();
     } else if (item) {
+      this.portState = emptyPortSelection();
       if (pointer.additive) {
         const next = new Set(this.selection);
         if (next.has(item.id)) next.delete(item.id);
@@ -206,6 +321,7 @@ export class CanvasController {
   pointerMove(pointer: CanvasPointer) {
     if (!this.pointers.has(pointer.id)) return;
     this.pointers.set(pointer.id, pointer);
+    if (!pointer.touch) this.hoverPoint = pointer;
     if (this.waitForRelease) return;
     if (this.pinch) {
       const a = this.pointers.get(this.pinch.ids[0]);
@@ -228,8 +344,18 @@ export class CanvasController {
     const gesture = this.gesture;
     if (!gesture || gesture.pointerId !== pointer.id) return;
     gesture.last = pointer;
-    if (!gesture.moved && distance(gesture.start, pointer) < DRAG_THRESHOLD) return;
+    if (
+      !gesture.moved &&
+      (gesture.last.touch
+        ? distance(gesture.start, pointer) <= 10
+        : distance(gesture.start, pointer) < DRAG_THRESHOLD)
+    )
+      return;
     gesture.moved = true;
+    if (gesture.kind === "port") {
+      gesture.kind = "pan";
+      this.portState = { ...this.portState, pending: [], hover: [] };
+    }
     const delta = { x: pointer.x - gesture.start.x, y: pointer.y - gesture.start.y };
     if (gesture.kind === "pan") {
       this.camera = {
@@ -276,6 +402,17 @@ export class CanvasController {
     }
     const gesture = this.gesture;
     if (!gesture || gesture.pointerId !== pointer.id) return;
+    if (gesture.kind === "port") {
+      const candidates = this.portState.pending;
+      this.gesture = null;
+      this.portState = { ...this.portState, pending: [] };
+      if (candidates.length === 1) this.selectPort(candidates[0]!);
+      else if (candidates.length > 1) {
+        this.portState = { ...this.portState, chooser: { point: pointer, candidates } };
+        this.emit();
+      }
+      return;
+    }
     const moves =
       gesture.kind === "drag" && gesture.moved
         ? this.items
@@ -294,8 +431,10 @@ export class CanvasController {
         else next.add(item.id);
         this.selection = next;
       } else if (!gesture.additive) this.selection = new Set();
-    } else if (!gesture.moved && gesture.kind === "pan" && !gesture.additive)
+    } else if (!gesture.moved && gesture.kind === "pan" && !gesture.additive) {
       this.selection = new Set();
+      this.portState = emptyPortSelection();
+    }
     this.gesture = null;
     this.dragOffset = ZERO;
     this.marquee = null;
@@ -304,7 +443,10 @@ export class CanvasController {
     this.emit();
   }
 
-  cancel() {
+  cancel(notify = true) {
+    const transient = this.portState.pending.length || this.portState.hover.length;
+    this.hoverPoint = null;
+    this.portState = { ...this.portState, pending: [], hover: [] };
     const active = this.gesture ?? this.pinch;
     if (active) {
       this.camera = active.camera;
@@ -316,7 +458,7 @@ export class CanvasController {
     this.marquee = null;
     this.pointers.clear();
     this.waitForRelease = false;
-    if (active) this.emit();
+    if (notify && (active || transient)) this.emit();
   }
 
   zoomTo(
@@ -363,6 +505,11 @@ export class CanvasController {
       return;
     }
     if (command === "escape") {
+      if (this.portState.anchor || this.portState.chooser || this.portState.pending.length) {
+        this.cancel();
+        this.clearPorts();
+        return;
+      }
       if (this.gesture || this.pinch || this.waitForRelease) this.cancel();
       else {
         this.selection = new Set();
@@ -370,7 +517,9 @@ export class CanvasController {
       }
       return;
     }
-    this.cancel();
+    const hoverPoint = this.hoverPoint;
+    this.cancel(false);
+    this.hoverPoint = hoverPoint;
     if (command === "reset") this.camera = ORIGIN;
     else if (command === "fit") this.camera = fitCamera(this.items, this.viewport);
     else {

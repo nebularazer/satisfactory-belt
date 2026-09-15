@@ -1,7 +1,13 @@
 import { CanvasController, GRID_SIZE, snapToGrid } from "@satisfactory-belt/canvas-core";
 import { EditHistory } from "@satisfactory-belt/edit-history";
-import { nodeBounds, resolveFactoryNode } from "@satisfactory-belt/factory-core";
-import type { FactoryNode, NodeDisplay } from "@satisfactory-belt/factory-core";
+import {
+  createPortIndex,
+  PIPE_PORT_RADIUS,
+  PORT_RADIUS,
+  nodeBounds,
+  resolveFactoryNode,
+} from "@satisfactory-belt/factory-core";
+import type { FactoryNode, NodeDisplay, SemanticPort } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 /** The host owns document edits and the workspace-local clipboard. */
@@ -9,18 +15,36 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
   const history = new EditHistory<readonly FactoryNode[]>(initialNodes);
   let displays = new Map<string, NodeDisplay>();
   let previousNodes = new Map<string, FactoryNode>();
+  let portIndex = createPortIndex([]);
+  let publishedIndex: typeof portIndex | null = null;
   function project(nodes: readonly FactoryNode[]) {
+    let configurationChanged = nodes.length !== previousNodes.size;
     const nextDisplays = new Map<string, NodeDisplay>();
     for (const node of nodes) {
       const previous = previousNodes.get(node.id);
       // Movement changes document positions, not card content.
       const unchanged = previous && sameConfiguration(previous, node);
+      if (!unchanged) configurationChanged = true;
       nextDisplays.set(
         node.id,
         unchanged ? displays.get(node.id)! : resolveFactoryNode(node, catalog),
       );
     }
     displays = nextDisplays;
+    if (configurationChanged) {
+      const ports: SemanticPort[] = [];
+      for (const [nodeId, display] of displays)
+        for (const port of display.ports) {
+          ports.push({
+            nodeId,
+            portKey: port.key,
+            direction: port.direction,
+            transport: port.transport,
+            itemId: port.itemId,
+          });
+        }
+      portIndex = createPortIndex(ports);
+    }
     previousNodes = new Map(nodes.map((node) => [node.id, node]));
     return nodes.map(nodeBounds);
   }
@@ -41,7 +65,30 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       }, context?.group);
     },
   });
-  history.subscribe(() => controller.setItems(project(history.getSnapshot().state)));
+  function publishPorts() {
+    if (publishedIndex === portIndex) return;
+    publishedIndex = portIndex;
+    controller.setPorts(
+      [...displays].flatMap(([nodeId, display]) =>
+        display.ports.map((port) => ({
+          nodeId,
+          portKey: port.key,
+          direction: port.direction,
+          x: port.x,
+          y: port.y,
+          radius: port.transport === "pipe" ? PIPE_PORT_RADIUS : PORT_RADIUS,
+        })),
+      ),
+      portIndex.compatibility,
+      portIndex.targets,
+    );
+  }
+  publishPorts();
+  history.subscribe(() => {
+    const nextItems = project(history.getSnapshot().state);
+    publishPorts();
+    controller.setItems(nextItems);
+  });
   function historyCommand(command: "undo" | "redo") {
     controller.cancel();
     const before = history.getSnapshot().state;

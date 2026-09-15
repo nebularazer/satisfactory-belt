@@ -9,6 +9,7 @@ import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import { CanvasTextMetrics, Container, Graphics, Sprite, Text } from "pixi.js";
 
 import type { IconCache } from "./icon-cache";
+import { PortHighlights } from "./port-highlights";
 import { CANVAS_PALETTES } from "./theme";
 import type { CanvasPalette } from "./theme";
 
@@ -21,6 +22,7 @@ const CLOCK = '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>';
 type IconView = { sprite: Sprite; placeholder: Graphics; id: string; size: number };
 
 export class MachineNodeView {
+  readonly portHighlights: PortHighlights;
   readonly container = new Container({ eventMode: "none" });
   private background = new Graphics();
   private content = new Container({ eventMode: "none" });
@@ -36,7 +38,8 @@ export class MachineNodeView {
   constructor(fontFamily: string, cache: IconCache) {
     this.fontFamily = fontFamily;
     this.cache = cache;
-    this.container.addChild(this.background, this.content);
+    this.portHighlights = new PortHighlights(fontFamily);
+    this.container.addChild(this.background, this.content, this.portHighlights.view);
   }
 
   update(
