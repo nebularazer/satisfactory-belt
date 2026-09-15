@@ -7,6 +7,8 @@ export interface Item {
   name: string;
   description: string;
   form: ItemForm;
+  /** Whether the AWESOME Sink can consume this item continuously. */
+  sinkable: boolean;
   /** Recipe quantities use pieces for solids, cubic metres for liquids and gases. */
   unit: "item" | "m3";
   iconId: string;
@@ -68,7 +70,17 @@ export interface LogisticsPart {
   description: string;
   descriptorId: string;
   iconId: string;
-  kind: "splitter" | "merger";
+  kind: "splitter" | "merger" | "smart-splitter" | "programmable-splitter";
+}
+
+/** The AWESOME Sink consumes delivered parts without a manufacturing recipe. */
+export interface AwesomeSink {
+  id: string;
+  name: string;
+  description: string;
+  descriptorId: string;
+  iconId: string;
+  powerMegawatts: number;
 }
 
 export interface Recipe {
@@ -93,6 +105,7 @@ export interface GameCatalog {
   fixedProducers: Record<string, FixedProducer>;
   extractors: Record<string, Extractor>;
   logistics: Record<string, LogisticsPart>;
+  sinks: Record<string, AwesomeSink>;
   recipes: Record<string, Recipe>;
 }
 
@@ -125,6 +138,10 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
     check(id === item.id && Boolean(item.name.trim()), `Invalid item ${id}.`);
     check(["solid", "liquid", "gas"].includes(item.form), `Invalid form for ${id}.`);
     check(item.unit === (item.form === "solid" ? "item" : "m3"), `Invalid unit for ${id}.`);
+    check(
+      typeof item.sinkable === "boolean" && (!item.sinkable || item.form === "solid"),
+      `Invalid sinkability for ${id}.`,
+    );
     check(iconIds.has(item.iconId), `Missing icon for ${id}.`);
   }
   for (const [id, machine] of Object.entries(catalog.machines)) {
@@ -193,8 +210,17 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
   }
   for (const [id, part] of Object.entries(catalog.logistics)) {
     check(id === part.id && Boolean(part.name.trim()), `Invalid logistics part ${id}.`);
-    check(part.kind === "splitter" || part.kind === "merger", `Invalid logistics kind for ${id}.`);
+    check(
+      ["splitter", "merger", "smart-splitter", "programmable-splitter"].includes(part.kind),
+      `Invalid logistics kind for ${id}.`,
+    );
     check(iconIds.has(part.iconId), `Missing icon for ${id}.`);
+  }
+  check(Boolean(catalog.sinks), "Missing AWESOME Sink catalog; prepare game assets again.");
+  for (const [id, sink] of Object.entries(catalog.sinks)) {
+    check(id === sink.id && Boolean(sink.name.trim()), `Invalid AWESOME Sink ${id}.`);
+    check(iconIds.has(sink.iconId), `Missing icon for ${id}.`);
+    check(nonnegative(sink.powerMegawatts), `Invalid power for ${id}.`);
   }
   for (const [id, recipe] of Object.entries(catalog.recipes)) {
     check(id === recipe.id && Boolean(recipe.name.trim()), `Invalid recipe ${id}.`);

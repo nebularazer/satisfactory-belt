@@ -1,4 +1,5 @@
 import type {
+  AwesomeSink,
   Extractor,
   FixedProducer,
   GameCatalog,
@@ -44,9 +45,27 @@ export function parseCatalog(
   const fixedProducers: Record<string, FixedProducer> = {};
   const extractors: Record<string, Extractor> = {};
   const logistics: Record<string, LogisticsPart> = {};
+  const sinks: Record<string, AwesomeSink> = {};
   const excludedRecipes: ExcludedRecipe[] = [];
   for (const [id, { native, data }] of classes) {
-    if (native === "FGBuildableAttachmentSplitter" || native === "FGBuildableAttachmentMerger") {
+    if (native === "FGBuildableResourceSink") {
+      const descriptorId = id.replace(/^Build_/, "Desc_");
+      if (classes.get(descriptorId)?.native !== "FGBuildingDescriptor")
+        throw new Error(`Missing building descriptor for ${id}.`);
+      sinks[id] = {
+        id,
+        descriptorId,
+        iconId: descriptorId,
+        name: string(data, "mDisplayName"),
+        description: string(data, "mDescription"),
+        powerMegawatts: number(data, "mPowerConsumption"),
+      };
+    }
+    if (
+      native === "FGBuildableAttachmentSplitter" ||
+      native === "FGBuildableAttachmentMerger" ||
+      native === "FGBuildableSplitterSmart"
+    ) {
       const descriptorId = id.replace(/^Build_/, "Desc_");
       if (classes.get(descriptorId)?.native !== "FGBuildingDescriptor")
         throw new Error(`Missing building descriptor for ${id}.`);
@@ -56,7 +75,12 @@ export function parseCatalog(
         iconId: descriptorId,
         name: string(data, "mDisplayName"),
         description: string(data, "mDescription"),
-        kind: native === "FGBuildableAttachmentSplitter" ? "splitter" : "merger",
+        kind:
+          native === "FGBuildableSplitterSmart"
+            ? smartSplitterKind(number(data, "mMaxNumSortRules"))
+            : native === "FGBuildableAttachmentSplitter"
+              ? "splitter"
+              : "merger",
       };
     }
     if (typeof data.mForm === "string" && data.mForm !== "RF_INVALID") {
@@ -74,6 +98,13 @@ export function parseCatalog(
         name: string(data, "mDisplayName"),
         description: string(data, "mDescription"),
         form,
+        // DNA capsules use the separate research-points counter, absent from Docs' normal points.
+        // Coupons are a one-time unlock, not a continuously sinkable material stream.
+        sinkable:
+          form === "solid" &&
+          id !== "Desc_ResourceSinkCoupon_C" &&
+          (id === "Desc_AlienDNACapsule_C" ||
+            (data.mResourceSinkPoints !== undefined && number(data, "mResourceSinkPoints") > 0)),
         unit: form === "solid" ? "item" : "m3",
         iconId: id,
       };
@@ -225,6 +256,7 @@ export function parseCatalog(
       fixedProducers: sorted(fixedProducers),
       extractors: sorted(extractors),
       logistics: sorted(logistics),
+      sinks: sorted(sinks),
       recipes: sorted(recipes),
     },
     excludedRecipes: excludedRecipes.toSorted((a, b) => a.id.localeCompare(b.id, "en")),
@@ -297,4 +329,10 @@ function sloopSlots(data: Record<string, unknown>): number {
   if (!Number.isSafeInteger(slots) || slots < 1 || slots > 4)
     throw new Error(`Invalid Sloop slots on ${String(data.ClassName)}.`);
   return slots;
+}
+
+function smartSplitterKind(maxRules: number): LogisticsPart["kind"] {
+  if (maxRules === 3) return "smart-splitter";
+  if (maxRules === 64) return "programmable-splitter";
+  throw new Error(`Unsupported splitter rule limit ${maxRules}.`);
 }

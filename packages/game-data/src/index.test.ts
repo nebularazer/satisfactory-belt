@@ -11,6 +11,7 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
       schemaVersion: 1,
       extractors: {},
       logistics: {},
+      sinks: {},
       source: { locale: "en-US", docsSha256: hash },
       items: {
         Item: {
@@ -18,6 +19,7 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
           name: "Item",
           description: "",
           form: "solid",
+          sinkable: false,
           unit: "item",
           iconId: hash,
         },
@@ -167,4 +169,32 @@ describe("game data validation", () => {
     delete icons.icons[hash];
     expect(() => validateGameData(catalog, icons)).toThrow("Missing icon");
   });
+});
+
+it("validates AWESOME Sink icons and power", () => {
+  const { catalog, icons } = fixture();
+  const sink = {
+    id: "Sink",
+    name: "AWESOME Sink",
+    description: "",
+    descriptorId: "Sink",
+    iconId: hash,
+    powerMegawatts: 30,
+  };
+  catalog.sinks.Sink = sink;
+  expect(() => validateGameData(catalog, icons)).not.toThrow();
+  sink.powerMegawatts = -1;
+  expect(() => validateGameData(catalog, icons)).toThrow("Invalid power");
+  sink.powerMegawatts = 30;
+  sink.iconId = "missing";
+  expect(() => validateGameData(catalog, icons)).toThrow("Missing icon");
+});
+
+it("requires explicit sinkability and prevents liquids from being marked sinkable", () => {
+  const { catalog, icons } = fixture();
+  catalog.items.Item.sinkable = true;
+  expect(() => validateGameData(catalog, icons)).not.toThrow();
+  catalog.items.Item.form = "liquid";
+  catalog.items.Item.unit = "m3";
+  expect(() => validateGameData(catalog, icons)).toThrow("Invalid sinkability");
 });

@@ -272,3 +272,92 @@ it("rejects extractor restrictions that point to manufactured items or incompati
     expect(() => parseCatalog(docs, source)).toThrow("Invalid resource restriction");
   }
 });
+
+it("extracts the AWESOME Sink without manufacturing recipes or translated-name matching", () => {
+  const docs = fixture();
+  docs[1]!.Classes.push({ ClassName: "Desc_ResourceSink_C" });
+  docs.push(
+    group("FGBuildableResourceSink", [
+      {
+        ClassName: "Build_ResourceSink_C",
+        mDisplayName: "Translated sink",
+        mDescription: "Consumes parts",
+        mPowerConsumption: "30.000000",
+      },
+    ]),
+  );
+  const { catalog } = parseCatalog(docs, source);
+  expect(catalog.sinks.Build_ResourceSink_C).toEqual({
+    id: "Build_ResourceSink_C",
+    descriptorId: "Desc_ResourceSink_C",
+    iconId: "Desc_ResourceSink_C",
+    name: "Translated sink",
+    description: "Consumes parts",
+    powerMegawatts: 30,
+  });
+  expect(catalog.machines.Build_ResourceSink_C).toBeUndefined();
+  docs[1]!.Classes.pop();
+  expect(() => parseCatalog(docs, source)).toThrow("Missing building descriptor");
+});
+
+it.each([
+  [3, "smart-splitter"],
+  [64, "programmable-splitter"],
+] as const)("extracts configurable splitter kind from its %s-rule capability", (limit, kind) => {
+  const docs = fixture();
+  docs[1]!.Classes.push({ ClassName: "Desc_Advanced_C" });
+  docs.push(
+    group("FGBuildableSplitterSmart", [
+      {
+        ClassName: "Build_Advanced_C",
+        mDisplayName: "Translated splitter",
+        mDescription: "",
+        mMaxNumSortRules: String(limit),
+      },
+    ]),
+  );
+  expect(parseCatalog(docs, source).catalog.logistics.Build_Advanced_C).toMatchObject({
+    kind,
+    descriptorId: "Desc_Advanced_C",
+  });
+});
+
+it("extracts continuous sinkability including DNA's separate points counter", () => {
+  const docs = fixture();
+  docs[0]!.Classes.push(
+    {
+      ClassName: "Desc_Plate_C",
+      mDisplayName: "Plate",
+      mDescription: "",
+      mForm: "RF_SOLID",
+      mResourceSinkPoints: "6",
+    },
+    {
+      ClassName: "Desc_AlienDNACapsule_C",
+      mDisplayName: "DNA",
+      mDescription: "",
+      mForm: "RF_SOLID",
+      mResourceSinkPoints: "0",
+    },
+    {
+      ClassName: "Desc_Waste_C",
+      mDisplayName: "Waste",
+      mDescription: "",
+      mForm: "RF_SOLID",
+      mResourceSinkPoints: "0",
+    },
+    {
+      ClassName: "Desc_ResourceSinkCoupon_C",
+      mDisplayName: "Coupon",
+      mDescription: "",
+      mForm: "RF_SOLID",
+      mResourceSinkPoints: "1",
+    },
+  );
+  const { items } = parseCatalog(docs, source).catalog;
+  expect(items.Desc_Plate_C!.sinkable).toBe(true);
+  expect(items.Desc_AlienDNACapsule_C!.sinkable).toBe(true);
+  expect(items.Desc_Waste_C!.sinkable).toBe(false);
+  expect(items.Desc_ResourceSinkCoupon_C!.sinkable).toBe(false);
+  expect(items.Desc_Water_C!.sinkable).toBe(false);
+});

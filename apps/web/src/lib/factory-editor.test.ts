@@ -15,6 +15,7 @@ it("starts an explicitly empty document without requiring any demo recipes", () 
     fixedProducers: {},
     extractors: {},
     logistics: {},
+    sinks: {},
   };
   const editor = createFactoryEditor(catalog, []);
   expect(editor.history.getSnapshot().state).toEqual([]);
@@ -240,6 +241,7 @@ function createTestEditor() {
     schemaVersion: 1,
     extractors: {},
     logistics: {},
+    sinks: {},
     source: { locale: "en", docsSha256: "a".repeat(64) },
     items: {
       Desc_WAT1_C: {
@@ -247,6 +249,7 @@ function createTestEditor() {
         name: "Somersloop",
         description: "",
         form: "solid",
+        sinkable: false,
         unit: "item",
         iconId: "sloop",
       },
@@ -369,6 +372,7 @@ it("retains extraction settings through movement, copy/paste and undo and refres
       name: `${id} Ore`,
       description: "",
       form: "solid",
+        sinkable: false,
       unit: "item",
       iconId: id,
     };

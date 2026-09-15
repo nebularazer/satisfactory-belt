@@ -61,6 +61,7 @@ function fixture() {
     schemaVersion: 1,
     extractors: {},
     logistics: {},
+    sinks: {},
     source: { locale: "en", docsSha256: "a".repeat(64) },
     items: Object.fromEntries(
       ["Iron", "Screw", "Plate", "Water", "Desc_WAT1_C"].map((id) => [
@@ -70,6 +71,7 @@ function fixture() {
           name: id,
           description: "",
           form: "solid",
+        sinkable: false,
           unit: "item",
           iconId: `${id}-icon`,
         },
