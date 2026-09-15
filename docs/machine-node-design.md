@@ -189,7 +189,7 @@ single clock percentage misleading and need a separate design later.
    texture completions after a view or canvas is destroyed. Do not add a ticker
    or one DOM element per port.
 
-7. **Replace the demo and preserve editing.** Adapt `createExampleCanvas` to store
+7. **Replace the demo and preserve editing.** Use `createFactoryEditor` to store
    domain nodes in edit history and provide geometry/display projections. Update
    copy/paste to clone all node configuration while assigning a new node ID;
    today's implementation copies rectangle fields individually. Keep deletion,
@@ -244,7 +244,7 @@ pnpm assets:stage --input .assets/prepared/REPLACE_WITH_COMPLETED_RUN
 pnpm dev
 ```
 
-The latest local run is `.assets/prepared/en-US-9lQx5t`, including logistics images. Staging
+The logistics validation run is `.assets/prepared/en-US-9lQx5t`, including logistics images. Staging
 checks catalog references and every icon file's size and hash before replacing the
 previous browser assets. Staged assets are gitignored; stage them before a build
 that needs to include the game catalog and icons. No Steam access is needed for
@@ -252,8 +252,11 @@ preparation or staging. Runtime URLs respect Vite's base path.
 
 `factory-core` resolves cards and port geometry; `canvas-core` handles rectangular
 interaction bounds; `canvas-pixi` owns machine views and their shared icon cache;
-`example-canvas` owns the editable document and publishes geometry and card content
-together. Copy/paste retains all machine settings. Ports remain decorative.
+`factory-editor` owns the editable document and publishes geometry and card content
+together. It requires initial nodes explicitly; `example-factory` supplies the demo
+document at the app boundary. Empty or loaded documents can use the same editor
+without depending on the demo recipes. Copy/paste retains all machine settings.
+Ports remain decorative.
 
 ## Validation
 

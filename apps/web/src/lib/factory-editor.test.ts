@@ -3,10 +3,29 @@ import type { ManufacturingNode } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { expect, it } from "vitest";
 
-import { createExampleCanvas as createCanvas } from "./example-canvas";
+import { createFactoryEditor } from "./factory-editor";
+
+it("starts an explicitly empty document without requiring any demo recipes", () => {
+  const catalog: GameCatalog = {
+    schemaVersion: 1,
+    source: { locale: "en", docsSha256: "a".repeat(64) },
+    items: {},
+    recipes: {},
+    machines: {},
+    fixedProducers: {},
+    extractors: {},
+    logistics: {},
+  };
+  const editor = createFactoryEditor(catalog, []);
+  expect(editor.history.getSnapshot().state).toEqual([]);
+  expect(editor.controller.getSnapshot().items).toEqual([]);
+  editor.clipboardCommand("paste");
+  editor.deleteSelection();
+  expect(editor.history.getSnapshot().canUndo).toBe(false);
+});
 
 it("deletes a group in one edit and restores its items, order, and selection on undo", () => {
-  const { controller, history, historyCommand, deleteSelection } = createExampleCanvas();
+  const { controller, history, historyCommand, deleteSelection } = createTestEditor();
   const original = history.getSnapshot().state;
   const selection = new Set(["machine-1", "machine-3"]);
   controller.setSelection(selection);
@@ -30,7 +49,7 @@ it("deletes a group in one edit and restores its items, order, and selection on 
 });
 
 it("ignores deletion without selection and during gestures without adding history", () => {
-  const { controller, history, historyCommand, deleteSelection } = createExampleCanvas();
+  const { controller, history, historyCommand, deleteSelection } = createTestEditor();
   const original = history.getSnapshot().state;
   deleteSelection();
   expect(history.getSnapshot().state).toBe(original);
@@ -54,7 +73,7 @@ it("ignores deletion without selection and during gestures without adding histor
 
 it("keeps copied items after deletion and records paste and delete independently", () => {
   const { controller, history, historyCommand, clipboardCommand, deleteSelection } =
-    createExampleCanvas();
+    createTestEditor();
   const original = history.getSnapshot().state;
   controller.setSelection(new Set(original.map((item) => item.id)));
   clipboardCommand("copy");
@@ -74,7 +93,7 @@ it("keeps copied items after deletion and records paste and delete independently
 });
 
 it("records a group drag once, retaining selection, camera, and preferences through undo", () => {
-  const { controller, history, historyCommand } = createExampleCanvas();
+  const { controller, history, historyCommand } = createTestEditor();
   const original = history.getSnapshot().state;
   controller.pointerDown({ id: 1, x: 100, y: 100, marquee: true });
   controller.pointerUp({ id: 1, x: 750, y: 300 });
@@ -97,7 +116,7 @@ it("records a group drag once, retaining selection, camera, and preferences thro
 });
 
 it("ignores cancelled/no-op drags and undoes one held-key gesture at a time", () => {
-  const { controller, history, historyCommand } = createExampleCanvas();
+  const { controller, history, historyCommand } = createTestEditor();
   controller.pointerDown({ id: 1, x: 200, y: 200 });
   controller.pointerUp({ id: 1, x: 205, y: 200 });
   expect(history.getSnapshot().canUndo).toBe(false);
@@ -118,7 +137,7 @@ it("ignores cancelled/no-op drags and undoes one held-key gesture at a time", ()
 });
 
 it("pastes a selected group with fresh IDs, preserved spacing, and one undo step", () => {
-  const { controller, history, historyCommand, clipboardCommand } = createExampleCanvas();
+  const { controller, history, historyCommand, clipboardCommand } = createTestEditor();
   const original = history.getSnapshot().state;
   controller.setSelection(new Set([original[0]!.id, original[1]!.id]));
   clipboardCommand("copy");
@@ -145,7 +164,7 @@ it("pastes a selected group with fresh IDs, preserved spacing, and one undo step
 });
 
 it("retains copied geometry after moving originals and advances each paste independently of zoom", () => {
-  const { controller, history, historyCommand, clipboardCommand } = createExampleCanvas();
+  const { controller, history, historyCommand, clipboardCommand } = createTestEditor();
   controller.setSelection(new Set(["machine-1"]));
   clipboardCommand("copy");
   controller.command("move-right");
@@ -169,7 +188,7 @@ it("retains copied geometry after moving originals and advances each paste indep
 });
 
 it.each([true, false])("pastes off-grid groups with grid snapping %s", (gridSnapping) => {
-  const { controller, history, clipboardCommand } = createExampleCanvas();
+  const { controller, history, clipboardCommand } = createTestEditor();
   history.update((items) =>
     items.map((item, index) => ({
       ...item,
@@ -189,7 +208,7 @@ it.each([true, false])("pastes off-grid groups with grid snapping %s", (gridSnap
 });
 
 it("ignores empty clipboards, empty selections, and clipboard commands during a gesture", () => {
-  const { controller, history, clipboardCommand } = createExampleCanvas();
+  const { controller, history, clipboardCommand } = createTestEditor();
   const original = history.getSnapshot().state;
   clipboardCommand("paste");
   clipboardCommand("copy");
@@ -213,10 +232,10 @@ it("ignores empty clipboards, empty selections, and clipboard commands during a 
     x: 192,
     y: 192,
   });
-  expect(createExampleCanvas().history.getSnapshot().state).toHaveLength(6);
+  expect(createTestEditor().history.getSnapshot().state).toHaveLength(6);
 });
 
-function createExampleCanvas() {
+function createTestEditor() {
   const catalog: GameCatalog = {
     schemaVersion: 1,
     extractors: {},
@@ -273,11 +292,11 @@ function createExampleCanvas() {
     x: (5 + (index % 3) * 9) * 32,
     y: (5 + Math.floor(index / 3) * 10) * 32,
   }));
-  return { ...createCanvas(catalog, nodes), catalog };
+  return { ...createFactoryEditor(catalog, nodes), catalog };
 }
 
 it("reuses card content on movement and publishes new content before geometry notifications", () => {
-  const { controller, history, getDisplay } = createExampleCanvas();
+  const { controller, history, getDisplay } = createTestEditor();
   const display = getDisplay("machine-1");
   controller.setSelection(new Set(["machine-1"]));
   controller.command("move-right");
@@ -304,7 +323,7 @@ it("preserves logistics identity and compact bounds through editing beside machi
     historyCommand,
     getDisplay,
     deleteSelection,
-  } = createExampleCanvas();
+  } = createTestEditor();
   for (const kind of ["splitter", "merger"] as const)
     catalog.logistics[kind] = {
       id: kind,
@@ -343,7 +362,7 @@ it("preserves logistics identity and compact bounds through editing beside machi
 
 it("retains extraction settings through movement, copy/paste and undo and refreshes resource changes", () => {
   const { catalog, controller, history, clipboardCommand, historyCommand, getDisplay } =
-    createExampleCanvas();
+    createTestEditor();
   for (const id of ["Iron", "Copper"])
     catalog.items[id] = {
       id,

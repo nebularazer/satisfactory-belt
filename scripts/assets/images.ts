@@ -10,7 +10,9 @@ import type {
 } from "@satisfactory-belt/game-data";
 import sharp, { type WebpOptions } from "sharp";
 
-export const iconSizes = [64, 128, 256] as const;
+import { createImageCache, iconSizes } from "./image-cache.ts";
+
+export { iconSizes } from "./image-cache.ts";
 const options = {
   lossless: { lossless: true, effort: 6 },
   quality90: { quality: 90, alphaQuality: 100, effort: 6, smartSubsample: true },
@@ -26,6 +28,8 @@ export interface ImageStats {
   descriptorCount: number;
   sourceFiles: number;
   uniqueImages: number;
+  reusedImages: number;
+  convertedImages: number;
   outputFiles: number;
   sourcePngBytes: number;
   outputBytes: number;
@@ -41,7 +45,18 @@ export async function prepareImages(
   output: string,
   encoding: IconManifest["encoding"],
   compare: boolean,
+  cacheDirectory?: string,
 ): Promise<{ manifest: IconManifest; descriptorIcons: Map<string, string>; stats: ImageStats }> {
+  const cache = cacheDirectory
+    ? createImageCache(cacheDirectory, {
+        // Bump when normalization, resizing, validation or output semantics change.
+        pipelineVersion: 1,
+        sizes: iconSizes,
+        encoding,
+        options: options[encoding],
+        versions: sharp.versions,
+      })
+    : undefined;
   const icons: Record<string, PreparedIcon> = {};
   const descriptorIcons = new Map<string, string>();
   const files = new Map<string, string>();
@@ -50,6 +65,8 @@ export async function prepareImages(
     descriptorCount: sources.length,
     sourceFiles: 0,
     uniqueImages: 0,
+    reusedImages: 0,
+    convertedImages: 0,
     outputFiles: 0,
     sourcePngBytes: 0,
     outputBytes: 0,
@@ -88,6 +105,19 @@ export async function prepareImages(
     stats.sourcePngBytes += png.length;
     if (reserved.has(id)) return;
     reserved.add(id);
+    // Comparison mode deliberately measures fresh encodes in all formats.
+    const cached = compare ? undefined : await cache?.read(id);
+    if (cached) {
+      for (const size of iconSizes) {
+        const variant = cached.icon.variants[size];
+        await publish(variant, cached.images.get(size)!);
+      }
+      icons[id] = cached.icon;
+      stats.reusedImages++;
+      completed();
+      return;
+    }
+    const images = new Map<IconSize, Buffer>();
     const variants: Partial<Record<IconSize, IconVariant>> = {};
     for (const size of iconSizes) {
       // Resize first, then encode each mode from exactly the same RGBA pixels.
@@ -117,13 +147,10 @@ export async function prepareImages(
       }
       const hash = sha256(encoded);
       const path = `icons/${hash}.webp`;
-      if (!written.has(path)) {
-        written.add(path);
-        await writeFile(join(output, path), encoded, { flag: "wx" });
-        stats.outputBytes += encoded.length;
-      }
-      stats.bytesBySize[size] += encoded.length;
-      variants[size] = { path, width: size, height: size, bytes: encoded.length, sha256: hash };
+      const variant = { path, width: size, height: size, bytes: encoded.length, sha256: hash };
+      await publish(variant, encoded);
+      variants[size] = variant;
+      images.set(size, encoded);
       if (stats.comparison) {
         const other = encoding === "lossless" ? "quality90" : "lossless";
         stats.comparison[size][encoding] += encoded.length;
@@ -134,8 +161,24 @@ export async function prepareImages(
     if (!variants[64] || !variants[128] || !variants[256])
       throw new Error(`Incomplete variants for ${id}.`);
     icons[id] = { id, variants: { 64: variants[64], 128: variants[128], 256: variants[256] } };
+    await cache?.write({ icon: icons[id], images });
+    stats.convertedImages++;
+    completed();
+  }
+  async function publish(variant: IconVariant, bytes: Buffer) {
+    if (!written.has(variant.path)) {
+      written.add(variant.path);
+      await writeFile(join(output, variant.path), bytes, { flag: "wx" });
+      stats.outputBytes += bytes.length;
+    }
+    stats.bytesBySize[variant.width] += bytes.length;
+  }
+  function completed() {
     stats.uniqueImages++;
-    if (stats.uniqueImages % 25 === 0) console.log(`Prepared ${stats.uniqueImages} unique icons…`);
+    if (stats.uniqueImages % 25 === 0)
+      console.log(
+        `Prepared ${stats.uniqueImages} unique icons (${stats.reusedImages} reused, ${stats.convertedImages} converted)…`,
+      );
   }
   const queue = [...sourcesByFile.values()];
   let next = 0;
