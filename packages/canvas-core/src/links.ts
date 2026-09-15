@@ -74,10 +74,10 @@ const earlier = (a: Entry, b: Entry) =>
 
 /** Search obstacle-edge coordinates, allowing several turns through staggered gaps. */
 function shortestDetour(start: Point, end: Point, boxes: readonly Bounds[]): Point[] | null {
-  const xs = [...new Set([start.x, end.x, ...boxes.flatMap((b) => [b.x, b.x + b.width])])].sort(
+  const xs = [...new Set([start.x, end.x, ...boxes.flatMap((b) => [b.x, b.x + b.width])])].toSorted(
     (a, b) => a - b,
   );
-  const ys = [...new Set([start.y, end.y, ...boxes.flatMap((b) => [b.y, b.y + b.height])])].sort(
+  const ys = [...new Set([start.y, end.y, ...boxes.flatMap((b) => [b.y, b.y + b.height])])].toSorted(
     (a, b) => a - b,
   );
   const width = xs.length;
