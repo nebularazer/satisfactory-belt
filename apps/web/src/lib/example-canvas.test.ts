@@ -1,11 +1,14 @@
+import { nodeBounds } from "@satisfactory-belt/factory-core";
+import type { ManufacturingNode } from "@satisfactory-belt/factory-core";
+import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { expect, it } from "vitest";
 
-import { createExampleCanvas } from "./example-canvas";
+import { createExampleCanvas as createCanvas } from "./example-canvas";
 
 it("deletes a group in one edit and restores its items, order, and selection on undo", () => {
   const { controller, history, historyCommand, deleteSelection } = createExampleCanvas();
   const original = history.getSnapshot().state;
-  const selection = new Set(["rectangle-1", "rectangle-3"]);
+  const selection = new Set(["machine-1", "machine-3"]);
   controller.setSelection(selection);
   controller.zoomTo(2);
   controller.setGridSnapping(false);
@@ -14,7 +17,7 @@ it("deletes a group in one edit and restores its items, order, and selection on 
   const deleted = history.getSnapshot().state;
   expect(deleted).toEqual(original.filter((item) => !selection.has(item.id)));
   expect(controller.getSnapshot().selection.size).toBe(0);
-  controller.setSelection(new Set(["rectangle-2"]));
+  controller.setSelection(new Set(["machine-2"]));
   historyCommand("undo");
   expect(history.getSnapshot().state).toBe(original);
   expect(history.getSnapshot().canUndo).toBe(false);
@@ -32,7 +35,7 @@ it("ignores deletion without selection and during gestures without adding histor
   deleteSelection();
   expect(history.getSnapshot().state).toBe(original);
   expect(history.getSnapshot().canUndo).toBe(false);
-  controller.setSelection(new Set(["rectangle-1"]));
+  controller.setSelection(new Set(["machine-1"]));
   controller.pointerDown({ id: 1, x: 200, y: 200 });
   controller.pointerMove({ id: 1, x: 232, y: 200 });
   deleteSelection();
@@ -86,11 +89,11 @@ it("records a group drag once, retaining selection, camera, and preferences thro
   controller.setGridSnapping(false);
   const { camera, selection } = controller.getSnapshot();
   historyCommand("undo");
-  expect(controller.getSnapshot().items).toBe(original);
+  expect(controller.getSnapshot().items).toEqual(original.map(nodeBounds));
   expect(history.getSnapshot().canUndo).toBe(false);
   expect(controller.getSnapshot()).toMatchObject({ camera, selection, gridSnapping: false });
   historyCommand("redo");
-  expect(controller.getSnapshot().items).toBe(moved);
+  expect(controller.getSnapshot().items).toEqual(moved.map(nodeBounds));
 });
 
 it("ignores cancelled/no-op drags and undoes one held-key gesture at a time", () => {
@@ -143,7 +146,7 @@ it("pastes a selected group with fresh IDs, preserved spacing, and one undo step
 
 it("retains copied geometry after moving originals and advances each paste independently of zoom", () => {
   const { controller, history, historyCommand, clipboardCommand } = createExampleCanvas();
-  controller.setSelection(new Set(["rectangle-1"]));
+  controller.setSelection(new Set(["machine-1"]));
   clipboardCommand("copy");
   controller.command("move-right");
   controller.zoomTo(2);
@@ -192,7 +195,7 @@ it("ignores empty clipboards, empty selections, and clipboard commands during a 
   clipboardCommand("copy");
   clipboardCommand("paste");
   expect(history.getSnapshot().state).toBe(original);
-  controller.setSelection(new Set(["rectangle-1"]));
+  controller.setSelection(new Set(["machine-1"]));
   clipboardCommand("copy");
   controller.command("escape");
   clipboardCommand("copy");
@@ -204,9 +207,142 @@ it("ignores empty clipboards, empty selections, and clipboard commands during a 
   controller.cancel();
   clipboardCommand("paste");
   expect(history.getSnapshot().state.at(-1)).toMatchObject({
-    text: "Rectangle 01",
+    recipeId: "Recipe",
+    sloopsUsed: 1,
+    clockPercent: 125,
     x: 192,
     y: 192,
   });
   expect(createExampleCanvas().history.getSnapshot().state).toHaveLength(6);
+});
+
+function createExampleCanvas() {
+  const catalog: GameCatalog = {
+    schemaVersion: 1,
+    extractors: {},
+    source: { locale: "en", docsSha256: "a".repeat(64) },
+    items: {
+      Desc_WAT1_C: {
+        id: "Desc_WAT1_C",
+        name: "Somersloop",
+        description: "",
+        form: "solid",
+        unit: "item",
+        iconId: "sloop",
+      },
+    },
+    machines: {
+      Machine: {
+        id: "Machine",
+        name: "Assembler",
+        description: "",
+        descriptorId: "Descriptor",
+        iconId: "machine",
+        manufacturingSpeed: 1,
+        power: { kind: "fixed", megawatts: 15 },
+        powerConsumptionExponent: 1.321929,
+        canOverclock: true,
+        sloopSlots: 2,
+        productionBoost: { base: 1, perSloop: 0.5, powerExponent: 2 },
+      },
+    },
+    recipes: {
+      Recipe: {
+        id: "Recipe",
+        name: "Recipe",
+        durationSeconds: 12,
+        ingredients: [],
+        products: [{ itemId: "Desc_WAT1_C", amount: 1 }],
+        machineIds: ["Machine"],
+        alternate: false,
+        events: [],
+        variablePower: { constantMegawatts: 0, factorMegawatts: 1 },
+      },
+    },
+    fixedProducers: {},
+  };
+  const nodes: ManufacturingNode[] = Array.from({ length: 6 }, (_, index) => ({
+    kind: "manufacturing",
+    id: `machine-${index + 1}`,
+    recipeId: "Recipe",
+    machineId: "Machine",
+    machineCount: 3,
+    clockPercent: 125,
+    sloopsUsed: 1,
+    x: (5 + (index % 3) * 9) * 32,
+    y: (5 + Math.floor(index / 3) * 10) * 32,
+  }));
+  return { ...createCanvas(catalog, nodes), catalog };
+}
+
+it("reuses card content on movement and publishes new content before geometry notifications", () => {
+  const { controller, history, getDisplay } = createExampleCanvas();
+  const display = getDisplay("machine-1");
+  controller.setSelection(new Set(["machine-1"]));
+  controller.command("move-right");
+  expect(getDisplay("machine-1")).toBe(display);
+  let observed: string | undefined;
+  const unsubscribe = controller.subscribe(() => {
+    observed = getDisplay("machine-1")?.subtitle;
+  });
+  history.update((nodes) =>
+    nodes.map((node) => (node.id === "machine-1" ? { ...node, machineCount: 4 } : node)),
+  );
+  expect(observed).toBe("4× Assembler");
+  expect(getDisplay("machine-1")).not.toBe(display);
+  unsubscribe();
+});
+
+it("retains extraction settings through movement, copy/paste and undo and refreshes resource changes", () => {
+  const { catalog, controller, history, clipboardCommand, historyCommand, getDisplay } =
+    createExampleCanvas();
+  for (const id of ["Iron", "Copper"])
+    catalog.items[id] = {
+      id,
+      name: `${id} Ore`,
+      description: "",
+      form: "solid",
+      unit: "item",
+      iconId: id,
+    };
+  catalog.extractors.Miner = {
+    id: "Miner",
+    name: "Miner Mk.1",
+    description: "",
+    descriptorId: "Desc_Miner",
+    iconId: "miner-icon",
+    resourceIds: ["Iron", "Copper"],
+    powerMegawatts: 5,
+    powerConsumptionExponent: 1.321929,
+    canOverclock: true,
+  };
+  const miner = {
+    kind: "extractor",
+    id: "miner",
+    extractorId: "Miner",
+    resourceId: "Iron",
+    machineCount: 2,
+    clockPercent: 125,
+    x: 160,
+    y: 160,
+  } as const;
+  history.update(() => [miner]);
+  controller.setSelection(new Set([miner.id]));
+  const display = getDisplay(miner.id);
+  controller.command("move-right");
+  expect(getDisplay(miner.id)).toBe(display);
+  clipboardCommand("copy");
+  clipboardCommand("paste");
+  const pasted = history.getSnapshot().state.at(-1)!;
+  expect(pasted).toMatchObject({ ...miner, id: expect.any(String), x: 208, y: 192 });
+  expect(pasted.id).not.toBe(miner.id);
+  historyCommand("undo");
+  expect(history.getSnapshot().state).toHaveLength(1);
+  historyCommand("redo");
+  expect(history.getSnapshot().state.at(-1)).toEqual(pasted);
+  history.update((nodes) =>
+    nodes.map((node) => (node.kind === "extractor" ? { ...node, resourceId: "Copper" } : node)),
+  );
+  expect(getDisplay(miner.id)?.title).toBe("Copper Ore");
+  expect(getDisplay(miner.id)?.ports[0]?.iconId).toBe("Copper");
 });

@@ -53,6 +53,12 @@ importers:
       '@satisfactory-belt/edit-history':
         specifier: workspace:*
         version: link:../../packages/edit-history
+      '@satisfactory-belt/factory-core':
+        specifier: workspace:*
+        version: link:../../packages/factory-core
+      '@satisfactory-belt/game-data':
+        specifier: workspace:*
+        version: link:../../packages/game-data
       '@satisfactory-belt/preferences':
         specifier: workspace:*
         version: link:../../packages/preferences
@@ -110,11 +116,26 @@ importers:
       '@satisfactory-belt/canvas-core':
         specifier: workspace:*
         version: link:../canvas-core
+      '@satisfactory-belt/factory-core':
+        specifier: workspace:*
+        version: link:../factory-core
+      '@satisfactory-belt/game-data':
+        specifier: workspace:*
+        version: link:../game-data
       pixi.js:
         specifier: ^8.20.1
         version: 8.20.1
 
   packages/edit-history: {}
+
+  packages/factory-core:
+    dependencies:
+      '@satisfactory-belt/canvas-core':
+        specifier: workspace:*
+        version: link:../canvas-core
+      '@satisfactory-belt/game-data':
+        specifier: workspace:*
+        version: link:../game-data
 
   packages/game-data: {}
 

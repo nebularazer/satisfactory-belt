@@ -4,6 +4,7 @@
     { "path": "./packages/game-data" },
     { "path": "./scripts" },
     { "path": "./packages/canvas-core" },
+    { "path": "./packages/factory-core" },
     { "path": "./packages/canvas-pixi" },
     { "path": "./packages/preferences" },
     { "path": "./packages/edit-history" },

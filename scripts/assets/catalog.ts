@@ -1,4 +1,5 @@
 import type {
+  Extractor,
   FixedProducer,
   GameCatalog,
   Ingredient,
@@ -40,6 +41,7 @@ export function parseCatalog(
   const machines: Record<string, Machine> = {};
   const recipes: Record<string, Recipe> = {};
   const fixedProducers: Record<string, FixedProducer> = {};
+  const extractors: Record<string, Extractor> = {};
   const excludedRecipes: ExcludedRecipe[] = [];
   for (const [id, { native, data }] of classes) {
     if (typeof data.mForm === "string" && data.mForm !== "RF_INVALID") {
@@ -103,8 +105,47 @@ export function parseCatalog(
             ? { kind: "variable" }
             : { kind: "fixed", megawatts: number(data, "mPowerConsumption") },
         powerConsumptionExponent: number(data, "mPowerConsumptionExponent"),
+        canOverclock: boolean(data, "mCanChangePotential"),
+        sloopSlots: sloopSlots(data),
+        productionBoost: {
+          base: number(data, "mBaseProductionBoost"),
+          perSloop: number(data, "mProductionShardBoostMultiplier"),
+          powerExponent: number(data, "mProductionBoostPowerConsumptionExponent"),
+        },
       };
     }
+  }
+  for (const [id, { native, data }] of classes) {
+    if (native !== "FGBuildableResourceExtractor" && native !== "FGBuildableWaterPump") continue;
+    const descriptorId = id.replace(/^Build_/, "Desc_");
+    if (classes.get(descriptorId)?.native !== "FGBuildingDescriptor")
+      throw new Error(`Missing building descriptor for ${id}.`);
+    const forms = list(data, "mAllowedResourceForms");
+    if (!forms.length || forms.some((form) => !["RF_SOLID", "RF_LIQUID", "RF_GAS"].includes(form)))
+      throw new Error(`Invalid resource forms for ${id}.`);
+    const available = [...classes]
+      .filter(
+        ([, resource]) =>
+          resource.native === "FGResourceDescriptor" &&
+          forms.includes(string(resource.data, "mForm")),
+      )
+      .map(([resourceId]) => resourceId);
+    const resourceIds = boolean(data, "mOnlyAllowCertainResources")
+      ? list(data, "mAllowedResources").map(classId)
+      : available;
+    if (!resourceIds.length || resourceIds.some((resourceId) => !available.includes(resourceId)))
+      throw new Error(`Invalid resource restriction for ${id}.`);
+    extractors[id] = {
+      id,
+      descriptorId,
+      iconId: descriptorId,
+      name: string(data, "mDisplayName"),
+      description: string(data, "mDescription"),
+      resourceIds: resourceIds.toSorted(),
+      powerMegawatts: number(data, "mPowerConsumption"),
+      powerConsumptionExponent: number(data, "mPowerConsumptionExponent"),
+      canOverclock: boolean(data, "mCanChangePotential"),
+    };
   }
   const handcrafting = new Set([
     "BP_WorkBenchComponent_C",
@@ -167,6 +208,7 @@ export function parseCatalog(
       items: sorted(items),
       machines: sorted(machines),
       fixedProducers: sorted(fixedProducers),
+      extractors: sorted(extractors),
       recipes: sorted(recipes),
     },
     excludedRecipes: excludedRecipes.toSorted((a, b) => a.id.localeCompare(b.id, "en")),
@@ -227,4 +269,16 @@ function sorted<T>(entries: Record<string, T>): Record<string, T> {
   return Object.fromEntries(
     Object.entries(entries).toSorted(([a], [b]) => a.localeCompare(b, "en")),
   );
+}
+
+/** Non-overridden machines use the default single amplification slot, even when
+ * Docs serializes mProductionShardSlotSize as zero (e.g. the Smelter). */
+function sloopSlots(data: Record<string, unknown>): number {
+  if (!boolean(data, "mCanChangeProductionBoost")) return 0;
+  const slots = boolean(data, "mOverrideProductionShardSlotSize")
+    ? number(data, "mProductionShardSlotSize")
+    : 1;
+  if (!Number.isSafeInteger(slots) || slots < 1 || slots > 4)
+    throw new Error(`Invalid Sloop slots on ${String(data.ClassName)}.`);
+  return slots;
 }

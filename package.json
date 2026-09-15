@@ -12,7 +12,8 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "test": "vitest run --passWithNoTests",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "assets:stage": "tsx scripts/assets/stage.ts"
   },
   "devDependencies": {
     "@satisfactory-belt/game-data": "workspace:*",

@@ -1,0 +1,189 @@
+import {
+  FOOTER_Y,
+  HEADER_HEIGHT,
+  NODE_SIZE,
+  PIPE_PORT_RADIUS,
+  PORT_RADIUS,
+} from "@satisfactory-belt/factory-core";
+import type { MachineDisplay } from "@satisfactory-belt/factory-core";
+import { CanvasTextMetrics, Container, Graphics, Sprite, Text } from "pixi.js";
+
+import type { IconCache } from "./icon-cache";
+
+// Lucide Zap and Clock SVG paths, ISC license, from lucide-react 1.45.0.
+// Separate arc flags/numbers explicitly for Pixi’s SVG parser.
+const ZAP =
+  '<path d="M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z"/>';
+const CLOCK = '<circle cx="12" cy="12" r="10" fill="#e2f3fb"/><path d="M12 6v6l4 2"/>';
+
+// Inspired by the game's orange inputs and green/teal outputs, adapted to white cards.
+const PORT_COLORS = {
+  input: { stroke: "#d77732", fill: "#fff0df" },
+  output: { stroke: "#239c83", fill: "#e1f5ed" },
+} as const;
+
+type IconView = { sprite: Sprite; placeholder: Graphics; id: string; size: number };
+
+export class MachineNodeView {
+  readonly container = new Container({ eventMode: "none" });
+  private background = new Graphics();
+  private content = new Container({ eventMode: "none" });
+  private texts: Text[] = [];
+  private icons: IconView[] = [];
+  private display: MachineDisplay | null = null;
+  private selected = false;
+  private zoom = -1;
+  private fontFamily: string;
+  private cache: IconCache;
+
+  constructor(fontFamily: string, cache: IconCache) {
+    this.fontFamily = fontFamily;
+    this.cache = cache;
+    this.container.addChild(this.background, this.content);
+  }
+
+  update(display: MachineDisplay, zoom: number, resolution: number, selected: boolean) {
+    if (this.display !== display) {
+      this.content.removeChildren().forEach((child) => child.destroy({ children: true }));
+      this.texts = [];
+      this.icons = [];
+      this.build(display);
+      this.display = display;
+    }
+    if (this.zoom !== zoom || this.selected !== selected) {
+      this.background
+        .clear()
+        .roundRect(0, 0, NODE_SIZE, NODE_SIZE, 8)
+        .fill("#ffffff")
+        .stroke({ color: selected ? "#6960d9" : "#d8d9e0", width: (selected ? 1.5 : 1) / zoom });
+      this.zoom = zoom;
+      this.selected = selected;
+      this.container.scale.set(zoom);
+    }
+    const textResolution = resolution * Math.max(1, 2 ** Math.ceil(Math.log2(zoom)));
+    for (const label of this.texts) {
+      if (label.resolution !== textResolution) label.resolution = textResolution;
+    }
+    for (const icon of this.icons) {
+      const texture = this.cache.get(icon.id, icon.size * zoom * resolution);
+      icon.placeholder.visible = !texture;
+      icon.sprite.visible = Boolean(texture);
+      if (texture && icon.sprite.texture !== texture) {
+        icon.sprite.texture = texture;
+        icon.sprite.width = icon.size;
+        icon.sprite.height = icon.size;
+      }
+    }
+  }
+
+  private build(display: MachineDisplay) {
+    const lines = new Graphics()
+      .moveTo(0, HEADER_HEIGHT)
+      .lineTo(NODE_SIZE, HEADER_HEIGHT)
+      .moveTo(0, FOOTER_Y)
+      .lineTo(NODE_SIZE, FOOTER_Y)
+      .stroke({ color: "#ececf0", width: 1 });
+    this.content.addChild(lines);
+    this.icon(display.machineIconId, 32, 32, 40);
+    this.label(display.title, 64, 23, 176, 15, "600", "#30313b");
+    this.label(display.subtitle, 64, 44, 176, 12, "400", "#757681");
+
+    const markers = new Graphics();
+    for (const port of display.ports) {
+      const colors = PORT_COLORS[port.direction];
+      if (port.transport === "pipe") {
+        markers.poly([
+          port.x,
+          port.y - PIPE_PORT_RADIUS,
+          port.x + PIPE_PORT_RADIUS,
+          port.y,
+          port.x,
+          port.y + PIPE_PORT_RADIUS,
+          port.x - PIPE_PORT_RADIUS,
+          port.y,
+        ]);
+      } else markers.circle(port.x, port.y, PORT_RADIUS);
+      markers.fill(colors.fill).stroke({ color: colors.stroke, width: 2 });
+      this.icon(port.iconId, port.direction === "input" ? 28 : NODE_SIZE - 28, port.y, 24);
+    }
+    this.content.addChild(markers);
+    this.symbol(ZAP, 12, 232, "#cd921a", "#f7ce65");
+    this.label(display.powerLabel, 32, 240, 80, 11, "500", "#656774");
+    if (display.clockLabel) {
+      this.symbol(CLOCK, 120, 232, "#3299b5");
+      this.label(display.clockLabel, 140, 240, 49, 11, "500", "#656774");
+    }
+    if (display.sloops) {
+      this.icon(display.sloops.iconId, 207, 240, 18);
+      this.label(
+        `${display.sloops.used}/${display.sloops.slots}`,
+        221,
+        240,
+        27,
+        11,
+        "500",
+        display.sloops.used ? "#6960d9" : "#656774",
+      );
+    }
+  }
+
+  private label(
+    value: string,
+    x: number,
+    y: number,
+    width: number,
+    fontSize: number,
+    fontWeight: "400" | "500" | "600",
+    fill: string,
+  ) {
+    const label = new Text({
+      text: value,
+      anchor: { x: 0, y: 0.5 },
+      style: { fontFamily: this.fontFamily, fontSize, fontWeight, fill },
+    });
+    // Only measure on content changes, never while dragging or on individual zoom steps.
+    if (CanvasTextMetrics.measureText(value, label.style).width > width) {
+      const chars = Array.from(value);
+      let low = 0;
+      let high = chars.length;
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (
+          CanvasTextMetrics.measureText(`${chars.slice(0, mid).join("")}…`, label.style).width <=
+          width
+        )
+          low = mid;
+        else high = mid - 1;
+      }
+      label.text = `${chars.slice(0, low).join("")}…`;
+    }
+    label.position.set(x, y);
+    this.texts.push(label);
+    this.content.addChild(label);
+  }
+
+  private icon(id: string, x: number, y: number, size: number) {
+    const placeholder = new Graphics()
+      .roundRect(x - size / 2, y - size / 2, size, size, 4)
+      .fill("#f0f0f3")
+      .stroke({ color: "#d8d9e0", width: 1 });
+    const sprite = new Sprite({ anchor: 0.5 });
+    sprite.position.set(x, y);
+    sprite.visible = false;
+    this.content.addChild(placeholder, sprite);
+    this.icons.push({ sprite, placeholder, id, size });
+  }
+
+  private symbol(paths: string, x: number, y: number, color: string, fill = "none") {
+    const icon = new Graphics().svg(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="${fill}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`,
+    );
+    icon.position.set(x, y);
+    icon.scale.set(16 / 24);
+    this.content.addChild(icon);
+  }
+
+  restoreText() {
+    for (const label of this.texts) label.unload();
+  }
+}

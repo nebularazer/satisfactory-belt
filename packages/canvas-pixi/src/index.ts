@@ -6,22 +6,17 @@ import {
   worldToScreen,
 } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem, CanvasPointer } from "@satisfactory-belt/canvas-core";
-import { Application, Container, Graphics, Text } from "pixi.js";
+import { PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
+import type { MachineDisplay } from "@satisfactory-belt/factory-core";
+import type { IconManifest } from "@satisfactory-belt/game-data";
+import { Application, Container, Graphics } from "pixi.js";
 
 import { createGrid } from "./grid";
+import { IconCache } from "./icon-cache";
+import { MachineNodeView } from "./machine-node";
 import { RenderPerformance } from "./performance";
 
 export { RenderPerformance } from "./performance";
-
-type ItemView = {
-  container: Container;
-  rectangle: Graphics;
-  label: Text;
-  clip: Graphics;
-  item: CanvasItem;
-  zoom: number;
-  selected: boolean;
-};
 
 const MARQUEE_FILL = { color: "#6960d9", alpha: 0.09 };
 
@@ -38,10 +33,13 @@ export async function mountCanvas(
   host: HTMLElement,
   controller: CanvasController,
   options: {
+    getDisplay: (id: string) => MachineDisplay | undefined;
+    iconManifest: IconManifest;
+    assetBaseUrl: string;
     signal?: AbortSignal;
     fontFamily?: string;
     onHistoryCommand?: (command: "undo" | "redo") => void;
-  } = {},
+  },
 ): Promise<CanvasView> {
   const monitor = new RenderPerformance();
   const abortedView: CanvasView = {
@@ -53,7 +51,9 @@ export async function mountCanvas(
   };
   const app = new Application();
   const fontFamily = options.fontFamily ?? "sans-serif";
-  await document.fonts.load(`500 14px "${fontFamily}"`);
+  await Promise.all(
+    [400, 500, 600].map((weight) => document.fonts.load(`${weight} 15px "${fontFamily}"`)),
+  );
   if (options.signal?.aborted) return abortedView;
   await app.init({
     preference: ["webgl"],
@@ -85,7 +85,8 @@ export async function mountCanvas(
   const itemsLayer = new Container();
   const overlay = new Graphics();
   app.stage.addChild(grid.view, itemsLayer, overlay);
-  const views = new Map<string, ItemView>();
+  const views = new Map<string, MachineNodeView>();
+  const icons = new IconCache(options.iconManifest, options.assetBaseUrl, invalidate);
   let previousItems: readonly CanvasItem[] | null = null;
   let frame = 0;
   let destroyed = false;
@@ -98,28 +99,6 @@ export async function mountCanvas(
 
   function invalidate() {
     if (!destroyed && !contextLost && !frame) frame = requestAnimationFrame(render);
-  }
-
-  function textResolution(zoom: number) {
-    // Cache enough pixels for the current zoom range instead of rasterizing every wheel step.
-    return resolution * Math.max(1, 2 ** Math.ceil(Math.log2(zoom)));
-  }
-
-  function createItem(item: CanvasItem): ItemView {
-    const container = new Container();
-    const rectangle = new Graphics();
-    const label = new Text({
-      text: item.text,
-      resolution,
-      roundPixels: true,
-      anchor: 0.5,
-      style: { fontFamily, fontSize: 14, fontWeight: "500", fill: "#424554" },
-    });
-    const clip = new Graphics();
-    clip.visible = false;
-    container.addChild(rectangle, label, clip);
-    itemsLayer.addChild(container);
-    return { container, rectangle, label, clip, item, zoom: -1, selected: false };
   }
 
   function render() {
@@ -151,53 +130,35 @@ export async function mountCanvas(
       const width = item.width * camera.zoom;
       const height = item.height * camera.zoom;
       let view = views.get(item.id);
-      if (!intersects({ ...position, width, height }, screen)) {
+      const margin = (Math.max(PORT_RADIUS, PIPE_PORT_RADIUS) + 1) * camera.zoom;
+      if (
+        !intersects(
+          {
+            x: position.x - margin,
+            y: position.y - margin,
+            width: width + margin * 2,
+            height: height + margin * 2,
+          },
+          screen,
+        )
+      ) {
         if (view) view.container.visible = false;
         continue;
       }
       if (started !== undefined) visibleItems++;
       if (!view) {
-        view = createItem(item);
+        view = new MachineNodeView(fontFamily, icons);
+        itemsLayer.addChild(view.container);
         views.set(item.id, view);
       }
       view.container.zIndex = index;
       view.container.visible = true;
       view.container.position.set(position.x, position.y);
-      if (view.item !== item || view.zoom !== camera.zoom || view.selected !== selected) {
-        view.rectangle
-          .clear()
-          .roundRect(0, 0, width, height, Math.min(10, height / 4, width / 4))
-          .fill("#ffffff")
-          .stroke({ color: selected ? "#6960d9" : "#d8d9e0", width: 1 });
-        view.selected = selected;
-      }
-      if (view.item !== item || view.zoom !== camera.zoom) {
-        // The font stays at 14 world units; text and its padding follow the camera scale.
-        view.label.text = item.text;
-        view.label.scale.set(camera.zoom);
-        view.label.resolution = textResolution(camera.zoom);
-        view.label.position.set(width / 2, height / 2);
-        view.label.visible = item.width > 20 && item.height > 20;
-        const padding = 10 * camera.zoom;
-        // Most labels fit: avoid a separate mask pass for each visible rectangle.
-        const clipped =
-          view.label.visible &&
-          (view.label.width > width - padding * 2 || view.label.height > height - padding * 2);
-        view.label.mask = clipped ? view.clip : null;
-        view.clip.visible = clipped;
-        view.clip
-          .clear()
-          .rect(
-            padding,
-            padding,
-            Math.max(0, width - padding * 2),
-            Math.max(0, height - padding * 2),
-          )
-          .fill("#ffffff");
-        view.item = item;
-        view.zoom = camera.zoom;
-      }
+      const display = options.getDisplay(item.id);
+      if (display) view.update(display, camera.zoom, resolution, selected);
+      else view.container.visible = false;
     }
+
     itemsLayer.sortableChildren = true;
     previousItems = items;
     if (marquee) {
@@ -372,7 +333,7 @@ export async function mountCanvas(
       syncPerformance();
       // Pixi releases the source canvases after text upload; the restored GPU textures
       // are empty until their managed text entries are regenerated.
-      for (const view of views.values()) view.label.unload();
+      for (const view of views.values()) view.restoreText();
       invalidate();
     },
     { signal: events.signal },
@@ -394,7 +355,6 @@ export async function mountCanvas(
     const width = Math.max(1, host.clientWidth);
     const height = Math.max(1, host.clientHeight);
     app.renderer.resize(width, height, resolution);
-    for (const view of views.values()) view.label.resolution = textResolution(view.zoom);
     controller.resize({ width, height });
     invalidate();
   }
@@ -428,7 +388,8 @@ export async function mountCanvas(
     cancelAnimationFrame(frame);
     views.clear();
     grid.destroy();
-    app.destroy(true, { children: true, texture: true, textureSource: true });
+    app.destroy(true, { children: true });
+    icons.destroy();
   }
   options.signal?.addEventListener("abort", destroy, { once: true });
   return {

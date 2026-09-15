@@ -16,6 +16,8 @@
     { "path": "../../packages/canvas-core" },
     { "path": "../../packages/canvas-pixi" },
     { "path": "../../packages/preferences" },
-    { "path": "../../packages/edit-history" }
+    { "path": "../../packages/edit-history" },
+    { "path": "../../packages/factory-core" },
+    { "path": "../../packages/game-data" }
   ]
 }

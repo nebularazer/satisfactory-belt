@@ -37,6 +37,13 @@ function fixture() {
         mManufacturingSpeed: "1",
         mPowerConsumption: "0",
         mPowerConsumptionExponent: "1.321929",
+        mCanChangePotential: "True",
+        mCanChangeProductionBoost: "True",
+        mOverrideProductionShardSlotSize: "True",
+        mProductionShardSlotSize: "2",
+        mBaseProductionBoost: "1",
+        mProductionShardBoostMultiplier: "0.5",
+        mProductionBoostPowerConsumptionExponent: "2",
       },
     ]),
     group("FGRecipe", [
@@ -132,4 +139,113 @@ describe("manufacturing catalog", () => {
     missing[1]!.Classes = [];
     expect(() => parseCatalog(missing, source)).toThrow("Missing building descriptor");
   });
+});
+
+it.each([
+  ["True", "True", "2", 2],
+  ["True", "False", "0", 1],
+  ["True", "True", "4", 4],
+  ["False", "False", "0", 0],
+])(
+  "extracts Sloop capacity with capability=%s override=%s size=%s",
+  (capable, override, size, expected) => {
+    const docs = fixture();
+    Object.assign(docs[2]!.Classes[0]!, {
+      mCanChangeProductionBoost: capable,
+      mOverrideProductionShardSlotSize: override,
+      mProductionShardSlotSize: size,
+      mCanChangePotential: "False",
+    });
+    const machine = parseCatalog(docs, source).catalog.machines.Build_Machine_C!;
+    expect(machine.sloopSlots).toBe(expected);
+    expect(machine.canOverclock).toBe(false);
+    expect(machine.productionBoost).toEqual({ base: 1, perSloop: 0.5, powerExponent: 2 });
+  },
+);
+it.each(["-1", "0", "1.5", "5"])("rejects invalid Sloop slot overrides %s", (size) => {
+  const docs = fixture();
+  docs[2]!.Classes[0]!.mProductionShardSlotSize = size;
+  expect(() => parseCatalog(docs, source)).toThrow("Invalid Sloop slots");
+});
+
+function extractorDocs() {
+  const docs = fixture();
+  docs[0]!.NativeClass = group("FGResourceDescriptor", []).NativeClass;
+  docs.push(
+    group("FGItemDescriptor", [
+      { ClassName: "Desc_Ingot_C", mDisplayName: "Ingot", mDescription: "", mForm: "RF_SOLID" },
+    ]),
+  );
+  docs[0]!.Classes.push({
+    ClassName: "Desc_Oil_C",
+    mDisplayName: "Oil",
+    mDescription: "",
+    mForm: "RF_LIQUID",
+  });
+  docs[1]!.Classes.push(
+    ...["Miner", "WaterPump", "OilPump"].map((name) => ({ ClassName: `Desc_${name}_C` })),
+  );
+  const base = {
+    mDisplayName: "Extractor",
+    mDescription: "",
+    mPowerConsumption: "5",
+    mPowerConsumptionExponent: "1.321929",
+    mCanChangePotential: "True",
+    mAllowedResourceForms: "(RF_SOLID)",
+    mOnlyAllowCertainResources: "False",
+    mAllowedResources: "",
+  };
+  docs.push(
+    group("FGBuildableResourceExtractor", [
+      { ...base, ClassName: "Build_Miner_C" },
+      {
+        ...base,
+        ClassName: "Build_OilPump_C",
+        mPowerConsumption: "40",
+        mAllowedResourceForms: "(RF_LIQUID)",
+        mOnlyAllowCertainResources: "True",
+        mAllowedResources: '("/Game/Oil.Desc_Oil_C")',
+      },
+    ]),
+  );
+  docs.push(
+    group("FGBuildableWaterPump", [
+      {
+        ...base,
+        ClassName: "Build_WaterPump_C",
+        mPowerConsumption: "20",
+        mAllowedResourceForms: "(RF_LIQUID)",
+        mOnlyAllowCertainResources: "True",
+        mAllowedResources: '("/Game/Water.Desc_Water_C")',
+      },
+    ]),
+  );
+  return docs;
+}
+
+it("extracts miner, water and oil capabilities from resource forms and restrictions", () => {
+  const { catalog } = parseCatalog(extractorDocs(), source);
+  expect(catalog.extractors.Build_Miner_C).toMatchObject({
+    resourceIds: ["Desc_Iron_C"],
+    iconId: "Desc_Miner_C",
+    powerMegawatts: 5,
+    canOverclock: true,
+  });
+  expect(catalog.extractors.Build_WaterPump_C).toMatchObject({
+    resourceIds: ["Desc_Water_C"],
+    powerMegawatts: 20,
+  });
+  expect(catalog.extractors.Build_OilPump_C).toMatchObject({
+    resourceIds: ["Desc_Oil_C"],
+    powerMegawatts: 40,
+  });
+  expect(catalog.machines.Build_Miner_C).toBeUndefined();
+});
+
+it("rejects extractor restrictions that point to manufactured items or incompatible forms", () => {
+  for (const resource of ["Desc_Ingot_C", "Desc_Iron_C", "Desc_Missing_C"]) {
+    const docs = extractorDocs();
+    docs.at(-1)!.Classes[0]!.mAllowedResources = `("/Game/Resource.${resource}")`;
+    expect(() => parseCatalog(docs, source)).toThrow("Invalid resource restriction");
+  }
 });

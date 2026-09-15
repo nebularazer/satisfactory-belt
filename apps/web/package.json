@@ -15,6 +15,8 @@
     "@satisfactory-belt/canvas-core": "workspace:*",
     "@satisfactory-belt/canvas-pixi": "workspace:*",
     "@satisfactory-belt/edit-history": "workspace:*",
+    "@satisfactory-belt/factory-core": "workspace:*",
+    "@satisfactory-belt/game-data": "workspace:*",
     "@satisfactory-belt/preferences": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",

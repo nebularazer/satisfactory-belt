@@ -38,16 +38,51 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { createExampleCanvas } from "@/lib/example-canvas";
+import { loadGameAssets } from "@/lib/game-assets";
+import type { GameAssets } from "@/lib/game-assets";
 
 const menuButton = (
   <Button variant="outline" size="icon" className="bg-white shadow-sm" aria-label="Canvas menu" />
 );
 
 export function App({ preferences }: { preferences: Preferences }) {
+  const [assets, setAssets] = useState<GameAssets | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    loadGameAssets(abort.signal)
+      .then(setAssets)
+      .catch((reason: unknown) => {
+        if (!abort.signal.aborted)
+          setError(reason instanceof Error ? reason.message : "Game data could not load.");
+      });
+    return () => abort.abort();
+  }, []);
+  if (!assets)
+    return (
+      <main className="flex h-dvh items-center justify-center bg-background p-8">
+        <p
+          role={error ? "alert" : "status"}
+          className="max-w-lg text-center text-sm text-muted-foreground"
+        >
+          {error ?? "Loading machines…"}
+        </p>
+      </main>
+    );
+  return <CanvasWorkspace preferences={preferences} assets={assets} />;
+}
+
+function CanvasWorkspace({
+  preferences,
+  assets,
+}: {
+  preferences: Preferences;
+  assets: GameAssets;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
-  const [{ controller, history, historyCommand, clipboardCommand, deleteSelection }] =
-    useState(createExampleCanvas);
+  const [{ controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay }] =
+    useState(() => createExampleCanvas(assets.catalog));
   const { canUndo, canRedo } = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [performanceMonitor, setPerformanceMonitor] = useState<RenderPerformance | null>(null);
@@ -79,6 +114,9 @@ export function App({ preferences }: { preferences: Preferences }) {
     const abort = new AbortController();
     void mountCanvas(host.current!, controller, {
       signal: abort.signal,
+      getDisplay,
+      iconManifest: assets.icons,
+      assetBaseUrl: assets.baseUrl,
       fontFamily: "Inter Variable",
       onHistoryCommand: historyCommand,
     })
@@ -98,7 +136,7 @@ export function App({ preferences }: { preferences: Preferences }) {
       abort.abort();
       view.current = null;
     };
-  }, [controller, historyCommand, preferences]);
+  }, [controller, historyCommand, preferences, assets, getDisplay]);
 
   const {
     reset,

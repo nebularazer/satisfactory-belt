@@ -28,6 +28,10 @@ export interface Machine {
   manufacturingSpeed: number;
   power: { kind: "fixed"; megawatts: number } | { kind: "variable" };
   powerConsumptionExponent: number;
+  canOverclock: boolean;
+  /** Slots per machine; zero means amplification is unsupported. */
+  sloopSlots: number;
+  productionBoost: { base: number; perSloop: number; powerExponent: number };
 }
 
 /** A building that produces a fixed output without selecting a manufacturing recipe. */
@@ -42,6 +46,19 @@ export interface FixedProducer {
   powerMegawatts: number;
   canOverclock: boolean;
   events: string[];
+}
+
+/** Resource extraction is independent of manufacturing recipes. */
+export interface Extractor {
+  id: string;
+  name: string;
+  description: string;
+  descriptorId: string;
+  iconId: string;
+  resourceIds: string[];
+  powerMegawatts: number;
+  powerConsumptionExponent: number;
+  canOverclock: boolean;
 }
 
 export interface Recipe {
@@ -64,6 +81,7 @@ export interface GameCatalog {
   items: Record<string, Item>;
   machines: Record<string, Machine>;
   fixedProducers: Record<string, FixedProducer>;
+  extractors: Record<string, Extractor>;
   recipes: Record<string, Recipe>;
 }
 
@@ -105,6 +123,19 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
       Number.isFinite(machine.manufacturingSpeed) && machine.manufacturingSpeed > 0,
       `Invalid speed for ${id}.`,
     );
+    check(typeof machine.canOverclock === "boolean", `Invalid clock capability for ${id}.`);
+    check(
+      Number.isSafeInteger(machine.sloopSlots) &&
+        machine.sloopSlots >= 0 &&
+        machine.sloopSlots <= 4,
+      `Invalid Sloop slots for ${id}.`,
+    );
+    check(
+      machine.productionBoost?.base === 1 &&
+        nonnegative(machine.productionBoost.perSloop) &&
+        nonnegative(machine.productionBoost.powerExponent),
+      `Invalid production boost for ${id}.`,
+    );
     check(nonnegative(machine.powerConsumptionExponent), `Invalid power exponent for ${id}.`);
     if (machine.power.kind === "fixed")
       check(nonnegative(machine.power.megawatts), `Invalid power for ${id}.`);
@@ -134,6 +165,20 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
       );
       check(Number.isFinite(product.amount) && product.amount > 0, `Invalid amount in ${id}.`);
     }
+  }
+  for (const [id, extractor] of Object.entries(catalog.extractors)) {
+    check(id === extractor.id && Boolean(extractor.name.trim()), `Invalid extractor ${id}.`);
+    check(iconIds.has(extractor.iconId), `Missing icon for ${id}.`);
+    check(nonnegative(extractor.powerMegawatts), `Invalid power for ${id}.`);
+    check(nonnegative(extractor.powerConsumptionExponent), `Invalid power exponent for ${id}.`);
+    check(typeof extractor.canOverclock === "boolean", `Invalid clock capability for ${id}.`);
+    check(
+      extractor.resourceIds.length > 0 &&
+        new Set(extractor.resourceIds).size === extractor.resourceIds.length,
+      `Invalid resources for ${id}.`,
+    );
+    for (const resourceId of extractor.resourceIds)
+      check(Object.hasOwn(catalog.items, resourceId), `Missing resource ${resourceId} for ${id}.`);
   }
   for (const [id, recipe] of Object.entries(catalog.recipes)) {
     check(id === recipe.id && Boolean(recipe.name.trim()), `Invalid recipe ${id}.`);

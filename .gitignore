@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 
 # Local game downloads, extraction tools and output
 /.assets/
+
+# Staged browser game catalog and icons
+/apps/web/public/game-data/
+/apps/web/public/.game-data-*/
