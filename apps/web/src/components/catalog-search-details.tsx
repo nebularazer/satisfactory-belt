@@ -347,19 +347,22 @@ function AdditionalRecipeMetrics({
     ids.map((id) => assets.catalog.items[id]!.name).join(", ");
   function indicator(description: string, children: React.ReactNode) {
     return (
-      <Tooltip disableHoverablePopup>
-        <TooltipTrigger
-          render={<button type="button" aria-label={description} />}
-          aria-label={description}
-          onClick={onSelect}
-          className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {children}
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="pointer-events-none">
-          {description}
-        </TooltipContent>
-      </Tooltip>
+      <span className="inline-flex max-w-full items-center gap-2">
+        <span aria-hidden="true">·</span>
+        <Tooltip disableHoverablePopup>
+          <TooltipTrigger
+            render={<button type="button" aria-label={description} />}
+            aria-label={description}
+            onClick={onSelect}
+            className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {children}
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="pointer-events-none">
+            {description}
+          </TooltipContent>
+        </Tooltip>
+      </span>
     );
   }
   const icons = (ids: readonly string[]) =>
