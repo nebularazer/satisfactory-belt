@@ -1,5 +1,6 @@
 import { intersects, screenToWorld } from "./geometry";
 import type { Bounds, Camera, Point } from "./geometry";
+import { SNAP_SIZE, snapToGrid } from "./grid";
 import type { PortReference } from "./ports";
 
 /** A vertical (x) or horizontal (y) line deliberately positioned by the user. */
@@ -73,13 +74,22 @@ const earlier = (a: Entry, b: Entry) =>
   a.estimate < b.estimate || (a.estimate === b.estimate && a.bends < b.bends);
 
 /** Search obstacle-edge coordinates, allowing several turns through staggered gaps. */
-function shortestDetour(start: Point, end: Point, boxes: readonly Bounds[]): Point[] | null {
-  const xs = [...new Set([start.x, end.x, ...boxes.flatMap((b) => [b.x, b.x + b.width])])].toSorted(
-    (a, b) => a - b,
-  );
-  const ys = [...new Set([start.y, end.y, ...boxes.flatMap((b) => [b.y, b.y + b.height])])].toSorted(
-    (a, b) => a - b,
-  );
+function shortestDetour(
+  start: Point,
+  end: Point,
+  boxes: readonly Bounds[],
+  grid = false,
+): Point[] | null {
+  const edges = (low: number, high: number) =>
+    grid
+      ? [Math.floor(low / SNAP_SIZE) * SNAP_SIZE, Math.ceil(high / SNAP_SIZE) * SNAP_SIZE]
+      : [low, high];
+  const xs = [
+    ...new Set([start.x, end.x, ...boxes.flatMap((b) => edges(b.x, b.x + b.width))]),
+  ].toSorted((a, b) => a - b);
+  const ys = [
+    ...new Set([start.y, end.y, ...boxes.flatMap((b) => edges(b.y, b.y + b.height))]),
+  ].toSorted((a, b) => a - b);
   const width = xs.length;
   const point = (id: number) => ({ x: xs[id % width]!, y: ys[Math.floor(id / width)]! });
   const source = ys.indexOf(start.y) * width + xs.indexOf(start.x);
@@ -165,8 +175,45 @@ function shortestDetour(start: Point, end: Point, boxes: readonly Bounds[]): Poi
   return null;
 }
 
-/** Orthogonal routing through obstacle-edge corridors; explicit guides retain user control. */
+/** Experimental preference: grid-aligned automatic bends with exact endpoint lanes. */
 export function routeLink(
+  source: Point,
+  target: Point,
+  obstacles: readonly Bounds[] = [],
+  guides?: readonly RouteGuide[],
+): readonly Point[] {
+  const original = routeUnsnapped(source, target, obstacles, guides);
+  if (guides?.length) return original;
+  const rawStart = original[1]!,
+    rawEnd = original.at(-2)!;
+  const start = { x: Math.ceil(rawStart.x / SNAP_SIZE) * SNAP_SIZE, y: source.y };
+  const end = { x: Math.floor(rawEnd.x / SNAP_SIZE) * SNAP_SIZE, y: target.y };
+  // Close neighbors may have no grid lane between their ports.
+  if (source.x < target.x && start.x >= end.x) return original;
+  const clearance = Math.min(12, Math.abs(rawStart.x - source.x));
+  const boxes = obstacles.map((box) => ({
+    x: box.x - clearance,
+    y: box.y - clearance,
+    width: box.width + clearance * 2,
+    height: box.height + clearance * 2,
+  }));
+  const x = (value: number) =>
+    value === rawStart.x ? start.x : value === rawEnd.x ? end.x : snapToGrid(value);
+  const y = (value: number) =>
+    value === source.y || value === target.y ? value : snapToGrid(value);
+  const snapped = original.slice(1, -1).map((p) => ({ x: x(p.x), y: y(p.y) }));
+  const clear = (path: readonly Point[]) =>
+    path.slice(1).every((p, i) => boxes.every((box) => !blocked(path[i]!, p, box)));
+  const interior = clear(snapped) ? snapped : shortestDetour(start, end, boxes, true);
+  if (!interior) return original;
+  const candidate = [source, ...clean(interior), target];
+  // Prefer a small grid detour, but keep narrow off-grid corridors when snapping
+  // would force a long route around the outside of neighboring nodes.
+  return cost(candidate) <= cost(original) + SNAP_SIZE * 2 ? candidate : original;
+}
+
+/** Orthogonal routing through obstacle-edge corridors; explicit guides retain user control. */
+function routeUnsnapped(
   source: Point,
   target: Point,
   obstacles: readonly Bounds[] = [],

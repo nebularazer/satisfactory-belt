@@ -119,7 +119,7 @@ it("routes a backward connection through the gap below its target instead of ove
   const length = points
     .slice(1)
     .reduce((sum, p, i) => sum + Math.abs(p.x - points[i].x) + Math.abs(p.y - points[i].y), 0);
-  expect(length).toBe(608);
+  expect(length).toBe(640); // Grid-aligned stubs and bends add two snap steps.
   expect(Math.min(...points.map((p) => p.y))).toBe(64);
 });
 
@@ -203,7 +203,7 @@ it("takes the shorter corridor between staggered obstacles in either obstacle or
   const length = points
     .slice(1)
     .reduce((sum, p, i) => sum + Math.abs(p.x - points[i].x) + Math.abs(p.y - points[i].y), 0);
-  expect(length).toBe(896);
+  expect(length).toBe(912); // A small detour keeps the corridor on the grid.
   expect(points.some((p) => p.x >= 268 && p.x <= 276)).toBe(true);
   for (const box of obstacles) {
     for (let i = 1; i < points.length; i++) {
@@ -222,4 +222,32 @@ it("takes the shorter corridor between staggered obstacles in either obstacle or
       expect(crosses).toBe(false);
     }
   }
+});
+
+it("aligns automatic interior bends while retaining off-grid port endpoint lanes", () => {
+  const start = { x: 101, y: 103 },
+    end = { x: 509, y: 261 };
+  const points = routeLink(start, end);
+  expect(points[0]).toEqual(start);
+  expect(points.at(-1)).toEqual(end);
+  orthogonal(points);
+  for (const p of points.slice(1, -1)) {
+    expect(p.x % 16).toBe(0);
+    expect(p.y === start.y || p.y === end.y || p.y % 16 === 0).toBe(true);
+  }
+});
+
+it("keeps a narrow off-grid corridor instead of taking a long grid detour", () => {
+  const points = routeLink({ x: 0, y: 120 }, { x: 560, y: 280 }, [
+    { x: 160, y: 0, width: 96, height: 224 },
+    { x: 280, y: 160, width: 96, height: 224 },
+  ]);
+  orthogonal(points);
+  expect(points.some((p) => p.x === 268)).toBe(true);
+});
+
+it("retains deliberately off-grid manual guides", () => {
+  const points = routeLink(source, target, [], [{ axis: "x", position: 333 }]);
+  expect(points.some((p) => p.x === 333)).toBe(true);
+  orthogonal(points);
 });

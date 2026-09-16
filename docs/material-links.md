@@ -96,8 +96,11 @@ The pure router keeps node positions fixed. Unobstructed shortest routes retain
 the centered default. Otherwise, an A* search finds a shortest orthogonal route
 through obstacle-edge corridors, preferring fewer bends on equal-length paths.
 Endpoint stubs shorten for close neighbors. If overlapping nodes leave no route
-from a port stub, the deterministic fallback can still cross cards. Automatic
-bends are not yet constrained to the snapping grid.
+from a port stub, the deterministic fallback can still cross cards. On the experiment branch, automatic
+bends prefer the 16-unit snapping grid while keeping endpoint lanes exact. A grid
+route may add up to 32 units over the shortest route; longer detours fall back to
+the off-grid route, preserving narrow corridors. Manual guides remain exact.
+This preference applies to automatic routes even when node snapping is disabled.
 
 Manual adjustments store axis-position guides. Keep endpoint stubs separate from
 the editable interior when simplifying a route: combining them previously removed
