@@ -765,3 +765,75 @@ it("commits a port drag as one undoable connection without moving either node", 
   historyCommand("redo");
   expect(history.getSnapshot().state).toBe(connected);
 });
+
+it("places at the snapped center, publishes ports, and restores the same node on redo", () => {
+  const editor = createTestEditor();
+  const before = editor.history.getSnapshot().state;
+  const node = editor.placeNode(
+    { kind: "manufacturing", recipeId: "Recipe", machineId: "Machine" },
+    { x: 503, y: 401 },
+  );
+  expect(node).toMatchObject({ x: 368, y: 272, machineCount: 1, clockPercent: 100, sloopsUsed: 0 });
+  expect(editor.controller.getSnapshot().selection).toEqual(new Set([node.id]));
+  expect(editor.getDisplay(node.id)?.ports).toHaveLength(1);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state.nodes.at(-1)).toBe(node);
+});
+
+it("adds and connects the first valid logistics port atomically, rejecting stale sources", () => {
+  const editor = createTestEditor();
+  editor.catalog.logistics.merger = {
+    id: "merger",
+    name: "Merger",
+    descriptorId: "merger",
+    kind: "merger",
+    description: "",
+    iconId: "merger",
+  };
+  const configuration = { kind: "logistics" as const, partId: "merger" };
+  const source = { nodeId: "machine-1", portKey: "output:Desc_WAT1_C" };
+  const before = editor.history.getSnapshot().state;
+  expect(editor.canPlace(configuration, source)).toBe(true);
+  editor.controller.setGridSnapping(false);
+  const node = editor.placeNode(configuration, { x: 501, y: 399 }, source);
+  expect(node).toMatchObject({ x: 437, y: 335 });
+  const after = editor.history.getSnapshot().state;
+  expect(after.links).toEqual([
+    { id: expect.any(String), output: source, input: { nodeId: node.id, portKey: "input:0" } },
+  ]);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state).toBe(after);
+  expect(() =>
+    editor.placeNode(configuration, { x: 0, y: 0 }, { ...source, nodeId: "missing" }),
+  ).toThrow("no longer supports");
+  expect(editor.history.getSnapshot().state).toBe(after);
+});
+
+it("filters consumers and producers by configured material and transport before atomic placement", () => {
+  const { catalog } = createTestEditor();
+  catalog.items.fluid = { ...catalog.items.Desc_WAT1_C!, id: "fluid", form: "liquid", unit: "m3" };
+  catalog.recipes.Consumer = {
+    ...catalog.recipes.Recipe!,
+    id: "Consumer",
+    ingredients: [{ itemId: "Desc_WAT1_C", amount: 1 }],
+    products: [{ itemId: "fluid", amount: 1 }],
+  };
+  const producer = { kind: "manufacturing" as const, recipeId: "Recipe", machineId: "Machine" };
+  const consumer = { ...producer, recipeId: "Consumer" };
+  const editor = createFactoryEditor(catalog, []);
+  const a = editor.placeNode(producer, { x: 0, y: 0 });
+  const source = { nodeId: a.id, portKey: "output:Desc_WAT1_C" };
+  expect(editor.canPlace(producer, source)).toBe(false);
+  expect(editor.canPlace(consumer, source)).toBe(true);
+  const b = editor.placeNode(consumer, { x: 400, y: 0 }, source);
+  const input = { nodeId: b.id, portKey: "input:Desc_WAT1_C" };
+  expect(editor.canPlace(producer, input)).toBe(true);
+  expect(editor.canPlace(consumer, input)).toBe(false);
+  editor.placeNode(producer, { x: -400, y: 0 }, input);
+  expect(editor.history.getSnapshot().state.links.at(-1)?.input).toEqual(input);
+  expect(editor.canPlace(consumer, { nodeId: b.id, portKey: "output:fluid" })).toBe(false);
+});

@@ -1,6 +1,10 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- The virtualized combobox popup uses a grid with independent row actions; absolute positioning requires div/span rows and cells. */
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-object-as-prop -- Search owns local UI state; only the bounded virtual window renders rows. */
-import { createSearchIndex, searchCatalog } from "@satisfactory-belt/game-data/search";
+import {
+  createSearchIndex,
+  searchCatalog,
+  recipeSearchSummary,
+} from "@satisfactory-belt/game-data/search";
 import type { SearchEntry, SearchOptions, SearchScope } from "@satisfactory-belt/game-data/search";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowLeftIcon, SearchIcon, XIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
@@ -12,13 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerTitle,
-  DrawerDescription,
-  DrawerClose,
-} from "@/components/ui/drawer";
+import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { GameAssets } from "@/lib/game-assets";
@@ -47,7 +45,7 @@ export function CatalogSearch({
   onOpenChange: (open: boolean) => void;
   finalFocus: () => HTMLElement | null;
   onAdd?: (entry: SearchEntry, scope?: SearchScope) => void;
-  /** Eligibility from a future material-link resolver; immutable snapshot of SearchEntry IDs. */
+  /** Eligibility from the material-link resolver; immutable snapshot of SearchEntry IDs. */
   allowedEntryIds?: ReadonlySet<string>;
 }) {
   const fullIndex = useMemo(() => createSearchIndex(assets.catalog), [assets.catalog]);
@@ -61,7 +59,9 @@ export function CatalogSearch({
     height: window.visualViewport?.height ?? window.innerHeight,
   }));
   const [frame, setFrame] = useState<Frame>(emptyFrame);
+  const [searchSession, setSearchSession] = useState(0);
   const [parent, setParent] = useState<Frame | null>(null);
+  const [placementError, setPlacementError] = useState<string | null>(null);
   const [detailEntry, setSelected] = useState<SearchEntry | null>(null);
   const selected =
     detailEntry && index.some((entry) => entry.id === detailEntry.id) ? detailEntry : null;
@@ -99,8 +99,21 @@ export function CatalogSearch({
       setFrame({ ...emptyFrame(), scope: { kind: entry.kind, id: entry.entityId } });
       restoreInputFocus.current = !narrow || document.activeElement === input.current;
     } else if (onAdd) {
+      place(entry);
+    }
+  }
+  function place(entry: SearchEntry) {
+    if (!onAdd || (allowedEntryIds && !allowedEntryIds.has(entry.id))) return;
+    try {
       onAdd(entry, frame.scope);
+      setPlacementError(null);
       changeOpen(false);
+      // A successful insertion starts a fresh search, including any saved building scope.
+      setFrame(emptyFrame());
+      setParent(null);
+      setSearchSession((current) => current + 1);
+    } catch (error) {
+      setPlacementError(error instanceof Error ? error.message : "Unable to place this node.");
     }
   }
   function showDetails(entry: SearchEntry, offset: number) {
@@ -109,6 +122,12 @@ export function CatalogSearch({
     setSelected(entry);
   }
   function showAlternative(entry: SearchEntry) {
+    if (allowedEntryIds && !allowedEntryIds.has(entry.id)) return;
+    setPlacementError(null);
+    if (selected?.kind === "machine" || selected?.kind === "extractor") {
+      setParent(frame);
+      setFrame({ ...emptyFrame(), scope: { kind: selected.kind, id: selected.entityId } });
+    }
     setSelected(entry);
   }
   useEffect(() => {
@@ -123,6 +142,7 @@ export function CatalogSearch({
     restoreInputFocus.current ||= !narrow;
   }
   function changeOpen(next: boolean) {
+    setPlacementError(null);
     if (!next) {
       setSelected(null);
       if (parent) {
@@ -157,7 +177,9 @@ export function CatalogSearch({
       ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
     ) {
       const buttons = Array.from(
-        detailPanel.current?.querySelectorAll<HTMLButtonElement>("[data-catalog-related]") ?? [],
+        detailPanel.current?.querySelectorAll<HTMLButtonElement>(
+          "[data-catalog-related]:not(:disabled):not([aria-disabled='true'])",
+        ) ?? [],
       );
       if (buttons.length) {
         event.preventDefault();
@@ -193,55 +215,80 @@ export function CatalogSearch({
         ? assets.catalog.extractors[frame.scope.id]?.name
         : null;
   const title = selected
-    ? "Details"
+    ? selected.name
     : scopeName
       ? `${scopeName} · ${frame.scope?.kind === "machine" ? "Recipes" : "Resources"}`
       : "Search catalog";
+  const selectedMachineId =
+    selected?.kind === "recipe"
+      ? frame.scope?.kind === "machine" && selected.machineIds.includes(frame.scope.id)
+        ? frame.scope.id
+        : selected.machineIds[0]
+      : undefined;
+  const subtitle = selected
+    ? selected.kind === "recipe"
+      ? recipeSearchSummary(assets.catalog, selected.entityId, selectedMachineId)
+      : selected.subtitle
+    : "Buildings, recipes, and alternatives";
   const content = (
     <>
       <div
         ref={heading}
         tabIndex={-1}
-        className="flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 pr-12 outline-none"
+        className={
+          selected || scopeName
+            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 outline-none sm:pr-12"
+            : "sr-only"
+        }
       >
         {(selected || parent) && (
           <Button variant="ghost" size="icon-sm" onClick={back} aria-label="Back to results">
             <ArrowLeftIcon />
           </Button>
         )}
-        <div className="min-w-0 flex-1 space-y-1.5">
-          {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
+        {selected && <CatalogIcon iconId={selected.iconId} assets={assets} />}
+        <div className="min-w-0 flex-1 space-y-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
+            {selected?.alternate && <Badge variant="secondary">Alternate</Badge>}
+            {selected && selected.events.length > 0 && <Badge variant="outline">Event</Badge>}
+          </div>
           {narrow ? (
-            <DrawerDescription className={compact ? "sr-only" : undefined}>
-              Buildings, recipes, and alternatives
-            </DrawerDescription>
+            <DrawerDescription>{subtitle}</DrawerDescription>
           ) : (
-            <DialogDescription>Buildings, recipes, and alternatives</DialogDescription>
+            <DialogDescription>{subtitle}</DialogDescription>
           )}
         </div>
-        {narrow && (
-          <DrawerClose
-            render={<Button variant="ghost" size="icon-sm" className="absolute top-2 right-2" />}
-            aria-label="Close search"
-          >
-            <XIcon />
-          </DrawerClose>
-        )}
       </div>
+      {placementError && (
+        <p role="alert" className="shrink-0 px-4 pb-3 text-sm text-destructive">
+          {placementError}
+        </p>
+      )}
       {selected && (
         <CatalogSearchDetails
           key={selected.id}
           entry={selected}
-          index={index}
+          index={fullIndex}
+          allowedEntryIds={allowedEntryIds}
+          onPlace={onAdd ? place : undefined}
           onDetails={showAlternative}
           panelRef={detailPanel}
           assets={assets}
           machineId={frame.scope?.kind === "machine" ? frame.scope.id : undefined}
         />
       )}
-      <div className={selected ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+      <div
+        className={
+          selected
+            ? "hidden"
+            : frame.scope
+              ? "flex min-h-0 flex-1 flex-col"
+              : "flex min-h-0 flex-1 flex-col pt-4"
+        }
+      >
         <SearchResults
-          key={frame.scope?.id ?? "catalog"}
+          key={`${searchSession}:${frame.scope?.id ?? "catalog"}`}
           index={index}
           assets={assets}
           frame={frame}
@@ -249,6 +296,7 @@ export function CatalogSearch({
           onChoose={choose}
           onDetails={showDetails}
           canAdd={Boolean(onAdd)}
+          restricted={allowedEntryIds !== undefined}
           inputRef={input}
           restoreInputFocus={restoreInputFocus}
           compact={compact}
@@ -258,7 +306,7 @@ export function CatalogSearch({
     </>
   );
   return narrow ? (
-    <Drawer open={open} onOpenChange={changeOpen}>
+    <Drawer open={open} onOpenChange={changeOpen} showSwipeHandle>
       <DrawerContent
         onKeyDownCapture={backShortcut}
         onKeyDown={keyDown}
@@ -292,6 +340,7 @@ function SearchResults({
   onChoose,
   onDetails,
   canAdd,
+  restricted,
   inputRef,
   restoreInputFocus,
   compact,
@@ -304,6 +353,7 @@ function SearchResults({
   onChoose: (entry: SearchEntry, offset: number) => void;
   onDetails: (entry: SearchEntry, offset: number) => void;
   canAdd: boolean;
+  restricted: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
   restoreInputFocus: React.RefObject<boolean>;
   compact: boolean;
@@ -378,11 +428,17 @@ function SearchResults({
       }}
     >
       <div className="shrink-0 space-y-3 px-4 pb-3">
-        <div className="flex items-center gap-2">
+        <div
+          className={frame.scope ? "flex items-center gap-2" : "flex items-center gap-2 sm:pr-8"}
+        >
           <ComboboxInput
             ref={inputRef}
+            type="search"
+            autoComplete="off"
+            inputMode="search"
+            enterKeyHint="search"
             showTrigger={false}
-            className="h-9 min-w-0 flex-1"
+            className="h-9 min-w-0 flex-1 [&_input::-webkit-search-cancel-button]:appearance-none"
             showClear={false}
             aria-haspopup="grid"
             aria-activedescendant={
@@ -570,8 +626,12 @@ function SearchResults({
       </ScrollArea>
       {results.length === 0 && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-6 text-center">
-          <p>No matches found</p>
-          <p className="text-sm text-muted-foreground">Try another name or reset the filters.</p>
+          <p>{restricted ? "No compatible choices found" : "No matches found"}</p>
+          <p className="text-sm text-muted-foreground">
+            {restricted
+              ? "Try another name or reset filters. Only choices that support this connection are available."
+              : "Try another name or reset the filters."}
+          </p>
           <Button variant="outline" onClick={() => update({ query: "", category: "all" })}>
             Reset search
           </Button>

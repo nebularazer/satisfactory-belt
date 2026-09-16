@@ -1,10 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-new-array-as-prop, react-perf/jsx-no-new-function-as-prop -- The virtual window bounds icons; fallback state changes only after image errors. */
 import type { Ingredient } from "@satisfactory-belt/game-data";
-import {
-  recipeSearchSummary,
-  recipeAlternatives,
-  compareRecipes,
-} from "@satisfactory-belt/game-data/search";
+import { recipeAlternatives, compareRecipes } from "@satisfactory-belt/game-data/search";
 import type { RecipeComparison, SearchEntry } from "@satisfactory-belt/game-data/search";
 import {
   ArrowLeftRightIcon,
@@ -31,23 +27,19 @@ const number = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
 export function CatalogIcon({
   iconId,
   assets,
-  large = false,
-  small = false,
+  size = 32,
 }: {
   iconId: string;
   assets: GameAssets;
-  large?: boolean;
-  small?: boolean;
+  size?: 16 | 24 | 32 | 64;
 }) {
   const icon = assets.icons.icons[iconId];
-  const sizes = large ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
+  const sizes = size === 64 ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
   const sources = icon
-    ? sizes.map((size) => new URL(icon.variants[size].path, assets.baseUrl).href)
+    ? sizes.map((variantSize) => new URL(icon.variants[variantSize].path, assets.baseUrl).href)
     : [];
   // Reset failed-image state when the requested asset changes (including hot reloads).
-  return (
-    <CatalogImage key={sources.join("|")} sources={sources} size={large ? 64 : small ? 16 : 32} />
-  );
+  return <CatalogImage key={sources.join("|")} sources={sources} size={size} />;
 }
 
 function CatalogImage({ sources, size }: { sources: readonly string[]; size: number }) {
@@ -58,7 +50,9 @@ function CatalogImage({ sources, size }: { sources: readonly string[]; size: num
       ? "size-16 shrink-0 object-contain"
       : size === 16
         ? "size-4 shrink-0 object-contain"
-        : "size-8 shrink-0 object-contain";
+        : size === 24
+          ? "size-6 shrink-0 object-contain"
+          : "size-8 shrink-0 object-contain";
   if (!src)
     return <ImageOffIcon aria-hidden="true" className={`${className} text-muted-foreground`} />;
   // Try the next prepared size on failure instead of permanently hiding the image.
@@ -83,6 +77,8 @@ export function CatalogSearchDetails({
   machineId,
   index,
   onDetails,
+  onPlace,
+  allowedEntryIds,
   panelRef,
 }: {
   entry: SearchEntry;
@@ -90,6 +86,8 @@ export function CatalogSearchDetails({
   machineId?: string;
   index: readonly SearchEntry[];
   onDetails: (entry: SearchEntry) => void;
+  onPlace?: (entry: SearchEntry) => void;
+  allowedEntryIds?: ReadonlySet<string>;
   panelRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const { catalog } = assets;
@@ -114,12 +112,12 @@ export function CatalogSearchDetails({
     return (
       <section className="space-y-2">
         <h4 className="text-sm font-medium">{title}</h4>
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {entries.map((quantity) => {
             const item = catalog.items[quantity.itemId]!;
             return (
-              <li key={item.id} className="flex items-center gap-3 text-sm">
-                <CatalogIcon iconId={item.iconId} assets={assets} />
+              <li key={item.id} className="flex items-center gap-2 text-sm">
+                <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
                 <span className="min-w-0 flex-1">{item.name}</span>
                 <span className="shrink-0 text-muted-foreground tabular-nums">
                   {number.format(quantity.amount * cyclesPerMinute)}
@@ -139,36 +137,26 @@ export function CatalogSearchDetails({
   const part = entry.kind === "logistics" ? catalog.logistics[entry.entityId] : undefined;
   const resource = entry.kind === "resource" ? catalog.items[entry.entityId] : undefined;
   const extractor = entry.extractorId ? catalog.extractors[entry.extractorId] : undefined;
+  const buildingName =
+    machine?.name ?? extractor?.name ?? producer?.name ?? sink?.name ?? part?.name ?? entry.name;
   const description =
     producer?.description ?? sink?.description ?? part?.description ?? resource?.description;
   const hasRelated = Boolean(recipe || entry.kind === "machine" || entry.kind === "extractor");
   return (
     <TooltipProvider delay={700} closeDelay={0} timeout={0}>
-      <div ref={panelRef} className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea className={hasRelated ? "min-h-0 max-h-[50%] shrink-0" : "min-h-0 flex-1"}>
+      <div
+        ref={panelRef}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+      >
+        <div className="shrink-0">
           <div className="px-4 pb-4">
-            <div className="flex items-center gap-4">
-              <CatalogIcon iconId={entry.iconId} assets={assets} large />
-              <div className="min-w-0">
-                <div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
-                  <h3 className="text-lg font-semibold">{entry.name}</h3>
-                  {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
-                  {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {entry.kind === "recipe"
-                    ? recipeSearchSummary(catalog, entry.entityId, recipeMachineId)
-                    : entry.subtitle}
-                </p>
-              </div>
-            </div>
             {description && (
               <p className="mb-5 whitespace-pre-line text-sm text-muted-foreground">
                 {description}
               </p>
             )}
             {recipe && (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {quantities("Inputs", recipe.ingredients, cycles)}
                 {quantities("Outputs", recipe.products, cycles)}
               </div>
@@ -191,9 +179,20 @@ export function CatalogSearchDetails({
               </p>
             )}
           </div>
-        </ScrollArea>
+        </div>
+        {onPlace && entry.kind !== "machine" && entry.kind !== "extractor" && (
+          <div className="shrink-0 border-t px-4 py-3">
+            <Button
+              className="w-full"
+              disabled={Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id))}
+              onClick={() => onPlace(entry)}
+            >
+              <PlusIcon aria-hidden="true" /> Place {buildingName}
+            </Button>
+          </div>
+        )}
         {hasRelated && (
-          <section className="flex min-h-0 flex-1 flex-col border-t">
+          <section className="flex min-h-32 flex-1 flex-col border-t">
             <h4 className="shrink-0 px-4 pt-3 pb-2 text-sm font-medium">
               {recipe ? "Alternative recipes" : entry.kind === "machine" ? "Recipes" : "Resources"}
             </h4>
@@ -201,16 +200,22 @@ export function CatalogSearchDetails({
               {related.length ? (
                 <ul className="space-y-1 px-4 pb-4">
                   {related.map((candidate) => {
+                    const disabled = Boolean(allowedEntryIds && !allowedEntryIds.has(candidate.id));
                     const comparison = recipe
                       ? compareRecipes(catalog, recipe.id, candidate.entityId, recipeMachineId)
                       : undefined;
                     return (
                       <li
                         key={candidate.id}
-                        className="relative rounded-md has-[[data-catalog-related]:focus-visible]:bg-accent"
+                        className={
+                          disabled
+                            ? "relative rounded-md opacity-50 grayscale"
+                            : "relative rounded-md has-[[data-catalog-related]:focus-visible]:bg-accent"
+                        }
                       >
                         <Button
                           variant="ghost"
+                          disabled={disabled}
                           data-catalog-related=""
                           className="absolute inset-0 h-full w-full rounded-md hover:bg-accent focus-visible:border-transparent focus-visible:bg-accent focus-visible:ring-0"
                           aria-label={`Details for ${candidate.name}`}
@@ -222,6 +227,11 @@ export function CatalogSearchDetails({
                             <span className="flex flex-wrap items-center gap-2">
                               <span>{candidate.name}</span>
                               {candidate.alternate && <Badge variant="secondary">Alternate</Badge>}
+                              {disabled && (
+                                <Badge variant="outline" title="Doesn’t support this connection">
+                                  Incompatible
+                                </Badge>
+                              )}
                             </span>
                             <span className="block whitespace-normal text-xs font-normal text-muted-foreground">
                               {candidate.subtitle}
@@ -229,23 +239,24 @@ export function CatalogSearchDetails({
                           </span>
                         </div>
                         {comparison && (
-                          <span className="pointer-events-none relative ml-13 mr-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 pb-2 text-xs font-normal tabular-nums text-muted-foreground">
+                          <span className="pointer-events-none relative ml-13 mr-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pb-2 text-xs font-normal tabular-nums text-muted-foreground">
                             <ComparisonMetric
                               kind="machines"
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                               value={comparison.machines}
                               baseline={1}
                             />
-                            <span aria-hidden="true">·</span>
                             <ComparisonMetric
                               kind="power"
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                               value={comparison.powerMegawatts}
                               baseline={comparison.baselinePowerMegawatts}
                             />
-                            <span aria-hidden="true">·</span>
                             <ComparisonMetric
                               kind="inputs"
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                               value={comparison.inputTypes}
                               baseline={comparison.baselineInputTypes}
@@ -253,6 +264,7 @@ export function CatalogSearchDetails({
                             <AdditionalRecipeMetrics
                               comparison={comparison}
                               assets={assets}
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                             />
                           </span>
@@ -280,11 +292,13 @@ function ComparisonMetric({
   value,
   baseline,
   onSelect,
+  disabled,
 }: {
   kind: "machines" | "power" | "inputs";
   value: number | null;
   baseline: number | null;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
   // Compare at the displayed precision so visually equal values receive the same color.
   const difference =
@@ -312,10 +326,11 @@ function ComparisonMetric({
   return (
     <Tooltip disableHoverablePopup>
       <TooltipTrigger
-        render={<button type="button" aria-label={description} />}
+        render={<button type="button" disabled={disabled} aria-label={description} />}
         className="pointer-events-auto inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={description}
-        onClick={onSelect}
+        disabled={disabled}
+        onClick={disabled ? undefined : onSelect}
       >
         {kind === "machines" ? (
           <FactoryIcon aria-hidden="true" className="size-3.5" />
@@ -337,10 +352,12 @@ function AdditionalRecipeMetrics({
   comparison,
   assets,
   onSelect,
+  disabled,
 }: {
   comparison: RecipeComparison;
   assets: GameAssets;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
   const { fluidInputIds, byproducts, removedInputIds, addedInputIds } = comparison;
   const names = (ids: readonly string[]) =>
@@ -348,12 +365,12 @@ function AdditionalRecipeMetrics({
   function indicator(description: string, children: React.ReactNode) {
     return (
       <span className="inline-flex max-w-full items-center gap-2">
-        <span aria-hidden="true">·</span>
         <Tooltip disableHoverablePopup>
           <TooltipTrigger
-            render={<button type="button" aria-label={description} />}
+            render={<button type="button" disabled={disabled} aria-label={description} />}
             aria-label={description}
-            onClick={onSelect}
+            disabled={disabled}
+            onClick={disabled ? undefined : onSelect}
             className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {children}
@@ -367,7 +384,7 @@ function AdditionalRecipeMetrics({
   }
   const icons = (ids: readonly string[]) =>
     ids.map((id) => (
-      <CatalogIcon key={id} iconId={assets.catalog.items[id]!.iconId} assets={assets} small />
+      <CatalogIcon key={id} iconId={assets.catalog.items[id]!.iconId} assets={assets} size={16} />
     ));
   const changes = [
     removedInputIds.length ? `Removes ${names(removedInputIds)}` : "",

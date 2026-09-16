@@ -5,10 +5,12 @@ import {
   routeLink,
   translateGuides,
 } from "@satisfactory-belt/canvas-core";
-import type { CanvasLink, PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
+import type { CanvasLink, Point, PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
 import { EditHistory } from "@satisfactory-belt/edit-history";
 import {
   createConnectionIndex,
+  createFactoryNode,
+  firstPlacementConnection,
   PIPE_PORT_RADIUS,
   PORT_RADIUS,
   nodeBounds,
@@ -17,6 +19,7 @@ import {
 } from "@satisfactory-belt/factory-core";
 import type {
   FactoryNode,
+  NodeConfiguration,
   NodeDisplay,
   SemanticPort,
   FactoryDocument,
@@ -300,7 +303,52 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       nodes.map((entry) => (entry.id === id ? { ...node, program: copied } : entry)),
     );
   }
+  function canPlace(configuration: NodeConfiguration, source?: PortReference) {
+    const id = crypto.randomUUID();
+    const node = createFactoryNode(catalog, configuration, id, { x: 0, y: 0 });
+    return (
+      !source ||
+      Boolean(
+        firstPlacementConnection(
+          catalog,
+          semanticPorts,
+          history.getSnapshot().state.links,
+          source,
+          node,
+        ),
+      )
+    );
+  }
+
+  function placeNode(configuration: NodeConfiguration, center: Point, source?: PortReference) {
+    let node = createFactoryNode(catalog, configuration, crypto.randomUUID(), center);
+    const bounds = nodeBounds(node);
+    const snap = controller.getSnapshot().gridSnapping ? snapToGrid : (value: number) => value;
+    node = { ...node, x: snap(center.x - bounds.width / 2), y: snap(center.y - bounds.height / 2) };
+    const connection = source
+      ? firstPlacementConnection(
+          catalog,
+          semanticPorts,
+          history.getSnapshot().state.links,
+          source,
+          node,
+        )
+      : null;
+    if (source && !connection)
+      throw new Error("This choice no longer supports the connection. Choose another result.");
+    controller.cancel();
+    history.update((current) => ({
+      nodes: [...current.nodes, node],
+      links: connection
+        ? [...current.links, { id: crypto.randomUUID(), ...connection }]
+        : current.links,
+    }));
+    controller.setSelection(new Set([node.id]));
+    return node;
+  }
   return {
+    canPlace,
+    placeNode,
     setSplitterProgram,
     connect,
     setRoute,

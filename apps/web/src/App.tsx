@@ -5,14 +5,15 @@ import {
   MAX_ZOOM,
   MIN_ZOOM,
 } from "@satisfactory-belt/canvas-core";
-import type { CanvasCommand } from "@satisfactory-belt/canvas-core";
+import type { CanvasCommand, CatalogRequest } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView, RenderPerformance } from "@satisfactory-belt/canvas-pixi";
+import { createSearchIndex } from "@satisfactory-belt/game-data/search";
+import type { SearchEntry, SearchScope } from "@satisfactory-belt/game-data/search";
 import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
-  SearchIcon,
   Grid2X2Icon,
   Grid3X3Icon,
   MaximizeIcon,
@@ -47,6 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { BrowserTheme } from "@/lib/browser-theme";
+import { catalogConfiguration, eligibleCatalogEntries } from "@/lib/catalog-placement";
 import { createExampleFactory } from "@/lib/example-factory";
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
@@ -102,13 +104,52 @@ function CanvasWorkspace({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const openSearch = useCallback(() => setSearchOpen(true), []);
+  const [insertion, setInsertion] = useState<CatalogRequest | null>(null);
+  const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
   const [editor] = useState(() =>
     createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)),
   );
   const { controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay } =
     editor;
+  const index = useMemo(() => createSearchIndex(assets.catalog), [assets.catalog]);
+  const documentState = useSyncExternalStore(history.subscribe, history.getSnapshot).state;
+  const allowedEntryIds = useMemo(
+    () =>
+      searchOpen && insertion?.source
+        ? !documentState.nodes.some((node) => node.id === insertion.source?.nodeId)
+          ? new Set<string>()
+          : eligibleCatalogEntries(index, (configuration) =>
+              editor.canPlace(configuration, insertion.source),
+            )
+        : undefined,
+    [editor, index, insertion, documentState, searchOpen],
+  );
+  useEffect(
+    () =>
+      controller.subscribeCatalog((request) => {
+        placedFromSearch.current = false;
+        setInsertion(request);
+        setSearchOpen(true);
+      }),
+    [controller],
+  );
+  const openAdd = useCallback(() => controller.openCatalogAtCenter(), [controller]);
+  const placeResult = useCallback(
+    (entry: SearchEntry, scope?: SearchScope) => {
+      if (!insertion) throw new Error("Open search from the canvas to place a node.");
+      editor.placeNode(catalogConfiguration(entry, scope), insertion.position, insertion.source);
+      placedFromSearch.current = true;
+    },
+    [editor, insertion],
+  );
+  const searchFinalFocus = useCallback(
+    () =>
+      placedFromSearch.current || insertion?.source
+        ? (host.current?.querySelector("canvas") ?? null)
+        : searchMenuFocus(),
+    [insertion],
+  );
   const { canUndo, canRedo } = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [performanceMonitor, setPerformanceMonitor] = useState<RenderPerformance | null>(null);
@@ -203,6 +244,17 @@ function CanvasWorkspace({
           (target.isContentEditable || target.closest("input, textarea, select, [role='textbox']"))
         )
           return;
+        if (
+          event.key.toLowerCase() === "n" &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey
+        ) {
+          event.preventDefault();
+          if (!event.repeat) openAdd();
+          return;
+        }
         if (deleteCommandForKey(event)) {
           event.preventDefault();
           if (!event.repeat) deleteSelection();
@@ -236,7 +288,7 @@ function CanvasWorkspace({
       actualSize: () => zoomControl("actual-size"),
       canvasFocus: () => host.current?.querySelector("canvas") ?? null,
     };
-  }, [controller, historyCommand, clipboardCommand, deleteSelection, searchOpen]);
+  }, [controller, historyCommand, clipboardCommand, deleteSelection, searchOpen, openAdd]);
 
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Workspace shortcuts bubble from the canvas, controls, and portalled menus; preserve the main landmark.
@@ -248,7 +300,9 @@ function CanvasWorkspace({
         assets={assets}
         open={searchOpen}
         onOpenChange={setSearchOpen}
-        finalFocus={searchMenuFocus}
+        finalFocus={searchFinalFocus}
+        onAdd={placeResult}
+        allowedEntryIds={allowedEntryIds}
       />
       <div ref={host} className="absolute inset-0" />
       <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))]">
@@ -262,9 +316,12 @@ function CanvasWorkspace({
             finalFocus={searchOpen ? false : canvasFocus}
           >
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={openSearch}>
-                <SearchIcon className="text-muted-foreground" />
-                Search catalog
+              <DropdownMenuItem onClick={openAdd} aria-keyshortcuts="n">
+                <PlusIcon className="text-muted-foreground" />
+                Add building
+                <DropdownMenuShortcut className="min-w-6 text-right tracking-normal">
+                  N
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={reset}>
                 <RotateCcwIcon className="text-muted-foreground" />

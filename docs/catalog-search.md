@@ -7,43 +7,55 @@ Exact names precede prefixes, partial names, and related terms. One-edit typo
 matching runs only when no direct match exists. Ingredient names do not broaden
 ordinary search.
 
-## Future material-link entry point
+## Canvas placement
 
-`CatalogSearch` and `SearchOptions` accept `allowedEntryIds?: ReadonlySet<string>`.
-This is an eligibility snapshot from the future material-link resolver, not a
-query or a UI filter. Search does not decide link compatibility.
+Search has three insertion contexts:
 
-- Omitted: unrestricted catalog search.
-- Empty set: no eligible results, including typo fallback.
-- Values use `SearchEntry.id` (for example `recipe:Recipe_IronPlate_C`), not
-  `entityId`. Obtain entries from `createSearchIndex` rather than constructing IDs.
-- Include eligible parent machine/extractor entries and eligible recipe/resource
-  choices. Allowing a building does not automatically allow all its recipes.
-- Replace the set when compatibility changes; do not mutate it in place.
-- The UI applies this boundary to results, building details, and alternatives.
-  Resetting the query or category cannot remove it.
+- Right-click empty canvas: unrestricted search at the clicked world position.
+- Main menu: unrestricted search at the visible canvas center.
+- Drag a port onto empty canvas, or select a port and then click/tap empty canvas:
+  compatible search at the drop/click world position, retaining the source port.
 
-The future caller will resolve the dragged port's direction, allowed materials,
-transport type, and graph constraints using the material-link domain logic, then
-pass the resulting IDs. For example, an existing input needs a producer and an
-existing output needs a consumer. The resolver must evaluate the prospective
-configuration (including recipe and machine), not merely a building name.
+Capture the position before opening the dialog/drawer. Center the new node on that
+point and snap its top-left position when grid snapping is enabled. Logistics nodes
+use their own smaller dimensions. Panning, pinching, and drops on existing nodes,
+ports, links, or link handles do not open search. Cancelling search makes no edit and
+preserves the connection anchor; Escape on the canvas clears it.
 
-```tsx
-<CatalogSearch
-  assets={assets}
-  open={open}
-  onOpenChange={setOpen}
-  finalFocus={() => trigger.current}
-  allowedEntryIds={eligibleEntryIds}
-  onAdd={(entry, scope) => handleSelection(entry, scope)}
-/>
-```
+Machine/extractor results open recipe/resource choices. Leaf results and the details
+screen's Place button call the same placement handler. Details place the currently
+displayed recipe, including a selected alternative. Preserve the scoped machine when
+it supports the recipe; otherwise use the first supported machine shown in details.
+Defaults are one machine, 100% clock, zero sloops, and existing splitter rules.
 
-`onAdd(entry, scope)` is the prepared primary action. Machine/extractor selection
-opens its eligible recipe/resource choices first. `scope` identifies the selected
-machine or extractor. Canvas placement and the link-drag trigger remain unwired
-in this feature.
+The editor validates before inserting, selects the new node, and records one history
+edit. Connection-driven placement connects the first valid port in display order.
+Node and link creation are atomic, including undo/redo. A stale or incompatible
+source leaves the document untouched and shows an error without closing search.
+Successful placement closes search and focuses the canvas.
+
+## Connection eligibility and alternatives
+
+`eligibleCatalogEntries` translates search entries into configurations and asks the
+editor's domain resolver whether each can connect. The resolver evaluates actual
+semantic ports against material, transport, splitter filters, and downstream graph
+constraints. Existing inputs need producers; existing outputs need consumers.
+
+`CatalogSearch` and `SearchOptions` accept `allowedEntryIds?: ReadonlySet<string>`:
+
+- Omitted: unrestricted search.
+- Empty set: no compatible results, including typo fallback.
+- Values are `SearchEntry.id`, not `entityId`.
+- Eligible parent machines/extractors and their eligible leaf choices are included
+  independently; allowing a parent does not allow every child.
+- The snapshot is recomputed when the document changes while search is open.
+- Resetting query/category cannot remove eligibility restrictions.
+
+Main results are filtered. Details receive the full index and eligibility snapshot:
+all alternatives remain visible, but incompatible alternatives and their comparison
+controls are disabled, including keyboard navigation. Alternatives only navigate to
+details; they have no placement action. A disabled alternative explains that it does
+not support the connection.
 
 ## Rendering and validation
 
