@@ -1,11 +1,8 @@
 import {
   CanvasController,
   GRID_SIZE,
-  SNAP_SIZE,
   snapToGrid,
   routeLink,
-  routeBounds,
-  intersects,
   translateGuides,
 } from "@satisfactory-belt/canvas-core";
 import type { CanvasLink, PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
@@ -34,7 +31,6 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
   let semanticPorts: SemanticPort[] = [];
   let publishedLinks: readonly MaterialLink[] | null = null;
   let routed = new Map<string, CanvasLink>();
-  let lastBounds = new Map<string, ReturnType<typeof nodeBounds>>();
   let displays = new Map<string, NodeDisplay>();
   let previousNodes = new Map<string, FactoryNode>();
   let portIndex = createConnectionIndex([], []);
@@ -159,18 +155,6 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
   function publishRoutes() {
     const { nodes, links } = history.getSnapshot().state;
     const bounds = new Map(nodes.map((node) => [node.id, nodeBounds(node)]));
-    // oxlint-disable-next-line oxc/no-map-spread -- Collect both old and new obstacle bounds.
-    const changed = [...bounds].flatMap(([id, box]) => {
-      const old = lastBounds.get(id);
-      return old &&
-        old.x === box.x &&
-        old.y === box.y &&
-        old.width === box.width &&
-        old.height === box.height
-        ? []
-        : [box, ...(old ? [old] : [])];
-    });
-    for (const [id, box] of lastBounds) if (!bounds.has(id)) changed.push(box);
     const point = (ref: PortReference) => {
       const box = bounds.get(ref.nodeId),
         port = displays.get(ref.nodeId)?.ports.find((p) => p.key === ref.portKey);
@@ -190,38 +174,18 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
         first?.x !== source.x ||
         first.y !== source.y ||
         last?.x !== target.x ||
-        last.y !== target.y ||
-        (!link.guides &&
-          changed.some((box) =>
-            intersects(routeBounds(cached.points), {
-              x: box.x - SNAP_SIZE,
-              y: box.y - SNAP_SIZE,
-              width: box.width + SNAP_SIZE * 2,
-              height: box.height + SNAP_SIZE * 2,
-            }),
-          ));
+        last.y !== target.y;
       next.set(
         link.id,
         dirty
           ? {
               ...link,
-              // The cards containing the two ports are endpoints, not obstacles.
-              // Including them makes the router immediately leave the port, loop
-              // around the card, and produce the large wraps seen in tight layouts.
-              points: routeLink(
-                source,
-                target,
-                [...bounds]
-                  .filter(([id]) => id !== link.output.nodeId && id !== link.input.nodeId)
-                  .map(([, box]) => box),
-                link.guides,
-              ),
+              points: routeLink(source, target, [], link.guides),
             }
           : cached,
       );
     }
     routed = next;
-    lastBounds = bounds;
     controller.setLinks([...routed.values()]);
   }
   publishPorts();

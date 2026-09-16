@@ -23,22 +23,11 @@ it.each([{ x: 500, y: 100 }, target, { x: 0, y: 100 }, { x: 0, y: 20 }])(
     expect(linkHandles({ id: "l", output, input, points }).length).toBeGreaterThan(0);
   },
 );
-it("detours around a blocking machine without moving the endpoints", () => {
-  const obstacle = { x: 240, y: 40, width: 120, height: 180 };
-  const points = routeLink(source, { x: 500, y: 100 }, [obstacle]);
-  orthogonal(points);
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1],
-      b = points[i];
-    const crosses =
-      a.y === b.y
-        ? a.y > obstacle.y &&
-          a.y < obstacle.y + obstacle.height &&
-          Math.min(a.x, b.x) < 360 &&
-          Math.max(a.x, b.x) > 240
-        : a.x > 240 && a.x < 360 && Math.min(a.y, b.y) < 220 && Math.max(a.y, b.y) > 40;
-    expect(crosses).toBe(false);
-  }
+it("keeps the default route independent of card bounds", () => {
+  const obstacles = [{ x: 240, y: 40, width: 120, height: 180 }];
+  expect(routeLink(source, { x: 500, y: 100 }, obstacles)).toEqual(
+    routeLink(source, { x: 500, y: 100 }),
+  );
 });
 it("moves a straight link's interior segment and retains its constraint when an endpoint moves", () => {
   const points = routeLink(source, { x: 500, y: 100 });
@@ -110,19 +99,6 @@ it("retains all three editable segments after moving the center handle repeatedl
   }
 });
 
-it("routes a backward connection through the gap below its target instead of over the target", () => {
-  const points = routeLink({ x: 256, y: 384 }, { x: 64, y: 64 }, [
-    { x: 0, y: 256, width: 256, height: 256 },
-    { x: 64, y: 0, width: 128, height: 128 },
-  ]);
-  orthogonal(points);
-  const length = points
-    .slice(1)
-    .reduce((sum, p, i) => sum + Math.abs(p.x - points[i].x) + Math.abs(p.y - points[i].y), 0);
-  expect(length).toBe(640); // Grid-aligned stubs and bends add two snap steps.
-  expect(Math.min(...points.map((p) => p.y))).toBe(64);
-});
-
 it.each([0.5, 1, 2])(
   "selects the nearest line at zoom %s even when a farther link is selected",
   (zoom) => {
@@ -190,81 +166,28 @@ it("selects the nearest route handle when touch targets overlap", () => {
   ).toEqual([{ id: "short", segment: 3 }]);
 });
 
-it("takes the shorter corridor between staggered obstacles in either obstacle order", () => {
-  const obstacles = [
-    { x: 160, y: 0, width: 96, height: 224 },
-    { x: 288, y: 160, width: 96, height: 224 },
-  ];
-  const start = { x: 0, y: 120 },
-    end = { x: 560, y: 280 };
-  const points = routeLink(start, end, obstacles);
-  orthogonal(points);
-  expect(points).toEqual(routeLink(start, end, obstacles.toReversed()));
-  const length = points
-    .slice(1)
-    .reduce((sum, p, i) => sum + Math.abs(p.x - points[i].x) + Math.abs(p.y - points[i].y), 0);
-  expect(length).toBe(912); // A small detour keeps the corridor on the grid.
-  expect(points.some((p) => p.x >= 268 && p.x <= 276)).toBe(true);
-  for (const box of obstacles) {
-    for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1],
-        b = points[i];
-      const crosses =
-        a.y === b.y
-          ? a.y > box.y - 12 &&
-            a.y < box.y + box.height + 12 &&
-            Math.max(a.x, b.x) > box.x - 12 &&
-            Math.min(a.x, b.x) < box.x + box.width + 12
-          : a.x > box.x - 12 &&
-            a.x < box.x + box.width + 12 &&
-            Math.max(a.y, b.y) > box.y - 12 &&
-            Math.min(a.y, b.y) < box.y + box.height + 12;
-      expect(crosses).toBe(false);
-    }
-  }
-});
-
-it("aligns automatic interior bends while retaining off-grid port endpoint lanes", () => {
+it("keeps automatic bends independent of the canvas grid", () => {
   const start = { x: 101, y: 103 },
     end = { x: 509, y: 261 };
   const points = routeLink(start, end);
   expect(points[0]).toEqual(start);
   expect(points.at(-1)).toEqual(end);
   orthogonal(points);
-  for (const p of points.slice(1, -1)) {
-    expect(Math.abs(p.x % 16)).toBe(0);
-    expect(p.y === start.y || p.y === end.y || p.y % 16 === 0).toBe(true);
-  }
+  expect(points.some((p) => p.x % 16 !== 0 || p.y % 16 !== 0)).toBe(true);
 });
 
-it("routes around a corridor too narrow for full node clearance", () => {
-  const points = routeLink({ x: 0, y: 120 }, { x: 560, y: 280 }, [
-    { x: 160, y: 0, width: 96, height: 224 },
-    { x: 280, y: 160, width: 96, height: 224 },
-  ]);
-  orthogonal(points);
-  expect(points.some((p) => p.x > 256 && p.x < 280)).toBe(false);
+it("ignores narrow gaps between cards", () => {
+  const start = { x: 0, y: 120 },
+    end = { x: 560, y: 280 },
+    obstacles = [
+      { x: 160, y: 0, width: 96, height: 224 },
+      { x: 280, y: 160, width: 96, height: 224 },
+    ];
+  expect(routeLink(start, end, obstacles)).toEqual(routeLink(start, end));
 });
 
-it("retains deliberately off-grid manual guides", () => {
+it("retains manual guides", () => {
   const points = routeLink(source, target, [], [{ axis: "x", position: 333 }]);
   expect(points.some((p) => p.x === 333)).toBe(true);
   orthogonal(points);
-});
-
-it("does not squeeze a vertical link between closely spaced, staggered endpoint nodes", () => {
-  const start = { x: 256, y: 288 },
-    end = { x: 272, y: 128 };
-  const points = routeLink(start, end, [
-    { x: 0, y: 144, width: 256, height: 256 },
-    { x: 272, y: 0, width: 256, height: 256 },
-  ]);
-  expect(points[0]).toEqual(start);
-  expect(points.at(-1)).toEqual(end);
-  orthogonal(points);
-  for (const p of points.slice(1, -1)) {
-    expect(p.x > 256 && p.x < 272).toBe(false);
-    expect(Math.abs(p.x % 16)).toBe(0);
-  }
-  expect(points.some((p) => p.x <= -16 || p.x >= 544)).toBe(true);
 });

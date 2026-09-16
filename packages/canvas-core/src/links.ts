@@ -1,6 +1,5 @@
 import { intersects, screenToWorld } from "./geometry";
 import type { Bounds, Camera, Point } from "./geometry";
-import { SNAP_SIZE, snapToGrid } from "./grid";
 import type { PortReference } from "./ports";
 
 /** A vertical (x) or horizontal (y) line deliberately positioned by the user. */
@@ -44,179 +43,11 @@ function clean(points: readonly Point[]): Point[] {
   }
   return result;
 }
-function blocked(a: Point, b: Point, box: Bounds) {
-  return a.y === b.y
-    ? a.y > box.y &&
-        a.y < box.y + box.height &&
-        Math.max(a.x, b.x) > box.x &&
-        Math.min(a.x, b.x) < box.x + box.width
-    : a.x > box.x &&
-        a.x < box.x + box.width &&
-        Math.max(a.y, b.y) > box.y &&
-        Math.min(a.y, b.y) < box.y + box.height;
-}
-function cost(points: readonly Point[]) {
-  // Length comes first; equal-length routes retain the centered default path.
-  return points
-    .slice(1)
-    .reduce((sum, p, i) => sum + Math.abs(p.x - points[i]!.x) + Math.abs(p.y - points[i]!.y), 0);
-}
-
-type Entry = {
-  id: number;
-  distance: number;
-  estimate: number;
-  bends: number;
-  axis: number;
-  previous?: Entry;
-};
-const earlier = (a: Entry, b: Entry) =>
-  a.estimate < b.estimate || (a.estimate === b.estimate && a.bends < b.bends);
-
-/** Search obstacle-edge coordinates, allowing several turns through staggered gaps. */
-function shortestDetour(
-  start: Point,
-  end: Point,
-  boxes: readonly Bounds[],
-  grid = false,
-): Point[] | null {
-  const edges = (low: number, high: number) =>
-    grid
-      ? [Math.floor(low / SNAP_SIZE) * SNAP_SIZE, Math.ceil(high / SNAP_SIZE) * SNAP_SIZE]
-      : [low, high];
-  const xs = [
-    ...new Set([start.x, end.x, ...boxes.flatMap((b) => edges(b.x, b.x + b.width))]),
-  ].toSorted((a, b) => a - b);
-  const ys = [
-    ...new Set([start.y, end.y, ...boxes.flatMap((b) => edges(b.y, b.y + b.height))]),
-  ].toSorted((a, b) => a - b);
-  const width = xs.length;
-  const point = (id: number) => ({ x: xs[id % width]!, y: ys[Math.floor(id / width)]! });
-  const source = ys.indexOf(start.y) * width + xs.indexOf(start.x);
-  const target = ys.indexOf(end.y) * width + xs.indexOf(end.x);
-  const heap: Entry[] = [];
-  const push = (entry: Entry) => {
-    heap.push(entry);
-    let i = heap.length - 1;
-    while (i > 0) {
-      const parent = Math.floor((i - 1) / 2);
-      if (!earlier(entry, heap[parent]!)) break;
-      heap[i] = heap[parent]!;
-      i = parent;
-    }
-    heap[i] = entry;
-  };
-  const pop = () => {
-    const first = heap[0]!;
-    const last = heap.pop()!;
-    if (heap.length) {
-      let i = 0;
-      while (i * 2 + 1 < heap.length) {
-        let child = i * 2 + 1;
-        if (child + 1 < heap.length && earlier(heap[child + 1]!, heap[child]!)) child++;
-        if (!earlier(heap[child]!, last)) break;
-        heap[i] = heap[child]!;
-        i = child;
-      }
-      heap[i] = last;
-    }
-    return first;
-  };
-  const best = new Map<number, Entry>();
-  push({ id: source, distance: 0, estimate: 0, bends: 0, axis: 0 });
-  while (heap.length) {
-    const current = pop();
-    if (
-      best.has(current.id * 3 + current.axis) &&
-      best.get(current.id * 3 + current.axis) !== current
-    )
-      continue;
-    if (current.id === target) {
-      const path: Point[] = [];
-      for (let step: Entry | undefined = current; step; step = step.previous)
-        path.push(point(step.id));
-      return path.toReversed();
-    }
-    const a = point(current.id),
-      col = current.id % width,
-      row = Math.floor(current.id / width);
-    const neighbors = [
-      ...(col > 0 ? [current.id - 1] : []),
-      ...(col + 1 < width ? [current.id + 1] : []),
-      ...(row > 0 ? [current.id - width] : []),
-      ...(row + 1 < ys.length ? [current.id + width] : []),
-    ];
-    for (const id of neighbors) {
-      const b = point(id);
-      if (boxes.some((box) => blocked(a, b, box))) continue;
-      const axis = a.x === b.x ? 2 : 1;
-      const distance = current.distance + Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-      const bends = current.bends + (current.axis && current.axis !== axis ? 1 : 0);
-      const key = id * 3 + axis,
-        previous = best.get(key);
-      if (
-        previous &&
-        (previous.distance < distance ||
-          (previous.distance === distance && previous.bends <= bends))
-      )
-        continue;
-      const entry: Entry = {
-        id,
-        axis,
-        distance,
-        bends,
-        previous: current,
-        // A small bend penalty keeps routes from making unnecessary hairpins when
-        // two corridors have nearly identical lengths.
-        estimate:
-          distance + Math.abs(b.x - end.x) + Math.abs(b.y - end.y) + bends * (SNAP_SIZE / 2),
-      };
-      best.set(key, entry);
-      push(entry);
-    }
-  }
-  return null;
-}
-
-/** Experimental preference: grid-aligned automatic bends with exact endpoint lanes. */
+/** Curved orthogonal routing with fixed endpoint stubs. Obstacle routing is deferred to ELK. */
 export function routeLink(
   source: Point,
   target: Point,
-  obstacles: readonly Bounds[] = [],
-  guides?: readonly RouteGuide[],
-): readonly Point[] {
-  const original = routeUnsnapped(source, target, obstacles, guides);
-  if (guides?.length) return original;
-  const rawStart = original[1]!,
-    rawEnd = original.at(-2)!;
-  const start = { x: Math.ceil(rawStart.x / SNAP_SIZE) * SNAP_SIZE, y: source.y };
-  const end = { x: Math.floor(rawEnd.x / SNAP_SIZE) * SNAP_SIZE, y: target.y };
-  // Close neighbors may have no grid lane between their ports.
-  if (source.y === target.y && source.x < target.x && start.x >= end.x) return original;
-  const clearance = SNAP_SIZE;
-  const boxes = obstacles.map((box) => ({
-    x: box.x - clearance,
-    y: box.y - clearance,
-    width: box.width + clearance * 2,
-    height: box.height + clearance * 2,
-  }));
-  const x = (value: number) =>
-    value === rawStart.x ? start.x : value === rawEnd.x ? end.x : snapToGrid(value);
-  const y = (value: number) =>
-    value === source.y || value === target.y ? value : snapToGrid(value);
-  const snapped = original.slice(1, -1).map((p) => ({ x: x(p.x), y: y(p.y) }));
-  const clear = (path: readonly Point[]) =>
-    path.slice(1).every((p, i) => boxes.every((box) => !blocked(path[i]!, p, box)));
-  const interior = clear(snapped) ? snapped : shortestDetour(start, end, boxes, true);
-  if (!interior) return original;
-  return [source, ...clean(interior), target];
-}
-
-/** Orthogonal routing through obstacle-edge corridors; explicit guides retain user control. */
-function routeUnsnapped(
-  source: Point,
-  target: Point,
-  obstacles: readonly Bounds[] = [],
+  _obstacles: readonly Bounds[] = [],
   guides?: readonly RouteGuide[],
 ): readonly Point[] {
   const stub =
@@ -265,31 +96,6 @@ function routeUnsnapped(
           { x: end.x, y: Math.min(source.y, target.y) - STUB * 2 },
           end,
         ];
-  const clearance = SNAP_SIZE;
-  const boxes = obstacles.map((b) => ({
-    x: b.x - clearance,
-    y: b.y - clearance,
-    width: b.width + clearance * 2,
-    height: b.height + clearance * 2,
-  }));
-  // Compare routes on both sides and through the gap before committing to a detour.
-  const middleY = (start.y + end.y) / 2;
-  const queue: Point[][] = [
-    clean(fallback),
-    clean([start, { x: start.x, y: end.y }, end]),
-    clean([start, { x: end.x, y: start.y }, end]),
-    clean([start, { x: start.x, y: middleY }, { x: end.x, y: middleY }, end]),
-  ];
-  const clear = (path: readonly Point[]) =>
-    path.slice(1).every((p, i) => boxes.every((box) => !blocked(path[i]!, p, box)));
-  // Preserve the centered path when it already has the shortest possible length.
-  const direct = queue.find(
-    (path) => clear(path) && cost(path) === Math.abs(start.x - end.x) + Math.abs(start.y - end.y),
-  );
-  if (direct) return [source, ...direct, target];
-  const path = shortestDetour(start, end, boxes);
-  if (path) return [source, ...clean(path), target];
-
   return [source, ...clean(fallback), target];
 }
 

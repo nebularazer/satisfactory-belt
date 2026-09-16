@@ -92,16 +92,10 @@ Assets were prepared from `.assets/extracted/en-US-fm8YO8` and staged from
 
 ## Routing
 
-The pure router keeps node positions fixed. Unobstructed shortest routes retain
-the centered default. Otherwise, an A* search finds a shortest orthogonal route
-through obstacle-edge corridors, preferring fewer bends on equal-length paths.
-Endpoint stubs shorten only for directly facing, level ports. If overlapping nodes leave no route
-from a port stub, the deterministic fallback can still cross cards. On the experiment branch, automatic
-bends use the 16-unit snapping grid while keeping endpoint lanes exact. Routes
-require at least 16 units of clearance from each node, so gaps narrower than 32
-units are not used as corridors. Longer outside routes are preferred over
-squeezing through narrow gaps. Manual guides remain exact.
-This preference applies to automatic routes even when node snapping is disabled.
+Automatic links use a fixed curved right-angle route with short endpoint stubs.
+They do not avoid cards or snap bends to the canvas grid. Manual segment guides
+remain exact and are preserved when endpoints move; automatic graph routing is
+deferred to ELK.js.
 
 Manual adjustments store axis-position guides. Keep endpoint stubs separate from
 the editable interior when simplifying a route: combining them previously removed
