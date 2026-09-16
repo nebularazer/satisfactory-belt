@@ -8,10 +8,12 @@ import {
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode, MaterialRate } from "@satisfactory-belt/factory-core";
+import { MinusIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorNumberField } from "@/components/inspector-number-field";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
@@ -68,71 +70,97 @@ export function InspectorBody({
       }}
     >
       {node.kind !== "logistics" && (
-        <div className="sticky top-0 z-10 overflow-x-auto overflow-y-hidden bg-card px-1 pt-1 pb-2">
-          <TabsList
-            aria-label="Machine settings scope"
-            className="min-w-full justify-start group-data-horizontal/tabs:h-auto"
-          >
-            <TabsTrigger value="all" className="h-11 flex-none px-3 sm:h-8">
-              All
-            </TabsTrigger>
-            {node.machines.map((member, index) => (
-              <TabsTrigger
-                key={member.id}
-                value={member.id}
-                aria-label={`Machine ${index + 1}`}
-                className="h-11 min-w-11 flex-none px-3 sm:h-8 sm:min-w-8"
+        <div className="sticky top-0 z-10 bg-card py-1">
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
+            <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
+              <TabsList
+                aria-label="Machine settings scope"
+                className="min-w-full justify-start p-0 group-data-horizontal/tabs:h-auto"
               >
-                {index + 1}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+                <TabsTrigger
+                  value="all"
+                  className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
+                >
+                  All
+                </TabsTrigger>
+                {node.machines.map((member, index) => (
+                  <TabsTrigger
+                    key={member.id}
+                    value={member.id}
+                    aria-label={`Machine ${index + 1}`}
+                    className="h-11 min-w-11 flex-none px-3 focus-visible:ring-inset sm:h-8 sm:min-w-8"
+                  >
+                    {index + 1}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+            <fieldset
+              aria-label="Machine count"
+              className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-11 sm:size-8"
+                aria-label="Remove last machine"
+                title="Remove last machine"
+                disabled={node.machines.length <= 1}
+                onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
+              >
+                <MinusIcon />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-11 sm:size-8"
+                aria-label="Add machine"
+                title="Add machine"
+                disabled={node.machines.length >= MAX_MACHINE_COUNT}
+                onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
+              >
+                <PlusIcon />
+              </Button>
+            </fieldset>
+          </div>
         </div>
       )}
       <TabsContent value={scope} className="space-y-5">
-        {node.kind !== "logistics" && members && capabilities && (
-          <div className="space-y-3">
-            {scope === "all" && (
-              <InspectorNumberField
-                label="Machine count"
-                value={node.machines.length}
-                revision={node.machines}
-                min={1}
-                max={MAX_MACHINE_COUNT}
-                integer
-                onCommit={(count) => editor.setMachineCount(node.id, count)}
-              />
-            )}
-            {capabilities.clock && (
-              <InspectorNumberField
-                key={`${scope}:clock`}
-                label="Clock speed"
-                value={commonSetting(members, "clockPercent")}
-                revision={node.machines}
-                min={1}
-                max={250}
-                unit="%"
-                onCommit={(value) =>
-                  editor.setOperatingSetting(node.id, scope, "clockPercent", value)
-                }
-              />
-            )}
-            {capabilities.sloopSlots > 0 && (
-              <InspectorNumberField
-                key={`${scope}:sloops`}
-                label="Sloops per machine"
-                value={commonSetting(members, "sloopsUsed")}
-                revision={node.machines}
-                min={0}
-                max={capabilities.sloopSlots}
-                integer
-                onCommit={(value) =>
-                  editor.setOperatingSetting(node.id, scope, "sloopsUsed", value)
-                }
-              />
-            )}
-          </div>
-        )}
+        {node.kind !== "logistics" &&
+          members &&
+          capabilities &&
+          (capabilities.clock || capabilities.sloopSlots > 0) && (
+            <div className="space-y-3">
+              {capabilities.clock && (
+                <InspectorNumberField
+                  key={`${scope}:clock`}
+                  label="Clock speed"
+                  value={commonSetting(members, "clockPercent")}
+                  revision={node.machines}
+                  min={1}
+                  max={250}
+                  unit="%"
+                  onCommit={(value) =>
+                    editor.setOperatingSetting(node.id, scope, "clockPercent", value)
+                  }
+                />
+              )}
+              {capabilities.sloopSlots > 0 && (
+                <InspectorNumberField
+                  key={`${scope}:sloops`}
+                  label="Sloops"
+                  value={commonSetting(members, "sloopsUsed")}
+                  revision={node.machines}
+                  min={0}
+                  max={capabilities.sloopSlots}
+                  integer
+                  onCommit={(value) =>
+                    editor.setOperatingSetting(node.id, scope, "sloopsUsed", value)
+                  }
+                />
+              )}
+            </div>
+          )}
         <section aria-label="Configured material rates" className="space-y-2 border-t pt-4">
           <div className="grid grid-cols-2 gap-4">
             <RateColumn
