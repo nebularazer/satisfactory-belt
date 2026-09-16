@@ -112,7 +112,7 @@ export function CatalogSearchDetails({
     return (
       <section className="space-y-2">
         <h4 className="text-sm font-medium">{title}</h4>
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {entries.map((quantity) => {
             const item = catalog.items[quantity.itemId]!;
             return (
