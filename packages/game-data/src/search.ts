@@ -270,6 +270,8 @@ export type RecipeComparison = Readonly<{
   removedInputIds: readonly string[];
   baselineInputTypes: number;
   inputTypes: number;
+  fluidInputIds: readonly string[];
+  byproducts: readonly { itemId: string; amountPerMinute: number }[];
 }>;
 
 /** Equal primary output, full-speed machine equivalents; no upstream power or amplification. */
@@ -309,5 +311,10 @@ export function compareRecipes(
     removedInputIds: [...baseInputs].filter((id) => !inputs.has(id)),
     baselineInputTypes: baseInputs.size,
     inputTypes: inputs.size,
+    fluidInputIds: [...inputs].filter((id) => catalog.items[id]!.form !== "solid"),
+    byproducts: candidate.products.slice(1).map((product) => ({
+      itemId: product.itemId,
+      amountPerMinute: (product.amount * outputPerMinute) / candidate.products[0]!.amount,
+    })),
   };
 }

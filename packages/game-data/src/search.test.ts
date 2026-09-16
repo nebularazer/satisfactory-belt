@@ -224,3 +224,37 @@ it("compares alternatives at the selected recipe output using absolute capacity 
   copy.recipes["Coated Plate"].products[0].itemId = "Copper Ore";
   expect(compareRecipes(copy, "Iron Plate", "Coated Plate")).toBeUndefined();
 });
+
+it("reports fluid inputs and byproducts at equal output, omitting irrelevant extras", () => {
+  expect(compareRecipes(catalog, "Iron Plate", "Coated Plate")).toMatchObject({
+    fluidInputIds: [],
+    byproducts: [],
+    addedInputIds: [],
+    removedInputIds: [],
+  });
+  const copy = structuredClone(catalog);
+  for (const [id, form] of [
+    ["Water", "liquid"],
+    ["Nitrogen", "gas"],
+  ] as const) {
+    copy.items[id] = { ...copy.items["Iron Ore"], id, name: id, form, unit: "m3" };
+  }
+  copy.recipes["Coated Plate"].ingredients = [
+    { itemId: "Water", amount: 3 },
+    { itemId: "Nitrogen", amount: 1 },
+  ];
+  copy.recipes["Coated Plate"].durationSeconds = 3;
+  copy.recipes["Coated Plate"].products.push({ itemId: "Water", amount: 0.5 });
+  expect(compareRecipes(copy, "Iron Plate", "Coated Plate")).toMatchObject({
+    fluidInputIds: ["Water", "Nitrogen"],
+    byproducts: [{ itemId: "Water", amountPerMinute: 5 }],
+    addedInputIds: ["Water", "Nitrogen"],
+    removedInputIds: ["Iron Ore"],
+  });
+  expect(compareRecipes(copy, "Coated Plate", "Iron Plate")).toMatchObject({
+    fluidInputIds: [],
+    byproducts: [],
+    addedInputIds: ["Iron Ore"],
+    removedInputIds: ["Water", "Nitrogen"],
+  });
+});

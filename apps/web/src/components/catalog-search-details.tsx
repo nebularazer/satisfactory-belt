@@ -5,8 +5,19 @@ import {
   recipeAlternatives,
   compareRecipes,
 } from "@satisfactory-belt/game-data/search";
-import type { SearchEntry } from "@satisfactory-belt/game-data/search";
-import { BoxesIcon, FactoryIcon, ImageOffIcon, ZapIcon } from "lucide-react";
+import type { RecipeComparison, SearchEntry } from "@satisfactory-belt/game-data/search";
+import {
+  ArrowLeftRightIcon,
+  ArrowRightIcon,
+  BoxesIcon,
+  DropletsIcon,
+  FactoryIcon,
+  GitBranchIcon,
+  ImageOffIcon,
+  MinusIcon,
+  PlusIcon,
+  ZapIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,10 +32,12 @@ export function CatalogIcon({
   iconId,
   assets,
   large = false,
+  small = false,
 }: {
   iconId: string;
   assets: GameAssets;
   large?: boolean;
+  small?: boolean;
 }) {
   const icon = assets.icons.icons[iconId];
   const sizes = large ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
@@ -32,14 +45,20 @@ export function CatalogIcon({
     ? sizes.map((size) => new URL(icon.variants[size].path, assets.baseUrl).href)
     : [];
   // Reset failed-image state when the requested asset changes (including hot reloads).
-  return <CatalogImage key={sources.join("|")} sources={sources} size={large ? 64 : 32} />;
+  return (
+    <CatalogImage key={sources.join("|")} sources={sources} size={large ? 64 : small ? 16 : 32} />
+  );
 }
 
 function CatalogImage({ sources, size }: { sources: readonly string[]; size: number }) {
   const [variant, setVariant] = useState(0);
   const src = sources[variant];
   const className =
-    size === 64 ? "size-16 shrink-0 object-contain" : "size-8 shrink-0 object-contain";
+    size === 64
+      ? "size-16 shrink-0 object-contain"
+      : size === 16
+        ? "size-4 shrink-0 object-contain"
+        : "size-8 shrink-0 object-contain";
   if (!src)
     return <ImageOffIcon aria-hidden="true" className={`${className} text-muted-foreground`} />;
   // Try the next prepared size on failure instead of permanently hiding the image.
@@ -210,7 +229,7 @@ export function CatalogSearchDetails({
                           </span>
                         </div>
                         {comparison && (
-                          <span className="pointer-events-none relative ml-13 mr-2 flex items-center gap-2 pb-2 text-xs font-normal tabular-nums text-muted-foreground">
+                          <span className="pointer-events-none relative ml-13 mr-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 pb-2 text-xs font-normal tabular-nums text-muted-foreground">
                             <ComparisonMetric
                               kind="machines"
                               onSelect={() => onDetails(candidate)}
@@ -230,6 +249,11 @@ export function CatalogSearchDetails({
                               onSelect={() => onDetails(candidate)}
                               value={comparison.inputTypes}
                               baseline={comparison.baselineInputTypes}
+                            />
+                            <AdditionalRecipeMetrics
+                              comparison={comparison}
+                              assets={assets}
+                              onSelect={() => onDetails(candidate)}
                             />
                           </span>
                         )}
@@ -306,5 +330,87 @@ function ComparisonMetric({
         {description}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function AdditionalRecipeMetrics({
+  comparison,
+  assets,
+  onSelect,
+}: {
+  comparison: RecipeComparison;
+  assets: GameAssets;
+  onSelect: () => void;
+}) {
+  const { fluidInputIds, byproducts, removedInputIds, addedInputIds } = comparison;
+  const names = (ids: readonly string[]) =>
+    ids.map((id) => assets.catalog.items[id]!.name).join(", ");
+  function indicator(description: string, children: React.ReactNode) {
+    return (
+      <Tooltip disableHoverablePopup>
+        <TooltipTrigger
+          render={<button type="button" aria-label={description} />}
+          aria-label={description}
+          onClick={onSelect}
+          className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {children}
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="pointer-events-none">
+          {description}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  const icons = (ids: readonly string[]) =>
+    ids.map((id) => (
+      <CatalogIcon key={id} iconId={assets.catalog.items[id]!.iconId} assets={assets} small />
+    ));
+  const changes = [
+    removedInputIds.length ? `Removes ${names(removedInputIds)}` : "",
+    addedInputIds.length ? `Adds ${names(addedInputIds)}` : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+  return (
+    <>
+      {byproducts.length > 0 &&
+        indicator(
+          `Byproducts at equal output: ${byproducts
+            .map(({ itemId, amountPerMinute }) => {
+              const item = assets.catalog.items[itemId]!;
+              return `${item.name} · ${number.format(amountPerMinute)}${item.unit === "m3" ? " m³/min" : "/min"}`;
+            })
+            .join(", ")}`,
+          <>
+            <GitBranchIcon aria-hidden="true" className="size-3.5" />
+            <span>{byproducts.length}</span>
+          </>,
+        )}
+      {fluidInputIds.length > 0 &&
+        indicator(
+          `Fluid inputs: ${names(fluidInputIds)}`,
+          <>
+            <DropletsIcon aria-hidden="true" className="size-3.5" />
+            <span>{fluidInputIds.length}</span>
+          </>,
+        )}
+      {changes &&
+        indicator(
+          `Material changes: ${changes}`,
+          <>
+            <ArrowLeftRightIcon aria-hidden="true" className="size-3.5" />
+            {removedInputIds.length > 0 && addedInputIds.length === 0 && (
+              <MinusIcon aria-hidden="true" className="size-3" />
+            )}
+            {icons(removedInputIds)}
+            {removedInputIds.length > 0 && addedInputIds.length > 0 && (
+              <ArrowRightIcon aria-hidden="true" className="size-3" />
+            )}
+            {removedInputIds.length === 0 && <PlusIcon aria-hidden="true" className="size-3" />}
+            {icons(addedInputIds)}
+          </>,
+        )}
+    </>
   );
 }
