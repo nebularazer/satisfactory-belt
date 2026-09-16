@@ -16,13 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerTitle,
-  DrawerDescription,
-  DrawerClose,
-} from "@/components/ui/drawer";
+import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { GameAssets } from "@/lib/game-assets";
@@ -243,7 +237,7 @@ export function CatalogSearch({
         tabIndex={-1}
         className={
           selected || scopeName
-            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 pr-12 outline-none"
+            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 outline-none sm:pr-12"
             : "sr-only"
         }
       >
@@ -266,14 +260,6 @@ export function CatalogSearch({
           )}
         </div>
       </div>
-      {narrow && (
-        <DrawerClose
-          render={<Button variant="ghost" size="icon-sm" className="absolute top-2 right-2" />}
-          aria-label="Close search"
-        >
-          <XIcon />
-        </DrawerClose>
-      )}
       {placementError && (
         <p role="alert" className="shrink-0 px-4 pb-3 text-sm text-destructive">
           {placementError}
@@ -320,7 +306,7 @@ export function CatalogSearch({
     </>
   );
   return narrow ? (
-    <Drawer open={open} onOpenChange={changeOpen}>
+    <Drawer open={open} onOpenChange={changeOpen} showSwipeHandle>
       <DrawerContent
         onKeyDownCapture={backShortcut}
         onKeyDown={keyDown}
@@ -442,7 +428,9 @@ function SearchResults({
       }}
     >
       <div className="shrink-0 space-y-3 px-4 pb-3">
-        <div className={frame.scope ? "flex items-center gap-2" : "flex items-center gap-2 pr-8"}>
+        <div
+          className={frame.scope ? "flex items-center gap-2" : "flex items-center gap-2 sm:pr-8"}
+        >
           <ComboboxInput
             ref={inputRef}
             showTrigger={false}
