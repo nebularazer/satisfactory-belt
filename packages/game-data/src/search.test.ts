@@ -6,6 +6,7 @@ import {
   searchCatalog,
   recipeSearchSummary,
   recipeAlternatives,
+  compareRecipes,
 } from "./search";
 
 const catalog: GameCatalog = {
@@ -154,4 +155,72 @@ it("finds alternatives by primary output and excludes the current recipe and byp
   expect(recipeAlternatives(copy, "Iron Plate")).toEqual(["Coated Plate"]);
   expect(recipeAlternatives(copy, "Coated Plate")).toEqual(["Iron Plate"]);
   expect(recipeAlternatives(copy, "missing")).toEqual([]);
+});
+
+it("keeps eligibility restrictions through categories, scopes, and typo fallback", () => {
+  const allowedEntryIds = new Set(["recipe:Iron Plate", "machine:Constructor"]);
+  expect(names("", { allowedEntryIds })).toEqual(["Constructor", "Iron Plate"]);
+  expect(names("plate", { allowedEntryIds })).toEqual(["Iron Plate"]);
+  expect(names("plte", { allowedEntryIds })).toEqual(["Iron Plate"]);
+  expect(names("", { allowedEntryIds, category: "buildings" })).toEqual(["Constructor"]);
+  expect(names("", { allowedEntryIds, scope: { kind: "machine", id: "Constructor" } })).toEqual([
+    "Iron Plate",
+  ]);
+  expect(names("", { allowedEntryIds: new Set() })).toEqual([]);
+  expect(names("plate", { allowedEntryIds: new Set(["Iron Plate"]) })).toEqual([]);
+  expect(
+    names("ore", {
+      allowedEntryIds: new Set(["resource:Miner:Iron Ore"]),
+      scope: { kind: "extractor", id: "Miner" },
+    }),
+  ).toEqual(["Iron Ore"]);
+});
+
+it("supports multiword initialisms without giving them precedence over exact names", () => {
+  const copy = structuredClone(catalog);
+  copy.recipes.Heavy = { ...copy.recipes["Iron Plate"], id: "Heavy", name: "Heavy Modular Frame" };
+  copy.recipes.Exact = { ...copy.recipes["Iron Plate"], id: "Exact", name: "HMF" };
+  const entries = createSearchIndex(copy);
+  expect(searchCatalog(entries, "hmf").map((entry) => entry.name)).toEqual([
+    "HMF",
+    "Heavy Modular Frame",
+  ]);
+  expect(searchCatalog(entries, "heavy mod")[0]?.name).toBe("Heavy Modular Frame");
+});
+
+it("finds alternate recipes by their output initialism", () => {
+  const copy = structuredClone(catalog);
+  copy.items["Iron Plate"].name = "Heavy Modular Frame";
+  expect(searchCatalog(createSearchIndex(copy), "hmf").map((entry) => entry.entityId)).toEqual([
+    "Coated Plate",
+    "Iron Plate",
+  ]);
+});
+
+it("compares alternatives at the selected recipe output using absolute capacity and power", () => {
+  const copy = structuredClone(catalog);
+  copy.recipes["Coated Plate"].durationSeconds = 3;
+  copy.recipes["Coated Plate"].ingredients = [{ itemId: "Copper Ore", amount: 1 }];
+  expect(compareRecipes(copy, "Iron Plate", "Coated Plate")).toMatchObject({
+    outputPerMinute: 20,
+    machines: 0.5,
+    baselinePowerMegawatts: 4,
+    powerMegawatts: 2,
+    addedInputIds: ["Copper Ore"],
+    removedInputIds: ["Iron Ore"],
+  });
+  expect(compareRecipes(copy, "Coated Plate", "Iron Plate")).toMatchObject({
+    outputPerMinute: 40,
+    machines: 2,
+    baselinePowerMegawatts: 4,
+    powerMegawatts: 8,
+  });
+  copy.machines.Constructor.power = { kind: "variable" };
+  expect(compareRecipes(copy, "Iron Plate", "Coated Plate")).toMatchObject({
+    powerMegawatts: null,
+    baselinePowerMegawatts: null,
+  });
+  expect(compareRecipes(copy, "missing", "Coated Plate")).toBeUndefined();
+  copy.recipes["Coated Plate"].products[0].itemId = "Copper Ore";
+  expect(compareRecipes(copy, "Iron Plate", "Coated Plate")).toBeUndefined();
 });

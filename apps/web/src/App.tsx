@@ -254,7 +254,11 @@ function CanvasWorkspace({
           <DropdownMenuTrigger render={menuButton}>
             <MenuIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-50" sideOffset={8} finalFocus={canvasFocus}>
+          <DropdownMenuContent
+            className="w-50"
+            sideOffset={8}
+            finalFocus={searchOpen ? false : canvasFocus}
+          >
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={openSearch}>
                 <SearchIcon className="text-muted-foreground" />

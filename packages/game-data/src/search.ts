@@ -15,6 +15,8 @@ export type SearchEntry = Readonly<{
   name: string;
   iconId: string;
   subtitle: string;
+  productionRate?: string;
+  machineSummary?: string;
   alternate: boolean;
   events: readonly string[];
   machineIds: readonly string[];
@@ -28,6 +30,13 @@ export type SearchScope = Readonly<{ kind: "machine" | "extractor"; id: string }
 export type SearchOptions = Readonly<{
   category?: "all" | "recipes" | "buildings";
   scope?: SearchScope;
+  /**
+   * Optional eligibility boundary, applied before ranking (including typo fallback).
+   * IDs are SearchEntry.id, not entityId. Omitted means unrestricted; empty means no results.
+   * The future material-link resolver owns compatibility rules and includes eligible parent
+   * buildings and recipe/resource choices. Replace the set when eligibility changes.
+   */
+  allowedEntryIds?: ReadonlySet<string>;
 }>;
 
 export function normalizeSearch(value: string): string {
@@ -40,10 +49,18 @@ export function normalizeSearch(value: string): string {
     .trim();
 }
 
+function searchInitialism(name: string): string {
+  const initials = normalizeSearch(name)
+    .split(" ")
+    .map((word) => word[0])
+    .join("");
+  return initials.length >= 3 ? initials : "";
+}
+
 export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] {
   const entries: SearchEntry[] = [];
   function add(entry: Omit<SearchEntry, "normalizedName" | "terms" | "words">, extra = "") {
-    const terms = normalizeSearch(`${entry.name} ${extra}`);
+    const terms = normalizeSearch(`${entry.name} ${extra} ${searchInitialism(entry.name)}`);
     entries.push({
       ...entry,
       normalizedName: normalizeSearch(entry.name),
@@ -55,6 +72,9 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
   for (const recipe of Object.values(catalog.recipes)) {
     const machines = recipe.machineIds.map((id) => catalog.machines[id]!.name).join(" · ");
     const products = recipe.products.map((p) => catalog.items[p.itemId]!.name).join(" + ");
+    const productInitials = recipe.products
+      .map((p) => searchInitialism(catalog.items[p.itemId]!.name))
+      .join(" ");
     add(
       {
         ...base,
@@ -64,11 +84,13 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
         name: recipe.alternate ? recipe.name.replace(/^Alternate:\s*/i, "") : recipe.name,
         iconId: catalog.items[recipe.products[0]!.itemId]!.iconId,
         subtitle: recipeSearchSummary(catalog, recipe.id),
+        productionRate: recipeProductionRate(catalog, recipe.id),
+        machineSummary: recipeMachineSummary(catalog, recipe.machineIds[0]!),
         alternate: recipe.alternate,
         events: recipe.events,
         machineIds: recipe.machineIds,
       },
-      `${machines} ${products} ${recipe.alternate ? "alt alternate alternative" : "standard"}`,
+      `${machines} ${products} ${productInitials} ${recipe.alternate ? "alt alternate alternative" : "standard"}`,
     );
   }
   const collections = [
@@ -123,9 +145,10 @@ export function searchCatalog(
 ): readonly SearchEntry[] {
   const normalized = normalizeSearch(query);
   const tokens = normalized.split(" ").filter(Boolean);
-  const ranked: { entry: SearchEntry; rank: number }[] = [];
-  const fallback: SearchEntry[] = [];
+  const ranked: SearchEntry[][] = [[], [], [], []];
+  const candidates: SearchEntry[] = [];
   for (const entry of index) {
+    if (options.allowedEntryIds && !options.allowedEntryIds.has(entry.id)) continue;
     if (options.scope) {
       if (
         options.scope.kind === "machine"
@@ -138,17 +161,8 @@ export function searchCatalog(
       if (options.category === "recipes" && entry.kind !== "recipe") continue;
       if (options.category === "buildings" && entry.kind === "recipe") continue;
     }
-    if (!tokens.every((token) => entry.terms.includes(token))) {
-      if (
-        tokens.every(
-          (token) =>
-            entry.terms.includes(token) ||
-            (token.length >= 4 && entry.words.some((word) => oneEditApart(token, word))),
-        )
-      )
-        fallback.push(entry);
-      continue;
-    }
+    candidates.push(entry);
+    if (!tokens.every((token) => entry.terms.includes(token))) continue;
     const rank = !normalized
       ? 0
       : entry.normalizedName === normalized
@@ -158,11 +172,19 @@ export function searchCatalog(
           : tokens.every((token) => entry.normalizedName.includes(token))
             ? 2
             : 3;
-    ranked.push({ entry, rank });
+    ranked[rank]!.push(entry);
   }
-  return ranked.length
-    ? ranked.toSorted((a, b) => a.rank - b.rank).map(({ entry }) => entry)
-    : fallback;
+  const matches = ranked.flat();
+  // Only pay for fuzzy matching if the entire direct-match pass found nothing.
+  return matches.length
+    ? matches
+    : candidates.filter((entry) =>
+        tokens.every(
+          (token) =>
+            entry.terms.includes(token) ||
+            (token.length >= 4 && entry.words.some((word) => oneEditApart(token, word))),
+        ),
+      );
 }
 
 /** Bounded typo fallback; no matrix allocation or fuzzy matching of short tokens. */
@@ -186,28 +208,41 @@ function oneEditApart(a: string, b: string): boolean {
 
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
 
-/** Compact baseline summary: one machine, default clock, primary product, no amplification. */
-export function recipeSearchSummary(
+/** Primary output at default clock and no amplification. */
+export function recipeProductionRate(
   catalog: GameCatalog,
   recipeId: string,
   machineId?: string,
 ): string {
   const recipe = catalog.recipes[recipeId]!;
   const product = recipe.products[0]!;
-  const unit = catalog.items[product.itemId]!.unit === "m3" ? "m³/min" : "/min";
-  return recipe.machineIds
-    .filter((id) => !machineId || id === machineId)
-    .map((id) => {
-      const machine = catalog.machines[id]!;
-      const power =
-        machine.power.kind === "fixed"
-          ? `${number.format(machine.power.megawatts)} MW`
-          : "Variable power";
-      const rate = number.format(
-        (product.amount * 60 * machine.manufacturingSpeed) / recipe.durationSeconds,
-      );
-      return `${machine.name} · ${power} · ${rate}${unit === "/min" ? "" : " "}${unit}`;
-    })
+  const machine = catalog.machines[machineId ?? recipe.machineIds[0]!]!;
+  const rate = number.format(
+    (product.amount * 60 * machine.manufacturingSpeed) / recipe.durationSeconds,
+  );
+  return `${rate}${catalog.items[product.itemId]!.unit === "m3" ? " m³/min" : "/min"}`;
+}
+
+function recipeMachineSummary(catalog: GameCatalog, machineId: string): string {
+  const machine = catalog.machines[machineId]!;
+  const power =
+    machine.power.kind === "fixed"
+      ? `${number.format(machine.power.megawatts)} MW`
+      : "Variable power";
+  return `${machine.name} · ${power}`;
+}
+
+/** Compact baseline summary: default clock, primary product, no amplification. */
+export function recipeSearchSummary(
+  catalog: GameCatalog,
+  recipeId: string,
+  machineId?: string,
+): string {
+  return catalog.recipes[recipeId]!.machineIds.filter((id) => !machineId || id === machineId)
+    .map(
+      (id) =>
+        `${recipeMachineSummary(catalog, id)} · ${recipeProductionRate(catalog, recipeId, id)}`,
+    )
     .join("; ");
 }
 
@@ -222,4 +257,57 @@ export function recipeAlternatives(catalog: GameCatalog, recipeId: string): read
       (a, b) => Number(a.alternate) - Number(b.alternate) || a.name.localeCompare(b.name, "en"),
     )
     .map((candidate) => candidate.id);
+}
+
+export type RecipeComparison = Readonly<{
+  outputPerMinute: number;
+  itemId: string;
+  machineId: string;
+  machines: number;
+  baselinePowerMegawatts: number | null;
+  powerMegawatts: number | null;
+  addedInputIds: readonly string[];
+  removedInputIds: readonly string[];
+  baselineInputTypes: number;
+  inputTypes: number;
+}>;
+
+/** Equal primary output, full-speed machine equivalents; no upstream power or amplification. */
+export function compareRecipes(
+  catalog: GameCatalog,
+  baselineId: string,
+  candidateId: string,
+  preferredMachineId?: string,
+): RecipeComparison | undefined {
+  const baseline = catalog.recipes[baselineId];
+  const candidate = catalog.recipes[candidateId];
+  if (!baseline || !candidate || baseline.products[0]?.itemId !== candidate.products[0]?.itemId)
+    return undefined;
+  const machineFor = (recipe: typeof baseline) =>
+    catalog.machines[
+      preferredMachineId && recipe.machineIds.includes(preferredMachineId)
+        ? preferredMachineId
+        : recipe.machineIds[0]!
+    ]!;
+  const baseMachine = machineFor(baseline);
+  const machine = machineFor(candidate);
+  const outputPerMinute =
+    (baseline.products[0]!.amount * 60 * baseMachine.manufacturingSpeed) / baseline.durationSeconds;
+  const candidateRate =
+    (candidate.products[0]!.amount * 60 * machine.manufacturingSpeed) / candidate.durationSeconds;
+  const machines = outputPerMinute / candidateRate;
+  const baseInputs = new Set(baseline.ingredients.map((input) => input.itemId));
+  const inputs = new Set(candidate.ingredients.map((input) => input.itemId));
+  return {
+    outputPerMinute,
+    itemId: baseline.products[0]!.itemId,
+    machineId: machine.id,
+    machines,
+    baselinePowerMegawatts: baseMachine.power.kind === "fixed" ? baseMachine.power.megawatts : null,
+    powerMegawatts: machine.power.kind === "fixed" ? machine.power.megawatts * machines : null,
+    addedInputIds: [...inputs].filter((id) => !baseInputs.has(id)),
+    removedInputIds: [...baseInputs].filter((id) => !inputs.has(id)),
+    baselineInputTypes: baseInputs.size,
+    inputTypes: inputs.size,
+  };
 }
