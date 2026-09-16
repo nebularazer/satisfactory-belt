@@ -65,6 +65,7 @@ export function CatalogSearch({
     height: window.visualViewport?.height ?? window.innerHeight,
   }));
   const [frame, setFrame] = useState<Frame>(emptyFrame);
+  const [searchSession, setSearchSession] = useState(0);
   const [parent, setParent] = useState<Frame | null>(null);
   const [placementError, setPlacementError] = useState<string | null>(null);
   const [detailEntry, setSelected] = useState<SearchEntry | null>(null);
@@ -113,6 +114,10 @@ export function CatalogSearch({
       onAdd(entry, frame.scope);
       setPlacementError(null);
       changeOpen(false);
+      // A successful insertion starts a fresh search, including any saved building scope.
+      setFrame(emptyFrame());
+      setParent(null);
+      setSearchSession((current) => current + 1);
     } catch (error) {
       setPlacementError(error instanceof Error ? error.message : "Unable to place this node.");
     }
@@ -236,7 +241,11 @@ export function CatalogSearch({
       <div
         ref={heading}
         tabIndex={-1}
-        className="flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 pr-12 outline-none"
+        className={
+          selected || scopeName
+            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 pr-12 outline-none"
+            : "sr-only"
+        }
       >
         {(selected || parent) && (
           <Button variant="ghost" size="icon-sm" onClick={back} aria-label="Back to results">
@@ -251,22 +260,20 @@ export function CatalogSearch({
             {selected && selected.events.length > 0 && <Badge variant="outline">Event</Badge>}
           </div>
           {narrow ? (
-            <DrawerDescription className={compact && !selected ? "sr-only" : undefined}>
-              {subtitle}
-            </DrawerDescription>
+            <DrawerDescription>{subtitle}</DrawerDescription>
           ) : (
             <DialogDescription>{subtitle}</DialogDescription>
           )}
         </div>
-        {narrow && (
-          <DrawerClose
-            render={<Button variant="ghost" size="icon-sm" className="absolute top-2 right-2" />}
-            aria-label="Close search"
-          >
-            <XIcon />
-          </DrawerClose>
-        )}
       </div>
+      {narrow && (
+        <DrawerClose
+          render={<Button variant="ghost" size="icon-sm" className="absolute top-2 right-2" />}
+          aria-label="Close search"
+        >
+          <XIcon />
+        </DrawerClose>
+      )}
       {placementError && (
         <p role="alert" className="shrink-0 px-4 pb-3 text-sm text-destructive">
           {placementError}
@@ -285,9 +292,17 @@ export function CatalogSearch({
           machineId={frame.scope?.kind === "machine" ? frame.scope.id : undefined}
         />
       )}
-      <div className={selected ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+      <div
+        className={
+          selected
+            ? "hidden"
+            : frame.scope
+              ? "flex min-h-0 flex-1 flex-col"
+              : "flex min-h-0 flex-1 flex-col pt-4"
+        }
+      >
         <SearchResults
-          key={frame.scope?.id ?? "catalog"}
+          key={`${searchSession}:${frame.scope?.id ?? "catalog"}`}
           index={index}
           assets={assets}
           frame={frame}
@@ -427,7 +442,7 @@ function SearchResults({
       }}
     >
       <div className="shrink-0 space-y-3 px-4 pb-3">
-        <div className="flex items-center gap-2">
+        <div className={frame.scope ? "flex items-center gap-2" : "flex items-center gap-2 pr-8"}>
           <ComboboxInput
             ref={inputRef}
             showTrigger={false}
