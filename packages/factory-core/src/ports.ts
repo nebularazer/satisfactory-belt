@@ -1,5 +1,7 @@
 import { portId } from "@satisfactory-belt/canvas-core";
 import type { PortCompatibility, PortReference } from "@satisfactory-belt/canvas-core";
+
+import type { MaterialFilter } from "./splitters";
 export type { PortReference } from "@satisfactory-belt/canvas-core";
 export type SemanticPort = PortReference &
   Readonly<{
@@ -7,6 +9,9 @@ export type SemanticPort = PortReference &
     transport: "belt" | "pipe";
     /** Null is an unassigned logistics port: any solid item over a belt. */
     itemId: string | null;
+    /** Sink acceptance and output filtering are derived from node configuration. */
+    accepts?: ReadonlySet<string>;
+    filter?: MaterialFilter;
   }>;
 export function getPortCompatibility(
   a: SemanticPort | undefined,
