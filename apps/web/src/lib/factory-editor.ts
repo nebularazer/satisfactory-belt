@@ -203,7 +203,20 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       next.set(
         link.id,
         dirty
-          ? { ...link, points: routeLink(source, target, [...bounds.values()], link.guides) }
+          ? {
+              ...link,
+              // The cards containing the two ports are endpoints, not obstacles.
+              // Including them makes the router immediately leave the port, loop
+              // around the card, and produce the large wraps seen in tight layouts.
+              points: routeLink(
+                source,
+                target,
+                [...bounds]
+                  .filter(([id]) => id !== link.output.nodeId && id !== link.input.nodeId)
+                  .map(([, box]) => box),
+                link.guides,
+              ),
+            }
           : cached,
       );
     }
