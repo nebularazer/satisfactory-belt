@@ -2,6 +2,7 @@ import { GRID_SIZE, SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
+import { commonSetting, validateMachineMembers } from "./machine-settings";
 import { validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
 
@@ -13,15 +14,13 @@ export const PORT_RADIUS = 7;
 export const PIPE_PORT_RADIUS = 9;
 export const SLOOP_ITEM_ID = "Desc_WAT1_C";
 
-type NodeBase = Readonly<{ id: string; x: number; y: number; machineCount: number }>;
+export type MachineMember = Readonly<{ id: string; clockPercent: number; sloopsUsed: number }>;
+type NodeBase = Readonly<{ id: string; x: number; y: number; machines: readonly MachineMember[] }>;
 export type ManufacturingNode = NodeBase &
   Readonly<{
     kind: "manufacturing";
     machineId: string;
     recipeId: string;
-    clockPercent: number;
-    /** Per machine, with the same configuration across the group. */
-    sloopsUsed: number;
   }>;
 export type FactoryNode =
   | ManufacturingNode
@@ -32,7 +31,6 @@ export type FactoryNode =
         kind: "extractor";
         extractorId: string;
         resourceId: string;
-        clockPercent: number;
       }>)
   | (NodeBase &
       Readonly<{
@@ -73,7 +71,7 @@ export type MachineDisplay = Readonly<{
   power: PowerDisplay;
   powerLabel: string;
   clockLabel: string | null;
-  sloops: Readonly<{ used: number; slots: number; iconId: string }> | null;
+  sloops: Readonly<{ used: number | null; slots: number; iconId: string }> | null;
 }>;
 export type LogisticsDisplay = Readonly<{
   layout: "logistics";
@@ -148,8 +146,10 @@ export function resolveMachineNode(
   node: Exclude<FactoryNode, LogisticsNode>,
   catalog: GameCatalog,
 ): MachineDisplay {
-  if (!Number.isSafeInteger(node.machineCount) || node.machineCount < 1)
-    throw new Error(`Invalid machine count on ${node.id}.`);
+  validateMachineMembers(node, catalog);
+  const clock = commonSetting(node.machines, "clockPercent");
+  const sloops = commonSetting(node.machines, "sloopsUsed");
+  const clockLabel = clock === null ? "Mixed" : `${numberLabel.format(clock)}%`;
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
     throw new Error(`Invalid position on ${node.id}.`);
   function ports(
@@ -177,13 +177,13 @@ export function resolveMachineNode(
     if (!sink) throw new Error(`Missing AWESOME Sink ${node.sinkId}.`);
     const power: PowerDisplay = {
       kind: "known",
-      megawatts: node.machineCount * sink.powerMegawatts,
+      megawatts: node.machines.length * sink.powerMegawatts,
     };
     return {
       layout: "machine",
       size: NODE_SIZE,
       title: sink.name,
-      subtitle: `${node.machineCount}× ${sink.name}`,
+      subtitle: `${node.machines.length}× ${sink.name}`,
       machineIconId: sink.iconId,
       ports: [
         {
@@ -208,31 +208,27 @@ export function resolveMachineNode(
     if (!extractor) throw new Error(`Missing extractor ${node.extractorId}.`);
     if (!extractor.resourceIds.includes(node.resourceId))
       throw new Error(`Resource ${node.resourceId} is incompatible with ${extractor.id}.`);
-    if (
-      !Number.isFinite(node.clockPercent) ||
-      node.clockPercent < 1 ||
-      node.clockPercent > 250 ||
-      (!extractor.canOverclock && node.clockPercent !== 100)
-    )
-      throw new Error(`Invalid clock on ${node.id}.`);
     const output = ports([{ itemId: node.resourceId, amount: 1 }], "output");
     const power: PowerDisplay = {
       kind: "known",
-      megawatts:
-        node.machineCount *
-        extractor.powerMegawatts *
-        (node.clockPercent / 100) ** extractor.powerConsumptionExponent,
+      megawatts: node.machines.reduce(
+        (sum, member) =>
+          sum +
+          extractor.powerMegawatts *
+            (member.clockPercent / 100) ** extractor.powerConsumptionExponent,
+        0,
+      ),
     };
     return {
       layout: "machine",
       size: NODE_SIZE,
       title: output[0]!.name,
-      subtitle: `${node.machineCount}× ${extractor.name}`,
+      subtitle: `${node.machines.length}× ${extractor.name}`,
       machineIconId: extractor.iconId,
       ports: output,
       power,
       powerLabel: formatPower(power),
-      clockLabel: extractor.canOverclock ? `${numberLabel.format(node.clockPercent)}%` : null,
+      clockLabel: extractor.canOverclock ? clockLabel : null,
       sloops: null,
     };
   }
@@ -241,13 +237,13 @@ export function resolveMachineNode(
     if (!producer) throw new Error(`Missing producer ${node.producerId}.`);
     const power: PowerDisplay = {
       kind: "known",
-      megawatts: node.machineCount * producer.powerMegawatts,
+      megawatts: node.machines.length * producer.powerMegawatts,
     };
     return {
       layout: "machine",
       size: NODE_SIZE,
       title: producer.name,
-      subtitle: `${node.machineCount}× ${producer.name}`,
+      subtitle: `${node.machines.length}× ${producer.name}`,
       machineIconId: producer.iconId,
       ports: ports(producer.products, "output"),
       power,
@@ -261,30 +257,21 @@ export function resolveMachineNode(
   if (!machine || !recipe) throw new Error(`Missing machine or recipe on ${node.id}.`);
   if (!recipe.machineIds.includes(machine.id))
     throw new Error(`Recipe ${recipe.id} is incompatible with ${machine.id}.`);
-  if (
-    !Number.isFinite(node.clockPercent) ||
-    node.clockPercent < 1 ||
-    node.clockPercent > 250 ||
-    (!machine.canOverclock && node.clockPercent !== 100)
-  )
-    throw new Error(`Invalid clock on ${node.id}.`);
-  if (
-    !Number.isInteger(node.sloopsUsed) ||
-    node.sloopsUsed < 0 ||
-    node.sloopsUsed > machine.sloopSlots
-  )
-    throw new Error(`Invalid Sloop count on ${node.id}.`);
-  const boost = machine.productionBoost.base + node.sloopsUsed * machine.productionBoost.perSloop;
   const power: PowerDisplay =
     machine.power.kind === "variable"
       ? { kind: "variable" }
       : {
           kind: "known",
-          megawatts:
-            node.machineCount *
-            machine.power.megawatts *
-            (node.clockPercent / 100) ** machine.powerConsumptionExponent *
-            boost ** machine.productionBoost.powerExponent,
+          megawatts: node.machines.reduce(
+            (sum, member) =>
+              sum +
+              (machine.power.kind === "fixed" ? machine.power.megawatts : 0) *
+                (member.clockPercent / 100) ** machine.powerConsumptionExponent *
+                (machine.productionBoost.base +
+                  member.sloopsUsed * machine.productionBoost.perSloop) **
+                  machine.productionBoost.powerExponent,
+            0,
+          ),
         };
   const sloopIcon = catalog.items[SLOOP_ITEM_ID]?.iconId;
   if (machine.sloopSlots > 0 && !sloopIcon) throw new Error("Missing Somersloop item icon.");
@@ -292,15 +279,15 @@ export function resolveMachineNode(
     layout: "machine",
     size: NODE_SIZE,
     title: recipe.name,
-    subtitle: `${node.machineCount}× ${machine.name}`,
+    subtitle: `${node.machines.length}× ${machine.name}`,
     machineIconId: machine.iconId,
     ports: [...ports(recipe.ingredients, "input"), ...ports(recipe.products, "output")],
     power,
     powerLabel: formatPower(power),
-    clockLabel: machine.canOverclock ? `${numberLabel.format(node.clockPercent)}%` : null,
+    clockLabel: machine.canOverclock ? clockLabel : null,
     sloops:
       machine.sloopSlots > 0
-        ? { used: node.sloopsUsed, slots: machine.sloopSlots, iconId: sloopIcon! }
+        ? { used: sloops, slots: machine.sloopSlots, iconId: sloopIcon! }
         : null,
   };
 }
@@ -311,3 +298,6 @@ export * from "./splitters";
 export * from "./semantic-ports";
 
 export * from "./placement";
+
+export * from "./machine-settings";
+export * from "./production";

@@ -5,8 +5,17 @@ A factory plan describes machines and the materials exchanged between them.
 ## Language
 
 **Machine group**:
-One or more machines sharing a recipe or production configuration, represented
-together with their combined material inputs and outputs.
+One or more machines of the same type sharing a recipe or resource, represented
+together with their combined material inputs and outputs. Each machine has its own
+operating settings, including clock speed and amplification where supported.
+
+**Group member**:
+An individual machine within a machine group, retaining its identity when its
+operating settings change.
+
+**Mixed setting**:
+An operating setting whose value differs between members of a machine group.
+Editing that setting for All assigns the chosen value to every member.
 
 **Material port**:
 A machine group's input for one ingredient or output for one product. It represents

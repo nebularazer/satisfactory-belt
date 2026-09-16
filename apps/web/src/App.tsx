@@ -452,7 +452,7 @@ function CanvasWorkspace({
             </Button>
           </ButtonGroup>
         </div>
-        <Inspector editor={editor} focusCanvas={focusCanvas} />
+        <Inspector editor={editor} focusCanvas={focusCanvas} assets={assets} />
       </div>
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">

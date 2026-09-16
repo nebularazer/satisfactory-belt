@@ -1,4 +1,9 @@
-import { nodeBounds } from "@satisfactory-belt/factory-core";
+import {
+  nodeBounds,
+  createMachineMembers,
+  resizeMachineGroup,
+  resolveProduction,
+} from "@satisfactory-belt/factory-core";
 import type { ManufacturingNode } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { expect, it } from "vitest";
@@ -229,8 +234,7 @@ it("ignores empty clipboards, empty selections, and clipboard commands during a 
   clipboardCommand("paste");
   expect(history.getSnapshot().state.nodes.at(-1)).toMatchObject({
     recipeId: "Recipe",
-    sloopsUsed: 1,
-    clockPercent: 125,
+    machines: Array.from({ length: 3 }, () => ({ sloopsUsed: 1, clockPercent: 125 })),
     x: 192,
     y: 192,
   });
@@ -290,9 +294,7 @@ function createTestEditor() {
     id: `machine-${index + 1}`,
     recipeId: "Recipe",
     machineId: "Machine",
-    machineCount: 3,
-    clockPercent: 125,
-    sloopsUsed: 1,
+    machines: createMachineMembers(3, { clockPercent: 125, sloopsUsed: 1 }),
     x: (5 + (index % 3) * 9) * 32,
     y: (5 + Math.floor(index / 3) * 10) * 32,
   }));
@@ -311,7 +313,11 @@ it("reuses card content on movement and publishes new content before geometry no
     observed = current?.layout === "machine" ? current.subtitle : undefined;
   });
   updateNodes((nodes) =>
-    nodes.map((node) => (node.id === "machine-1" ? { ...node, machineCount: 4 } : node)),
+    nodes.map((node) =>
+      node.kind !== "logistics" && node.id === "machine-1"
+        ? resizeMachineGroup(node, 4, () => crypto.randomUUID())
+        : node,
+    ),
   );
   expect(observed).toBe("4× Assembler");
   expect(getDisplay("machine-1")).not.toBe(display);
@@ -401,8 +407,7 @@ it("retains extraction settings through movement, copy/paste and undo and refres
     id: "miner",
     extractorId: "Miner",
     resourceId: "Iron",
-    machineCount: 2,
-    clockPercent: 125,
+    machines: createMachineMembers(2, { clockPercent: 125 }),
     x: 160,
     y: 160,
   } as const;
@@ -440,7 +445,11 @@ it("keeps transient port selection across movement and metadata edits, but clear
   historyCommand("undo");
   expect(controller.getPortSnapshot().anchor).toEqual(anchor);
   updateNodes((nodes) =>
-    nodes.map((node) => (node.id === anchor.nodeId ? { ...node, machineCount: 5 } : node)),
+    nodes.map((node) =>
+      node.kind !== "logistics" && node.id === anchor.nodeId
+        ? resizeMachineGroup(node, 5, () => crypto.randomUUID())
+        : node,
+    ),
   );
   expect(controller.getPortSnapshot().anchor).toEqual(anchor);
   deleteSelection();
@@ -726,7 +735,14 @@ it("uses Sink acceptance in the editor and preserves Sink nodes through copy, de
         ? { ...node, recipeId: "Iron" }
         : node,
     ),
-    { kind: "sink", id: "sink-node", sinkId: "sink", machineCount: 2, x: 1600, y: 160 },
+    {
+      kind: "sink",
+      id: "sink-node",
+      sinkId: "sink",
+      machines: createMachineMembers(2),
+      x: 1600,
+      y: 160,
+    },
   ]);
   const input = { nodeId: "sink-node", portKey: "input:0" };
   expect(connect({ nodeId: "machine-1", portKey: "output:Iron" }, input).compatible).toBe(true);
@@ -739,7 +755,11 @@ it("uses Sink acceptance in the editor and preserves Sink nodes through copy, de
   clipboardCommand("copy");
   clipboardCommand("paste");
   const pasted = history.getSnapshot().state.nodes.at(-1)!;
-  expect(pasted).toMatchObject({ kind: "sink", sinkId: "sink", machineCount: 2 });
+  expect(pasted).toMatchObject({
+    kind: "sink",
+    sinkId: "sink",
+    machines: [{ clockPercent: 100 }, { clockPercent: 100 }],
+  });
   deleteSelection();
   historyCommand("undo");
   expect(history.getSnapshot().state.nodes.at(-1)).toEqual(pasted);
@@ -774,7 +794,7 @@ it("places at the snapped center, publishes ports, and restores the same node on
     { kind: "manufacturing", recipeId: "Recipe", machineId: "Machine" },
     { x: 503, y: 401 },
   );
-  expect(node).toMatchObject({ x: 368, y: 272, machineCount: 1, clockPercent: 100, sloopsUsed: 0 });
+  expect(node).toMatchObject({ x: 368, y: 272, machines: [{ clockPercent: 100, sloopsUsed: 0 }] });
   expect(editor.controller.getSnapshot().selection).toEqual(new Set([node.id]));
   expect(editor.getDisplay(node.id)?.ports).toHaveLength(1);
   editor.historyCommand("undo");
@@ -844,7 +864,9 @@ it("inspects one grouped machine node, hides multi-selection, and follows delete
   const target = () => inspectorTarget(editor.controller.getSnapshot());
   expect(target()).toBeNull();
   editor.updateNodes((nodes) =>
-    nodes.map((node) => (node.kind === "manufacturing" ? { ...node, machineCount: 5 } : node)),
+    nodes.map((node) =>
+      node.kind === "manufacturing" ? resizeMachineGroup(node, 5, () => crypto.randomUUID()) : node,
+    ),
   );
   editor.controller.setSelection(new Set(["machine-1"]));
   const selected = target();
@@ -878,4 +900,67 @@ it("inspects a link's transport and endpoints and drops deleted links", () => {
   editor.deleteSelection();
   expect(inspectorTarget(editor.controller.getSnapshot())).toBeNull();
   expect(inspectorSummary(editor, target)).toBeNull();
+});
+
+it("commits All edits atomically, restores mixed settings with undo, and rejects invalid edits before publication", () => {
+  const editor = createTestEditor();
+  const node = editor.getNode("machine-1")!;
+  if (node.kind !== "manufacturing") throw new Error("Expected a machine");
+  editor.setOperatingSetting(node.id, node.machines[0]!.id, "clockPercent", 200);
+  const mixed = editor.history.getSnapshot();
+  editor.setOperatingSetting(node.id, "all", "clockPercent", 150);
+  const uniform = editor.getNode(node.id)!;
+  expect(
+    uniform.kind !== "logistics" && uniform.machines.map((member) => member.clockPercent),
+  ).toEqual([150, 150, 150]);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(mixed.state);
+  expect(editor.getDisplay(node.id)).toMatchObject({ clockLabel: "Mixed" });
+  editor.historyCommand("redo");
+  const beforeInvalid = editor.history.getSnapshot();
+  let notifications = 0;
+  editor.history.subscribe(() => {
+    notifications++;
+  });
+  expect(() => editor.setOperatingSetting(node.id, "all", "clockPercent", 999)).toThrow();
+  expect(() => editor.setOperatingSetting(node.id, "missing", "sloopsUsed", 1)).toThrow();
+  editor.setOperatingSetting(node.id, "all", "clockPercent", 150);
+  expect(editor.history.getSnapshot()).toBe(beforeInvalid);
+  expect(notifications).toBe(0);
+});
+
+it("keeps links and member identities through settings edits, count changes, and undo", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const before = editor.history.getSnapshot().state;
+  const node = editor.getNode(editor.output.nodeId)!;
+  if (node.kind !== "manufacturing") throw new Error("Expected a machine");
+  editor.setOperatingSetting(node.id, node.machines[0]!.id, "sloopsUsed", 2);
+  editor.setMachineCount(node.id, 5);
+  const after = editor.getNode(node.id)!;
+  expect(
+    after.kind !== "logistics" && after.machines.slice(0, 3).map((member) => member.id),
+  ).toEqual(node.machines.map((member) => member.id));
+  expect(editor.history.getSnapshot().state.links).toBe(before.links);
+  editor.historyCommand("undo");
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+});
+
+it("undoes a desired-output count and clock change together without losing links", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const before = editor.history.getSnapshot().state;
+  editor.setOutputRate(editor.output.nodeId, "all", "Desc_WAT1_C", 40);
+  const node = editor.getNode(editor.output.nodeId)!;
+  expect(node.kind !== "logistics" && node.machines.length).toBe(6);
+  expect(resolveProduction(node, editor.catalog).outputs[0]!.perMinute).toBeCloseTo(40);
+  expect(editor.history.getSnapshot().state.links).toBe(before.links);
+  const solved = editor.history.getSnapshot().state;
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state).toBe(solved);
+  expect(() => editor.setOutputRate(editor.output.nodeId, "all", "Desc_WAT1_C", -1)).toThrow();
+  expect(editor.history.getSnapshot().state).toBe(solved);
 });

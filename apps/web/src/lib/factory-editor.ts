@@ -15,10 +15,15 @@ import {
   PORT_RADIUS,
   nodeBounds,
   resolveFactoryNode,
+  setMachineSetting,
+  setDesiredOutput,
+  resizeMachineGroup,
   resolveSemanticPorts,
 } from "@satisfactory-belt/factory-core";
 import type {
   FactoryNode,
+  MachineScope,
+  MachineSetting,
   NodeConfiguration,
   NodeDisplay,
   SemanticPort,
@@ -294,6 +299,37 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       return { nodes, links };
     });
   }
+  function editMachine(
+    id: string,
+    change: (node: Exclude<FactoryNode, { kind: "logistics" }>) => FactoryNode,
+  ) {
+    if (controller.getSnapshot().interaction !== "idle") return;
+    history.update((current) => {
+      const node = current.nodes.find((entry) => entry.id === id);
+      if (!node || node.kind === "logistics") return current;
+      const next = change(node);
+      if (next === node) return current;
+      // Validate before publishing to history or notifying canvas subscribers.
+      resolveFactoryNode(next, catalog);
+      return { ...current, nodes: current.nodes.map((entry) => (entry === node ? next : entry)) };
+    });
+  }
+  function setOperatingSetting(
+    id: string,
+    scope: MachineScope,
+    setting: MachineSetting,
+    value: number,
+  ) {
+    editMachine(id, (node) => setMachineSetting(node, catalog, scope, setting, value));
+  }
+  function setMachineCount(id: string, count: number) {
+    editMachine(id, (node) => resizeMachineGroup(node, count, () => crypto.randomUUID()));
+  }
+  function setOutputRate(id: string, scope: MachineScope, itemId: string, perMinute: number) {
+    editMachine(id, (node) =>
+      setDesiredOutput(node, catalog, scope, itemId, perMinute, () => crypto.randomUUID()),
+    );
+  }
   function setSplitterProgram(id: string, program: SplitterProgram) {
     const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
     if (!node || node.kind !== "logistics") throw new Error(`Missing splitter ${id}.`);
@@ -347,6 +383,10 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
     return node;
   }
   return {
+    setOutputRate,
+    setOperatingSetting,
+    setMachineCount,
+    getNode: (id: string) => history.getSnapshot().state.nodes.find((node) => node.id === id),
     canPlace,
     placeNode,
     setSplitterProgram,
@@ -372,22 +412,16 @@ function sameConfiguration(a: FactoryNode, b: FactoryNode): boolean {
       a.partId === b.partId &&
       a.program === b.program
     );
-  if (a.kind !== b.kind || a.machineCount !== b.machineCount) return false;
+  if (a.kind !== b.kind || a.machines !== b.machines) return false;
   if (a.kind === "sink" && b.kind === "sink") return a.sinkId === b.sinkId;
   if (a.kind === "fixed-producer" && b.kind === "fixed-producer")
     return a.producerId === b.producerId;
   if (a.kind === "extractor" && b.kind === "extractor")
-    return (
-      a.extractorId === b.extractorId &&
-      a.resourceId === b.resourceId &&
-      a.clockPercent === b.clockPercent
-    );
+    return a.extractorId === b.extractorId && a.resourceId === b.resourceId;
   return (
     a.kind === "manufacturing" &&
     b.kind === "manufacturing" &&
     a.machineId === b.machineId &&
-    a.recipeId === b.recipeId &&
-    a.clockPercent === b.clockPercent &&
-    a.sloopsUsed === b.sloopsUsed
+    a.recipeId === b.recipeId
   );
 }

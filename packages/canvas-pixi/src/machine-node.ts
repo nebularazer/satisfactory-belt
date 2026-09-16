@@ -112,7 +112,7 @@ export class MachineNodeView {
     if (display.sloops) {
       this.icon(display.sloops.iconId, 207, 240, 18);
       this.label(
-        `${display.sloops.used}/${display.sloops.slots}`,
+        display.sloops.used === null ? "Mixed" : `${display.sloops.used}/${display.sloops.slots}`,
         221,
         240,
         27,
