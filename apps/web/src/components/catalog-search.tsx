@@ -433,8 +433,12 @@ function SearchResults({
         >
           <ComboboxInput
             ref={inputRef}
+            type="search"
+            autoComplete="off"
+            inputMode="search"
+            enterKeyHint="search"
             showTrigger={false}
-            className="h-9 min-w-0 flex-1"
+            className="h-9 min-w-0 flex-1 [&_input::-webkit-search-cancel-button]:appearance-none"
             showClear={false}
             aria-haspopup="grid"
             aria-activedescendant={
