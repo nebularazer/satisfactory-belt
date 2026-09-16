@@ -232,22 +232,39 @@ it("aligns automatic interior bends while retaining off-grid port endpoint lanes
   expect(points.at(-1)).toEqual(end);
   orthogonal(points);
   for (const p of points.slice(1, -1)) {
-    expect(p.x % 16).toBe(0);
+    expect(Math.abs(p.x % 16)).toBe(0);
     expect(p.y === start.y || p.y === end.y || p.y % 16 === 0).toBe(true);
   }
 });
 
-it("keeps a narrow off-grid corridor instead of taking a long grid detour", () => {
+it("routes around a corridor too narrow for full node clearance", () => {
   const points = routeLink({ x: 0, y: 120 }, { x: 560, y: 280 }, [
     { x: 160, y: 0, width: 96, height: 224 },
     { x: 280, y: 160, width: 96, height: 224 },
   ]);
   orthogonal(points);
-  expect(points.some((p) => p.x === 268)).toBe(true);
+  expect(points.some((p) => p.x > 256 && p.x < 280)).toBe(false);
 });
 
 it("retains deliberately off-grid manual guides", () => {
   const points = routeLink(source, target, [], [{ axis: "x", position: 333 }]);
   expect(points.some((p) => p.x === 333)).toBe(true);
   orthogonal(points);
+});
+
+it("does not squeeze a vertical link between closely spaced, staggered endpoint nodes", () => {
+  const source = { x: 256, y: 288 },
+    target = { x: 272, y: 128 };
+  const points = routeLink(source, target, [
+    { x: 0, y: 144, width: 256, height: 256 },
+    { x: 272, y: 0, width: 256, height: 256 },
+  ]);
+  expect(points[0]).toEqual(source);
+  expect(points.at(-1)).toEqual(target);
+  orthogonal(points);
+  for (const p of points.slice(1, -1)) {
+    expect(p.x > 256 && p.x < 272).toBe(false);
+    expect(Math.abs(p.x % 16)).toBe(0);
+  }
+  expect(points.some((p) => p.x <= -16 || p.x >= 544)).toBe(true);
 });

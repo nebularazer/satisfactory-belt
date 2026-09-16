@@ -1,6 +1,7 @@
 import {
   CanvasController,
   GRID_SIZE,
+  SNAP_SIZE,
   snapToGrid,
   routeLink,
   routeBounds,
@@ -193,10 +194,10 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
         (!link.guides &&
           changed.some((box) =>
             intersects(routeBounds(cached.points), {
-              x: box.x - 12,
-              y: box.y - 12,
-              width: box.width + 24,
-              height: box.height + 24,
+              x: box.x - SNAP_SIZE,
+              y: box.y - SNAP_SIZE,
+              width: box.width + SNAP_SIZE * 2,
+              height: box.height + SNAP_SIZE * 2,
             }),
           ));
       next.set(

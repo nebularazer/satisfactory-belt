@@ -189,8 +189,8 @@ export function routeLink(
   const start = { x: Math.ceil(rawStart.x / SNAP_SIZE) * SNAP_SIZE, y: source.y };
   const end = { x: Math.floor(rawEnd.x / SNAP_SIZE) * SNAP_SIZE, y: target.y };
   // Close neighbors may have no grid lane between their ports.
-  if (source.x < target.x && start.x >= end.x) return original;
-  const clearance = Math.min(12, Math.abs(rawStart.x - source.x));
+  if (source.y === target.y && source.x < target.x && start.x >= end.x) return original;
+  const clearance = SNAP_SIZE;
   const boxes = obstacles.map((box) => ({
     x: box.x - clearance,
     y: box.y - clearance,
@@ -206,10 +206,7 @@ export function routeLink(
     path.slice(1).every((p, i) => boxes.every((box) => !blocked(path[i]!, p, box)));
   const interior = clear(snapped) ? snapped : shortestDetour(start, end, boxes, true);
   if (!interior) return original;
-  const candidate = [source, ...clean(interior), target];
-  // Prefer a small grid detour, but keep narrow off-grid corridors when snapping
-  // would force a long route around the outside of neighboring nodes.
-  return cost(candidate) <= cost(original) + SNAP_SIZE * 2 ? candidate : original;
+  return [source, ...clean(interior), target];
 }
 
 /** Orthogonal routing through obstacle-edge corridors; explicit guides retain user control. */
@@ -219,7 +216,8 @@ function routeUnsnapped(
   obstacles: readonly Bounds[] = [],
   guides?: readonly RouteGuide[],
 ): readonly Point[] {
-  const stub = source.x < target.x ? Math.min(STUB, (target.x - source.x) / 3) : STUB;
+  const stub =
+    source.y === target.y && source.x < target.x ? Math.min(STUB, (target.x - source.x) / 3) : STUB;
   const start = { x: source.x + stub, y: source.y },
     end = { x: target.x - stub, y: target.y };
   if (guides?.length) {
@@ -264,7 +262,7 @@ function routeUnsnapped(
           { x: end.x, y: Math.min(source.y, target.y) - STUB * 2 },
           end,
         ];
-  const clearance = Math.min(12, stub);
+  const clearance = SNAP_SIZE;
   const boxes = obstacles.map((b) => ({
     x: b.x - clearance,
     y: b.y - clearance,
