@@ -47,7 +47,7 @@ export function CatalogSearch({
   onOpenChange: (open: boolean) => void;
   finalFocus: () => HTMLElement | null;
   onAdd?: (entry: SearchEntry, scope?: SearchScope) => void;
-  /** Eligibility from a future material-link resolver; immutable snapshot of SearchEntry IDs. */
+  /** Eligibility from the material-link resolver; immutable snapshot of SearchEntry IDs. */
   allowedEntryIds?: ReadonlySet<string>;
 }) {
   const fullIndex = useMemo(() => createSearchIndex(assets.catalog), [assets.catalog]);
@@ -62,6 +62,7 @@ export function CatalogSearch({
   }));
   const [frame, setFrame] = useState<Frame>(emptyFrame);
   const [parent, setParent] = useState<Frame | null>(null);
+  const [placementError, setPlacementError] = useState<string | null>(null);
   const [detailEntry, setSelected] = useState<SearchEntry | null>(null);
   const selected =
     detailEntry && index.some((entry) => entry.id === detailEntry.id) ? detailEntry : null;
@@ -99,8 +100,17 @@ export function CatalogSearch({
       setFrame({ ...emptyFrame(), scope: { kind: entry.kind, id: entry.entityId } });
       restoreInputFocus.current = !narrow || document.activeElement === input.current;
     } else if (onAdd) {
+      place(entry);
+    }
+  }
+  function place(entry: SearchEntry) {
+    if (!onAdd || (allowedEntryIds && !allowedEntryIds.has(entry.id))) return;
+    try {
       onAdd(entry, frame.scope);
+      setPlacementError(null);
       changeOpen(false);
+    } catch (error) {
+      setPlacementError(error instanceof Error ? error.message : "Unable to place this node.");
     }
   }
   function showDetails(entry: SearchEntry, offset: number) {
@@ -109,6 +119,12 @@ export function CatalogSearch({
     setSelected(entry);
   }
   function showAlternative(entry: SearchEntry) {
+    if (allowedEntryIds && !allowedEntryIds.has(entry.id)) return;
+    setPlacementError(null);
+    if (selected?.kind === "machine" || selected?.kind === "extractor") {
+      setParent(frame);
+      setFrame({ ...emptyFrame(), scope: { kind: selected.kind, id: selected.entityId } });
+    }
     setSelected(entry);
   }
   useEffect(() => {
@@ -123,6 +139,7 @@ export function CatalogSearch({
     restoreInputFocus.current ||= !narrow;
   }
   function changeOpen(next: boolean) {
+    setPlacementError(null);
     if (!next) {
       setSelected(null);
       if (parent) {
@@ -157,7 +174,9 @@ export function CatalogSearch({
       ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
     ) {
       const buttons = Array.from(
-        detailPanel.current?.querySelectorAll<HTMLButtonElement>("[data-catalog-related]") ?? [],
+        detailPanel.current?.querySelectorAll<HTMLButtonElement>(
+          "[data-catalog-related]:not(:disabled):not([aria-disabled='true'])",
+        ) ?? [],
       );
       if (buttons.length) {
         event.preventDefault();
@@ -228,11 +247,18 @@ export function CatalogSearch({
           </DrawerClose>
         )}
       </div>
+      {placementError && (
+        <p role="alert" className="shrink-0 px-4 pb-3 text-sm text-destructive">
+          {placementError}
+        </p>
+      )}
       {selected && (
         <CatalogSearchDetails
           key={selected.id}
           entry={selected}
-          index={index}
+          index={fullIndex}
+          allowedEntryIds={allowedEntryIds}
+          onPlace={onAdd ? place : undefined}
           onDetails={showAlternative}
           panelRef={detailPanel}
           assets={assets}
@@ -249,6 +275,7 @@ export function CatalogSearch({
           onChoose={choose}
           onDetails={showDetails}
           canAdd={Boolean(onAdd)}
+          restricted={allowedEntryIds !== undefined}
           inputRef={input}
           restoreInputFocus={restoreInputFocus}
           compact={compact}
@@ -292,6 +319,7 @@ function SearchResults({
   onChoose,
   onDetails,
   canAdd,
+  restricted,
   inputRef,
   restoreInputFocus,
   compact,
@@ -304,6 +332,7 @@ function SearchResults({
   onChoose: (entry: SearchEntry, offset: number) => void;
   onDetails: (entry: SearchEntry, offset: number) => void;
   canAdd: boolean;
+  restricted: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
   restoreInputFocus: React.RefObject<boolean>;
   compact: boolean;
@@ -570,8 +599,12 @@ function SearchResults({
       </ScrollArea>
       {results.length === 0 && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-6 text-center">
-          <p>No matches found</p>
-          <p className="text-sm text-muted-foreground">Try another name or reset the filters.</p>
+          <p>{restricted ? "No compatible choices found" : "No matches found"}</p>
+          <p className="text-sm text-muted-foreground">
+            {restricted
+              ? "Try another name or reset filters. Only choices that support this connection are available."
+              : "Try another name or reset the filters."}
+          </p>
           <Button variant="outline" onClick={() => update({ query: "", category: "all" })}>
             Reset search
           </Button>

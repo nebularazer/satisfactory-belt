@@ -812,3 +812,28 @@ it("adds and connects the first valid logistics port atomically, rejecting stale
   ).toThrow("no longer supports");
   expect(editor.history.getSnapshot().state).toBe(after);
 });
+
+it("filters consumers and producers by configured material and transport before atomic placement", () => {
+  const { catalog } = createTestEditor();
+  catalog.items.fluid = { ...catalog.items.Desc_WAT1_C!, id: "fluid", form: "liquid", unit: "m3" };
+  catalog.recipes.Consumer = {
+    ...catalog.recipes.Recipe!,
+    id: "Consumer",
+    ingredients: [{ itemId: "Desc_WAT1_C", amount: 1 }],
+    products: [{ itemId: "fluid", amount: 1 }],
+  };
+  const producer = { kind: "manufacturing" as const, recipeId: "Recipe", machineId: "Machine" };
+  const consumer = { ...producer, recipeId: "Consumer" };
+  const editor = createFactoryEditor(catalog, []);
+  const a = editor.placeNode(producer, { x: 0, y: 0 });
+  const source = { nodeId: a.id, portKey: "output:Desc_WAT1_C" };
+  expect(editor.canPlace(producer, source)).toBe(false);
+  expect(editor.canPlace(consumer, source)).toBe(true);
+  const b = editor.placeNode(consumer, { x: 400, y: 0 }, source);
+  const input = { nodeId: b.id, portKey: "input:Desc_WAT1_C" };
+  expect(editor.canPlace(producer, input)).toBe(true);
+  expect(editor.canPlace(consumer, input)).toBe(false);
+  editor.placeNode(producer, { x: -400, y: 0 }, input);
+  expect(editor.history.getSnapshot().state.links.at(-1)?.input).toEqual(input);
+  expect(editor.canPlace(consumer, { nodeId: b.id, portKey: "output:fluid" })).toBe(false);
+});

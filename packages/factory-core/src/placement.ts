@@ -5,6 +5,7 @@ import { resolveFactoryNode } from "./index";
 import type { FactoryNode } from "./index";
 import { createConnectionIndex } from "./links";
 import type { MaterialLink } from "./links";
+import { getPortCompatibility } from "./ports";
 import type { SemanticPort } from "./ports";
 import { resolveSemanticPorts } from "./semantic-ports";
 
@@ -44,6 +45,11 @@ export function firstPlacementConnection(
   node: FactoryNode,
 ) {
   const candidates = resolveSemanticPorts(node, catalog);
+  const anchor = ports.find(
+    (port) => port.nodeId === source.nodeId && port.portKey === source.portKey,
+  );
+  if (!candidates.some((candidate) => getPortCompatibility(anchor, candidate).compatible))
+    return null;
   const index = createConnectionIndex([...ports, ...candidates], links);
   for (const candidate of candidates) {
     const result = index.compatibility(source, candidate);

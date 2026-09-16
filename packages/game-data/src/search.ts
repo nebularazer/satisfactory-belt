@@ -33,7 +33,7 @@ export type SearchOptions = Readonly<{
   /**
    * Optional eligibility boundary, applied before ranking (including typo fallback).
    * IDs are SearchEntry.id, not entityId. Omitted means unrestricted; empty means no results.
-   * The future material-link resolver owns compatibility rules and includes eligible parent
+   * The material-link resolver owns compatibility rules and includes eligible parent
    * buildings and recipe/resource choices. Replace the set when eligibility changes.
    */
   allowedEntryIds?: ReadonlySet<string>;

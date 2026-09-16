@@ -83,6 +83,8 @@ export function CatalogSearchDetails({
   machineId,
   index,
   onDetails,
+  onPlace,
+  allowedEntryIds,
   panelRef,
 }: {
   entry: SearchEntry;
@@ -90,6 +92,8 @@ export function CatalogSearchDetails({
   machineId?: string;
   index: readonly SearchEntry[];
   onDetails: (entry: SearchEntry) => void;
+  onPlace?: (entry: SearchEntry) => void;
+  allowedEntryIds?: ReadonlySet<string>;
   panelRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const { catalog } = assets;
@@ -201,6 +205,7 @@ export function CatalogSearchDetails({
               {related.length ? (
                 <ul className="space-y-1 px-4 pb-4">
                   {related.map((candidate) => {
+                    const disabled = Boolean(allowedEntryIds && !allowedEntryIds.has(candidate.id));
                     const comparison = recipe
                       ? compareRecipes(catalog, recipe.id, candidate.entityId, recipeMachineId)
                       : undefined;
@@ -211,6 +216,7 @@ export function CatalogSearchDetails({
                       >
                         <Button
                           variant="ghost"
+                          disabled={disabled}
                           data-catalog-related=""
                           className="absolute inset-0 h-full w-full rounded-md hover:bg-accent focus-visible:border-transparent focus-visible:bg-accent focus-visible:ring-0"
                           aria-label={`Details for ${candidate.name}`}
@@ -225,6 +231,9 @@ export function CatalogSearchDetails({
                             </span>
                             <span className="block whitespace-normal text-xs font-normal text-muted-foreground">
                               {candidate.subtitle}
+                              {disabled && (
+                                <span className="block">Doesn’t support this connection</span>
+                              )}
                             </span>
                           </span>
                         </div>
@@ -232,6 +241,7 @@ export function CatalogSearchDetails({
                           <span className="pointer-events-none relative ml-13 mr-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 pb-2 text-xs font-normal tabular-nums text-muted-foreground">
                             <ComparisonMetric
                               kind="machines"
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                               value={comparison.machines}
                               baseline={1}
@@ -239,6 +249,7 @@ export function CatalogSearchDetails({
                             <span aria-hidden="true">·</span>
                             <ComparisonMetric
                               kind="power"
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                               value={comparison.powerMegawatts}
                               baseline={comparison.baselinePowerMegawatts}
@@ -246,6 +257,7 @@ export function CatalogSearchDetails({
                             <span aria-hidden="true">·</span>
                             <ComparisonMetric
                               kind="inputs"
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                               value={comparison.inputTypes}
                               baseline={comparison.baselineInputTypes}
@@ -253,6 +265,7 @@ export function CatalogSearchDetails({
                             <AdditionalRecipeMetrics
                               comparison={comparison}
                               assets={assets}
+                              disabled={disabled}
                               onSelect={() => onDetails(candidate)}
                             />
                           </span>
@@ -267,6 +280,17 @@ export function CatalogSearchDetails({
             </ScrollArea>
           </section>
         )}
+        {onPlace && entry.kind !== "machine" && entry.kind !== "extractor" && (
+          <div className="shrink-0 border-t px-4 py-3">
+            <Button
+              className="w-full"
+              disabled={Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id))}
+              onClick={() => onPlace(entry)}
+            >
+              <PlusIcon aria-hidden="true" /> Place {entry.name}
+            </Button>
+          </div>
+        )}
         <p className="hidden shrink-0 border-t px-4 py-2 text-xs text-muted-foreground sm:block">
           ↑ ↓ Navigate · Enter Open · Alt+← Back · Esc Close
         </p>
@@ -280,11 +304,13 @@ function ComparisonMetric({
   value,
   baseline,
   onSelect,
+  disabled,
 }: {
   kind: "machines" | "power" | "inputs";
   value: number | null;
   baseline: number | null;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
   // Compare at the displayed precision so visually equal values receive the same color.
   const difference =
@@ -312,10 +338,11 @@ function ComparisonMetric({
   return (
     <Tooltip disableHoverablePopup>
       <TooltipTrigger
-        render={<button type="button" aria-label={description} />}
+        render={<button type="button" disabled={disabled} aria-label={description} />}
         className="pointer-events-auto inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={description}
-        onClick={onSelect}
+        disabled={disabled}
+        onClick={disabled ? undefined : onSelect}
       >
         {kind === "machines" ? (
           <FactoryIcon aria-hidden="true" className="size-3.5" />
@@ -337,10 +364,12 @@ function AdditionalRecipeMetrics({
   comparison,
   assets,
   onSelect,
+  disabled,
 }: {
   comparison: RecipeComparison;
   assets: GameAssets;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
   const { fluidInputIds, byproducts, removedInputIds, addedInputIds } = comparison;
   const names = (ids: readonly string[]) =>
@@ -351,9 +380,10 @@ function AdditionalRecipeMetrics({
         <span aria-hidden="true">·</span>
         <Tooltip disableHoverablePopup>
           <TooltipTrigger
-            render={<button type="button" aria-label={description} />}
+            render={<button type="button" disabled={disabled} aria-label={description} />}
             aria-label={description}
-            onClick={onSelect}
+            disabled={disabled}
+            onClick={disabled ? undefined : onSelect}
             className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {children}
