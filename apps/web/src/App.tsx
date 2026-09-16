@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { KeyboardEvent } from "react";
 
 import { CatalogSearch } from "@/components/catalog-search";
+import { Inspector } from "@/components/inspector";
 import { PerformanceBar } from "@/components/performance-bar";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -134,6 +135,7 @@ function CanvasWorkspace({
       }),
     [controller],
   );
+  const focusCanvas = useCallback(() => view.current?.focus(), []);
   const openAdd = useCallback(() => controller.openCatalogAtCenter(), [controller]);
   const placeResult = useCallback(
     (entry: SearchEntry, scope?: SearchScope) => {
@@ -393,62 +395,65 @@ function CanvasWorkspace({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] flex items-center gap-2">
-        <ButtonGroup aria-label="Zoom controls" className="rounded-lg bg-background shadow-sm">
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Zoom out"
-            title="Zoom out (−)"
-            disabled={zoom <= MIN_ZOOM}
-            onClick={controlZoomOut}
-          >
-            <MinusIcon />
-          </Button>
-          <Button
-            variant="outline"
-            className="tabular-nums"
-            aria-label={`Zoom ${Math.round(zoom * 100)}%. Restore 100%`}
-            title="Restore 100%"
-            onClick={actualSize}
-          >
-            {Math.round(zoom * 100)}%
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Zoom in"
-            title="Zoom in (+)"
-            disabled={zoom >= MAX_ZOOM}
-            onClick={controlZoomIn}
-          >
-            <PlusIcon />
-          </Button>
-        </ButtonGroup>
-        <ButtonGroup aria-label="History controls" className="rounded-lg bg-background shadow-sm">
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Undo"
-            title="Undo (Ctrl/Cmd+Z)"
-            disabled={!canUndo}
-            onClick={undo}
-          >
-            <Undo2Icon />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Redo"
-            title="Redo (Ctrl/Cmd+Shift+Z)"
-            disabled={!canRedo}
-            onClick={redo}
-          >
-            <Redo2Icon />
-          </Button>
-        </ButtonGroup>
+      <div className="pointer-events-none absolute right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] flex flex-col gap-3">
+        {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
+        <div className="pointer-events-auto flex w-fit items-center gap-2">
+          <ButtonGroup aria-label="Zoom controls" className="rounded-lg bg-background shadow-sm">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Zoom out"
+              title="Zoom out (−)"
+              disabled={zoom <= MIN_ZOOM}
+              onClick={controlZoomOut}
+            >
+              <MinusIcon />
+            </Button>
+            <Button
+              variant="outline"
+              className="tabular-nums"
+              aria-label={`Zoom ${Math.round(zoom * 100)}%. Restore 100%`}
+              title="Restore 100%"
+              onClick={actualSize}
+            >
+              {Math.round(zoom * 100)}%
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Zoom in"
+              title="Zoom in (+)"
+              disabled={zoom >= MAX_ZOOM}
+              onClick={controlZoomIn}
+            >
+              <PlusIcon />
+            </Button>
+          </ButtonGroup>
+          <ButtonGroup aria-label="History controls" className="rounded-lg bg-background shadow-sm">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Undo"
+              title="Undo (Ctrl/Cmd+Z)"
+              disabled={!canUndo}
+              onClick={undo}
+            >
+              <Undo2Icon />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Redo"
+              title="Redo (Ctrl/Cmd+Shift+Z)"
+              disabled={!canRedo}
+              onClick={redo}
+            >
+              <Redo2Icon />
+            </Button>
+          </ButtonGroup>
+        </div>
+        <Inspector editor={editor} focusCanvas={focusCanvas} />
       </div>
-      {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">
           Unable to start the canvas: {error}

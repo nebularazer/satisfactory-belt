@@ -9,7 +9,7 @@ export function PerformanceBar({ monitor }: { monitor: RenderPerformance }) {
   return (
     <aside
       aria-label="Canvas performance"
-      className="absolute bottom-[calc(max(1rem,env(safe-area-inset-bottom))+3rem)] left-1/2 flex h-8 -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-lg border bg-background px-3 text-xs text-muted-foreground shadow-sm tabular-nums lg:bottom-[max(1rem,env(safe-area-inset-bottom))]"
+      className="pointer-events-auto flex h-8 self-center sm:fixed sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+3rem)] sm:left-1/2 sm:-translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-lg border bg-background px-3 text-xs text-muted-foreground shadow-sm tabular-nums lg:bottom-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <span title="Actual canvas renders per second; zero when the canvas is idle">
         {rendersPerSecond} renders/s

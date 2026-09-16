@@ -4,6 +4,7 @@ import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { expect, it } from "vitest";
 
 import { createFactoryEditor } from "./factory-editor";
+import { inspectorSummary, inspectorTarget } from "./inspector";
 
 it("starts an explicitly empty document without requiring any demo recipes", () => {
   const catalog: GameCatalog = {
@@ -836,4 +837,45 @@ it("filters consumers and producers by configured material and transport before 
   editor.placeNode(producer, { x: -400, y: 0 }, input);
   expect(editor.history.getSnapshot().state.links.at(-1)?.input).toEqual(input);
   expect(editor.canPlace(consumer, { nodeId: b.id, portKey: "output:fluid" })).toBe(false);
+});
+
+it("inspects one grouped machine node, hides multi-selection, and follows delete/undo", () => {
+  const editor = createTestEditor();
+  const target = () => inspectorTarget(editor.controller.getSnapshot());
+  expect(target()).toBeNull();
+  editor.updateNodes((nodes) =>
+    nodes.map((node) => (node.kind === "manufacturing" ? { ...node, machineCount: 5 } : node)),
+  );
+  editor.controller.setSelection(new Set(["machine-1"]));
+  const selected = target();
+  expect(inspectorSummary(editor, selected)).toMatchObject({
+    title: "Recipe",
+    subtitle: "5× Assembler",
+  });
+  editor.controller.zoomTo(2);
+  expect(target()).toBe(selected);
+  editor.controller.setSelection(new Set(["machine-1", "machine-2"]));
+  expect(target()).toBeNull();
+  editor.controller.setSelection(new Set(["machine-1"]));
+  editor.deleteSelection();
+  expect(target()).toBeNull();
+  expect(inspectorSummary(editor, selected)).toBeNull();
+  editor.historyCommand("undo");
+  expect(inspectorSummary(editor, target())).toMatchObject({ subtitle: "5× Assembler" });
+});
+
+it("inspects a link's transport and endpoints and drops deleted links", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const link = editor.history.getSnapshot().state.links[0]!;
+  editor.controller.selectLink(link.id);
+  const target = inspectorTarget(editor.controller.getSnapshot());
+  expect(inspectorSummary(editor, target)).toEqual({
+    title: "Belt link",
+    subtitle: "Recipe (Somersloop) → Recipe (Somersloop)",
+    deleteLabel: "Delete link",
+  });
+  editor.deleteSelection();
+  expect(inspectorTarget(editor.controller.getSnapshot())).toBeNull();
+  expect(inspectorSummary(editor, target)).toBeNull();
 });
