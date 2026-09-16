@@ -137,6 +137,8 @@ export function CatalogSearchDetails({
   const part = entry.kind === "logistics" ? catalog.logistics[entry.entityId] : undefined;
   const resource = entry.kind === "resource" ? catalog.items[entry.entityId] : undefined;
   const extractor = entry.extractorId ? catalog.extractors[entry.extractorId] : undefined;
+  const buildingName =
+    machine?.name ?? extractor?.name ?? producer?.name ?? sink?.name ?? part?.name ?? entry.name;
   const description =
     producer?.description ?? sink?.description ?? part?.description ?? resource?.description;
   const hasRelated = Boolean(recipe || entry.kind === "machine" || entry.kind === "extractor");
@@ -185,7 +187,7 @@ export function CatalogSearchDetails({
               disabled={Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id))}
               onClick={() => onPlace(entry)}
             >
-              <PlusIcon aria-hidden="true" /> Place {entry.name}
+              <PlusIcon aria-hidden="true" /> Place {buildingName}
             </Button>
           </div>
         )}
