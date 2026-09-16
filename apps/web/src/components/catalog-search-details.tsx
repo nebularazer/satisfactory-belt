@@ -1,10 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-new-array-as-prop, react-perf/jsx-no-new-function-as-prop -- The virtual window bounds icons; fallback state changes only after image errors. */
 import type { Ingredient } from "@satisfactory-belt/game-data";
-import {
-  recipeSearchSummary,
-  recipeAlternatives,
-  compareRecipes,
-} from "@satisfactory-belt/game-data/search";
+import { recipeAlternatives, compareRecipes } from "@satisfactory-belt/game-data/search";
 import type { RecipeComparison, SearchEntry } from "@satisfactory-belt/game-data/search";
 import {
   ArrowLeftRightIcon,
@@ -148,31 +144,19 @@ export function CatalogSearchDetails({
   const hasRelated = Boolean(recipe || entry.kind === "machine" || entry.kind === "extractor");
   return (
     <TooltipProvider delay={700} closeDelay={0} timeout={0}>
-      <div ref={panelRef} className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea className={hasRelated ? "min-h-0 max-h-[50%] shrink-0" : "min-h-0 flex-1"}>
+      <div
+        ref={panelRef}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+      >
+        <div className="shrink-0">
           <div className="px-4 pb-4">
-            <div className="flex items-center gap-4">
-              <CatalogIcon iconId={entry.iconId} assets={assets} large />
-              <div className="min-w-0">
-                <div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
-                  <h3 className="text-lg font-semibold">{entry.name}</h3>
-                  {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
-                  {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {entry.kind === "recipe"
-                    ? recipeSearchSummary(catalog, entry.entityId, recipeMachineId)
-                    : entry.subtitle}
-                </p>
-              </div>
-            </div>
             {description && (
               <p className="mb-5 whitespace-pre-line text-sm text-muted-foreground">
                 {description}
               </p>
             )}
             {recipe && (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {quantities("Inputs", recipe.ingredients, cycles)}
                 {quantities("Outputs", recipe.products, cycles)}
               </div>
@@ -195,9 +179,20 @@ export function CatalogSearchDetails({
               </p>
             )}
           </div>
-        </ScrollArea>
+        </div>
+        {onPlace && entry.kind !== "machine" && entry.kind !== "extractor" && (
+          <div className="shrink-0 border-t px-4 py-3">
+            <Button
+              className="w-full"
+              disabled={Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id))}
+              onClick={() => onPlace(entry)}
+            >
+              <PlusIcon aria-hidden="true" /> Place {entry.name}
+            </Button>
+          </div>
+        )}
         {hasRelated && (
-          <section className="flex min-h-0 flex-1 flex-col border-t">
+          <section className="flex min-h-32 flex-1 flex-col border-t">
             <h4 className="shrink-0 px-4 pt-3 pb-2 text-sm font-medium">
               {recipe ? "Alternative recipes" : entry.kind === "machine" ? "Recipes" : "Resources"}
             </h4>
@@ -212,7 +207,11 @@ export function CatalogSearchDetails({
                     return (
                       <li
                         key={candidate.id}
-                        className="relative rounded-md has-[[data-catalog-related]:focus-visible]:bg-accent"
+                        className={
+                          disabled
+                            ? "relative rounded-md opacity-50 grayscale"
+                            : "relative rounded-md has-[[data-catalog-related]:focus-visible]:bg-accent"
+                        }
                       >
                         <Button
                           variant="ghost"
@@ -228,17 +227,19 @@ export function CatalogSearchDetails({
                             <span className="flex flex-wrap items-center gap-2">
                               <span>{candidate.name}</span>
                               {candidate.alternate && <Badge variant="secondary">Alternate</Badge>}
+                              {disabled && (
+                                <Badge variant="outline" title="Doesn’t support this connection">
+                                  Incompatible
+                                </Badge>
+                              )}
                             </span>
                             <span className="block whitespace-normal text-xs font-normal text-muted-foreground">
                               {candidate.subtitle}
-                              {disabled && (
-                                <span className="block">Doesn’t support this connection</span>
-                              )}
                             </span>
                           </span>
                         </div>
                         {comparison && (
-                          <span className="pointer-events-none relative ml-13 mr-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 pb-2 text-xs font-normal tabular-nums text-muted-foreground">
+                          <span className="pointer-events-none relative ml-13 mr-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pb-2 text-xs font-normal tabular-nums text-muted-foreground">
                             <ComparisonMetric
                               kind="machines"
                               disabled={disabled}
@@ -246,7 +247,6 @@ export function CatalogSearchDetails({
                               value={comparison.machines}
                               baseline={1}
                             />
-                            <span aria-hidden="true">·</span>
                             <ComparisonMetric
                               kind="power"
                               disabled={disabled}
@@ -254,7 +254,6 @@ export function CatalogSearchDetails({
                               value={comparison.powerMegawatts}
                               baseline={comparison.baselinePowerMegawatts}
                             />
-                            <span aria-hidden="true">·</span>
                             <ComparisonMetric
                               kind="inputs"
                               disabled={disabled}
@@ -279,17 +278,6 @@ export function CatalogSearchDetails({
               )}
             </ScrollArea>
           </section>
-        )}
-        {onPlace && entry.kind !== "machine" && entry.kind !== "extractor" && (
-          <div className="shrink-0 border-t px-4 py-3">
-            <Button
-              className="w-full"
-              disabled={Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id))}
-              onClick={() => onPlace(entry)}
-            >
-              <PlusIcon aria-hidden="true" /> Place {entry.name}
-            </Button>
-          </div>
         )}
         <p className="hidden shrink-0 border-t px-4 py-2 text-xs text-muted-foreground sm:block">
           ↑ ↓ Navigate · Enter Open · Alt+← Back · Esc Close
@@ -377,7 +365,6 @@ function AdditionalRecipeMetrics({
   function indicator(description: string, children: React.ReactNode) {
     return (
       <span className="inline-flex max-w-full items-center gap-2">
-        <span aria-hidden="true">·</span>
         <Tooltip disableHoverablePopup>
           <TooltipTrigger
             render={<button type="button" disabled={disabled} aria-label={description} />}

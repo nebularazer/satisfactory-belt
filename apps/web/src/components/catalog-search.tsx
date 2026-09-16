@@ -1,6 +1,10 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- The virtualized combobox popup uses a grid with independent row actions; absolute positioning requires div/span rows and cells. */
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-object-as-prop -- Search owns local UI state; only the bounded virtual window renders rows. */
-import { createSearchIndex, searchCatalog } from "@satisfactory-belt/game-data/search";
+import {
+  createSearchIndex,
+  searchCatalog,
+  recipeSearchSummary,
+} from "@satisfactory-belt/game-data/search";
 import type { SearchEntry, SearchOptions, SearchScope } from "@satisfactory-belt/game-data/search";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowLeftIcon, SearchIcon, XIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
@@ -212,10 +216,21 @@ export function CatalogSearch({
         ? assets.catalog.extractors[frame.scope.id]?.name
         : null;
   const title = selected
-    ? "Details"
+    ? selected.name
     : scopeName
       ? `${scopeName} · ${frame.scope?.kind === "machine" ? "Recipes" : "Resources"}`
       : "Search catalog";
+  const selectedMachineId =
+    selected?.kind === "recipe"
+      ? frame.scope?.kind === "machine" && selected.machineIds.includes(frame.scope.id)
+        ? frame.scope.id
+        : selected.machineIds[0]
+      : undefined;
+  const subtitle = selected
+    ? selected.kind === "recipe"
+      ? recipeSearchSummary(assets.catalog, selected.entityId, selectedMachineId)
+      : selected.subtitle
+    : "Buildings, recipes, and alternatives";
   const content = (
     <>
       <div
@@ -228,14 +243,19 @@ export function CatalogSearch({
             <ArrowLeftIcon />
           </Button>
         )}
+        {selected && <CatalogIcon iconId={selected.iconId} assets={assets} />}
         <div className="min-w-0 flex-1 space-y-1.5">
-          {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
+          <div className="flex flex-wrap items-center gap-2">
+            {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
+            {selected?.alternate && <Badge variant="secondary">Alternate</Badge>}
+            {selected && selected.events.length > 0 && <Badge variant="outline">Event</Badge>}
+          </div>
           {narrow ? (
-            <DrawerDescription className={compact ? "sr-only" : undefined}>
-              Buildings, recipes, and alternatives
+            <DrawerDescription className={compact && !selected ? "sr-only" : undefined}>
+              {subtitle}
             </DrawerDescription>
           ) : (
-            <DialogDescription>Buildings, recipes, and alternatives</DialogDescription>
+            <DialogDescription>{subtitle}</DialogDescription>
           )}
         </div>
         {narrow && (
