@@ -245,7 +245,7 @@ function CanvasWorkspace({
         )
           return;
         if (
-          event.key.toLowerCase() === "a" &&
+          event.key.toLowerCase() === "n" &&
           !event.ctrlKey &&
           !event.metaKey &&
           !event.altKey &&
@@ -316,11 +316,11 @@ function CanvasWorkspace({
             finalFocus={searchOpen ? false : canvasFocus}
           >
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={openAdd} aria-keyshortcuts="a">
+              <DropdownMenuItem onClick={openAdd} aria-keyshortcuts="n">
                 <PlusIcon className="text-muted-foreground" />
-                Add
+                Add building
                 <DropdownMenuShortcut className="min-w-6 text-right tracking-normal">
-                  A
+                  N
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={reset}>
