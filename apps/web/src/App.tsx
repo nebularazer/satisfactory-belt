@@ -29,7 +29,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { KeyboardEvent } from "react";
 
 import { PerformanceBar } from "@/components/performance-bar";
-import { PortChooser } from "@/components/port-chooser";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -98,8 +97,11 @@ function CanvasWorkspace({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<CanvasView | null>(null);
-  const [{ controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay }] =
-    useState(() => createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)));
+  const [editor] = useState(() =>
+    createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)),
+  );
+  const { controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay } =
+    editor;
   const { canUndo, canRedo } = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [performanceMonitor, setPerformanceMonitor] = useState<RenderPerformance | null>(null);
@@ -368,7 +370,6 @@ function CanvasWorkspace({
           </Button>
         </ButtonGroup>
       </div>
-      <PortChooser controller={controller} getDisplay={getDisplay} assets={assets} />
       {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">

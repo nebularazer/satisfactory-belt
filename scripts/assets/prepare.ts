@@ -69,6 +69,7 @@ Setup and scope: docs/asset-extraction.md`);
     ...Object.values(catalog.fixedProducers),
     ...Object.values(catalog.extractors),
     ...Object.values(catalog.logistics),
+    ...Object.values(catalog.sinks),
   ];
   const needed = new Set(entities.map((entry) => entry.iconId));
   const byDescriptor = new Map(sourceIcons.map((icon) => [icon.className, icon]));

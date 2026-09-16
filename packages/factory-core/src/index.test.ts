@@ -61,6 +61,7 @@ function fixture() {
     schemaVersion: 1,
     extractors: {},
     logistics: {},
+    sinks: {},
     source: { locale: "en", docsSha256: "a".repeat(64) },
     items: Object.fromEntries(
       ["Iron", "Screw", "Plate", "Water", "Desc_WAT1_C"].map((id) => [
@@ -70,6 +71,7 @@ function fixture() {
           name: id,
           description: "",
           form: "solid",
+          sinkable: false,
           unit: "item",
           iconId: `${id}-icon`,
         },
@@ -309,3 +311,66 @@ it("resolves extraction as a single resource output with machine power, clock an
     "Missing extractor",
   );
 });
+
+it("projects a grouped Sink as one terminal belt input with aggregate power", () => {
+  const { catalog } = fixture();
+  catalog.sinks.sink = {
+    id: "sink",
+    descriptorId: "desc",
+    iconId: "sink-icon",
+    name: "AWESOME Sink",
+    description: "",
+    powerMegawatts: 30,
+  };
+  const node = {
+    id: "sink-node",
+    kind: "sink",
+    sinkId: "sink",
+    machineCount: 2,
+    x: 0,
+    y: 0,
+  } as const;
+  const display = resolveFactoryNode(node, catalog);
+  expect(display).toMatchObject({
+    layout: "machine",
+    powerLabel: "60 MW",
+    clockLabel: null,
+    sloops: null,
+    machineIconId: "sink-icon",
+  });
+  expect(display.ports).toHaveLength(1);
+  expect(display.ports[0]).toMatchObject({
+    key: "input:0",
+    direction: "input",
+    itemId: null,
+    transport: "belt",
+  });
+  expect(() => resolveFactoryNode({ ...node, sinkId: "missing" }, catalog)).toThrow(
+    "Missing AWESOME Sink",
+  );
+});
+
+it.each(["smart-splitter", "programmable-splitter"] as const)(
+  "projects %s with one input and three stable outputs",
+  (kind) => {
+    const { catalog } = fixture();
+    catalog.logistics.part = {
+      id: "part",
+      descriptorId: "desc",
+      iconId: "icon",
+      name: kind,
+      description: "",
+      kind,
+    };
+    const display = resolveFactoryNode(
+      { kind: "logistics", id: "node", partId: "part", x: 0, y: 0 },
+      catalog,
+    );
+    expect(display.ports.map((port) => port.key)).toEqual([
+      "input:0",
+      "output:0",
+      "output:1",
+      "output:2",
+    ]);
+  },
+);
