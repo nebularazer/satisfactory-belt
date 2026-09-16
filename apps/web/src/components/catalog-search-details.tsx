@@ -36,7 +36,7 @@ export function CatalogIcon({
   const icon = assets.icons.icons[iconId];
   const sizes = size === 64 ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
   const sources = icon
-    ? sizes.map((size) => new URL(icon.variants[size].path, assets.baseUrl).href)
+    ? sizes.map((variantSize) => new URL(icon.variants[variantSize].path, assets.baseUrl).href)
     : [];
   // Reset failed-image state when the requested asset changes (including hot reloads).
   return <CatalogImage key={sources.join("|")} sources={sources} size={size} />;
