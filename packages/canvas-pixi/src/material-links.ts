@@ -18,11 +18,13 @@ function toward(a: Point, b: Point, amount: number): Point {
 export function drawMaterialLinks(
   lines: Graphics,
   handles: Graphics,
+  endpointLeads: Graphics,
   snapshot: CanvasSnapshot,
   palette: CanvasPalette,
 ) {
   lines.clear();
   handles.clear();
+  endpointLeads.clear();
   const { camera, viewport, links, linkSelection } = snapshot;
   const preview = snapshot.connectionPreview;
   const rendered = preview ? [...links, { id: null, points: preview }] : links;
@@ -55,6 +57,19 @@ export function drawMaterialLinks(
     }
     const end = points.at(-1)!;
     lines.lineTo(end.x, end.y).stroke({ color, width: selected ? 3 : 2 });
+    // Cards sit above the main link layer. Redraw only the short port leads above
+    // cards so every connection visibly reaches its endpoint without covering card
+    // content along the rest of the route.
+    if (points.length > 1) {
+      endpointLeads
+        .moveTo(points[0]!.x, points[0]!.y)
+        .lineTo(points[1]!.x, points[1]!.y)
+        .stroke({ color, width: selected ? 3 : 2 });
+      endpointLeads
+        .moveTo(points.at(-2)!.x, points.at(-2)!.y)
+        .lineTo(end.x, end.y)
+        .stroke({ color, width: selected ? 3 : 2 });
+    }
     if (!selected || link.id === null) continue;
     for (const handle of linkHandles(link)) {
       const p = worldToScreen(handle, camera);

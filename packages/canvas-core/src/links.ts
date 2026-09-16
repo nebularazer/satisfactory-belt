@@ -166,7 +166,10 @@ function shortestDetour(
         distance,
         bends,
         previous: current,
-        estimate: distance + Math.abs(b.x - end.x) + Math.abs(b.y - end.y),
+        // A small bend penalty keeps routes from making unnecessary hairpins when
+        // two corridors have nearly identical lengths.
+        estimate:
+          distance + Math.abs(b.x - end.x) + Math.abs(b.y - end.y) + bends * (SNAP_SIZE / 2),
       };
       best.set(key, entry);
       push(entry);

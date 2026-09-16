@@ -91,9 +91,17 @@ export async function mountCanvas(
   const grid = createGrid(palette.grid);
   const linksLayer = new Graphics();
   const linkHandlesLayer = new Graphics();
+  const linkEndpointLayer = new Graphics();
   const itemsLayer = new Container();
   const overlay = new Graphics();
-  app.stage.addChild(grid.view, linksLayer, linkHandlesLayer, itemsLayer, overlay);
+  app.stage.addChild(
+    grid.view,
+    linksLayer,
+    linkHandlesLayer,
+    itemsLayer,
+    linkEndpointLayer,
+    overlay,
+  );
   const views = new Map<string, MachineNodeView>();
   const icons = new IconCache(options.iconManifest, options.assetBaseUrl, invalidate);
   let previousItems: readonly CanvasItem[] | null = null;
@@ -119,7 +127,7 @@ export async function mountCanvas(
     const { camera, viewport, selection, dragOffset, items, marquee } = snapshot;
     if (grid.view.visible) grid.update(camera, viewport, resolution);
     overlay.clear();
-    drawMaterialLinks(linksLayer, linkHandlesLayer, snapshot, palette);
+    drawMaterialLinks(linksLayer, linkHandlesLayer, linkEndpointLayer, snapshot, palette);
     if (items !== previousItems) {
       const ids = new Set(items.map((item) => item.id));
       for (const [id, view] of views) {
