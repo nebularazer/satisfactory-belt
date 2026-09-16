@@ -244,7 +244,7 @@ export function CatalogSearch({
           </Button>
         )}
         {selected && <CatalogIcon iconId={selected.iconId} assets={assets} />}
-        <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex flex-wrap items-center gap-2">
             {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
             {selected?.alternate && <Badge variant="secondary">Alternate</Badge>}

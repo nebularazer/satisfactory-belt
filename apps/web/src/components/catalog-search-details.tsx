@@ -27,23 +27,19 @@ const number = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
 export function CatalogIcon({
   iconId,
   assets,
-  large = false,
-  small = false,
+  size = 32,
 }: {
   iconId: string;
   assets: GameAssets;
-  large?: boolean;
-  small?: boolean;
+  size?: 16 | 24 | 32 | 64;
 }) {
   const icon = assets.icons.icons[iconId];
-  const sizes = large ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
+  const sizes = size === 64 ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
   const sources = icon
     ? sizes.map((size) => new URL(icon.variants[size].path, assets.baseUrl).href)
     : [];
   // Reset failed-image state when the requested asset changes (including hot reloads).
-  return (
-    <CatalogImage key={sources.join("|")} sources={sources} size={large ? 64 : small ? 16 : 32} />
-  );
+  return <CatalogImage key={sources.join("|")} sources={sources} size={size} />;
 }
 
 function CatalogImage({ sources, size }: { sources: readonly string[]; size: number }) {
@@ -54,7 +50,9 @@ function CatalogImage({ sources, size }: { sources: readonly string[]; size: num
       ? "size-16 shrink-0 object-contain"
       : size === 16
         ? "size-4 shrink-0 object-contain"
-        : "size-8 shrink-0 object-contain";
+        : size === 24
+          ? "size-6 shrink-0 object-contain"
+          : "size-8 shrink-0 object-contain";
   if (!src)
     return <ImageOffIcon aria-hidden="true" className={`${className} text-muted-foreground`} />;
   // Try the next prepared size on failure instead of permanently hiding the image.
@@ -114,12 +112,12 @@ export function CatalogSearchDetails({
     return (
       <section className="space-y-2">
         <h4 className="text-sm font-medium">{title}</h4>
-        <ul className="space-y-2">
+        <ul className="space-y-1">
           {entries.map((quantity) => {
             const item = catalog.items[quantity.itemId]!;
             return (
-              <li key={item.id} className="flex items-center gap-3 text-sm">
-                <CatalogIcon iconId={item.iconId} assets={assets} />
+              <li key={item.id} className="flex items-center gap-2 text-sm">
+                <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
                 <span className="min-w-0 flex-1">{item.name}</span>
                 <span className="shrink-0 text-muted-foreground tabular-nums">
                   {number.format(quantity.amount * cyclesPerMinute)}
@@ -384,7 +382,7 @@ function AdditionalRecipeMetrics({
   }
   const icons = (ids: readonly string[]) =>
     ids.map((id) => (
-      <CatalogIcon key={id} iconId={assets.catalog.items[id]!.iconId} assets={assets} small />
+      <CatalogIcon key={id} iconId={assets.catalog.items[id]!.iconId} assets={assets} size={16} />
     ));
   const changes = [
     removedInputIds.length ? `Removes ${names(removedInputIds)}` : "",
