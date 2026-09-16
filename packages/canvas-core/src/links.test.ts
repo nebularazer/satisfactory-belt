@@ -253,14 +253,14 @@ it("retains deliberately off-grid manual guides", () => {
 });
 
 it("does not squeeze a vertical link between closely spaced, staggered endpoint nodes", () => {
-  const source = { x: 256, y: 288 },
-    target = { x: 272, y: 128 };
-  const points = routeLink(source, target, [
+  const start = { x: 256, y: 288 },
+    end = { x: 272, y: 128 };
+  const points = routeLink(start, end, [
     { x: 0, y: 144, width: 256, height: 256 },
     { x: 272, y: 0, width: 256, height: 256 },
   ]);
-  expect(points[0]).toEqual(source);
-  expect(points.at(-1)).toEqual(target);
+  expect(points[0]).toEqual(start);
+  expect(points.at(-1)).toEqual(end);
   orthogonal(points);
   for (const p of points.slice(1, -1)) {
     expect(p.x > 256 && p.x < 272).toBe(false);
