@@ -2,7 +2,6 @@ import {
   nodeBounds,
   createMachineMembers,
   resizeMachineGroup,
-  resolveProduction,
 } from "@satisfactory-belt/factory-core";
 import type { ManufacturingNode } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
@@ -945,22 +944,4 @@ it("keeps links and member identities through settings edits, count changes, and
   editor.historyCommand("undo");
   editor.historyCommand("undo");
   expect(editor.history.getSnapshot().state).toBe(before);
-});
-
-it("undoes a desired-output count and clock change together without losing links", () => {
-  const editor = createLinkedEditor();
-  editor.connect(editor.output, editor.input);
-  const before = editor.history.getSnapshot().state;
-  editor.setOutputRate(editor.output.nodeId, "all", "Desc_WAT1_C", 40);
-  const node = editor.getNode(editor.output.nodeId)!;
-  expect(node.kind !== "logistics" && node.machines.length).toBe(6);
-  expect(resolveProduction(node, editor.catalog).outputs[0]!.perMinute).toBeCloseTo(40);
-  expect(editor.history.getSnapshot().state.links).toBe(before.links);
-  const solved = editor.history.getSnapshot().state;
-  editor.historyCommand("undo");
-  expect(editor.history.getSnapshot().state).toBe(before);
-  editor.historyCommand("redo");
-  expect(editor.history.getSnapshot().state).toBe(solved);
-  expect(() => editor.setOutputRate(editor.output.nodeId, "all", "Desc_WAT1_C", -1)).toThrow();
-  expect(editor.history.getSnapshot().state).toBe(solved);
 });

@@ -2,7 +2,7 @@ import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 import type { FactoryNode, MachineMember } from "./index";
 
-/** Bounds allocations for user-entered counts and output targets. */
+/** Bounds allocations for user-entered machine counts. */
 export const MAX_MACHINE_COUNT = 10_000;
 
 export type MachineGroup = Exclude<FactoryNode, { kind: "logistics" }>;

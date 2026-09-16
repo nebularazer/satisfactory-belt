@@ -11,7 +11,7 @@ import {
   setMachineSetting,
 } from "./machine-settings";
 /* oxlint-disable oxc/no-map-spread -- Tests construct immutable settings and retain original snapshots. */
-import { resolveProduction, setDesiredOutput } from "./production";
+import { resolveProduction } from "./production";
 
 it.each(["splitter", "merger"] as const)(
   "projects %s slots on a compact snapping square without assigning material",
@@ -548,75 +548,4 @@ it("inherits All settings when growing and copies the last member for mixed sett
     clockPercent: 150,
     sloopsUsed: 1,
   });
-});
-
-it("sets desired output with the minimum machine count and a shared clock up to 100%", () => {
-  const { node, catalog } = fixture();
-  let serial = 0;
-  const target = setDesiredOutput(node, catalog, "all", "Plate", 22, () => `new-${serial++}`);
-  expect(target.machines).toHaveLength(5);
-  expect(commonSetting(target.machines, "clockPercent")).toBeCloseTo(88);
-  expect(resolveProduction(target, catalog).outputs[0].perMinute).toBeCloseTo(22);
-  expect(resolveProduction(target, catalog).inputs[0].perMinute).toBeCloseTo(132);
-  expect(target.machines.slice(0, 3).map((member) => member.id)).toEqual(
-    node.machines.map((member) => member.id),
-  );
-  const reduced = setDesiredOutput(target, catalog, "all", "Plate", 7, () => "unused");
-  expect(reduced.machines).toHaveLength(2);
-  expect(commonSetting(reduced.machines, "clockPercent")).toBeCloseTo(70);
-  const exact = setDesiredOutput(reduced, catalog, "all", "Plate", 10, () => "unused");
-  expect(exact.machines).toHaveLength(2);
-  expect(commonSetting(exact.machines, "clockPercent")).toBe(100);
-});
-
-it("accounts for Sloops and byproducts when solving output and preserves individual amplification", () => {
-  const { node, catalog } = fixture();
-  const mixed = {
-    ...node,
-    machines: [
-      { id: "a", clockPercent: 50, sloopsUsed: 2 },
-      { id: "b", clockPercent: 125, sloopsUsed: 0 },
-    ],
-  };
-  const target = setDesiredOutput(mixed, catalog, "all", "Water", 36, () => "new");
-  expect(target.machines).toHaveLength(3);
-  expect(target.machines.map((member) => member.sloopsUsed)).toEqual([2, 0, 0]);
-  expect(commonSetting(target.machines, "clockPercent")).toBe(90);
-  expect(
-    resolveProduction(target, catalog).outputs.find((rate) => rate.itemId === "Water")?.perMinute,
-  ).toBeCloseTo(36);
-  const allSloops = setMachineSetting(node, catalog, "all", "sloopsUsed", 2);
-  const grown = setDesiredOutput(allSloops, catalog, "all", "Plate", 35, () => "new");
-  expect(grown.machines).toHaveLength(4);
-  expect(commonSetting(grown.machines, "sloopsUsed")).toBe(2);
-  expect(commonSetting(grown.machines, "clockPercent")).toBe(87.5);
-});
-
-it("adjusts just one machine's output and rejects impossible targets without mutating the group", () => {
-  const { node, catalog } = fixture();
-  const first = node.machines[0].id;
-  const single = setDesiredOutput(node, catalog, first, "Plate", 10, () => "unused");
-  expect(single.machines).toHaveLength(3);
-  expect(single.machines[0].clockPercent).toBe(200);
-  expect(single.machines[1]).toBe(node.machines[1]);
-  expect(setDesiredOutput(node, catalog, "all", "Plate", 15, () => "unused")).toBe(node);
-  for (const invalid of [0, -1, NaN, Infinity, 0.001, 1e10]) {
-    expect(() =>
-      setDesiredOutput(node, catalog, "all", "Plate", invalid, () => "unused"),
-    ).toThrow();
-  }
-  expect(() => setDesiredOutput(node, catalog, first, "Plate", 20, () => "unused")).toThrow(
-    "clock",
-  );
-  expect(() => setDesiredOutput(node, catalog, "all", "Iron", 10, () => "unused")).toThrow(
-    "produced",
-  );
-  expect(node.machines.every((member) => member.clockPercent === 100)).toBe(true);
-});
-
-it("does not add a surplus machine at floating-point output boundaries", () => {
-  const { node, catalog } = fixture();
-  const target = setDesiredOutput(node, catalog, "all", "Plate", 20.000000000000004, () => "new");
-  expect(target.machines).toHaveLength(4);
-  expect(commonSetting(target.machines, "clockPercent")).toBe(100);
 });

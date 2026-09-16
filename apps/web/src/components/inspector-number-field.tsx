@@ -2,8 +2,13 @@
 import { MinusIcon, PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 
 /** Drafts never enter document history; a null value represents mixed settings. */
 export function InspectorNumberField({
@@ -11,7 +16,6 @@ export function InspectorNumberField({
   value,
   revision,
   min,
-  exclusiveMin = false,
   max,
   integer = false,
   unit,
@@ -21,7 +25,6 @@ export function InspectorNumberField({
   value: number | null;
   revision: unknown;
   min: number;
-  exclusiveMin?: boolean;
   max?: number;
   integer?: boolean;
   unit?: string;
@@ -40,7 +43,7 @@ export function InspectorNumberField({
   function valid(number: number) {
     return (
       Number.isFinite(number) &&
-      (exclusiveMin ? number > min : number >= min) &&
+      number >= min &&
       (max === undefined || number <= max) &&
       (!integer || Number.isSafeInteger(number))
     );
@@ -48,7 +51,7 @@ export function InspectorNumberField({
   function apply(number: number) {
     if (!valid(number)) {
       setError(
-        `Enter ${integer ? "a whole number" : "a number"} ${max === undefined ? `${exclusiveMin ? "greater than" : "of at least"} ${min}` : `from ${min} to ${max}`}.`,
+        `Enter ${integer ? "a whole number" : "a number"} ${max === undefined ? `of at least ${min}` : `from ${min} to ${max}`}.`,
       );
       return;
     }
@@ -72,64 +75,68 @@ export function InspectorNumberField({
   }
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-3">
-        <label htmlFor={id} className="text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="shrink-0 whitespace-nowrap text-xs sm:text-sm">
           {label}
         </label>
-        {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
-      </div>
-      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] gap-1 sm:grid-cols-[2rem_minmax(0,1fr)_2rem]">
-        <Button
-          variant="outline"
-          className="h-11 px-0 sm:h-8"
-          aria-label={`Decrease ${label} by 1`}
-          disabled={!canStep(-1)}
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => step(-1)}
-        >
-          <MinusIcon />
-        </Button>
-        <Input
-          id={id}
-          inputMode={integer ? "numeric" : "decimal"}
-          className="min-h-11 text-right tabular-nums sm:min-h-8"
-          value={draft ?? (value === null ? "" : String(Number(value.toPrecision(12))))}
-          placeholder={value === null ? "Mixed" : undefined}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${id}-error` : undefined}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setError(null);
-          }}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing) return;
-            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-              event.preventDefault();
-              step(event.key === "ArrowUp" ? 1 : -1);
-            }
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commit();
-            }
-            if (event.key === "Escape" && draft !== null) {
-              event.preventDefault();
-              event.stopPropagation();
-              setDraft(null);
+        <InputGroup className="h-11 max-w-44 min-w-0 flex-1 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30">
+          <InputGroupInput
+            id={id}
+            inputMode={integer ? "numeric" : "decimal"}
+            className="min-h-11 text-right tabular-nums sm:min-h-8"
+            value={draft ?? (value === null ? "" : String(Number(value.toPrecision(12))))}
+            placeholder={value === null ? "Mixed" : undefined}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? `${id}-error` : undefined}
+            onChange={(event) => {
+              setDraft(event.target.value);
               setError(null);
-            }
-          }}
-        />
-        <Button
-          variant="outline"
-          className="h-11 px-0 sm:h-8"
-          aria-label={`Increase ${label} by 1`}
-          disabled={!canStep(1)}
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => step(1)}
-        >
-          <PlusIcon />
-        </Button>
+            }}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) return;
+              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                event.preventDefault();
+                step(event.key === "ArrowUp" ? 1 : -1);
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commit();
+              }
+              if (event.key === "Escape" && draft !== null) {
+                event.preventDefault();
+                event.stopPropagation();
+                setDraft(null);
+                setError(null);
+              }
+            }}
+          />
+          <InputGroupAddon align="inline-start" className="py-0">
+            <InputGroupButton
+              size="icon-xs"
+              className="h-9 w-7 sm:size-6"
+              aria-label={`Decrease ${label} by 1`}
+              disabled={!canStep(-1)}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => step(-1)}
+            >
+              <MinusIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+          <InputGroupAddon align="inline-end" className="gap-1 py-0">
+            {unit && <InputGroupText className="text-xs">{unit}</InputGroupText>}
+            <InputGroupButton
+              size="icon-xs"
+              className="h-9 w-7 sm:size-6"
+              aria-label={`Increase ${label} by 1`}
+              disabled={!canStep(1)}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => step(1)}
+            >
+              <PlusIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
       </div>
       {error && (
         <p id={`${id}-error`} role="alert" className="text-xs text-destructive">

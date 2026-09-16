@@ -16,7 +16,6 @@ import {
   nodeBounds,
   resolveFactoryNode,
   setMachineSetting,
-  setDesiredOutput,
   resizeMachineGroup,
   resolveSemanticPorts,
 } from "@satisfactory-belt/factory-core";
@@ -325,11 +324,6 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
   function setMachineCount(id: string, count: number) {
     editMachine(id, (node) => resizeMachineGroup(node, count, () => crypto.randomUUID()));
   }
-  function setOutputRate(id: string, scope: MachineScope, itemId: string, perMinute: number) {
-    editMachine(id, (node) =>
-      setDesiredOutput(node, catalog, scope, itemId, perMinute, () => crypto.randomUUID()),
-    );
-  }
   function setSplitterProgram(id: string, program: SplitterProgram) {
     const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
     if (!node || node.kind !== "logistics") throw new Error(`Missing splitter ${id}.`);
@@ -383,7 +377,6 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
     return node;
   }
   return {
-    setOutputRate,
     setOperatingSetting,
     setMachineCount,
     getNode: (id: string) => history.getSnapshot().state.nodes.find((node) => node.id === id),

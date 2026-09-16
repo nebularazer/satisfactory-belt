@@ -8,11 +8,10 @@ import {
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode, MaterialRate } from "@satisfactory-belt/factory-core";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorNumberField } from "@/components/inspector-number-field";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
@@ -30,8 +29,6 @@ export function InspectorBody({
   assets: GameAssets;
 }) {
   const [selected, setSelected] = useState("all");
-  const [outputItem, setOutputItem] = useState<string | null>(null);
-  const outputId = useId();
   const scope =
     node.kind !== "logistics" && node.machines.some((member) => member.id === selected)
       ? selected
@@ -43,8 +40,6 @@ export function InspectorBody({
     assets.catalog,
   );
   const production = resolveProduction(node, assets.catalog, scope);
-  const desired =
-    production.outputs.find((rate) => rate.itemId === outputItem) ?? production.outputs[0];
   // Logistics and sinks have network-dependent streams, not a configured recipe rate.
   const streams = (direction: "input" | "output"): readonly MaterialRate[] => {
     if (node.kind !== "logistics" && node.kind !== "sink")
@@ -76,13 +71,9 @@ export function InspectorBody({
         <div className="sticky top-0 z-10 overflow-x-auto overflow-y-hidden bg-card px-1 pt-1 pb-2">
           <TabsList
             aria-label="Machine settings scope"
-            variant="line"
-            className="min-w-full justify-start p-0 group-data-horizontal/tabs:h-auto"
+            className="min-w-full justify-start group-data-horizontal/tabs:h-auto"
           >
-            <TabsTrigger
-              value="all"
-              className="h-11 flex-none px-3 data-active:font-semibold sm:h-8"
-            >
+            <TabsTrigger value="all" className="h-11 flex-none px-3 sm:h-8">
               All
             </TabsTrigger>
             {node.machines.map((member, index) => (
@@ -90,7 +81,7 @@ export function InspectorBody({
                 key={member.id}
                 value={member.id}
                 aria-label={`Machine ${index + 1}`}
-                className="h-11 min-w-11 flex-none px-3 data-active:font-semibold sm:h-8 sm:min-w-8"
+                className="h-11 min-w-11 flex-none px-3 sm:h-8 sm:min-w-8"
               >
                 {index + 1}
               </TabsTrigger>
@@ -142,51 +133,6 @@ export function InspectorBody({
             )}
           </div>
         )}
-        {node.kind === "manufacturing" &&
-          capabilities?.clock &&
-          desired &&
-          desired.perMinute !== null && (
-            <div className="space-y-2 border-t pt-4">
-              {production.outputs.length > 1 ? (
-                <div className="space-y-1.5">
-                  <label htmlFor={outputId} className="text-xs text-muted-foreground">
-                    Output item
-                  </label>
-                  <NativeSelect
-                    id={outputId}
-                    value={desired.itemId}
-                    onChange={(event) => setOutputItem(event.target.value)}
-                    className="w-full [&_select]:h-11 sm:[&_select]:h-8"
-                  >
-                    {production.outputs.map((rate) => (
-                      <NativeSelectOption key={rate.itemId} value={rate.itemId}>
-                        {assets.catalog.items[rate.itemId]!.name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  {assets.catalog.items[desired.itemId]!.name}
-                </p>
-              )}
-              <InspectorNumberField
-                key={`${scope}:output:${desired.itemId}`}
-                label="Desired output"
-                value={desired.perMinute}
-                revision={node.machines}
-                min={0}
-                exclusiveMin
-                unit={assets.catalog.items[desired.itemId]!.unit === "m3" ? "m³/min" : "items/min"}
-                onCommit={(rate) => editor.setOutputRate(node.id, scope, desired.itemId, rate)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {scope === "all"
-                  ? "Adjusts machine count and a shared clock up to 100%."
-                  : "Adjusts this machine’s clock speed."}
-              </p>
-            </div>
-          )}
         <section aria-label="Configured material rates" className="space-y-2 border-t pt-4">
           <div className="grid grid-cols-2 gap-4">
             <RateColumn
