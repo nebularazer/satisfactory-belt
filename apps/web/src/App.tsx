@@ -14,7 +14,6 @@ import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
-  SearchIcon,
   Grid2X2Icon,
   Grid3X3Icon,
   MaximizeIcon,
@@ -135,7 +134,7 @@ function CanvasWorkspace({
       }),
     [controller],
   );
-  const openSearch = useCallback(() => controller.openCatalogAtCenter(), [controller]);
+  const openAdd = useCallback(() => controller.openCatalogAtCenter(), [controller]);
   const placeResult = useCallback(
     (entry: SearchEntry, scope?: SearchScope) => {
       if (!insertion) throw new Error("Open search from the canvas to place a node.");
@@ -245,6 +244,17 @@ function CanvasWorkspace({
           (target.isContentEditable || target.closest("input, textarea, select, [role='textbox']"))
         )
           return;
+        if (
+          event.key.toLowerCase() === "a" &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey
+        ) {
+          event.preventDefault();
+          if (!event.repeat) openAdd();
+          return;
+        }
         if (deleteCommandForKey(event)) {
           event.preventDefault();
           if (!event.repeat) deleteSelection();
@@ -278,7 +288,7 @@ function CanvasWorkspace({
       actualSize: () => zoomControl("actual-size"),
       canvasFocus: () => host.current?.querySelector("canvas") ?? null,
     };
-  }, [controller, historyCommand, clipboardCommand, deleteSelection, searchOpen]);
+  }, [controller, historyCommand, clipboardCommand, deleteSelection, searchOpen, openAdd]);
 
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Workspace shortcuts bubble from the canvas, controls, and portalled menus; preserve the main landmark.
@@ -306,9 +316,12 @@ function CanvasWorkspace({
             finalFocus={searchOpen ? false : canvasFocus}
           >
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={openSearch}>
-                <SearchIcon className="text-muted-foreground" />
-                Search catalog
+              <DropdownMenuItem onClick={openAdd} aria-keyshortcuts="a">
+                <PlusIcon className="text-muted-foreground" />
+                Add
+                <DropdownMenuShortcut className="min-w-6 text-right tracking-normal">
+                  A
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={reset}>
                 <RotateCcwIcon className="text-muted-foreground" />
