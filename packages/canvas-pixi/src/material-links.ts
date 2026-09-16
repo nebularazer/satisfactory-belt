@@ -61,13 +61,16 @@ export function drawMaterialLinks(
     // cards so every connection visibly reaches its endpoint without covering card
     // content along the rest of the route.
     if (points.length > 1) {
+      const inset = Math.max(5, 8 * camera.zoom);
+      const sourceLead = toward(points[0]!, points[1]!, inset);
+      const targetLead = toward(end, points.at(-2)!, inset);
       endpointLeads
-        .moveTo(points[0]!.x, points[0]!.y)
+        .moveTo(sourceLead.x, sourceLead.y)
         .lineTo(points[1]!.x, points[1]!.y)
         .stroke({ color, width: selected ? 3 : 2 });
       endpointLeads
         .moveTo(points.at(-2)!.x, points.at(-2)!.y)
-        .lineTo(end.x, end.y)
+        .lineTo(targetLead.x, targetLead.y)
         .stroke({ color, width: selected ? 3 : 2 });
     }
     if (!selected || link.id === null) continue;
