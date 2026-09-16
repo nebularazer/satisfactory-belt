@@ -33,42 +33,31 @@ export function InspectorNumberField({
   const id = useId();
   const [source, setSource] = useState(revision);
   const [draft, setDraft] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   // An external edit or undo wins over a draft, even when the displayed value stays Mixed.
   if (source !== revision) {
     setSource(revision);
     setDraft(null);
-    setError(null);
   }
-  function valid(number: number) {
-    return (
-      Number.isFinite(number) &&
-      number >= min &&
-      (max === undefined || number <= max) &&
-      (!integer || Number.isSafeInteger(number))
-    );
+  function normalize(number: number) {
+    const lower = integer ? Math.ceil(min) : min;
+    const upper = integer
+      ? Math.floor(Math.min(max ?? Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER))
+      : (max ?? Number.MAX_VALUE);
+    const clamped = Math.min(upper, Math.max(lower, integer ? Math.round(number) : number));
+    return Number.isFinite(clamped) ? clamped : null;
   }
   function apply(number: number) {
-    if (!valid(number)) {
-      setError(
-        `Enter ${integer ? "a whole number" : "a number"} ${max === undefined ? `of at least ${min}` : `from ${min} to ${max}`}.`,
-      );
-      return;
-    }
-    try {
-      onCommit(number);
-      setDraft(null);
-      setError(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "This value could not be applied.");
-    }
+    const normalized = normalize(number);
+    if (normalized !== null) onCommit(normalized);
+    // Empty or nonnumeric drafts restore the committed value (or Mixed).
+    setDraft(null);
   }
   function commit() {
     if (draft !== null) apply(draft.trim() ? Number(draft) : NaN);
   }
-  const stepValue = draft === null ? value : draft.trim() ? Number(draft) : null;
+  const stepValue = draft === null ? value : normalize(draft.trim() ? Number(draft) : NaN);
   function canStep(delta: number) {
-    return stepValue !== null && valid(stepValue) && valid(stepValue + delta);
+    return stepValue !== null && normalize(stepValue + delta) !== stepValue;
   }
   function step(delta: number) {
     if (stepValue !== null && canStep(delta)) apply(stepValue + delta);
@@ -86,11 +75,8 @@ export function InspectorNumberField({
             className="min-h-11 text-right tabular-nums sm:min-h-8"
             value={draft ?? (value === null ? "" : String(Number(value.toPrecision(12))))}
             placeholder={value === null ? "Mixed" : undefined}
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? `${id}-error` : undefined}
             onChange={(event) => {
               setDraft(event.target.value);
-              setError(null);
             }}
             onBlur={commit}
             onKeyDown={(event) => {
@@ -107,7 +93,6 @@ export function InspectorNumberField({
                 event.preventDefault();
                 event.stopPropagation();
                 setDraft(null);
-                setError(null);
               }
             }}
           />
@@ -138,11 +123,6 @@ export function InspectorNumberField({
           </InputGroupAddon>
         </InputGroup>
       </div>
-      {error && (
-        <p id={`${id}-error`} role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
     </div>
   );
 }
