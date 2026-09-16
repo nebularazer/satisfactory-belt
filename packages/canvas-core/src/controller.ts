@@ -27,6 +27,8 @@ export type CanvasCommand =
   | "move-right"
   | "move-up"
   | "move-down";
+export type CatalogRequest = Readonly<{ position: Point; source?: PortReference }>;
+
 export type CanvasPointer = Point &
   Readonly<{ id: number; touch?: boolean; marquee?: boolean; additive?: boolean }>;
 
@@ -115,6 +117,51 @@ export class CanvasController {
     this.onRoute = options.onRoute;
     this.items = options.items;
     this.onMove = options.onMove;
+  }
+
+  private catalogListeners = new Set<(request: CatalogRequest) => void>();
+
+  subscribeCatalog = (listener: (request: CatalogRequest) => void) => {
+    this.catalogListeners.add(listener);
+    return () => {
+      this.catalogListeners.delete(listener);
+    };
+  };
+
+  /** Menu insertion deliberately ignores any selected port. */
+  openCatalogAtCenter = () => {
+    this.cancel();
+    this.requestCatalog({ x: this.viewport.width / 2, y: this.viewport.height / 2 });
+  };
+
+  openCatalogAt(pointer: CanvasPointer) {
+    if (this.gesture || this.pinch || this.waitForRelease || !this.isEmpty(pointer)) return;
+    this.requestCatalog(pointer);
+  }
+
+  private isEmpty(pointer: CanvasPointer) {
+    return (
+      !this.hitTest(pointer) &&
+      !this.portHits(pointer).length &&
+      !hitTestLinks(pointer, !!pointer.touch, this.camera, this.links, this.linkState.selected)
+        .length &&
+      !hitTestLinks(
+        pointer,
+        !!pointer.touch,
+        this.camera,
+        this.links,
+        this.linkState.selected,
+        true,
+      ).length
+    );
+  }
+
+  private requestCatalog(screen: Point, source?: PortReference) {
+    const request = {
+      position: screenToWorld(screen, this.camera),
+      source: source ? { nodeId: source.nodeId, portKey: source.portKey } : undefined,
+    };
+    for (const listener of this.catalogListeners) listener(request);
   }
 
   getSnapshot = (): CanvasSnapshot => ({
@@ -632,6 +679,11 @@ export class CanvasController {
       this.portState = emptyPortSelection();
       if (targets.length === 1 && this.compatibility(gesture.sourcePort, targets[0]!).compatible)
         this.onConnect?.(gesture.sourcePort, targets[0]!);
+      if (!targets.length && this.isEmpty(pointer) && this.catalogListeners.size) {
+        // Keep the anchor when search is dismissed, just like click-to-connect.
+        this.selectPort(gesture.sourcePort);
+        this.requestCatalog(pointer, gesture.sourcePort);
+      }
       this.emit();
       return;
     }
@@ -662,6 +714,12 @@ export class CanvasController {
         this.selection = next;
       } else if (!gesture.additive) this.selection = new Set();
     } else if (!gesture.moved && gesture.kind === "pan" && !gesture.additive) {
+      if (this.portState.anchor && this.isEmpty(pointer) && this.catalogListeners.size) {
+        this.gesture = null;
+        this.requestCatalog(pointer, this.portState.anchor);
+        this.emit();
+        return;
+      }
       this.selection = new Set();
       this.linkState = emptyLinkSelection();
       this.portState = emptyPortSelection();
