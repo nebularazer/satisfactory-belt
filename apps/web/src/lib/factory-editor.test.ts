@@ -765,3 +765,50 @@ it("commits a port drag as one undoable connection without moving either node", 
   historyCommand("redo");
   expect(history.getSnapshot().state).toBe(connected);
 });
+
+it("places at the snapped center, publishes ports, and restores the same node on redo", () => {
+  const editor = createTestEditor();
+  const before = editor.history.getSnapshot().state;
+  const node = editor.placeNode(
+    { kind: "manufacturing", recipeId: "Recipe", machineId: "Machine" },
+    { x: 503, y: 401 },
+  );
+  expect(node).toMatchObject({ x: 368, y: 272, machineCount: 1, clockPercent: 100, sloopsUsed: 0 });
+  expect(editor.controller.getSnapshot().selection).toEqual(new Set([node.id]));
+  expect(editor.getDisplay(node.id)?.ports).toHaveLength(1);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state.nodes.at(-1)).toBe(node);
+});
+
+it("adds and connects the first valid logistics port atomically, rejecting stale sources", () => {
+  const editor = createTestEditor();
+  editor.catalog.logistics.merger = {
+    id: "merger",
+    name: "Merger",
+    descriptorId: "merger",
+    kind: "merger",
+    description: "",
+    iconId: "merger",
+  };
+  const configuration = { kind: "logistics" as const, partId: "merger" };
+  const source = { nodeId: "machine-1", portKey: "output:Desc_WAT1_C" };
+  const before = editor.history.getSnapshot().state;
+  expect(editor.canPlace(configuration, source)).toBe(true);
+  editor.controller.setGridSnapping(false);
+  const node = editor.placeNode(configuration, { x: 501, y: 399 }, source);
+  expect(node).toMatchObject({ x: 437, y: 335 });
+  const after = editor.history.getSnapshot().state;
+  expect(after.links).toEqual([
+    { id: expect.any(String), output: source, input: { nodeId: node.id, portKey: "input:0" } },
+  ]);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state).toBe(after);
+  expect(() =>
+    editor.placeNode(configuration, { x: 0, y: 0 }, { ...source, nodeId: "missing" }),
+  ).toThrow("no longer supports");
+  expect(editor.history.getSnapshot().state).toBe(after);
+});
