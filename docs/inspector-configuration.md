@@ -13,7 +13,10 @@ labels have no icons; node footers use a gauge for clock speed. Power statistics
 come last and share their light/dark colors with the canvas footer.
 Searchable choices keep the selected value in a trigger and open a separate, initially
 empty search field. Popups align to the full control width, including icons and Add
-actions. Canceling a search preserves the selection.
+actions. Canceling a search preserves the selection. Triggers use the shadcn outline
+button style and lists use its compact rows with 16px item icons. Choices are sorted
+alphabetically by display name, with natural numeric order; splitter rules and
+From connections remain pinned above the items.
 
 There is no enabled/standby setting. Editable input/output rate targets remain deferred.
 

@@ -110,7 +110,11 @@ export function InspectorTrainPlatforms({
               value={platform?.materialId ?? "auto"}
               assets={assets}
               options={[
-                { value: "auto", label: platform ? "From connections" : "No transfer" },
+                {
+                  value: "auto",
+                  pinned: true,
+                  label: platform ? "From connections" : "No transfer",
+                },
                 ...(building && platform ? Object.values(assets.catalog.items) : [])
                   .filter((item) => (item.form === "solid") === (building?.transport === "belt"))
                   .map((item) => ({

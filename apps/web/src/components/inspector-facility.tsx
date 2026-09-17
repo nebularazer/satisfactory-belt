@@ -216,6 +216,7 @@ export function InspectorFacility({
             options={[
               {
                 value: "auto",
+                pinned: true,
                 label: "From connections",
                 disabled: () => !compatible({ ...c, materialId: null }),
               },
@@ -237,7 +238,7 @@ export function InspectorFacility({
           value={c.fuelId ?? "auto"}
           assets={assets}
           options={[
-            { value: "auto", label: "From connections" },
+            { value: "auto", pinned: true, label: "From connections" },
             ...Object.values(catalog.items)
               .filter((item) => item.form === "solid" && (item.energyMegajoules ?? 0) > 0)
               .map((item) => ({
@@ -267,7 +268,7 @@ export function InspectorFacility({
               value={c[key] ?? "auto"}
               assets={assets}
               options={[
-                { value: "auto", label: "From connections" },
+                { value: "auto", pinned: true, label: "From connections" },
                 ...items().map((option) => ({
                   ...option,
                   disabled: () => !compatible({ ...c, [key]: option.value }),

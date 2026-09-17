@@ -145,10 +145,10 @@ function SplitterOutputRules({
   const rules = program[output];
   const smart = assets.catalog.logistics[node.partId]!.kind === "smart-splitter";
   const special = [
-    { value: "any", label: "Any" },
-    { value: "none", label: "None" },
-    { value: "any-undefined", label: "Any undefined" },
-    { value: "overflow", label: "Overflow" },
+    { value: "any", label: "Any", pinned: true },
+    { value: "none", label: "None", pinned: true },
+    { value: "any-undefined", label: "Any undefined", pinned: true },
+    { value: "overflow", label: "Overflow", pinned: true },
   ];
   const options = [
     ...special,
