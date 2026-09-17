@@ -1,3 +1,4 @@
+import { CANVAS_PALETTES } from "@satisfactory-belt/canvas-pixi/theme";
 import {
   machineCapabilities,
   resolveFactoryNode,
@@ -9,11 +10,19 @@ import {
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode } from "@satisfactory-belt/factory-core";
 import { ZapIcon, BatteryChargingIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
+const footerColors: CSSProperties & Record<`--${string}`, string> = {
+  "--footer-color": CANVAS_PALETTES.light.footer,
+  "--footer-color-dark": CANVAS_PALETTES.dark.footer,
+  "--power-stroke": CANVAS_PALETTES.light.power.stroke,
+  "--power-stroke-dark": CANVAS_PALETTES.dark.power.stroke,
+  "--power-fill": CANVAS_PALETTES.light.power.fill,
+  "--power-fill-dark": CANVAS_PALETTES.dark.power.fill,
+};
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 3 });
 export function InspectorStatistics({
   node,
@@ -29,7 +38,7 @@ export function InspectorStatistics({
   if (node.kind === "logistics") return null;
   const members = scopedMachines(node, scope),
     capabilities = machineCapabilities(node, assets.catalog);
-  const rows: { label: string; value: string; icon?: ReactNode }[] = [];
+  const rows: { label: string; value: string; icon?: ReactNode; power?: boolean }[] = [];
   const itemIcon = (id: string) => (
     <CatalogIcon iconId={assets.catalog.items[id]!.iconId} assets={assets} size={16} />
   );
@@ -42,18 +51,6 @@ export function InspectorStatistics({
       ),
     });
   const display = resolveFactoryNode({ ...node, machines: members }, assets.catalog);
-  if (
-    display.layout === "machine" &&
-    !(node.kind === "facility" && node.configuration.type === "storage")
-  ) {
-    const generated =
-      node.kind === "facility" && ["generator", "augmenter"].includes(node.configuration.type);
-    rows.push({
-      label: generated ? "Power generated" : scope === "all" ? "Total power" : "Power",
-      value: display.powerLabel.replace(/ generated$/, ""),
-      icon: generated ? <BatteryChargingIcon className="size-4" /> : <ZapIcon className="size-4" />,
-    });
-  }
   if (node.kind === "manufacturing" && capabilities.sloopSlots > 0) {
     const boost = assets.catalog.machines[node.machineId]!.productionBoost;
     const factors = members.map((m) => boost.base + m.sloopsUsed * boost.perSloop);
@@ -137,12 +134,32 @@ export function InspectorStatistics({
           });
     }
   }
+  if (
+    display.layout === "machine" &&
+    !(node.kind === "facility" && node.configuration.type === "storage")
+  ) {
+    const generated =
+      node.kind === "facility" && ["generator", "augmenter"].includes(node.configuration.type);
+    rows.push({
+      label: generated ? "Power generated" : scope === "all" ? "Total power" : "Power",
+      power: true,
+      value: display.powerLabel.replace(/ generated$/, ""),
+      icon: generated ? (
+        <BatteryChargingIcon className="size-4" />
+      ) : (
+        <ZapIcon className="size-4 text-[var(--power-stroke)] fill-[var(--power-fill)] dark:text-[var(--power-stroke-dark)] dark:fill-[var(--power-fill-dark)]" />
+      ),
+    });
+  }
   if (!rows.length) return null;
   return (
-    <dl className="space-y-2 border-t pt-4 text-xs">
+    <dl className="space-y-2 border-t pt-4 text-xs" style={footerColors}>
       {rows.map((row) => (
-        <div key={row.label} className="flex items-start justify-between gap-3">
-          <dt className="flex items-center gap-1.5 text-muted-foreground">
+        <div
+          key={row.label}
+          className={`flex items-start justify-between gap-3 ${row.power ? "text-[var(--footer-color)] dark:text-[var(--footer-color-dark)]" : ""}`}
+        >
+          <dt className={`flex items-center gap-1.5 ${row.power ? "" : "text-muted-foreground"}`}>
             {row.icon}
             {row.label}
           </dt>

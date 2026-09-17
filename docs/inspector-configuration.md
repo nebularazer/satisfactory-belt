@@ -9,7 +9,8 @@ blur, integer settings round, and empty/non-numeric drafts restore the prior val
 Stations, logistics buffers, depot uploaders and the Space Elevator are individual
 buildings with no grouping tabs or count controls.
 Tier/purity button groups and numeric controls share a common width. Operating-setting
-labels have no icons; node footers use a gauge for clock speed.
+labels have no icons; node footers use a gauge for clock speed. Power statistics
+come last and share their light/dark colors with the canvas footer.
 There is no enabled/standby setting. Editable input/output rate targets remain deferred.
 
 ## Supported bodies
@@ -48,8 +49,9 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   own conveyor input and displays the selected item image.
 - Train Stations: connected routes with load/unload item filters and wait assumptions
   at each stop. The shared route defines freight-car count. Each station configures its car
-  positions with one selector: No transfer, Freight · Load/Unload, or Fluid ·
-  Load/Unload. Cargo remains a separate setting.
+  positions with one inline icon button group: No transfer, Fluid · Load/Unload,
+  or Freight · Load/Unload. Cargo is always shown in an aligned row and is disabled
+  for No transfer.
   The station node expands with one row per car and two active material ports per
   configured platform. Compact labeled dividers identify each car and its platform
   type; port side/color indicates load or unload. No-transfer positions take less
@@ -72,6 +74,9 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 Power Storage, power-grid controls, pipeline junctions/pumps/valves, portals, and
 throughput monitors remain out of scope. Transport calculations do not simulate
 travel, queues, loading windows, fluid hydraulics, inventory fill, or power networks.
+Load/unload filters store the cargo allowed to transfer for that route at this stop;
+empty lists mean any cargo. These filters respect platform direction and currently
+do not affect calculated material flow.
 Round-trip assumptions include docking and waiting. Routes do not yet propagate
 material streams between stations; selected cargo describes their material ports.
 

@@ -23,7 +23,7 @@ export type InspectorOption = {
   hideDisabledBadge?: boolean;
 };
 const labelFor = (option: InspectorOption) => option.label;
-const disabled = (option: InspectorOption) =>
+const isDisabled = (option: InspectorOption) =>
   typeof option.disabled === "function" ? option.disabled() : option.disabled;
 const valueFor = (option: InspectorOption) => option.value;
 export function InspectorChoice({
@@ -33,6 +33,8 @@ export function InspectorChoice({
   onChange,
   assets,
   description,
+  disabled = false,
+  inline = false,
 }: {
   label: string;
   value: string | null;
@@ -40,26 +42,33 @@ export function InspectorChoice({
   onChange: (value: string) => void;
   assets?: GameAssets;
   description?: string;
+  disabled?: boolean;
+  inline?: boolean;
 }) {
   const id = useId();
   return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+    <div className={inline ? "flex items-center justify-between gap-2" : "space-y-1.5"}>
+      <label
+        htmlFor={id}
+        className={inline ? "text-xs sm:text-sm" : "text-xs font-medium text-muted-foreground"}
+      >
         {label}
       </label>
       <Combobox
+        disabled={disabled}
         items={options}
         value={options.find((option) => option.value === value) ?? null}
         itemToStringLabel={labelFor}
         itemToStringValue={valueFor}
         onValueChange={(option) => {
-          if (option && !disabled(option)) onChange(option.value);
+          if (option && !isDisabled(option)) onChange(option.value);
         }}
       >
         <ComboboxInput
           id={id}
+          disabled={disabled}
           placeholder={value === null ? "Mixed" : "Choose…"}
-          className="w-full"
+          className={inline ? "w-55 min-w-0 shrink-0" : "w-full"}
         />
         <ComboboxContent onKeyDown={(event) => event.stopPropagation()}>
           <ComboboxEmpty>No matches.</ComboboxEmpty>
@@ -76,7 +85,7 @@ export function InspectorChoice({
 }
 
 function InspectorChoiceItem({ option, assets }: { option: InspectorOption; assets?: GameAssets }) {
-  const incompatible = disabled(option);
+  const incompatible = isDisabled(option);
   return (
     <ComboboxItem value={option} disabled={incompatible} className="min-h-11 sm:min-h-9">
       {assets && option.iconId && <CatalogIcon iconId={option.iconId} assets={assets} size={24} />}

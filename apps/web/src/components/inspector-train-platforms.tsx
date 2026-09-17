@@ -1,7 +1,15 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Station-local platform configuration. */
 import { stationRoute } from "@satisfactory-belt/factory-core";
 import type { FacilityNode, FreightPlatform } from "@satisfactory-belt/factory-core";
+import {
+  ArrowDownToLineIcon,
+  ArrowUpFromLineIcon,
+  DropletIcon,
+  PackageIcon,
+  XIcon,
+} from "lucide-react";
 
+import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorChoice } from "@/components/inspector-choice";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import type { createFactoryEditor } from "@/lib/factory-editor";
@@ -18,9 +26,9 @@ export function InspectorTrainPlatforms({
 }) {
   const c = node.configuration;
   if (c.type !== "train-station") return null;
-  const buildings = Object.values(assets.catalog.buildings!).filter(
-    (b) => b.kind === "freight-platform",
-  );
+  const buildings = Object.values(assets.catalog.buildings!)
+    .filter((b) => b.kind === "freight-platform")
+    .toSorted((a, b) => Number(b.transport === "pipe") - Number(a.transport === "pipe"));
   const candidate = (index: number, platform: FreightPlatform | null): FacilityNode => {
     return {
       ...node,
@@ -62,7 +70,7 @@ export function InspectorTrainPlatforms({
           (["load", "unload"] as const).map((mode) => ({
             value: `${option.id}:${mode}`,
             label: `${option.transport === "pipe" ? "Fluid" : "Freight"} · ${mode === "load" ? "Load" : "Unload"}`,
-            iconId: option.iconId,
+            icon: <TransferIcon fluid={option.transport === "pipe"} mode={mode} />,
             configuration: {
               buildingId: option.id,
               mode,
@@ -73,20 +81,21 @@ export function InspectorTrainPlatforms({
         );
         return (
           <div key={`car:${index + 1}`} className="space-y-3 border-t pt-3">
-            <InspectorChoice
+            <InspectorButtonGroup
+              iconOnly
               label={`Car ${index + 1}`}
               value={platform ? `${platform.buildingId}:${platform.mode}` : "none"}
-              assets={assets}
               options={[
                 {
                   value: "none",
                   label: "No transfer",
+                  icon: <XIcon className="size-4" />,
                   disabled: () => !editor.canReplaceNode(candidate(index, null)),
                 },
                 ...variants.map((option) => ({
                   value: option.value,
                   label: option.label,
-                  iconId: option.iconId,
+                  icon: option.icon,
                   disabled: () => !editor.canReplaceNode(candidate(index, option.configuration)),
                 })),
               ]}
@@ -99,35 +108,50 @@ export function InspectorTrainPlatforms({
                 )
               }
             />
-            {platform && building && (
-              <InspectorChoice
-                label="Cargo"
-                value={platform.materialId ?? "auto"}
-                assets={assets}
-                options={[
-                  { value: "auto", label: "From connections" },
-                  ...Object.values(assets.catalog.items)
-                    .filter((item) => (item.form === "solid") === (building.transport === "belt"))
-                    .map((item) => ({
-                      value: item.id,
-                      label: item.name,
-                      iconId: item.iconId,
-                      disabled: () =>
-                        !editor.canReplaceNode(
-                          candidate(index, { ...platform, materialId: item.id }),
-                        ),
-                    })),
-                ]}
-                onChange={(id) =>
-                  editor.replaceNode(
-                    candidate(index, { ...platform, materialId: id === "auto" ? null : id }),
-                  )
-                }
-              />
-            )}
+            <InspectorChoice
+              inline
+              disabled={!platform}
+              label="Cargo"
+              value={platform?.materialId ?? "auto"}
+              assets={assets}
+              options={[
+                { value: "auto", label: platform ? "From connections" : "No transfer" },
+                ...(building && platform ? Object.values(assets.catalog.items) : [])
+                  .filter((item) => (item.form === "solid") === (building?.transport === "belt"))
+                  .map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                    iconId: item.iconId,
+                    disabled: () =>
+                      !platform ||
+                      !editor.canReplaceNode(
+                        candidate(index, { ...platform, materialId: item.id }),
+                      ),
+                  })),
+              ]}
+              onChange={(id) =>
+                platform &&
+                editor.replaceNode(
+                  candidate(index, { ...platform, materialId: id === "auto" ? null : id }),
+                )
+              }
+            />
           </div>
         );
       })}
     </section>
+  );
+}
+
+function TransferIcon({ fluid, mode }: { fluid: boolean; mode: "load" | "unload" }) {
+  return (
+    <span className="flex items-center" aria-hidden="true">
+      {fluid ? <DropletIcon className="size-4" /> : <PackageIcon className="size-4" />}
+      {mode === "load" ? (
+        <ArrowDownToLineIcon className="size-3" />
+      ) : (
+        <ArrowUpFromLineIcon className="size-3" />
+      )}
+    </span>
   );
 }
