@@ -58,22 +58,24 @@ export function InspectorTrainPlatforms({
       )}
       {c.platforms.map((platform, index) => {
         const building = platform ? assets.catalog.buildings![platform.buildingId]! : null;
-        function variant(buildingId: string): FreightPlatform | null {
-          if (buildingId === "none") return null;
-          return {
-            buildingId,
-            mode: platform?.mode ?? "load",
-            materialId:
-              building?.transport === assets.catalog.buildings![buildingId]!.transport
-                ? (platform?.materialId ?? null)
-                : null,
-          };
-        }
+        const variants = buildings.flatMap((option) =>
+          (["load", "unload"] as const).map((mode) => ({
+            value: `${option.id}:${mode}`,
+            label: `${option.transport === "pipe" ? "Fluid" : "Freight"} · ${mode === "load" ? "Load" : "Unload"}`,
+            iconId: option.iconId,
+            configuration: {
+              buildingId: option.id,
+              mode,
+              materialId:
+                building?.transport === option.transport ? (platform?.materialId ?? null) : null,
+            },
+          })),
+        );
         return (
           <div key={`car:${index + 1}`} className="space-y-3 border-t pt-3">
             <InspectorChoice
               label={`Car ${index + 1}`}
-              value={platform?.buildingId ?? "none"}
+              value={platform ? `${platform.buildingId}:${platform.mode}` : "none"}
               assets={assets}
               options={[
                 {
@@ -81,56 +83,47 @@ export function InspectorTrainPlatforms({
                   label: "No transfer",
                   disabled: () => !editor.canReplaceNode(candidate(index, null)),
                 },
-                ...buildings.map((b) => ({
-                  value: b.id,
-                  label: b.transport === "pipe" ? "Fluid" : "Freight",
-                  iconId: b.iconId,
-                  disabled: () => !editor.canReplaceNode(candidate(index, variant(b.id))),
+                ...variants.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  iconId: option.iconId,
+                  disabled: () => !editor.canReplaceNode(candidate(index, option.configuration)),
                 })),
               ]}
-              onChange={(id) => editor.replaceNode(candidate(index, variant(id)))}
+              onChange={(value) =>
+                editor.replaceNode(
+                  candidate(
+                    index,
+                    variants.find((option) => option.value === value)?.configuration ?? null,
+                  ),
+                )
+              }
             />
             {platform && building && (
-              <>
-                <InspectorChoice
-                  label="Transfer mode"
-                  value={platform.mode}
-                  options={(["load", "unload"] as const).map((mode) => ({
-                    value: mode,
-                    label: mode === "load" ? "Load" : "Unload",
-                    disabled: () => !editor.canReplaceNode(candidate(index, { ...platform, mode })),
-                  }))}
-                  onChange={(mode) =>
-                    editor.replaceNode(
-                      candidate(index, { ...platform, mode: mode === "load" ? "load" : "unload" }),
-                    )
-                  }
-                />
-                <InspectorChoice
-                  label="Cargo"
-                  value={platform.materialId ?? "auto"}
-                  assets={assets}
-                  options={[
-                    { value: "auto", label: "From connections" },
-                    ...Object.values(assets.catalog.items)
-                      .filter((item) => (item.form === "solid") === (building.transport === "belt"))
-                      .map((item) => ({
-                        value: item.id,
-                        label: item.name,
-                        iconId: item.iconId,
-                        disabled: () =>
-                          !editor.canReplaceNode(
-                            candidate(index, { ...platform, materialId: item.id }),
-                          ),
-                      })),
-                  ]}
-                  onChange={(id) =>
-                    editor.replaceNode(
-                      candidate(index, { ...platform, materialId: id === "auto" ? null : id }),
-                    )
-                  }
-                />
-              </>
+              <InspectorChoice
+                label="Cargo"
+                value={platform.materialId ?? "auto"}
+                assets={assets}
+                options={[
+                  { value: "auto", label: "From connections" },
+                  ...Object.values(assets.catalog.items)
+                    .filter((item) => (item.form === "solid") === (building.transport === "belt"))
+                    .map((item) => ({
+                      value: item.id,
+                      label: item.name,
+                      iconId: item.iconId,
+                      disabled: () =>
+                        !editor.canReplaceNode(
+                          candidate(index, { ...platform, materialId: item.id }),
+                        ),
+                    })),
+                ]}
+                onChange={(id) =>
+                  editor.replaceNode(
+                    candidate(index, { ...platform, materialId: id === "auto" ? null : id }),
+                  )
+                }
+              />
             )}
           </div>
         );

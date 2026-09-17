@@ -23,7 +23,7 @@ export function InspectorButtonGroup({
         {label}
         {value === null && <span className="ml-1 text-xs text-muted-foreground">· Mixed</span>}
       </span>
-      <ButtonGroup aria-labelledby={id}>
+      <ButtonGroup aria-labelledby={id} className="w-42 shrink-0">
         {options.map((option) => (
           <Button
             key={option.value}
@@ -32,7 +32,7 @@ export function InspectorButtonGroup({
             aria-pressed={value === option.value}
             disabled={typeof option.disabled === "function" ? option.disabled() : option.disabled}
             onClick={() => onChange(option.value)}
-            className="min-h-11 px-2 sm:min-h-8"
+            className="min-h-11 min-w-0 flex-1 px-2 sm:min-h-8"
           >
             {option.label}
           </Button>

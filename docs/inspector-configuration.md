@@ -8,6 +8,8 @@ fixed while member numbers scroll without a scrollbar. Numeric drafts clamp on E
 blur, integer settings round, and empty/non-numeric drafts restore the prior value.
 Stations, logistics buffers, depot uploaders and the Space Elevator are individual
 buildings with no grouping tabs or count controls.
+Tier/purity button groups and numeric controls share a common width. Operating-setting
+labels have no icons; node footers use a gauge for clock speed.
 There is no enabled/standby setting. Editable input/output rate targets remain deferred.
 
 ## Supported bodies
@@ -46,7 +48,8 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   own conveyor input and displays the selected item image.
 - Train Stations: connected routes with load/unload item filters and wait assumptions
   at each stop. The shared route defines freight-car count. Each station configures its car
-  positions as Freight, Fluid, or No transfer, plus cargo and load/unload mode.
+  positions with one selector: No transfer, Freight · Load/Unload, or Fluid ·
+  Load/Unload. Cargo remains a separate setting.
   The station node expands with one row per car and two active material ports per
   configured platform. Compact labeled dividers identify each car and its platform
   type; port side/color indicates load or unload. No-transfer positions take less

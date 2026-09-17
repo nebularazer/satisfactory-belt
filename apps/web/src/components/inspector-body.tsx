@@ -10,7 +10,7 @@ import {
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode, MaterialRate } from "@satisfactory-belt/factory-core";
-import { GaugeIcon, MinusIcon, PlusIcon } from "lucide-react";
+import { MinusIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
@@ -215,7 +215,6 @@ export function InspectorBody({
                 <InspectorNumberField
                   key={`${scope}:clock`}
                   label="Clock speed"
-                  icon={<GaugeIcon className="size-4 text-muted-foreground" />}
                   value={commonSetting(members, "clockPercent")}
                   revision={node.machines}
                   min={1}
@@ -230,13 +229,6 @@ export function InspectorBody({
                 <InspectorNumberField
                   key={`${scope}:sloops`}
                   label="Sloops"
-                  icon={
-                    <CatalogIcon
-                      iconId={assets.catalog.items["Desc_WAT1_C"]!.iconId}
-                      assets={assets}
-                      size={16}
-                    />
-                  }
                   value={commonSetting(members, "sloopsUsed")}
                   revision={node.machines}
                   min={0}

@@ -7,11 +7,11 @@ import { PortHighlights } from "./port-highlights";
 import { CANVAS_PALETTES } from "./theme";
 import type { CanvasPalette } from "./theme";
 
-// Lucide Zap and Clock SVG paths, ISC license, from lucide-react 1.45.0.
+// Lucide Zap and Gauge SVG paths, ISC license, from lucide-react 1.45.0.
 // Separate arc flags/numbers explicitly for Pixi’s SVG parser.
 const ZAP =
   '<path d="M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z"/>';
-const CLOCK = '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>';
+const GAUGE = '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>';
 
 const STORAGE =
   '<path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/>';
@@ -173,7 +173,7 @@ export class MachineNodeView {
       this.palette.footer,
     );
     if (display.clockLabel) {
-      this.symbol(CLOCK, 124, footerY + 8, this.palette.clock.stroke, this.palette.clock.fill);
+      this.symbol(GAUGE, 124, footerY + 8, this.palette.clock.stroke, this.palette.clock.fill);
       this.label(display.clockLabel, 144, footerY + 16, 42, 11, "500", this.palette.footer);
     }
     if (display.sloops) {

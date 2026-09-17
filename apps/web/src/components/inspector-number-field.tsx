@@ -1,6 +1,5 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Handlers belong to this small controlled field. */
 import { MinusIcon, PlusIcon } from "lucide-react";
-import type { ReactNode } from "react";
 import { useId, useState } from "react";
 
 import {
@@ -14,7 +13,6 @@ import {
 /** Drafts never enter document history; a null value represents mixed settings. */
 export function InspectorNumberField({
   label,
-  icon,
   value,
   revision,
   min,
@@ -24,7 +22,6 @@ export function InspectorNumberField({
   onCommit,
 }: {
   label: string;
-  icon?: ReactNode;
   value: number | null;
   revision: unknown;
   min: number;
@@ -69,10 +66,9 @@ export function InspectorNumberField({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={id} className="flex items-center gap-1.5 text-xs sm:text-sm">
-          {icon}
           {label}
         </label>
-        <InputGroup className="h-11 max-w-34 min-w-0 flex-1 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30">
+        <InputGroup className="h-11 w-42 min-w-0 shrink-0 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30">
           <InputGroupInput
             id={id}
             inputMode={integer ? "numeric" : "decimal"}
