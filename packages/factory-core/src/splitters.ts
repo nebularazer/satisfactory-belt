@@ -15,6 +15,7 @@ export const DEFAULT_SPLITTER_PROGRAM: SplitterProgram = Object.freeze({
   "output:1": Object.freeze([Object.freeze({ kind: "any" as const })]),
   "output:2": Object.freeze([Object.freeze({ kind: "none" as const })]),
 });
+export const MAX_SPLITTER_RULES = 64;
 export const SPLITTER_OUTPUTS: readonly SplitterOutput[] = ["output:0", "output:1", "output:2"];
 
 export function validateSplitterProgram(
@@ -50,7 +51,8 @@ export function validateSplitterProgram(
     }
     total += filters.length;
   }
-  if (total > 64) throw new Error("A programmable splitter supports at most 64 rules.");
+  if (total > MAX_SPLITTER_RULES)
+    throw new Error("A programmable splitter supports at most 64 rules.");
 }
 
 export function splitterFilters(

@@ -488,7 +488,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     }));
   }
   function setRouteSettings(route: TransportRoute) {
-    validateTransportRoute(history.getSnapshot().state, route, catalog);
+    validateTransportRoute(history.getSnapshot().state, route);
     history.update((current) => {
       const next = reconcileTransportConnections({
         ...current,

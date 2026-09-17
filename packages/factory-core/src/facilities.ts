@@ -65,7 +65,6 @@ export type FacilityNode = Readonly<{
 export type TransportStop = Readonly<{
   id: string;
   nodeId: string;
-  unloadItemIds: readonly string[];
   waitSeconds: number;
 }>;
 export type TransportRoute = Readonly<{

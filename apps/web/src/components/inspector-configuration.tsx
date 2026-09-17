@@ -1,6 +1,6 @@
 /* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- Rule-group hover/focus identifies its matching canvas port. */
 /* oxlint-disable oxc/no-map-spread -- Candidate rules are immutable document values. */
-/* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Only the selected inspector constructs these choices. */
+/* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Only the selected inspector constructs these choices. */
 import {
   DEFAULT_SPLITTER_PROGRAM,
   SPLITTER_OUTPUTS,
@@ -20,6 +20,8 @@ import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorChoice } from "@/components/inspector-choice";
 import { Button } from "@/components/ui/button";
+import { InputGroupButton } from "@/components/ui/input-group";
+import { Marker, MarkerContent } from "@/components/ui/marker";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
@@ -67,39 +69,44 @@ export function InspectorConfiguration({
         onChange={(recipeId) => editor.replaceNode(withRecipe(node, recipeId, c))}
       />
     );
-  if (node.kind === "extractor")
+  if (node.kind === "extractor") {
+    const extractor = c.extractors[node.extractorId]!;
+    const tiers = Object.values(c.extractors).filter((entry) =>
+      entry.resourceIds.includes(node.resourceId),
+    );
+    if (extractor.resourceIds.length <= 1 && tiers.length <= 1) return null;
     return (
       <div className="space-y-3">
-        <InspectorChoice
-          label="Resource"
-          value={node.resourceId}
-          assets={assets}
-          options={c.extractors[node.extractorId]!.resourceIds.map((id) => ({
-            value: id,
-            label: c.items[id]!.name,
-            iconId: c.items[id]!.iconId,
-            disabled: () => !editor.canReplaceNode({ ...node, resourceId: id }),
-          }))}
-          onChange={(resourceId) => editor.replaceNode({ ...node, resourceId })}
-        />
-        {Object.values(c.extractors).filter((e) => e.resourceIds.includes(node.resourceId)).length >
-          1 && (
+        {extractor.resourceIds.length > 1 && (
+          <InspectorChoice
+            label="Resource"
+            value={node.resourceId}
+            assets={assets}
+            options={extractor.resourceIds.map((id) => ({
+              value: id,
+              label: c.items[id]!.name,
+              iconId: c.items[id]!.iconId,
+              disabled: () => !editor.canReplaceNode({ ...node, resourceId: id }),
+            }))}
+            onChange={(resourceId) => editor.replaceNode({ ...node, resourceId })}
+          />
+        )}
+        {tiers.length > 1 && (
           <InspectorButtonGroup
             label="Miner tier"
             value={node.extractorId}
-            options={Object.values(c.extractors)
-              .filter((e) => e.resourceIds.includes(node.resourceId))
-              .map((e) => ({
-                value: e.id,
-                label: e.name.replace(/^Miner\s*/i, ""),
-                iconId: e.iconId,
-                disabled: () => !editor.canReplaceNode({ ...node, extractorId: e.id }),
-              }))}
+            options={tiers.map((e) => ({
+              value: e.id,
+              label: e.name.replace(/^Miner\s*/i, ""),
+              iconId: e.iconId,
+              disabled: () => !editor.canReplaceNode({ ...node, extractorId: e.id }),
+            }))}
             onChange={(extractorId) => editor.replaceNode({ ...node, extractorId })}
           />
         )}
       </div>
     );
+  }
   if (node.kind !== "logistics") return null;
   const part = c.logistics[node.partId]!;
   const configurable = part.kind === "smart-splitter" || part.kind === "programmable-splitter";
@@ -158,7 +165,7 @@ function SplitterOutputRules({
     return {
       ...option,
       hideDisabledBadge: selected,
-      disabled: () => selected || !editor.canReplaceNode(added(option.value)),
+      disabled: () => (!smart && selected) || !editor.canReplaceNode(added(option.value)),
     };
   });
   return (
@@ -173,61 +180,74 @@ function SplitterOutputRules({
           editor.controller.highlightPort(null);
       }}
     >
-      <h3 className="text-xs font-medium text-muted-foreground">{label} output</h3>
-      <ul className="space-y-1">
-        {rules.map((rule) => {
-          const key = ruleKey(rule);
-          const item = rule.kind === "item" ? assets.catalog.items[rule.itemId] : undefined;
-          const name = item?.name ?? special.find((option) => option.value === key)!.label;
-          const removed = candidate(rules.filter((existing) => ruleKey(existing) !== key));
-          return (
-            <li key={key} className="flex items-center gap-2 text-xs">
-              {item && <CatalogIcon iconId={item.iconId} assets={assets} size={24} />}
-              <span className="min-w-0 flex-1">{name}</span>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove ${name} from ${label} output`}
-                disabled={!editor.canReplaceNode(removed)}
-                onClick={() => editor.replaceNode(removed)}
-              >
-                <XIcon />
-              </Button>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="flex items-end gap-2">
-        <div className="min-w-0 flex-1">
+      <Marker variant="separator">
+        <MarkerContent>{label} output</MarkerContent>
+      </Marker>
+      {smart ? (
+        <InspectorChoice
+          hideLabel
+          showSelectedIcon
+          label={`${label} output`}
+          value={rules[0] ? ruleKey(rules[0]) : "none"}
+          options={choices}
+          assets={assets}
+          onChange={(value) => editor.replaceNode(added(value))}
+        />
+      ) : (
+        <>
+          <ul className="space-y-1">
+            {rules.map((rule) => {
+              const key = ruleKey(rule);
+              const item = rule.kind === "item" ? assets.catalog.items[rule.itemId] : undefined;
+              const name = item?.name ?? special.find((option) => option.value === key)!.label;
+              const removed = candidate(rules.filter((existing) => ruleKey(existing) !== key));
+              return (
+                <li key={key} className="flex items-center gap-2 text-xs">
+                  {item && <CatalogIcon iconId={item.iconId} assets={assets} size={24} />}
+                  <span className="min-w-0 flex-1">{name}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove ${name} from ${label} output`}
+                    disabled={!editor.canReplaceNode(removed)}
+                    onClick={() => editor.replaceNode(removed)}
+                  >
+                    <XIcon />
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
           <InspectorChoice
-            label="Item or rule"
+            hideLabel
+            showSelectedIcon
+            label={`Add item or rule to ${label} output`}
             value={pending ?? "choose"}
             options={choices}
             assets={assets}
             onChange={setPending}
-          />
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mb-px"
-          title={smart ? "Replace this output’s rule" : "Add a rule"}
-          disabled={
-            !pending ||
-            rules.some((rule) => ruleKey(rule) === pending) ||
-            !editor.canReplaceNode(added(pending))
-          }
-          onClick={() => {
-            if (pending) {
-              editor.replaceNode(added(pending));
-              setPending(null);
+            inputAction={
+              <InputGroupButton
+                aria-label={`Add rule to ${label} output`}
+                disabled={
+                  !pending ||
+                  rules.some((rule) => ruleKey(rule) === pending) ||
+                  !editor.canReplaceNode(added(pending))
+                }
+                onClick={() => {
+                  if (pending) {
+                    editor.replaceNode(added(pending));
+                    setPending(null);
+                  }
+                }}
+              >
+                <PlusIcon />
+                Add
+              </InputGroupButton>
             }
-          }}
-        >
-          <PlusIcon />
-          Add
-        </Button>
-      </div>
+          />
+        </>
+      )}
     </section>
   );
 }

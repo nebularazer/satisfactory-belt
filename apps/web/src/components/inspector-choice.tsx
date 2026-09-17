@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Choices are scoped to the selected inspector. */
 import { useId } from "react";
+import type { ReactNode } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+import { InputGroupAddon } from "@/components/ui/input-group";
 import type { GameAssets } from "@/lib/game-assets";
 
 export type InspectorOption = {
@@ -35,6 +37,9 @@ export function InspectorChoice({
   description,
   disabled = false,
   inline = false,
+  hideLabel = false,
+  showSelectedIcon = false,
+  inputAction,
 }: {
   label: string;
   value: string | null;
@@ -44,20 +49,34 @@ export function InspectorChoice({
   description?: string;
   disabled?: boolean;
   inline?: boolean;
+  hideLabel?: boolean;
+  showSelectedIcon?: boolean;
+  inputAction?: ReactNode;
 }) {
   const id = useId();
+  const selected = options.find((option) => option.value === value);
   return (
-    <div className={inline ? "flex items-center justify-between gap-2" : "space-y-1.5"}>
+    <div
+      className={
+        inline ? "flex items-center justify-between gap-2" : hideLabel ? "" : "space-y-1.5"
+      }
+    >
       <label
         htmlFor={id}
-        className={inline ? "text-xs sm:text-sm" : "text-xs font-medium text-muted-foreground"}
+        className={
+          hideLabel
+            ? "sr-only"
+            : inline
+              ? "text-xs sm:text-sm"
+              : "text-xs font-medium text-muted-foreground"
+        }
       >
         {label}
       </label>
       <Combobox
         disabled={disabled}
         items={options}
-        value={options.find((option) => option.value === value) ?? null}
+        value={selected ?? null}
         itemToStringLabel={labelFor}
         itemToStringValue={valueFor}
         onValueChange={(option) => {
@@ -68,8 +87,15 @@ export function InspectorChoice({
           id={id}
           disabled={disabled}
           placeholder={value === null ? "Mixed" : "Choose…"}
-          className={inline ? "w-55 min-w-0 shrink-0" : "w-full"}
-        />
+          className={`${inline ? "w-55 min-w-0 shrink-0" : "w-full"} ${inputAction ? "has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30" : ""}`}
+        >
+          {showSelectedIcon && selected?.iconId && assets && (
+            <InputGroupAddon align="inline-start">
+              <CatalogIcon iconId={selected.iconId} assets={assets} size={24} />
+            </InputGroupAddon>
+          )}
+          {inputAction && <InputGroupAddon align="inline-end">{inputAction}</InputGroupAddon>}
+        </ComboboxInput>
         <ComboboxContent onKeyDown={(event) => event.stopPropagation()}>
           <ComboboxEmpty>No matches.</ComboboxEmpty>
           <ComboboxList>

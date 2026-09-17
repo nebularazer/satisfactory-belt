@@ -200,7 +200,6 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
       .map((node) => ({
         id: `${node.id}-stop`,
         nodeId: node.id,
-        unloadItemIds: [],
         waitSeconds: 15,
       })),
   }));

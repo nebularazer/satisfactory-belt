@@ -1,5 +1,7 @@
 import { CANVAS_PALETTES } from "@satisfactory-belt/canvas-pixi/theme";
 import {
+  DEFAULT_SPLITTER_PROGRAM,
+  MAX_SPLITTER_RULES,
   machineCapabilities,
   resolveFactoryNode,
   stationRoute,
@@ -35,7 +37,23 @@ export function InspectorStatistics({
   editor: ReturnType<typeof createFactoryEditor>;
   assets: GameAssets;
 }) {
-  if (node.kind === "logistics") return null;
+  if (node.kind === "logistics") {
+    if (assets.catalog.logistics[node.partId]!.kind !== "programmable-splitter") return null;
+    const used = Object.values(node.program ?? DEFAULT_SPLITTER_PROGRAM).reduce(
+      (sum, rules) => sum + rules.length,
+      0,
+    );
+    return (
+      <dl className="border-t pt-4 text-xs">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-muted-foreground">Available program slots</dt>
+          <dd className="tabular-nums">
+            {MAX_SPLITTER_RULES - used}/{MAX_SPLITTER_RULES}
+          </dd>
+        </div>
+      </dl>
+    );
+  }
   const members = scopedMachines(node, scope),
     capabilities = machineCapabilities(node, assets.catalog);
   const rows: { label: string; value: string; icon?: ReactNode; power?: boolean }[] = [];
@@ -77,8 +95,8 @@ export function InspectorStatistics({
         rows.push({
           label:
             counter === "sinkPoints"
-              ? "Group configured points/min"
-              : "Group configured DNA points/min",
+              ? `Estimated points/min${node.machines.length > 1 ? " (group)" : ""}`
+              : `Estimated DNA points/min${node.machines.length > 1 ? " (group)" : ""}`,
           value: relevant.some((rate) => rate.perMinute === null)
             ? "Unresolved flow"
             : number.format(

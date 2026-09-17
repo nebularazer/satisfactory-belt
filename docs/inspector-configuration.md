@@ -21,13 +21,14 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   nodes show variable power as Ø followed by its average.
 - Miners and oil extraction: individual purity and clock; shared resource and
   compatible miner tier. Purity and miner tiers use inline button groups. Water
-  extraction has clock but no purity setting.
-- Smart/programmed splitters: Left, Center, and Right output lists with an always
-  visible item/rule picker and Add button. Smart outputs hold at most one rule;
-  programmable splitters support 64 rules total. Empty lists close the output.
-  Hover/focus identifies the canvas port. Selected choices are disabled without
-  an Incompatible badge. Splitter type changes are not exposed.
-- Sink: incoming materials, points per item, and configured group points/min on
+  extraction has clock but no resource or purity selector.
+- Smart/programmed splitters: Marker separators label Left, Center, and Right outputs.
+  Smart outputs use one direct selector with the selected item icon. Programmable
+  outputs use rule lists and an always-visible picker with an integrated Add button;
+  their summary shows remaining program slots out of 64. Empty lists close the output.
+  Hover/focus identifies the canvas port. Already-added programmable choices are
+  disabled without an Incompatible badge. Splitter type changes are not exposed.
+- Sink: incoming materials, points per item, and estimated points/min across the group on
   unambiguous paths. DNA points have their own counter. Coupon progression is not
   modeled. Individual sink allocation is unknown.
 - Gift Tree: fixed configured production, count, and power.
@@ -48,7 +49,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   an aligned cargo selector, station fuel, and shared
   road-route assumptions (fuel per trip, vehicles, round-trip time). Fuel has its
   own conveyor input and displays the selected item image.
-- Train Stations: connected routes with an unload item filter and wait assumptions
+- Train Stations: connected routes with wait assumptions
   at each stop. The shared route defines freight-car count. Each station configures its car
   positions with one inline icon button group: No transfer, Fluid · Load/Unload,
   or Freight · Load/Unload. Cargo is always shown in an aligned row and is disabled
@@ -75,9 +76,8 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 Power Storage, power-grid controls, pipeline junctions/pumps/valves, portals, and
 throughput monitors remain out of scope. Transport calculations do not simulate
 travel, queues, loading windows, fluid hydraulics, inventory fill, or power networks.
-The unload filter stores the cargo allowed to leave the train at this stop; an
-empty list means any cargo. It respects platform direction and currently does not
-affect calculated material flow. Loading is configured through each platform’s cargo.
+Transfers are configured through each platform’s direction and cargo; there are no
+station-level load or unload filters.
 Round-trip assumptions include docking and waiting. Routes do not yet propagate
 material streams between stations; selected cargo describes their material ports.
 

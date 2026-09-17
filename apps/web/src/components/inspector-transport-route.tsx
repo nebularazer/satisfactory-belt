@@ -2,11 +2,8 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Inspector route settings. */
 import { routeTopology, stationRoute } from "@satisfactory-belt/factory-core";
 import type { FacilityNode, TransportRoute } from "@satisfactory-belt/factory-core";
-import { XIcon } from "lucide-react";
 
-import { InspectorChoice } from "@/components/inspector-choice";
 import { InspectorNumberField } from "@/components/inspector-number-field";
-import { Button } from "@/components/ui/button";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
@@ -93,19 +90,6 @@ export function InspectorTransportRoute({
           .filter((stop) => stop.nodeId === node.id)
           .map((stop) => (
             <div key={stop.id} className="space-y-3">
-              <InspectorItemFilter
-                label="Unload filter"
-                values={stop.unloadItemIds}
-                assets={assets}
-                onChange={(unloadItemIds) =>
-                  update({
-                    ...route,
-                    stops: route.stops.map((entry) =>
-                      entry.id === stop.id ? { ...entry, unloadItemIds } : entry,
-                    ),
-                  })
-                }
-              />
               <InspectorNumberField
                 label="Wait at stop"
                 value={stop.waitSeconds}
@@ -125,49 +109,5 @@ export function InspectorTransportRoute({
             </div>
           ))}
     </section>
-  );
-}
-
-function InspectorItemFilter({
-  label,
-  values,
-  assets,
-  onChange,
-}: {
-  label: string;
-  values: readonly string[];
-  assets: GameAssets;
-  onChange: (ids: readonly string[]) => void;
-}) {
-  return (
-    <div className="space-y-1">
-      <InspectorChoice
-        label={label}
-        value="add"
-        assets={assets}
-        options={[
-          { value: "add", label: values.length ? "Add item" : "Any item" },
-          ...Object.values(assets.catalog.items)
-            .filter((item) => !values.includes(item.id))
-            .map((item) => ({ value: item.id, label: item.name, iconId: item.iconId })),
-        ]}
-        onChange={(id) => {
-          if (id !== "add") onChange([...values, id]);
-        }}
-      />
-      {values.map((id) => (
-        <div key={id} className="flex items-center justify-between gap-1 text-xs">
-          <span>{assets.catalog.items[id]!.name}</span>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Remove ${assets.catalog.items[id]!.name} from ${label}`}
-            onClick={() => onChange(values.filter((value) => value !== id))}
-          >
-            <XIcon />
-          </Button>
-        </div>
-      ))}
-    </div>
   );
 }

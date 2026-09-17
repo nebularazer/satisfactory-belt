@@ -87,11 +87,7 @@ export function withRecipe(
   };
 }
 
-export function validateTransportRoute(
-  document: FactoryDocument,
-  route: TransportRoute,
-  catalog: GameCatalog,
-) {
+export function validateTransportRoute(document: FactoryDocument, route: TransportRoute) {
   if (
     !route.id ||
     !route.name.trim() ||
@@ -130,8 +126,7 @@ export function validateTransportRoute(
       !setting.id ||
       !Number.isFinite(setting.waitSeconds) ||
       setting.waitSeconds < 0 ||
-      setting.waitSeconds > 86400 ||
-      setting.unloadItemIds.some((id) => !catalog.items[id])
+      setting.waitSeconds > 86400
     )
       throw new Error("Invalid stop settings.");
     if (stop?.kind !== "facility" || stationKind(stop) !== route.kind)
