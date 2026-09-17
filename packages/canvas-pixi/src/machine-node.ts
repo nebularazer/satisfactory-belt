@@ -13,6 +13,13 @@ const ZAP =
   '<path d="M 15.914 4 a 1.5 1.5 0 0 0 -2.474 -1.561 l -9 9 A 1.5 1.5 0 0 0 5.5 14 h 4.002 a 0.5 0.5 0 0 1 0.471 0.666 L 8.086 20 a 1.5 1.5 0 0 0 2.475 1.56 l 9 -9 A 1.5 1.5 0 0 0 18.5 10 h -3.997 a 0.5 0.5 0 0 1 -0.472 -0.667 z"/>';
 const CLOCK = '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>';
 
+const STORAGE =
+  '<path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/>';
+const FLUID =
+  '<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/>';
+const GENERATION =
+  '<path d="m11 7-3 5h4l-3 5"/><path d="M14.856 6H16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.935"/><path d="M22 14v-4"/><path d="M5.14 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.936"/>';
+
 type IconView = { sprite: Sprite; placeholder: Graphics; id: string; size: number };
 
 export class MachineNodeView {
@@ -103,19 +110,46 @@ export class MachineNodeView {
         this.icon(port.iconId, port.direction === "input" ? 28 : display.size - 28, port.y, 24);
     }
     if (display.layout === "logistics") return;
-    this.symbol(ZAP, 12, 232, this.palette.power.stroke, this.palette.power.fill);
-    this.label(display.powerLabel, 32, 240, 80, 11, "500", this.palette.footer);
+    const footer = display.footer;
+    const symbol =
+      footer?.kind === "storage"
+        ? STORAGE
+        : footer?.kind === "fluid"
+          ? FLUID
+          : footer?.kind === "generation"
+            ? GENERATION
+            : ZAP;
+    this.symbol(
+      symbol,
+      12,
+      232,
+      footer ? this.palette.footer : this.palette.power.stroke,
+      footer ? "none" : this.palette.power.fill,
+    );
+    const powerLabel =
+      display.power.kind === "range"
+        ? `Ø ${new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(display.power.averageMegawatts)} MW`
+        : display.powerLabel;
+    this.label(
+      footer?.label ?? powerLabel,
+      32,
+      240,
+      display.clockLabel ? 92 : 208,
+      11,
+      "500",
+      this.palette.footer,
+    );
     if (display.clockLabel) {
-      this.symbol(CLOCK, 120, 232, this.palette.clock.stroke, this.palette.clock.fill);
-      this.label(display.clockLabel, 140, 240, 49, 11, "500", this.palette.footer);
+      this.symbol(CLOCK, 124, 232, this.palette.clock.stroke, this.palette.clock.fill);
+      this.label(display.clockLabel, 144, 240, 42, 11, "500", this.palette.footer);
     }
     if (display.sloops) {
-      this.icon(display.sloops.iconId, 207, 240, 18);
+      this.icon(display.sloops.iconId, 197, 240, 16);
       this.label(
         display.sloops.used === null ? "Mixed" : `${display.sloops.used}/${display.sloops.slots}`,
-        221,
+        208,
         240,
-        27,
+        42,
         11,
         "500",
         display.sloops.used ? this.palette.selection : this.palette.footer,

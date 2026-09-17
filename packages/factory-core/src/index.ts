@@ -5,6 +5,7 @@ import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 import { resolveFacility } from "./facilities";
 import type { FacilityNode, Purity } from "./facilities";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
+import type { PortTransport } from "./ports";
 import { validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
 
@@ -23,6 +24,9 @@ export type MachineMember = Readonly<{
   purity?: Purity;
   loadPercent?: number;
   suppliedMatrices?: boolean;
+  impureSatellites?: number;
+  normalSatellites?: number;
+  pureSatellites?: number;
 }>;
 type NodeBase = Readonly<{ id: string; x: number; y: number; machines: readonly MachineMember[] }>;
 export type ManufacturingNode = NodeBase &
@@ -60,7 +64,8 @@ export type LogisticsNode = Readonly<{
 export type PortDisplay = Readonly<{
   key: string;
   direction: "input" | "output";
-  transport: "belt" | "pipe";
+  transport: PortTransport;
+  purpose?: "fuel";
   itemId: string | null;
   name: string;
   iconId: string | null;
@@ -87,6 +92,7 @@ export type MachineDisplay = Readonly<{
   power: PowerDisplay;
   powerLabel: string;
   clockLabel: string | null;
+  footer?: Readonly<{ kind: "storage" | "fluid" | "generation"; label: string }>;
   sloops: Readonly<{ used: number | null; slots: number; iconId: string }> | null;
 }>;
 export type LogisticsDisplay = Readonly<{
@@ -131,7 +137,10 @@ export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): Nod
         transport: "belt",
         itemId: null,
         iconId: null,
-        name: `${direction === "input" ? "Input" : "Output"} ${slot + 1}`,
+        name:
+          direction === "output" && part.kind !== "merger"
+            ? `${["Left", "Center", "Right"][slot]} output`
+            : `${direction === "input" ? "Input" : "Output"} ${slot + 1}`,
         x: direction === "input" ? 0 : LOGISTICS_NODE_SIZE,
         y: LOGISTICS_NODE_SIZE / 2 + (slot - (count - 1) / 2) * GRID_SIZE,
       });
@@ -348,3 +357,5 @@ export * from "./configuration";
 export * from "./configured-flow";
 
 export * from "./clipboard";
+
+export * from "./transport";

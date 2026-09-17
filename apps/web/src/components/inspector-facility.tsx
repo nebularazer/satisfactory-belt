@@ -1,16 +1,18 @@
 /* oxlint-disable oxc/no-map-spread -- Candidate settings must preserve immutable history snapshots. */
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Controls render only for the selected building. */
-import { DEFAULT_DEPOT_RESEARCH, DEPOT_SPEEDS, parsePurity } from "@satisfactory-belt/factory-core";
+import {
+  DEFAULT_DEPOT_RESEARCH,
+  DEPOT_SPEEDS,
+  commonSetting,
+  scopedMachines,
+} from "@satisfactory-belt/factory-core";
 import type { FacilityNode, FacilityConfiguration } from "@satisfactory-belt/factory-core";
 import { PROJECT_PHASES } from "@satisfactory-belt/game-data";
-import { PlusIcon, MinusIcon } from "lucide-react";
 
-import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorChoice } from "@/components/inspector-choice";
 import { InspectorNumberField } from "@/components/inspector-number-field";
-import { InspectorTextField } from "@/components/inspector-text-field";
+import { InspectorTrainPlatforms } from "@/components/inspector-train-platforms";
 import { InspectorTransportRoute } from "@/components/inspector-transport-route";
-import { Button } from "@/components/ui/button";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
@@ -22,10 +24,12 @@ export const PURITY_OPTIONS = [
 ];
 export function InspectorFacility({
   node,
+  scope,
   editor,
   assets,
 }: {
   node: FacilityNode;
+  scope: string;
   editor: Editor;
   assets: GameAssets;
 }) {
@@ -49,33 +53,11 @@ export function InspectorFacility({
       .filter((i) => (i.form === "solid") === (transport === "belt"))
       .map((i) => itemOption(i.id));
   }
-  function field(
-    label: string,
-    value: number,
-    min: number,
-    max: number,
-    onCommit: (value: number) => void,
-    integer = false,
-    unit?: string,
-  ) {
-    return (
-      <InspectorNumberField
-        label={label}
-        value={value}
-        min={min}
-        max={max}
-        integer={integer}
-        unit={unit}
-        revision={node.configuration}
-        onCommit={onCommit}
-      />
-    );
-  }
   return (
     <div className="space-y-4">
       {c.type === "generator" && (
         <InspectorChoice
-          label="Fuel · shared by all machines"
+          label="Fuel"
           value={c.fuelId}
           assets={assets}
           options={b.fuels.map((f) => ({
@@ -97,76 +79,39 @@ export function InspectorFacility({
             }))}
             onChange={(resourceId) => commit({ ...c, resourceId })}
           />
-          <section className="space-y-3" aria-label="Resource well extractors">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">Satellite extractors</h3>
-              <div className="flex gap-1">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Remove last satellite"
-                  disabled={c.satellites.length <= 1}
-                  onClick={() => commit({ ...c, satellites: c.satellites.slice(0, -1) })}
-                >
-                  <MinusIcon />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Add satellite"
-                  disabled={c.satellites.length >= 10}
-                  onClick={() =>
-                    commit({
-                      ...c,
-                      satellites: [
-                        ...c.satellites,
-                        { id: crypto.randomUUID(), purity: c.satellites.at(-1)!.purity },
-                      ],
-                    })
-                  }
-                >
-                  <PlusIcon />
-                </Button>
-              </div>
-            </div>
-            <InspectorChoice
-              label="All satellite purities"
-              value={
-                c.satellites.every((s) => s.purity === c.satellites[0]!.purity)
-                  ? String(c.satellites[0]!.purity)
-                  : null
-              }
-              options={PURITY_OPTIONS}
-              onChange={(value) =>
-                commit({
-                  ...c,
-                  satellites: c.satellites.map((s) => ({
-                    ...s,
-                    purity: parsePurity(Number(value)),
-                  })),
-                })
-              }
-            />
-            {c.satellites.map((satellite, index) => (
-              <InspectorChoice
-                key={satellite.id}
-                label={`Extractor ${index + 1} purity`}
-                value={String(satellite.purity)}
-                options={PURITY_OPTIONS}
-                onChange={(value) =>
-                  commit({
-                    ...c,
-                    satellites: c.satellites.map((s) =>
-                      s.id === satellite.id ? { ...s, purity: parsePurity(Number(value)) } : s,
-                    ),
-                  })
-                }
-              />
-            ))}
-            <p className="text-xs text-muted-foreground">
-              All satellite extractors use this pressurizer’s clock. Power is counted once for the
-              pressurizer.
-            </p>
+          <section className="space-y-3" aria-label="Satellite extractors">
+            <h3 className="text-xs font-medium text-muted-foreground">Satellite extractors</h3>
+            {(
+              [
+                ["impureSatellites", "Impure"],
+                ["normalSatellites", "Normal"],
+                ["pureSatellites", "Pure"],
+              ] as const
+            ).map(([setting, label]) => {
+              const members = scopedMachines(node, scope);
+              const max = Math.min(
+                ...members.map(
+                  (member) =>
+                    10 -
+                    (member.impureSatellites ?? 0) -
+                    (member.normalSatellites ?? 0) -
+                    (member.pureSatellites ?? 0) +
+                    (member[setting] ?? 0),
+                ),
+              );
+              return (
+                <InspectorNumberField
+                  key={`${scope}:${setting}`}
+                  label={label}
+                  value={commonSetting(members, setting)}
+                  min={0}
+                  max={max}
+                  integer
+                  revision={node.machines}
+                  onCommit={(value) => editor.setOperatingSetting(node.id, scope, setting, value)}
+                />
+              );
+            })}
           </section>
         </>
       )}
@@ -220,13 +165,6 @@ export function InspectorFacility({
             }
           />
         </section>
-      )}
-      {"name" in c && (
-        <InspectorTextField
-          label="Name"
-          value={c.name}
-          onCommit={(name) => commit({ ...c, name })}
-        />
       )}
       {(c.type === "truck-station" || c.type === "freight-platform") && (
         <>
@@ -284,101 +222,23 @@ export function InspectorFacility({
           )}
         </>
       )}
-      {(c.type === "truck-station" || c.type === "train-station") && (
+      {(c.type === "truck-station" || c.type === "train-station" || c.type === "drone-port") && (
         <InspectorTransportRoute node={node} editor={editor} assets={assets} />
       )}
       {c.type === "train-station" && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">Platforms</h3>
-          {document.nodes
-            .filter(
-              (n): n is FacilityNode =>
-                n.kind === "facility" &&
-                n.configuration.type === "freight-platform" &&
-                n.configuration.stationId === node.id,
-            )
-            .toSorted(
-              (a, other) =>
-                (a.configuration.type === "freight-platform" ? a.configuration.position : 0) -
-                (other.configuration.type === "freight-platform"
-                  ? other.configuration.position
-                  : 0),
-            )
-            .map((platform) => (
-              <p key={platform.id} className="text-xs">
-                {platform.configuration.type === "freight-platform" &&
-                  `${platform.configuration.position}. ${catalog.buildings![platform.buildingId]!.name} · ${platform.configuration.mode}`}
-              </p>
-            ))}
-          <p className="text-xs text-muted-foreground">
-            Place freight or empty platforms from the catalog, then assign their station and
-            position.
-          </p>
-        </section>
+        <InspectorTrainPlatforms node={node} editor={editor} assets={assets} />
       )}
       {c.type === "freight-platform" && (
-        <>
-          <InspectorChoice
-            label="Train station"
-            value={c.stationId ?? "none"}
-            options={[
-              { value: "none", label: "Unassigned" },
-              ...document.nodes
-                .filter(
-                  (n): n is FacilityNode =>
-                    n.kind === "facility" && n.configuration.type === "train-station",
-                )
-                .map((n) => ({
-                  value: n.id,
-                  label: n.configuration.type === "train-station" ? n.configuration.name : n.id,
-                  disabled: () => !compatible({ ...c, stationId: n.id }),
-                })),
-            ]}
-            onChange={(id) => commit({ ...c, stationId: id === "none" ? null : id })}
-          />
-          <InspectorChoice
-            label="Platform position"
-            value={String(c.position)}
-            options={Array.from({ length: 100 }, (_, index) => ({
-              value: String(index + 1),
-              label: String(index + 1),
-              disabled: () => !compatible({ ...c, position: index + 1 }),
-            }))}
-            onChange={(position) => commit({ ...c, position: Number(position) })}
-          />
-        </>
+        <p className="text-xs text-muted-foreground">
+          {c.stationId
+            ? c.position
+              ? `Car ${c.position}`
+              : "Connected to station · no car assigned"
+            : "Connect the rectangular platform port to a train station and assign its car number there."}
+        </p>
       )}
       {c.type === "drone-port" && (
         <>
-          <InspectorChoice
-            label="Drone"
-            value={String(c.hasDrone)}
-            options={[
-              { value: "true", label: "Drone stationed here" },
-              { value: "false", label: "Destination only" },
-            ]}
-            onChange={(value) => commit({ ...c, hasDrone: value === "true" })}
-          />
-          <InspectorChoice
-            label="Destination"
-            value={c.destinationId ?? "none"}
-            options={[
-              { value: "none", label: "Unassigned" },
-              ...document.nodes
-                .filter(
-                  (n): n is FacilityNode =>
-                    n.kind === "facility" &&
-                    n.configuration.type === "drone-port" &&
-                    n.id !== node.id,
-                )
-                .map((n) => ({
-                  value: n.id,
-                  label: n.configuration.type === "drone-port" ? n.configuration.name : n.id,
-                  disabled: () => !compatible({ ...c, destinationId: n.id }),
-                })),
-            ]}
-            onChange={(id) => commit({ ...c, destinationId: id === "none" ? null : id })}
-          />
           <InspectorChoice
             label="Fuel"
             value={c.fuelId}
@@ -405,19 +265,6 @@ export function InspectorFacility({
               onChange={(id) => commit({ ...c, [key]: id === "auto" ? null : id })}
             />
           ))}
-          {field(
-            "Round trip",
-            c.roundTripSeconds,
-            1,
-            86400,
-            (roundTripSeconds) => commit({ ...c, roundTripSeconds }),
-            false,
-            "s",
-          )}
-          <p className="text-xs text-muted-foreground">
-            Round-trip time is a planning assumption, including docking and waiting. Cargo
-            throughput also depends on available loads.
-          </p>
         </>
       )}
       {c.type === "space-elevator" && (
@@ -428,37 +275,10 @@ export function InspectorFacility({
             options={PROJECT_PHASES.map((_, i) => ({
               value: String(i + 1),
               label: `Phase ${i + 1}`,
-              disabled: () => !compatible({ ...c, phase: i + 1, delivered: {} }),
+              disabled: () => !compatible({ ...c, phase: i + 1 }),
             }))}
-            onChange={(value) => commit({ ...c, phase: Number(value), delivered: {} })}
+            onChange={(value) => commit({ ...c, phase: Number(value) })}
           />
-          <section className="space-y-4" aria-label="Delivery progress">
-            {PROJECT_PHASES[c.phase - 1]!.map((requirement) => (
-              <div key={requirement.itemId} className="space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <CatalogIcon
-                    iconId={catalog.items[requirement.itemId]!.iconId}
-                    assets={assets}
-                    size={24}
-                  />
-                  {catalog.items[requirement.itemId]!.name}
-                </div>
-                {field(
-                  "Delivered",
-                  c.delivered[requirement.itemId] ?? 0,
-                  0,
-                  requirement.amount,
-                  (value) =>
-                    commit({ ...c, delivered: { ...c.delivered, [requirement.itemId]: value } }),
-                  true,
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {requirement.amount - (c.delivered[requirement.itemId] ?? 0)} remaining of{" "}
-                  {requirement.amount}
-                </p>
-              </div>
-            ))}
-          </section>
         </>
       )}
     </div>

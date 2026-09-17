@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Handlers belong to this small controlled field. */
 import { MinusIcon, PlusIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { useId, useState } from "react";
 
 import {
@@ -13,6 +14,7 @@ import {
 /** Drafts never enter document history; a null value represents mixed settings. */
 export function InspectorNumberField({
   label,
+  icon,
   value,
   revision,
   min,
@@ -22,6 +24,7 @@ export function InspectorNumberField({
   onCommit,
 }: {
   label: string;
+  icon?: ReactNode;
   value: number | null;
   revision: unknown;
   min: number;
@@ -65,14 +68,15 @@ export function InspectorNumberField({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="shrink-0 whitespace-nowrap text-xs sm:text-sm">
+        <label htmlFor={id} className="flex items-center gap-1.5 text-xs sm:text-sm">
+          {icon}
           {label}
         </label>
-        <InputGroup className="h-11 max-w-44 min-w-0 flex-1 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30">
+        <InputGroup className="h-11 max-w-34 min-w-0 flex-1 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30">
           <InputGroupInput
             id={id}
             inputMode={integer ? "numeric" : "decimal"}
-            className="min-h-11 text-right tabular-nums sm:min-h-8"
+            className="min-h-11 px-1 text-right text-xs tabular-nums sm:min-h-8"
             value={draft ?? (value === null ? "" : String(Number(value.toPrecision(12))))}
             placeholder={value === null ? "Mixed" : undefined}
             onChange={(event) => {

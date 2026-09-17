@@ -1,11 +1,17 @@
 import {
   machineCapabilities,
+  resolveFactoryNode,
+  stationRoute,
+  routeTopology,
   scopedMachines,
   DEPOT_SPEEDS,
   configuredIncomingRates,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode } from "@satisfactory-belt/factory-core";
+import { ZapIcon, BatteryChargingIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
+import { CatalogIcon } from "@/components/catalog-search-details";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 3 });
@@ -23,19 +29,37 @@ export function InspectorStatistics({
   if (node.kind === "logistics") return null;
   const members = scopedMachines(node, scope),
     capabilities = machineCapabilities(node, assets.catalog);
-  const rows: { label: string; value: string }[] = [];
+  const rows: { label: string; value: string; icon?: ReactNode }[] = [];
+  const itemIcon = (id: string) => (
+    <CatalogIcon iconId={assets.catalog.items[id]!.iconId} assets={assets} size={16} />
+  );
   if (capabilities.clock)
     rows.push({
       label: "Power Shards",
+      icon: itemIcon("Desc_CrystalShard_C"),
       value: String(
         members.reduce((sum, m) => sum + Math.max(0, Math.ceil((m.clockPercent - 100) / 50)), 0),
       ),
     });
+  const display = resolveFactoryNode({ ...node, machines: members }, assets.catalog);
+  if (
+    display.layout === "machine" &&
+    !(node.kind === "facility" && node.configuration.type === "storage")
+  ) {
+    const generated =
+      node.kind === "facility" && ["generator", "augmenter"].includes(node.configuration.type);
+    rows.push({
+      label: generated ? "Power generated" : scope === "all" ? "Total power" : "Power",
+      value: display.powerLabel.replace(/ generated$/, ""),
+      icon: generated ? <BatteryChargingIcon className="size-4" /> : <ZapIcon className="size-4" />,
+    });
+  }
   if (node.kind === "manufacturing" && capabilities.sloopSlots > 0) {
     const boost = assets.catalog.machines[node.machineId]!.productionBoost;
     const factors = members.map((m) => boost.base + m.sloopsUsed * boost.perSloop);
     rows.push({
       label: "Amplification",
+      icon: itemIcon("Desc_WAT1_C"),
       value:
         Math.min(...factors) === Math.max(...factors)
           ? `${number.format(factors[0]!)}×`
@@ -96,7 +120,9 @@ export function InspectorStatistics({
         label: "Power boost contribution",
         value: `+${members.reduce((sum, m) => sum + (m.suppliedMatrices ? 30 : 10), 0)}%`,
       });
-    if (c.type === "drone-port" && c.hasDrone) {
+    if (c.type === "drone-port") {
+      const route = stationRoute(editor.history.getSnapshot().state, node);
+      const closed = routeTopology(editor.history.getSnapshot().state, node.id).closed;
       for (const [direction, id] of [
         ["Outgoing", c.outgoingItemId],
         ["Incoming", c.incomingItemId],
@@ -104,16 +130,22 @@ export function InspectorStatistics({
         if (id)
           rows.push({
             label: `${direction} cargo capacity`,
-            value: `${number.format((9 * (assets.catalog.items[id]!.stackSize ?? 1) * 60) / c.roundTripSeconds)} items/min`,
+            value:
+              closed && route
+                ? `${number.format((9 * (assets.catalog.items[id]!.stackSize ?? 1) * 60 * route.vehicleCount) / route.roundTripSeconds)} items/min`
+                : "Complete the route loop",
           });
     }
   }
   if (!rows.length) return null;
   return (
-    <dl className="space-y-2 border-t pt-3 text-xs">
+    <dl className="space-y-2 border-t pt-4 text-xs">
       {rows.map((row) => (
         <div key={row.label} className="flex items-start justify-between gap-3">
-          <dt className="text-muted-foreground">{row.label}</dt>
+          <dt className="flex items-center gap-1.5 text-muted-foreground">
+            {row.icon}
+            {row.label}
+          </dt>
           <dd className="text-right tabular-nums">{row.value}</dd>
         </div>
       ))}

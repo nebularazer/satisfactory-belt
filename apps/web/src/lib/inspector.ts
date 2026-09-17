@@ -38,8 +38,15 @@ export function inspectorSummary(
   const input = destination?.ports.find((port) => port.key === link.input.portKey);
   if (!source || !destination || !output || !input) return null;
   return {
-    title: output.transport === "pipe" ? "Pipe link" : "Belt link",
-    subtitle: `${source.title} (${output.name}) → ${destination.title} (${input.name})`,
+    title:
+      output.transport === "pipe"
+        ? "Pipeline"
+        : output.transport === "platform"
+          ? "Platform connection"
+          : output.transport.endsWith("-route")
+            ? "Transport route"
+            : "Conveyor",
+    subtitle: null,
     deleteLabel: "Delete link",
   };
 }

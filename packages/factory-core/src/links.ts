@@ -3,7 +3,7 @@ import type { PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
 
 import type { TransportRoute, DepotResearch } from "./facilities";
 import type { FactoryNode } from "./index";
-import { createPortIndex } from "./ports";
+import { createPortIndex, isMaterialTransport } from "./ports";
 import type { SemanticPort } from "./ports";
 import { filterAllows } from "./splitters";
 
@@ -45,17 +45,27 @@ export function createConnectionIndex(
       id,
       new Set(port.direction === "output" && port.itemId !== null ? [port.itemId] : []),
     );
-    if (port.itemId === null && port.direction === "output") {
+    if (
+      isMaterialTransport(port.transport) &&
+      port.itemId === null &&
+      port.direction === "output"
+    ) {
       const entries = outputs.get(port.nodeId) ?? [];
       entries.push(id);
       outputs.set(port.nodeId, entries);
     }
   }
   for (const port of ports)
-    if (port.itemId === null && port.direction === "input" && port.forwardsMaterials !== false)
+    if (
+      isMaterialTransport(port.transport) &&
+      port.itemId === null &&
+      port.direction === "input" &&
+      port.forwardsMaterials !== false
+    )
       for (const output of outputs.get(port.nodeId) ?? []) edge(portId(port), output);
   for (const link of links) {
-    edge(portId(link.output), portId(link.input));
+    if (isMaterialTransport(byId.get(portId(link.output))?.transport ?? "belt"))
+      edge(portId(link.output), portId(link.input));
     pairs.add(pairKey(link.output, link.input));
   }
   // Monotonic sets terminate even for recycling loops. No item ordering or rates are inferred.
@@ -82,6 +92,37 @@ export function createConnectionIndex(
     if (!result.compatible) return result;
     const output = byId.get(portId(result.output))!;
     const input = byId.get(portId(result.input))!;
+    if (!isMaterialTransport(output.transport)) {
+      const existing = links.find(
+        (link) => pairKey(link.output, link.input) === pairKey(result.output, result.input),
+      );
+      if (existing && !allowExisting) return { compatible: false, reason: "duplicate-link" };
+      const others = existing ? links.filter((link) => link !== existing) : links;
+      if (
+        others.some(
+          (link) =>
+            (output.transport !== "platform" && portId(link.output) === portId(result.output)) ||
+            portId(link.input) === portId(result.input),
+        )
+      )
+        return { compatible: false, reason: "occupied-port" };
+      if (
+        output.transport === "drone-route" &&
+        others.some(
+          (link) =>
+            link.output.portKey === "route:output" &&
+            [link.output.nodeId, link.input.nodeId].some(
+              (id) => id === output.nodeId || id === input.nodeId,
+            ) &&
+            [link.output.nodeId, link.input.nodeId].some(
+              (id) => id !== output.nodeId && id !== input.nodeId,
+            ),
+        )
+      )
+        return { compatible: false, reason: "drone-point-to-point" };
+
+      return result;
+    }
     if (output.filter && output.filter.rules.every((rule) => rule.kind === "none"))
       return { compatible: false, reason: "disabled-output" };
     if (input.itemId !== null && !filterAllows(output.filter, input.itemId))

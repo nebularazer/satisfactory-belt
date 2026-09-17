@@ -11,14 +11,12 @@ export function parseBuildings(
   const kinds: Record<string, BuildingKind> = {
     FGBuildableGeneratorFuel: "generator",
     FGBuildableGeneratorNuclear: "generator",
-    FGBuildableGeneratorGeoThermal: "geothermal",
     FGBuildablePowerBooster: "augmenter",
     FGBuildableFrackingActivator: "well",
     FGCentralStorageContainer: "depot",
     FGBuildableDockingStation: "truck-station",
     FGBuildableRailroadStation: "train-station",
     FGBuildableTrainPlatformCargo: "freight-platform",
-    FGBuildableTrainPlatformEmpty: "freight-platform",
     FGBuildableDroneStation: "drone-port",
     FGBuildableSpaceElevator: "space-elevator",
   };
@@ -86,8 +84,7 @@ export function parseBuildings(
               n("mStorageInventorySize"),
       fuels,
       resourceIds,
-      baseRate:
-        kind === "well" ? 60 : kind === "geothermal" ? n("mVariablePowerProductionFactor") : 0,
+      baseRate: kind === "well" ? 60 : 0,
       loadFollowing: id === "Build_GeneratorBiomass_Automated_C",
     };
     if (kind === "truck-station" && fluid) building.capacity = 3200;

@@ -9,8 +9,11 @@ import type { CanvasLink, Point, PortReference, RouteGuide } from "@satisfactory
 import { EditHistory } from "@satisfactory-belt/edit-history";
 import {
   remapCopiedFacilities,
+  reconcileTransportConnections,
+  isMaterialTransport,
   copiedTransportRoutes,
   validateTransportRoute,
+  validateFacilityReferences,
   createConfigurationValidator,
   clearRemovedReferences,
   setMatrixSupply,
@@ -42,7 +45,7 @@ import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 /** The host owns document edits and the workspace-local clipboard. */
 export function createFactoryEditor(catalog: GameCatalog, initialDocument: FactoryDocument) {
-  const history = new EditHistory<FactoryDocument>(initialDocument);
+  const history = new EditHistory<FactoryDocument>(reconcileTransportConnections(initialDocument));
   let semanticPorts: SemanticPort[] = [];
   let publishedLinks: readonly MaterialLink[] | null = null;
   let routed = new Map<string, CanvasLink>();
@@ -74,21 +77,23 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     previousNodes = new Map(nodes.map((node) => [node.id, node]));
     return nodes.map(nodeBounds);
   }
-  const items = project(initialDocument.nodes);
+  const items = project(history.getSnapshot().state.nodes);
   function connect(a: PortReference, b: PortReference) {
     const result = portIndex.compatibility(a, b);
     if (result.compatible)
-      history.update((current) => ({
-        ...current,
-        links: [
-          ...current.links,
-          {
-            id: crypto.randomUUID(),
-            output: { nodeId: result.output.nodeId, portKey: result.output.portKey },
-            input: { nodeId: result.input.nodeId, portKey: result.input.portKey },
-          },
-        ],
-      }));
+      history.update((current) =>
+        reconcileTransportConnections({
+          ...current,
+          links: [
+            ...current.links,
+            {
+              id: crypto.randomUUID(),
+              output: { nodeId: result.output.nodeId, portKey: result.output.portKey },
+              input: { nodeId: result.input.nodeId, portKey: result.input.portKey },
+            },
+          ],
+        }),
+      );
     return result;
   }
   function setRoute(id: string, guides?: readonly RouteGuide[]) {
@@ -238,7 +243,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       );
       return nodes.length === current.nodes.length && links.length === current.links.length
         ? current
-        : {
+        : reconcileTransportConnections({
             ...current,
             nodes: clearRemovedReferences(nodes),
             links,
@@ -246,7 +251,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
               ...route,
               stops: route.stops.filter((stop) => !selection.has(stop.nodeId)),
             })),
-          };
+          });
     });
   }
 
@@ -304,14 +309,16 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       input: { ...link.input, nodeId: ids.get(link.input.nodeId)! },
       guides: translateGuides(link.guides, { x: dx, y: dy }),
     }));
-    history.update((current) => ({
-      ...current,
-      nodes: [...current.nodes, ...pasted],
-      ...(remapped.routes.length
-        ? { routes: [...(current.routes ?? []), ...remapped.routes] }
-        : {}),
-      links: [...current.links, ...links],
-    }));
+    history.update((current) =>
+      reconcileTransportConnections({
+        ...current,
+        nodes: [...current.nodes, ...pasted],
+        ...(remapped.routes.length
+          ? { routes: [...(current.routes ?? []), ...remapped.routes] }
+          : {}),
+        links: [...current.links, ...links],
+      }),
+    );
     pasteCount++;
     controller.setSelection(new Set(pasted.map((item) => item.id)));
   }
@@ -325,7 +332,11 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       for (const link of current.links)
         if (createConnectionIndex(ports, links).compatibility(link.output, link.input).compatible)
           links.push(link);
-      return { ...current, nodes: clearRemovedReferences(nodes), links };
+      return reconcileTransportConnections({
+        ...current,
+        nodes: clearRemovedReferences(nodes),
+        links,
+      });
     });
   }
   function editMachine(
@@ -397,13 +408,15 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     if (source && !connection)
       throw new Error("This choice no longer supports the connection. Choose another result.");
     controller.cancel();
-    history.update((current) => ({
-      ...current,
-      nodes: [...current.nodes, node],
-      links: connection
-        ? [...current.links, { id: crypto.randomUUID(), ...connection }]
-        : current.links,
-    }));
+    history.update((current) =>
+      reconcileTransportConnections({
+        ...current,
+        nodes: [...current.nodes, node],
+        links: connection
+          ? [...current.links, { id: crypto.randomUUID(), ...connection }]
+          : current.links,
+      }),
+    );
     controller.setSelection(new Set([node.id]));
     return node;
   }
@@ -434,7 +447,13 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       semanticPorts.find(
         (entry) => entry.nodeId === link.output.nodeId && entry.portKey === link.output.portKey,
       );
-    if (!port || !Number.isInteger(tier) || tier < 1 || tier > (port.transport === "belt" ? 6 : 2))
+    if (
+      !port ||
+      !isMaterialTransport(port.transport) ||
+      !Number.isInteger(tier) ||
+      tier < 1 ||
+      tier > (port.transport === "belt" ? 6 : 2)
+    )
       throw new Error("Invalid transport tier.");
     history.update((current) => ({
       ...current,
@@ -448,6 +467,50 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       routes: [...(current.routes ?? []).filter((r) => r.id !== route.id), structuredClone(route)],
     }));
   }
+  function setPlatformAssignment(stationId: string, position: number, platformId: string | null) {
+    history.update((current) => {
+      const station = current.nodes.find((node) => node.id === stationId);
+      if (station?.kind !== "facility" || station.configuration.type !== "train-station")
+        return current;
+      const routeId = station.configuration.routeId;
+      const route = current.routes?.find((entry) => entry.id === routeId);
+      if (!Number.isInteger(position) || position < 1 || position > (route?.freightCarCount ?? 1))
+        return current;
+      if (
+        platformId &&
+        !current.nodes.some(
+          (node) =>
+            node.id === platformId &&
+            node.kind === "facility" &&
+            node.configuration.type === "freight-platform" &&
+            node.configuration.stationId === stationId,
+        )
+      )
+        return current;
+      const next = {
+        ...current,
+        nodes: current.nodes.map((node) => {
+          if (
+            node.kind !== "facility" ||
+            node.configuration.type !== "freight-platform" ||
+            node.configuration.stationId !== stationId
+          )
+            return node;
+          const assignedPosition =
+            node.id === platformId
+              ? position
+              : node.configuration.position === position
+                ? 0
+                : node.configuration.position;
+          return assignedPosition === node.configuration.position
+            ? node
+            : { ...node, configuration: { ...node.configuration, position: assignedPosition } };
+        }),
+      };
+      validateFacilityReferences(next);
+      return next;
+    });
+  }
   function setDepotResearch(research: DepotResearch) {
     if (
       ![research.speedLevel, research.capacityLevel].every(
@@ -457,50 +520,13 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       throw new Error("Invalid depot research.");
     history.update((current) => ({ ...current, depotResearch: { ...research } }));
   }
-  function createTransportRoute(id: string) {
-    history.update((current) => {
-      const node = current.nodes.find((entry) => entry.id === id);
-      if (
-        node?.kind !== "facility" ||
-        (node.configuration.type !== "truck-station" && node.configuration.type !== "train-station")
-      )
-        return current;
-      const route: TransportRoute = {
-        id: crypto.randomUUID(),
-        name: `${node.configuration.name} route`,
-        kind: node.configuration.type === "truck-station" ? "road" : "rail",
-        vehicleCount: 1,
-        roundTripSeconds: 120,
-        fuelId: null,
-        fuelPerTrip: 0,
-        stops: [
-          {
-            id: crypto.randomUUID(),
-            nodeId: id,
-            loadItemIds: [],
-            unloadItemIds: [],
-            waitSeconds: 0,
-          },
-        ],
-      };
-      return {
-        ...current,
-        routes: [...(current.routes ?? []), route],
-        nodes: current.nodes.map((entry) =>
-          entry.id === id
-            ? { ...node, configuration: { ...node.configuration, routeId: route.id } }
-            : entry,
-        ),
-      };
-    });
-  }
   return {
-    createTransportRoute,
     replaceNode,
     canReplaceNode: canConfigure,
     setLinkTier,
     setRouteSettings,
     setDepotResearch,
+    setPlatformAssignment,
     setMatrixSupply: (id: string, scope: string, supplied: boolean) =>
       editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,

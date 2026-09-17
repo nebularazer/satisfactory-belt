@@ -40,7 +40,26 @@ export class PortHighlights {
       const muted = roles[i] === "muted";
       const radius = port.transport === "pipe" ? PIPE_PORT_RADIUS : PORT_RADIUS;
       const shape = (size = radius) => {
-        if (port.transport === "pipe")
+        if (port.purpose === "fuel")
+          this.view.poly([
+            port.x - size,
+            port.y,
+            port.x - size / 2,
+            port.y - size,
+            port.x + size / 2,
+            port.y - size,
+            port.x + size,
+            port.y,
+            port.x + size / 2,
+            port.y + size,
+            port.x - size / 2,
+            port.y + size,
+          ]);
+        else if (port.transport === "platform")
+          this.view.roundRect(port.x - size, port.y - size / 2, size * 2, size, 2);
+        else if (port.transport.endsWith("-route"))
+          this.view.rect(port.x - size, port.y - size, size * 2, size * 2);
+        else if (port.transport === "pipe")
           this.view.poly([
             port.x,
             port.y - size,

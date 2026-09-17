@@ -3,10 +3,20 @@ import type { PortCompatibility, PortReference } from "@satisfactory-belt/canvas
 
 import type { MaterialFilter } from "./splitters";
 export type { PortReference } from "@satisfactory-belt/canvas-core";
+export type PortTransport =
+  | "belt"
+  | "pipe"
+  | "road-route"
+  | "rail-route"
+  | "drone-route"
+  | "platform";
+export const isMaterialTransport = (transport: PortTransport) =>
+  transport === "belt" || transport === "pipe";
+
 export type SemanticPort = PortReference &
   Readonly<{
     direction: "input" | "output";
-    transport: "belt" | "pipe";
+    transport: PortTransport;
     /** Null is an unassigned logistics port: any solid item over a belt. */
     itemId: string | null;
     /** Sink acceptance and output filtering are derived from node configuration. */
@@ -24,9 +34,11 @@ export function getPortCompatibility(
   if (a.nodeId === b.nodeId) return { compatible: false, reason: "same-node" };
   if (a.direction === b.direction) return { compatible: false, reason: "same-direction" };
   if (a.transport !== b.transport) return { compatible: false, reason: "different-transport" };
+  const relationship = !isMaterialTransport(a.transport);
   const wildcard =
-    (a.transport === "belt" || a.allowsUnknownFluid || b.allowsUnknownFluid) &&
-    (a.itemId === null || b.itemId === null);
+    relationship ||
+    ((a.transport === "belt" || a.allowsUnknownFluid || b.allowsUnknownFluid) &&
+      (a.itemId === null || b.itemId === null));
   if (!wildcard && (a.itemId === null || b.itemId === null || a.itemId !== b.itemId))
     return { compatible: false, reason: "different-material" };
   return {
@@ -55,7 +67,7 @@ export function createPortIndex(ports: readonly SemanticPort[]) {
       const port = byId.get(portId(ref));
       if (!port) return [];
       const opposite = port.direction === "input" ? "output" : "input";
-      if (port.transport === "pipe")
+      if (port.transport !== "belt")
         return ports.filter((candidate) => getPortCompatibility(port, candidate).compatible);
       const candidates =
         port.transport === "belt" && port.itemId === null

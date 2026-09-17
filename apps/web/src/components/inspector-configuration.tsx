@@ -6,11 +6,18 @@ import {
   SPLITTER_OUTPUTS,
   withRecipe,
 } from "@satisfactory-belt/factory-core";
-import type { FactoryNode, SplitterRule } from "@satisfactory-belt/factory-core";
+import type {
+  FactoryNode,
+  LogisticsNode,
+  SplitterRule,
+  SplitterOutput,
+} from "@satisfactory-belt/factory-core";
 import { recipeAlternatives } from "@satisfactory-belt/game-data/search";
 import { PlusIcon, XIcon } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
+import { CatalogIcon } from "@/components/catalog-search-details";
+import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorChoice } from "@/components/inspector-choice";
 import { Button } from "@/components/ui/button";
 import type { createFactoryEditor } from "@/lib/factory-editor";
@@ -42,14 +49,15 @@ export function InspectorConfiguration({
   if (node.kind === "manufacturing")
     return (
       <InspectorChoice
-        label="Recipe · shared by all machines"
+        label="Recipe"
         value={node.recipeId}
         assets={assets}
         options={Object.values(c.recipes)
           .filter((r) => r.machineIds.includes(node.machineId) || alternatives.has(r.id))
           .map((r) => ({
             value: r.id,
-            label: r.name,
+            label: r.name.replace(/^Alternate:\s*/i, ""),
+            badge: r.alternate ? "Alternate" : undefined,
             description: r.machineIds.includes(node.machineId)
               ? undefined
               : c.machines[r.machineIds[0]!]!.name,
@@ -63,7 +71,7 @@ export function InspectorConfiguration({
     return (
       <div className="space-y-3">
         <InspectorChoice
-          label="Resource · shared by all machines"
+          label="Resource"
           value={node.resourceId}
           assets={assets}
           options={c.extractors[node.extractorId]!.resourceIds.map((id) => ({
@@ -76,15 +84,14 @@ export function InspectorConfiguration({
         />
         {Object.values(c.extractors).filter((e) => e.resourceIds.includes(node.resourceId)).length >
           1 && (
-          <InspectorChoice
-            label="Miner tier · shared by all machines"
+          <InspectorButtonGroup
+            label="Miner tier"
             value={node.extractorId}
-            assets={assets}
             options={Object.values(c.extractors)
               .filter((e) => e.resourceIds.includes(node.resourceId))
               .map((e) => ({
                 value: e.id,
-                label: e.name,
+                label: e.name.replace(/^Miner\s*/i, ""),
                 iconId: e.iconId,
                 disabled: () => !editor.canReplaceNode({ ...node, extractorId: e.id }),
               }))}
@@ -96,161 +103,131 @@ export function InspectorConfiguration({
   if (node.kind !== "logistics") return null;
   const part = c.logistics[node.partId]!;
   const configurable = part.kind === "smart-splitter" || part.kind === "programmable-splitter";
+  if (!configurable) return null;
+  return (
+    <div className="space-y-5">
+      {SPLITTER_OUTPUTS.map((output, index) => (
+        <SplitterOutputRules
+          key={output}
+          node={node}
+          output={output}
+          label={["Left", "Center", "Right"][index]!}
+          editor={editor}
+          assets={assets}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SplitterOutputRules({
+  node,
+  output,
+  label,
+  editor,
+  assets,
+}: {
+  node: LogisticsNode;
+  output: SplitterOutput;
+  label: string;
+  editor: Editor;
+  assets: GameAssets;
+}) {
+  const [pending, setPending] = useState<string | null>(null);
   const program = node.program ?? DEFAULT_SPLITTER_PROGRAM;
+  const rules = program[output];
+  const smart = assets.catalog.logistics[node.partId]!.kind === "smart-splitter";
   const special = [
-    { value: "any", label: "Any", description: "Any incoming item" },
-    { value: "none", label: "None", description: "This output is closed" },
-    {
-      value: "any-undefined",
-      label: "Any undefined",
-      description: "Items not explicitly named on any output",
-    },
-    {
-      value: "overflow",
-      label: "Overflow",
-      description: "Used when other matching outputs cannot accept an item",
-    },
+    { value: "any", label: "Any" },
+    { value: "none", label: "None" },
+    { value: "any-undefined", label: "Any undefined" },
+    { value: "overflow", label: "Overflow" },
   ];
   const options = [
     ...special,
-    ...Object.values(c.items)
-      .filter((i) => i.form === "solid")
-      .map((i) => ({ value: `item:${i.id}`, label: i.name, iconId: i.iconId })),
+    ...Object.values(assets.catalog.items)
+      .filter((item) => item.form === "solid")
+      .map((item) => ({ value: `item:${item.id}`, label: item.name, iconId: item.iconId })),
   ];
-  const total = Object.values(program).reduce((sum, rules) => sum + rules.length, 0);
+  function candidate(next: readonly SplitterRule[]): LogisticsNode {
+    return { ...node, program: { ...program, [output]: next } };
+  }
+  const added = (key: string) => candidate(smart ? [fromKey(key)] : [...rules, fromKey(key)]);
+  const choices = options.map((option) => {
+    const selected = rules.some((rule) => ruleKey(rule) === option.value);
+    return {
+      ...option,
+      hideDisabledBadge: selected,
+      disabled: () => selected || !editor.canReplaceNode(added(option.value)),
+    };
+  });
   return (
-    <div className="space-y-4">
-      {part.kind !== "merger" && (
-        <InspectorChoice
-          label="Splitter type"
-          value={part.id}
-          assets={assets}
-          options={Object.values(c.logistics)
-            .filter((p) => p.kind !== "merger")
-            .map((p) => {
-              const candidate: FactoryNode = {
-                ...node,
-                partId: p.id,
-                program: p.kind === "splitter" ? undefined : program,
-              };
-              return {
-                value: p.id,
-                label: p.name,
-                iconId: p.iconId,
-                disabled: () => !editor.canReplaceNode(candidate),
-              };
-            })}
-          onChange={(partId) =>
-            editor.replaceNode({
-              ...node,
-              partId,
-              program: c.logistics[partId]!.kind === "splitter" ? undefined : program,
-            })
-          }
-        />
-      )}
-      {configurable &&
-        SPLITTER_OUTPUTS.map((output, index) => (
-          <section
-            key={output}
-            className="space-y-2 rounded-lg border p-3"
-            aria-label={`Output ${index + 1} rules`}
-            onPointerEnter={() =>
-              editor.controller.highlightPort({ nodeId: node.id, portKey: output })
-            }
-            onPointerLeave={() => editor.controller.highlightPort(null)}
-            onFocus={() => editor.controller.highlightPort({ nodeId: node.id, portKey: output })}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget))
-                editor.controller.highlightPort(null);
-            }}
-          >
-            <h3 className="text-sm font-medium">
-              Output {index + 1} · {index === 0 ? "Top" : index === 1 ? "Center" : "Bottom"}
-            </h3>
-            {program[output].map((rule, ruleIndex) => (
-              <div key={ruleKey(rule)} className="flex items-end gap-1">
-                <div className="min-w-0 flex-1">
-                  <InspectorChoice
-                    label={part.kind === "smart-splitter" ? "Rule" : `Rule ${ruleIndex + 1}`}
-                    value={ruleKey(rule)}
-                    assets={assets}
-                    options={options.map((option) => {
-                      const rules = program[output].map((r, i) =>
-                        i === ruleIndex ? fromKey(option.value) : r,
-                      );
-                      return {
-                        ...option,
-                        disabled: () =>
-                          !editor.canReplaceNode({
-                            ...node,
-                            program: { ...program, [output]: rules },
-                          }),
-                      };
-                    })}
-                    onChange={(key) =>
-                      editor.replaceNode({
-                        ...node,
-                        program: {
-                          ...program,
-                          [output]: program[output].map((r, i) =>
-                            i === ruleIndex ? fromKey(key) : r,
-                          ),
-                        },
-                      })
-                    }
-                  />
-                </div>
-                {program[output].length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove rule ${ruleIndex + 1} from output ${index + 1}`}
-                    disabled={
-                      !editor.canReplaceNode({
-                        ...node,
-                        program: {
-                          ...program,
-                          [output]: program[output].filter((_, i) => i !== ruleIndex),
-                        },
-                      })
-                    }
-                    onClick={() =>
-                      editor.replaceNode({
-                        ...node,
-                        program: {
-                          ...program,
-                          [output]: program[output].filter((_, i) => i !== ruleIndex),
-                        },
-                      })
-                    }
-                  >
-                    <XIcon />
-                  </Button>
-                )}
-              </div>
-            ))}
-            {part.kind === "programmable-splitter" && (
+    <section
+      className="space-y-2"
+      aria-label={`${label} output rules`}
+      onPointerEnter={() => editor.controller.highlightPort({ nodeId: node.id, portKey: output })}
+      onPointerLeave={() => editor.controller.highlightPort(null)}
+      onFocus={() => editor.controller.highlightPort({ nodeId: node.id, portKey: output })}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          editor.controller.highlightPort(null);
+      }}
+    >
+      <h3 className="text-xs font-medium text-muted-foreground">{label} output</h3>
+      <ul className="space-y-1">
+        {rules.map((rule) => {
+          const key = ruleKey(rule);
+          const item = rule.kind === "item" ? assets.catalog.items[rule.itemId] : undefined;
+          const name = item?.name ?? special.find((option) => option.value === key)!.label;
+          const removed = candidate(rules.filter((existing) => ruleKey(existing) !== key));
+          return (
+            <li key={key} className="flex items-center gap-2 text-xs">
+              {item && <CatalogIcon iconId={item.iconId} assets={assets} size={24} />}
+              <span className="min-w-0 flex-1">{name}</span>
               <Button
-                variant="outline"
-                size="sm"
-                disabled={total >= 64 || program[output].some((r) => r.kind === "none")}
-                onClick={() =>
-                  editor.replaceNode({
-                    ...node,
-                    program: { ...program, [output]: [...program[output], { kind: "none" }] },
-                  })
-                }
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove ${name} from ${label} output`}
+                disabled={!editor.canReplaceNode(removed)}
+                onClick={() => editor.replaceNode(removed)}
               >
-                <PlusIcon />
-                Add rule
+                <XIcon />
               </Button>
-            )}
-          </section>
-        ))}
-      {part.kind === "programmable-splitter" && (
-        <p className="text-xs text-muted-foreground">{total}/64 rules</p>
-      )}
-    </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <InspectorChoice
+            label="Item or rule"
+            value={pending ?? "choose"}
+            options={choices}
+            assets={assets}
+            onChange={setPending}
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mb-px"
+          title={smart ? "Replace this output’s rule" : "Add a rule"}
+          disabled={
+            !pending ||
+            rules.some((rule) => ruleKey(rule) === pending) ||
+            !editor.canReplaceNode(added(pending))
+          }
+          onClick={() => {
+            if (pending) {
+              editor.replaceNode(added(pending));
+              setPending(null);
+            }
+          }}
+        >
+          <PlusIcon />
+          Add
+        </Button>
+      </div>
+    </section>
   );
 }

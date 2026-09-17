@@ -5,6 +5,7 @@ import type { FactoryNode, ManufacturingNode } from "./index";
 import { createConnectionIndex } from "./links";
 import type { FactoryDocument } from "./links";
 import { resolveSemanticPorts } from "./semantic-ports";
+import { stationKind } from "./transport";
 
 /** A candidate must preserve every existing link, including downstream mixed-material paths. */
 export function canReplaceNode(
@@ -47,12 +48,10 @@ export function validateFacilityReferences(document: FactoryDocument) {
   for (const node of document.nodes) {
     if (node.kind !== "facility") continue;
     const c = node.configuration;
-    if (c.type === "truck-station" || c.type === "train-station") {
+    if (c.type === "truck-station" || c.type === "train-station" || c.type === "drone-port") {
       if (
         c.routeId &&
-        !document.routes?.some(
-          (r) => r.id === c.routeId && r.kind === (c.type === "truck-station" ? "road" : "rail"),
-        )
+        !document.routes?.some((r) => r.id === c.routeId && r.kind === stationKind(node))
       )
         throw new Error("Incompatible transport route.");
     }
@@ -61,6 +60,7 @@ export function validateFacilityReferences(document: FactoryDocument) {
       if (station?.kind !== "facility" || station.configuration.type !== "train-station")
         throw new Error("Missing train station.");
       if (
+        c.position > 0 &&
         document.nodes.some(
           (other) =>
             other.id !== node.id &&
@@ -72,27 +72,6 @@ export function validateFacilityReferences(document: FactoryDocument) {
       )
         throw new Error("Platform position already occupied.");
     }
-    if (c.type === "drone-port" && c.destinationId) {
-      const destination = nodes.get(c.destinationId);
-      if (
-        destination?.kind !== "facility" ||
-        destination.configuration.type !== "drone-port" ||
-        destination.id === node.id
-      )
-        throw new Error("Invalid drone destination.");
-      if (
-        c.outgoingItemId &&
-        destination.configuration.incomingItemId &&
-        c.outgoingItemId !== destination.configuration.incomingItemId
-      )
-        throw new Error("Destination accepts a different cargo.");
-      if (
-        c.incomingItemId &&
-        destination.configuration.outgoingItemId &&
-        c.incomingItemId !== destination.configuration.outgoingItemId
-      )
-        throw new Error("Destination supplies a different cargo.");
-    }
   }
 }
 
@@ -103,8 +82,6 @@ export function clearRemovedReferences(nodes: readonly FactoryNode[]): readonly 
     const c = node.configuration;
     if (c.type === "freight-platform" && c.stationId && !ids.has(c.stationId))
       return { ...node, configuration: { ...c, stationId: null } };
-    if (c.type === "drone-port" && c.destinationId && !ids.has(c.destinationId))
-      return { ...node, configuration: { ...c, destinationId: null } };
     return node;
   });
 }
@@ -142,10 +119,10 @@ export function validateTransportRoute(
   if (
     !route.id ||
     !route.name.trim() ||
-    !["road", "rail"].includes(route.kind) ||
+    !["road", "rail", "drone"].includes(route.kind) ||
     !Number.isSafeInteger(route.vehicleCount) ||
     route.vehicleCount < 1 ||
-    route.vehicleCount > 10000 ||
+    route.vehicleCount > (route.kind === "drone" ? 2 : 10000) ||
     !Number.isFinite(route.roundTripSeconds) ||
     route.roundTripSeconds < 1 ||
     !Number.isFinite(route.fuelPerTrip) ||
@@ -159,6 +136,24 @@ export function validateTransportRoute(
       !catalog.items[route.fuelId]!.energyMegajoules)
   )
     throw new Error("Invalid vehicle fuel.");
+  if (route.kind === "rail") {
+    const count = route.freightCarCount ?? 1;
+    const stations = new Set(route.stops.map((stop) => stop.nodeId));
+    if (
+      !Number.isSafeInteger(count) ||
+      count < 1 ||
+      count > 100 ||
+      document.nodes.some(
+        (node) =>
+          node.kind === "facility" &&
+          node.configuration.type === "freight-platform" &&
+          node.configuration.stationId &&
+          stations.has(node.configuration.stationId) &&
+          node.configuration.position > count,
+      )
+    )
+      throw new Error("Train must include every assigned freight car.");
+  }
   if (new Set(route.stops.map((stop) => stop.id)).size !== route.stops.length)
     throw new Error("Duplicate route stop.");
   for (const setting of route.stops) {
@@ -171,10 +166,7 @@ export function validateTransportRoute(
       [...setting.loadItemIds, ...setting.unloadItemIds].some((id) => !catalog.items[id])
     )
       throw new Error("Invalid stop settings.");
-    if (
-      stop?.kind !== "facility" ||
-      stop.configuration.type !== (route.kind === "road" ? "truck-station" : "train-station")
-    )
+    if (stop?.kind !== "facility" || stationKind(stop) !== route.kind)
       throw new Error("Invalid route stop.");
   }
   validateFacilityReferences({

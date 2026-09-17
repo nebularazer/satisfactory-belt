@@ -1,4 +1,4 @@
-/* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Only the selected entity's bounded inspector controls are rendered. */
+/* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop -- Only the selected entity's bounded inspector controls are rendered. */
 import {
   configuredIncomingRates,
   commonMatrices,
@@ -10,11 +10,11 @@ import {
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode, MaterialRate } from "@satisfactory-belt/factory-core";
-import { MinusIcon, PlusIcon } from "lucide-react";
+import { GaugeIcon, MinusIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
-import { InspectorChoice } from "@/components/inspector-choice";
+import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
 import { InspectorNumberField } from "@/components/inspector-number-field";
@@ -27,7 +27,7 @@ import type { GameAssets } from "@/lib/game-assets";
 type Editor = ReturnType<typeof createFactoryEditor>;
 const MATRIX_OPTIONS = [
   { value: "false", label: "Not supplied" },
-  { value: "true", label: "Supplied · 5/min" },
+  { value: "true", label: "Supplied" },
 ];
 const rateFormat = new Intl.NumberFormat("en", { maximumSignificantDigits: 5 });
 
@@ -105,17 +105,17 @@ export function InspectorBody({
       {node.kind !== "logistics" && (
         <div className="sticky top-0 z-10 bg-card py-1">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
-            <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
-              <TabsList
-                aria-label="Machine settings scope"
-                className="min-w-full justify-start p-0 group-data-horizontal/tabs:h-auto"
+            <TabsList
+              aria-label="Machine settings scope"
+              className="min-w-0 flex-1 justify-start p-0 group-data-horizontal/tabs:h-auto"
+            >
+              <TabsTrigger
+                value="all"
+                className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
               >
-                <TabsTrigger
-                  value="all"
-                  className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
-                >
-                  All
-                </TabsTrigger>
+                All
+              </TabsTrigger>
+              <div className="ml-1 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden border-l border-border pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {node.machines.map((member, index) => (
                   <TabsTrigger
                     key={member.id}
@@ -126,8 +126,8 @@ export function InspectorBody({
                     {index + 1}
                   </TabsTrigger>
                 ))}
-              </TabsList>
-            </div>
+              </div>
+            </TabsList>
             {capabilities?.groupable && (
               <fieldset
                 aria-label="Machine count"
@@ -160,10 +160,10 @@ export function InspectorBody({
           </div>
         </div>
       )}
-      <TabsContent value={scope} className="space-y-5">
+      <TabsContent value={scope} className="space-y-4">
         <InspectorConfiguration node={node} editor={editor} assets={assets} />
         {node.kind === "facility" && (
-          <InspectorFacility node={node} editor={editor} assets={assets} />
+          <InspectorFacility node={node} scope={scope} editor={editor} assets={assets} />
         )}
 
         {node.kind !== "logistics" &&
@@ -176,7 +176,7 @@ export function InspectorBody({
             capabilities.matrices) && (
             <div className="space-y-3">
               {capabilities.purity && (
-                <InspectorChoice
+                <InspectorButtonGroup
                   label="Purity"
                   value={
                     commonSetting(members, "purity") === null
@@ -204,7 +204,7 @@ export function InspectorBody({
                 />
               )}
               {capabilities.matrices && (
-                <InspectorChoice
+                <InspectorButtonGroup
                   label="Alien Power Matrices"
                   value={commonMatrices(members) === null ? null : String(commonMatrices(members))}
                   options={MATRIX_OPTIONS}
@@ -215,6 +215,7 @@ export function InspectorBody({
                 <InspectorNumberField
                   key={`${scope}:clock`}
                   label="Clock speed"
+                  icon={<GaugeIcon className="size-4 text-muted-foreground" />}
                   value={commonSetting(members, "clockPercent")}
                   revision={node.machines}
                   min={1}
@@ -229,6 +230,13 @@ export function InspectorBody({
                 <InspectorNumberField
                   key={`${scope}:sloops`}
                   label="Sloops"
+                  icon={
+                    <CatalogIcon
+                      iconId={assets.catalog.items["Desc_WAT1_C"]!.iconId}
+                      assets={assets}
+                      size={16}
+                    />
+                  }
                   value={commonSetting(members, "sloopsUsed")}
                   revision={node.machines}
                   min={0}
@@ -265,12 +273,6 @@ export function InspectorBody({
           )}
         </section>
         <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
-        {display.layout === "machine" && (
-          <div className="flex items-center justify-between gap-3 border-t pt-3 text-sm">
-            <span>{scope === "all" ? "Total power" : "Power"}</span>
-            <span className="tabular-nums">{display.powerLabel}</span>
-          </div>
-        )}
       </TabsContent>
     </Tabs>
   );

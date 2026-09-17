@@ -41,11 +41,6 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
             configuration: {
               ...c,
               resourceId: "Desc_NitrogenGas_C",
-              satellites: [
-                { id: "1", purity: 0.5 },
-                { id: "2", purity: 1 },
-                { id: "3", purity: 2 },
-              ],
             },
           };
         if (c.type === "truck-station")
@@ -65,7 +60,7 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
             configuration: {
               ...c,
               stationId: showcaseId("Build_TrainStation_C"),
-              position: ++platformPosition,
+              position: 2 + ++platformPosition,
               materialId: node.buildingId.includes("Empty")
                 ? null
                 : building.transport === "belt"
@@ -81,11 +76,6 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
               outgoingItemId: "Desc_IronPlate_C",
               incomingItemId: "Desc_OreIron_C",
             },
-          };
-        if (c.type === "space-elevator")
-          node = {
-            ...node,
-            configuration: { ...c, delivered: { Desc_SpaceElevatorPart_1_C: 20 } },
           };
       }
       nodes.push(node);
@@ -168,7 +158,7 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
   );
   const buildings = Object.values(catalog.buildings ?? {});
   for (const kinds of [
-    ["generator", "geothermal", "augmenter"],
+    ["generator", "augmenter"],
     ["well", "storage", "depot"],
     ["truck-station", "train-station", "drone-port"],
     ["freight-platform", "space-elevator"],
@@ -190,6 +180,7 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
     name: kind === "road" ? "Inspector vehicle route" : "Inspector train route",
     kind,
     vehicleCount: 1,
+    freightCarCount: kind === "rail" ? 4 : undefined,
     roundTripSeconds: 120,
     fuelId: kind === "road" ? "Desc_Coal_C" : null,
     fuelPerTrip: kind === "road" ? 4 : 0,
@@ -211,6 +202,29 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
     nodes,
     routes,
     links: [
+      {
+        id: showcaseId("road-out"),
+        output: { nodeId: showcaseId("Build_TruckStation_C"), portKey: "route:output" },
+        input: { nodeId: showcaseId("Build_FluidTruckStation_C"), portKey: "route:input" },
+      },
+      {
+        id: showcaseId("road-return"),
+        output: { nodeId: showcaseId("Build_FluidTruckStation_C"), portKey: "route:output" },
+        input: { nodeId: showcaseId("Build_TruckStation_C"), portKey: "route:input" },
+      },
+      {
+        id: showcaseId("platform-1"),
+        output: { nodeId: showcaseId("Build_TrainStation_C"), portKey: "platform:output" },
+        input: { nodeId: showcaseId("Build_TrainDockingStation_C"), portKey: "platform:input" },
+      },
+      {
+        id: showcaseId("platform-2"),
+        output: { nodeId: showcaseId("Build_TrainStation_C"), portKey: "platform:output" },
+        input: {
+          nodeId: showcaseId("Build_TrainDockingStationLiquid_C"),
+          portKey: "platform:input",
+        },
+      },
       {
         id: showcaseId("belt"),
         output: {

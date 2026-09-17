@@ -36,10 +36,8 @@ export function validateSplitterProgram(
   let total = 0;
   for (const output of SPLITTER_OUTPUTS) {
     const filters = rules[output];
-    if (!filters.length || (kind === "smart-splitter" && filters.length !== 1))
-      throw new Error(
-        "A smart splitter requires one rule per output; programmable outputs require at least one rule.",
-      );
+    if (kind === "smart-splitter" && filters.length > 1)
+      throw new Error("A smart splitter supports at most one rule per output.");
     const seen = new Set<string>();
     for (const filter of filters) {
       if (!filter || !["item", "any", "none", "any-undefined", "overflow"].includes(filter.kind))

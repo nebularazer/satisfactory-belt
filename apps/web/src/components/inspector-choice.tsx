@@ -19,6 +19,8 @@ export type InspectorOption = {
   disabled?: boolean | (() => boolean);
   iconId?: string;
   description?: string;
+  badge?: string;
+  hideDisabledBadge?: boolean;
 };
 const labelFor = (option: InspectorOption) => option.label;
 const disabled = (option: InspectorOption) =>
@@ -84,7 +86,8 @@ function InspectorChoiceItem({ option, assets }: { option: InspectorOption; asse
           <span className="block text-xs text-muted-foreground">{option.description}</span>
         )}
       </span>
-      {incompatible && (
+      {option.badge && <Badge variant="secondary">{option.badge}</Badge>}
+      {incompatible && !option.hideDisabledBadge && (
         <Badge variant="outline" title="Doesn’t support the existing connections or configuration">
           Incompatible
         </Badge>

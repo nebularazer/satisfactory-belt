@@ -199,24 +199,24 @@ it("applies one pressurizer clock to satellite purities and counts pressurizer p
   const { catalog, facility } = fixture();
   const node: FacilityNode = {
     ...facility("well"),
-    machines: createMachineMembers(1, { clockPercent: 200 }),
+    machines: createMachineMembers(1, {
+      clockPercent: 200,
+      impureSatellites: 1,
+      normalSatellites: 1,
+      pureSatellites: 1,
+    }),
     configuration: {
       type: "well",
       resourceId: "gas",
-      satellites: [
-        { id: "a", purity: 0.5 },
-        { id: "b", purity: 1 },
-        { id: "c", purity: 2 },
-      ],
     },
   };
   expect(resolveProduction(node, catalog).outputs).toEqual([{ itemId: "gas", perMinute: 420 }]);
   expect(resolveFactoryNode(node, catalog)).toMatchObject({
     power: { kind: "known", megawatts: 375 },
   });
-  expect(() => resolveFactoryNode({ ...node, machines: createMachineMembers(2) }, catalog)).toThrow(
-    "cannot be grouped",
-  );
+  expect(
+    resolveProduction({ ...node, machines: createMachineMembers(2) }, catalog).outputs,
+  ).toEqual([{ itemId: "gas", perMinute: 0 }]);
 });
 
 it("keeps mixed per-extractor purity, overwrites All and inherits the resulting purity", () => {
@@ -301,14 +301,14 @@ it("disables phase changes that would remove connected Project Assembly inputs",
   expect(
     canReplaceNode(
       document,
-      { ...elevator, configuration: { type: "space-elevator", phase: 2, delivered: {} } },
+      { ...elevator, configuration: { type: "space-elevator", phase: 2 } },
       catalog,
     ),
   ).toBe(true);
   expect(
     canReplaceNode(
       document,
-      { ...elevator, configuration: { type: "space-elevator", phase: 3, delivered: {} } },
+      { ...elevator, configuration: { type: "space-elevator", phase: 3 } },
       catalog,
     ),
   ).toBe(false);
@@ -364,7 +364,6 @@ it("does not propagate truck fuel into its outgoing cargo", () => {
       ...facility("truck"),
       configuration: {
         type: "truck-station",
-        name: "Truck",
         mode: "unload",
         materialId: null,
         routeId: null,
@@ -375,4 +374,50 @@ it("does not propagate truck fuel into its outgoing cargo", () => {
     [link("fuel", "mine", "output:coal", "truck", "input:fuel")],
   );
   expect(index.materials({ nodeId: "truck", portKey: "output:cargo" }).size).toBe(0);
+});
+
+it("groups wells with independent satellite counts, mixed edits and inherited All settings", () => {
+  const { catalog, facility } = fixture();
+  const original = { ...facility("well"), machines: createMachineMembers(2) };
+  expect(commonSetting(original.machines, "pureSatellites")).toBe(0);
+  const mixed = setMachineSetting(original, catalog, "1", "pureSatellites", 2);
+  expect(commonSetting(mixed.machines, "pureSatellites")).toBeNull();
+  expect(resolveProduction(mixed, catalog).outputs[0].perMinute).toBe(240);
+  const uniform = setMachineSetting(mixed, catalog, "all", "pureSatellites", 3);
+  const expanded = resizeMachineGroup(uniform, 3, () => "3");
+  expect(expanded.machines.map((member) => member.pureSatellites)).toEqual([3, 3, 3]);
+  expect(resolveProduction(expanded, catalog).outputs[0].perMinute).toBe(1080);
+  expect(() => setMachineSetting(expanded, catalog, "all", "normalSatellites", 8)).toThrow(
+    "satellites",
+  );
+});
+
+it("exposes two industrial storage ports per side and refuses a downgrade that loses a connection", () => {
+  const { catalog, facility } = fixture();
+  const id = "Build_StorageContainerMk2_C";
+  catalog.buildings![id] = { ...catalog.buildings!.storage, id, capacity: 48 };
+  const node = facility(id);
+  const display = resolveFactoryNode(node, catalog);
+  expect(display.ports.map((port) => port.key)).toEqual([
+    "input:0",
+    "output:0",
+    "input:1",
+    "output:1",
+  ]);
+  expect(display).toMatchObject({ footer: { kind: "storage", label: "48 slots" } });
+  expect(resolveFactoryNode(facility("buffer"), catalog)).toMatchObject({
+    footer: { kind: "fluid", label: "400 m³" },
+  });
+  const target = facility("storage");
+  const doc = {
+    nodes: [node, target],
+    links: [
+      {
+        id: "second",
+        output: { nodeId: node.id, portKey: "output:1" },
+        input: { nodeId: target.id, portKey: "input:0" },
+      },
+    ],
+  };
+  expect(canReplaceNode(doc, { ...node, buildingId: "storage" }, catalog)).toBe(false);
 });

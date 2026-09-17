@@ -19,8 +19,6 @@ export function remapCopiedFacilities(
       return nodeId ? [{ ...stop, id: createId(), nodeId }] : [];
     }),
   }));
-  const remap = (id: string | null) =>
-    id ? (ids.get(id) ?? (existingIds.has(id) ? id : null)) : null;
   return {
     routes,
     nodes: nodes.map((node) => {
@@ -31,9 +29,7 @@ export function remapCopiedFacilities(
           ...node,
           configuration: { ...c, stationId: c.stationId ? (ids.get(c.stationId) ?? null) : null },
         };
-      if (c.type === "drone-port")
-        return { ...node, configuration: { ...c, destinationId: remap(c.destinationId) } };
-      if (c.type === "truck-station" || c.type === "train-station")
+      if (c.type === "truck-station" || c.type === "train-station" || c.type === "drone-port")
         return {
           ...node,
           configuration: { ...c, routeId: c.routeId ? (routeIds.get(c.routeId) ?? null) : null },

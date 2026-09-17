@@ -49,16 +49,30 @@ Sites in one machine group may have different purities while sharing their resou
 
 **Resource well**:
 A pressurizer and its satellite extractors, sharing one resource and pressurizer
-clock. Each satellite has its own purity; only the pressurizer consumes power.
+clock. Grouped wells share the resource; each member has its own clock and counts
+of impure, normal, and pure satellites. Only pressurizers consume power.
 
 **Transport route**:
-A shared sequence of vehicle or train stops with fleet and round-trip assumptions.
-Station loading modes and train cargo filters describe how materials are transferred.
+A directed loop of compatible vehicle, train, or drone stations. A route can have
+intermediate stops for vehicles and trains; drones make two-port round trips.
+An open chain is an incomplete route. Fleet and round-trip
+assumptions belong to the route.
 
 **Configured supply**:
 The nominal material supply implied by machine settings along an unambiguous
 path. It does not account for transport capacity, demand, or allocation between branches.
 
-**Delivery objective**:
-A finite quantity of Project Assembly parts still required for a Space Elevator
-phase, distinct from a continuous material consumption rate.
+**Route port**:
+A station’s arrival or departure point connecting it to other stations of the same
+transport type. It carries a route relationship, not a material stream.
+
+**Platform connection**:
+A link assigning a freight platform to its train station. Each station maps its
+connected platforms to freight-car numbers; unassigned cars have no transfer.
+
+**Fuel port**:
+A material input reserved for transport fuel, distinct from cargo inputs.
+
+**Project Assembly sink**:
+A Space Elevator accepting the parts for a selected phase without a delivery limit
+in the factory plan. A world has only one Space Elevator.

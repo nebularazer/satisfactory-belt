@@ -2,6 +2,7 @@ import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 import { resolveFactoryNode } from "./index";
 import type { FactoryNode, NodeDisplay } from "./index";
+import { isMaterialTransport } from "./ports";
 import type { SemanticPort } from "./ports";
 import { splitterFilters } from "./splitters";
 
@@ -33,7 +34,8 @@ export function resolveSemanticPorts(
     itemId: port.itemId,
     ...(node.kind === "facility"
       ? {
-          forwardsMaterials: node.configuration.type === "storage",
+          forwardsMaterials:
+            node.configuration.type === "storage" && isMaterialTransport(port.transport),
           allowsUnknownFluid: port.transport === "pipe" && port.itemId === null,
           ...(port.key === "input:fuel" && node.configuration.type === "truck-station"
             ? {

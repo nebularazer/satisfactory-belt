@@ -7,7 +7,14 @@ import type { FactoryNode, MachineMember } from "./index";
 export const MAX_MACHINE_COUNT = 10_000;
 
 export type MachineGroup = Exclude<FactoryNode, { kind: "logistics" }>;
-export type MachineSetting = "clockPercent" | "sloopsUsed" | "purity" | "loadPercent";
+export type MachineSetting =
+  | "clockPercent"
+  | "sloopsUsed"
+  | "purity"
+  | "loadPercent"
+  | "impureSatellites"
+  | "normalSatellites"
+  | "pureSatellites";
 /** "all" or a member ID local to its group. */
 export type MachineScope = string;
 
@@ -31,6 +38,7 @@ export function machineCapabilities(node: MachineGroup, catalog: GameCatalog) {
   const extractor = node.kind === "extractor" ? catalog.extractors[node.extractorId] : null;
   const building = node.kind === "facility" ? catalog.buildings?.[node.buildingId] : null;
   return {
+    satellites: building?.kind === "well",
     purity: extractor?.hasPurity ?? building?.kind === "geothermal",
     load: building?.loadFollowing ?? false,
     matrices: building?.kind === "augmenter",
@@ -61,11 +69,25 @@ export function validateMachineMembers(node: MachineGroup, catalog: GameCatalog)
   if (!node.machines.length || node.machines.length > MAX_MACHINE_COUNT)
     throw new Error(`A group must contain 1 to ${MAX_MACHINE_COUNT} machines.`);
   const ids = new Set<string>();
-  const { clock, sloopSlots, purity, load, matrices } = machineCapabilities(node, catalog);
+  const { clock, sloopSlots, purity, load, matrices, satellites } = machineCapabilities(
+    node,
+    catalog,
+  );
   for (const member of node.machines) {
     if (!member.id || member.id === "all" || ids.has(member.id))
       throw new Error("Invalid machine identity.");
     ids.add(member.id);
+    const counts = [
+      member.impureSatellites ?? 0,
+      member.normalSatellites ?? 0,
+      member.pureSatellites ?? 0,
+    ];
+    if (
+      counts.some((n) => !Number.isInteger(n) || n < 0) ||
+      counts.reduce((a, b) => a + b, 0) > 10 ||
+      (!satellites && counts.some(Boolean))
+    )
+      throw new Error("A well supports zero to ten satellites.");
     if (member.purity !== undefined && (!purity || ![0.5, 1, 2].includes(member.purity)))
       throw new Error("Invalid resource purity.");
     if (
@@ -136,6 +158,18 @@ export function resizeMachineGroup(
     ...(last.loadPercent !== undefined
       ? { loadPercent: commonSetting(node.machines, "loadPercent") ?? last.loadPercent }
       : {}),
+    ...(last.impureSatellites !== undefined ||
+    last.normalSatellites !== undefined ||
+    last.pureSatellites !== undefined
+      ? {
+          impureSatellites:
+            commonSetting(node.machines, "impureSatellites") ?? last.impureSatellites ?? 0,
+          normalSatellites:
+            commonSetting(node.machines, "normalSatellites") ?? last.normalSatellites ?? 0,
+          pureSatellites:
+            commonSetting(node.machines, "pureSatellites") ?? last.pureSatellites ?? 0,
+        }
+      : {}),
     ...(last.suppliedMatrices !== undefined
       ? { suppliedMatrices: commonMatrices(node.machines) ?? last.suppliedMatrices }
       : {}),
@@ -153,7 +187,7 @@ export function resizeMachineGroup(
 }
 
 export function memberSetting(member: MachineMember, setting: MachineSetting): number {
-  return member[setting] ?? (setting === "purity" ? 1 : 100);
+  return member[setting] ?? (setting.endsWith("Satellites") ? 0 : setting === "purity" ? 1 : 100);
 }
 export function commonMatrices(members: readonly MachineMember[]): boolean | null {
   const value = members[0]?.suppliedMatrices ?? false;
