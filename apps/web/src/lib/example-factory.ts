@@ -1,4 +1,5 @@
 import { GRID_SIZE } from "@satisfactory-belt/canvas-core";
+import { createMachineMembers } from "@satisfactory-belt/factory-core";
 import type { FactoryNode } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
@@ -19,12 +20,10 @@ export function createExampleFactory(catalog: GameCatalog): readonly FactoryNode
       throw new Error(`The example recipe ${example.recipeId} is missing from the catalog.`);
     return {
       recipeId: example.recipeId,
-      machineCount: example.machineCount,
-      sloopsUsed: example.sloopsUsed,
+      machines: createMachineMembers(example.machineCount, { sloopsUsed: example.sloopsUsed }),
       kind: "manufacturing",
       id: `machine-${index + 1}`,
       machineId: recipe.machineIds[0]!,
-      clockPercent: 100,
       x: (5 + (index % 3) * 10) * GRID_SIZE,
       y: (5 + Math.floor(index / 3) * 10) * GRID_SIZE,
     };
@@ -33,7 +32,7 @@ export function createExampleFactory(catalog: GameCatalog): readonly FactoryNode
     kind: "fixed-producer",
     id: "gift-tree",
     producerId: "Build_TreeGiftProducer_C",
-    machineCount: 1,
+    machines: createMachineMembers(1),
     x: 15 * GRID_SIZE,
     y: 25 * GRID_SIZE,
   });
@@ -48,8 +47,7 @@ export function createExampleFactory(catalog: GameCatalog): readonly FactoryNode
     nodes.push({
       ...extraction,
       kind: "extractor",
-      machineCount: 1,
-      clockPercent: 100,
+      machines: createMachineMembers(1),
       x: (5 + (index % 3) * 10) * GRID_SIZE,
       y: (5 + Math.floor(index / 3) * 10) * GRID_SIZE,
     });
@@ -87,7 +85,7 @@ export function createExampleFactory(catalog: GameCatalog): readonly FactoryNode
       kind: "sink",
       id: "awesome-sink",
       sinkId: "Build_ResourceSink_C",
-      machineCount: 1,
+      machines: createMachineMembers(1),
       x: 35 * GRID_SIZE,
       y: 29 * GRID_SIZE,
     },

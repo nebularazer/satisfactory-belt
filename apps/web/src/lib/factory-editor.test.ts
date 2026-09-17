@@ -1,9 +1,15 @@
-import { nodeBounds } from "@satisfactory-belt/factory-core";
+import {
+  nodeBounds,
+  routeTopology,
+  createMachineMembers,
+  resizeMachineGroup,
+} from "@satisfactory-belt/factory-core";
 import type { ManufacturingNode } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { expect, it } from "vitest";
 
 import { createFactoryEditor } from "./factory-editor";
+import { inspectorSummary, inspectorTarget } from "./inspector";
 
 it("starts an explicitly empty document without requiring any demo recipes", () => {
   const catalog: GameCatalog = {
@@ -17,7 +23,7 @@ it("starts an explicitly empty document without requiring any demo recipes", () 
     logistics: {},
     sinks: {},
   };
-  const editor = createFactoryEditor(catalog, []);
+  const editor = createFactoryEditor(catalog, { nodes: [], links: [] });
   expect(editor.history.getSnapshot().state.nodes).toEqual([]);
   expect(editor.controller.getSnapshot().items).toEqual([]);
   editor.clipboardCommand("paste");
@@ -228,8 +234,7 @@ it("ignores empty clipboards, empty selections, and clipboard commands during a 
   clipboardCommand("paste");
   expect(history.getSnapshot().state.nodes.at(-1)).toMatchObject({
     recipeId: "Recipe",
-    sloopsUsed: 1,
-    clockPercent: 125,
+    machines: Array.from({ length: 3 }, () => ({ sloopsUsed: 1, clockPercent: 125 })),
     x: 192,
     y: 192,
   });
@@ -289,13 +294,11 @@ function createTestEditor() {
     id: `machine-${index + 1}`,
     recipeId: "Recipe",
     machineId: "Machine",
-    machineCount: 3,
-    clockPercent: 125,
-    sloopsUsed: 1,
+    machines: createMachineMembers(3, { clockPercent: 125, sloopsUsed: 1 }),
     x: (5 + (index % 3) * 9) * 32,
     y: (5 + Math.floor(index / 3) * 10) * 32,
   }));
-  return { ...createFactoryEditor(catalog, nodes), catalog };
+  return { ...createFactoryEditor(catalog, { nodes, links: [] }), catalog };
 }
 
 it("reuses card content on movement and publishes new content before geometry notifications", () => {
@@ -310,7 +313,11 @@ it("reuses card content on movement and publishes new content before geometry no
     observed = current?.layout === "machine" ? current.subtitle : undefined;
   });
   updateNodes((nodes) =>
-    nodes.map((node) => (node.id === "machine-1" ? { ...node, machineCount: 4 } : node)),
+    nodes.map((node) =>
+      node.kind !== "logistics" && node.id === "machine-1"
+        ? resizeMachineGroup(node, 4, () => crypto.randomUUID())
+        : node,
+    ),
   );
   expect(observed).toBe("4× Assembler");
   expect(getDisplay("machine-1")).not.toBe(display);
@@ -400,8 +407,7 @@ it("retains extraction settings through movement, copy/paste and undo and refres
     id: "miner",
     extractorId: "Miner",
     resourceId: "Iron",
-    machineCount: 2,
-    clockPercent: 125,
+    machines: createMachineMembers(2, { clockPercent: 125 }),
     x: 160,
     y: 160,
   } as const;
@@ -439,7 +445,11 @@ it("keeps transient port selection across movement and metadata edits, but clear
   historyCommand("undo");
   expect(controller.getPortSnapshot().anchor).toEqual(anchor);
   updateNodes((nodes) =>
-    nodes.map((node) => (node.id === anchor.nodeId ? { ...node, machineCount: 5 } : node)),
+    nodes.map((node) =>
+      node.kind !== "logistics" && node.id === anchor.nodeId
+        ? resizeMachineGroup(node, 5, () => crypto.randomUUID())
+        : node,
+    ),
   );
   expect(controller.getPortSnapshot().anchor).toEqual(anchor);
   deleteSelection();
@@ -657,7 +667,15 @@ it("stores splitter programs, revalidates connected outputs and restores everyth
     "output:1": [{ kind: "none" }],
     "output:2": [{ kind: "any-undefined" }],
   } as const;
+  controller.selectPort(center);
+  expect(controller.getPortSnapshot().anchor).toEqual(center);
   setSplitterProgram("smart-node", program);
+  expect(controller.getPortSnapshot().anchor).toBeNull();
+  controller.selectPort(center);
+  expect(controller.getPortSnapshot().anchor).toBeNull();
+  expect(
+    editor.getDisplay("smart-node")!.ports.find((port) => port.key === center.portKey)?.disabled,
+  ).toBe(true);
   expect(history.getSnapshot().state.links).toHaveLength(1);
   expect(editor.getMaterials({ nodeId: "smart-node", portKey: "output:0" })).toEqual(
     new Set(["Desc_WAT1_C"]),
@@ -665,7 +683,10 @@ it("stores splitter programs, revalidates connected outputs and restores everyth
   expect(connect(center, input)).toEqual({ compatible: false, reason: "disabled-output" });
   historyCommand("undo");
   expect(history.getSnapshot().state).toBe(before);
+  controller.selectPort(center);
+  expect(controller.getPortSnapshot().anchor).toEqual(center);
   historyCommand("redo");
+  expect(controller.getPortSnapshot().anchor).toBeNull();
   controller.setSelection(new Set(["smart-node"]));
   clipboardCommand("copy");
   clipboardCommand("paste");
@@ -725,7 +746,14 @@ it("uses Sink acceptance in the editor and preserves Sink nodes through copy, de
         ? { ...node, recipeId: "Iron" }
         : node,
     ),
-    { kind: "sink", id: "sink-node", sinkId: "sink", machineCount: 2, x: 1600, y: 160 },
+    {
+      kind: "sink",
+      id: "sink-node",
+      sinkId: "sink",
+      machines: createMachineMembers(2),
+      x: 1600,
+      y: 160,
+    },
   ]);
   const input = { nodeId: "sink-node", portKey: "input:0" };
   expect(connect({ nodeId: "machine-1", portKey: "output:Iron" }, input).compatible).toBe(true);
@@ -738,7 +766,11 @@ it("uses Sink acceptance in the editor and preserves Sink nodes through copy, de
   clipboardCommand("copy");
   clipboardCommand("paste");
   const pasted = history.getSnapshot().state.nodes.at(-1)!;
-  expect(pasted).toMatchObject({ kind: "sink", sinkId: "sink", machineCount: 2 });
+  expect(pasted).toMatchObject({
+    kind: "sink",
+    sinkId: "sink",
+    machines: [{ clockPercent: 100 }, { clockPercent: 100 }],
+  });
   deleteSelection();
   historyCommand("undo");
   expect(history.getSnapshot().state.nodes.at(-1)).toEqual(pasted);
@@ -773,7 +805,7 @@ it("places at the snapped center, publishes ports, and restores the same node on
     { kind: "manufacturing", recipeId: "Recipe", machineId: "Machine" },
     { x: 503, y: 401 },
   );
-  expect(node).toMatchObject({ x: 368, y: 272, machineCount: 1, clockPercent: 100, sloopsUsed: 0 });
+  expect(node).toMatchObject({ x: 368, y: 272, machines: [{ clockPercent: 100, sloopsUsed: 0 }] });
   expect(editor.controller.getSnapshot().selection).toEqual(new Set([node.id]));
   expect(editor.getDisplay(node.id)?.ports).toHaveLength(1);
   editor.historyCommand("undo");
@@ -824,7 +856,7 @@ it("filters consumers and producers by configured material and transport before 
   };
   const producer = { kind: "manufacturing" as const, recipeId: "Recipe", machineId: "Machine" };
   const consumer = { ...producer, recipeId: "Consumer" };
-  const editor = createFactoryEditor(catalog, []);
+  const editor = createFactoryEditor(catalog, { nodes: [], links: [] });
   const a = editor.placeNode(producer, { x: 0, y: 0 });
   const source = { nodeId: a.id, portKey: "output:Desc_WAT1_C" };
   expect(editor.canPlace(producer, source)).toBe(false);
@@ -836,4 +868,416 @@ it("filters consumers and producers by configured material and transport before 
   editor.placeNode(producer, { x: -400, y: 0 }, input);
   expect(editor.history.getSnapshot().state.links.at(-1)?.input).toEqual(input);
   expect(editor.canPlace(consumer, { nodeId: b.id, portKey: "output:fluid" })).toBe(false);
+});
+
+it("inspects one grouped machine node, hides multi-selection, and follows delete/undo", () => {
+  const editor = createTestEditor();
+  const target = () => inspectorTarget(editor.controller.getSnapshot());
+  expect(target()).toBeNull();
+  editor.updateNodes((nodes) =>
+    nodes.map((node) =>
+      node.kind === "manufacturing" ? resizeMachineGroup(node, 5, () => crypto.randomUUID()) : node,
+    ),
+  );
+  editor.controller.setSelection(new Set(["machine-1"]));
+  const selected = target();
+  expect(inspectorSummary(editor, selected)).toMatchObject({
+    title: "Recipe",
+    subtitle: "5× Assembler",
+  });
+  editor.controller.zoomTo(2);
+  expect(target()).toBe(selected);
+  editor.controller.setSelection(new Set(["machine-1", "machine-2"]));
+  expect(target()).toBeNull();
+  editor.controller.setSelection(new Set(["machine-1"]));
+  editor.deleteSelection();
+  expect(target()).toBeNull();
+  expect(inspectorSummary(editor, selected)).toBeNull();
+  editor.historyCommand("undo");
+  expect(inspectorSummary(editor, target())).toMatchObject({ subtitle: "5× Assembler" });
+});
+
+it("inspects a link's transport and endpoints and drops deleted links", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const link = editor.history.getSnapshot().state.links[0]!;
+  editor.controller.selectLink(link.id);
+  const target = inspectorTarget(editor.controller.getSnapshot());
+  expect(inspectorSummary(editor, target)).toEqual({
+    title: "Conveyor",
+    subtitle: null,
+    deleteLabel: "Delete link",
+  });
+  editor.deleteSelection();
+  expect(inspectorTarget(editor.controller.getSnapshot())).toBeNull();
+  expect(inspectorSummary(editor, target)).toBeNull();
+});
+
+it("commits All edits atomically, restores mixed settings with undo, and rejects invalid edits before publication", () => {
+  const editor = createTestEditor();
+  const node = editor.getNode("machine-1")!;
+  if (node.kind !== "manufacturing") throw new Error("Expected a machine");
+  editor.setOperatingSetting(node.id, node.machines[0]!.id, "clockPercent", 200);
+  const mixed = editor.history.getSnapshot();
+  editor.setOperatingSetting(node.id, "all", "clockPercent", 150);
+  const uniform = editor.getNode(node.id)!;
+  expect(
+    uniform.kind !== "logistics" && uniform.machines.map((member) => member.clockPercent),
+  ).toEqual([150, 150, 150]);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(mixed.state);
+  expect(editor.getDisplay(node.id)).toMatchObject({ clockLabel: "Mixed" });
+  editor.historyCommand("redo");
+  const beforeInvalid = editor.history.getSnapshot();
+  let notifications = 0;
+  editor.history.subscribe(() => {
+    notifications++;
+  });
+  expect(() => editor.setOperatingSetting(node.id, "all", "clockPercent", 999)).toThrow();
+  expect(() => editor.setOperatingSetting(node.id, "missing", "sloopsUsed", 1)).toThrow();
+  editor.setOperatingSetting(node.id, "all", "clockPercent", 150);
+  expect(editor.history.getSnapshot()).toBe(beforeInvalid);
+  expect(notifications).toBe(0);
+});
+
+it("keeps links and member identities through settings edits, count changes, and undo", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const before = editor.history.getSnapshot().state;
+  const node = editor.getNode(editor.output.nodeId)!;
+  if (node.kind !== "manufacturing") throw new Error("Expected a machine");
+  editor.setOperatingSetting(node.id, node.machines[0]!.id, "sloopsUsed", 2);
+  editor.setMachineCount(node.id, 5);
+  const after = editor.getNode(node.id)!;
+  expect(
+    after.kind !== "logistics" && after.machines.slice(0, 3).map((member) => member.id),
+  ).toEqual(node.machines.map((member) => member.id));
+  expect(editor.history.getSnapshot().state.links).toBe(before.links);
+  editor.historyCommand("undo");
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+});
+
+it("disables incompatible recipe changes and records compatible changes as one undo step", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const node = editor.getNode(editor.output.nodeId)!;
+  if (node.kind !== "manufacturing") throw new Error();
+  editor.catalog.recipes.Alternative = {
+    ...editor.catalog.recipes[node.recipeId]!,
+    id: "Alternative",
+    name: "Alternative",
+    durationSeconds: 20,
+  };
+  editor.catalog.recipes.Incompatible = {
+    ...editor.catalog.recipes[node.recipeId]!,
+    id: "Incompatible",
+    products: [],
+  };
+  const before = editor.history.getSnapshot();
+  const bad = { ...node, recipeId: "Incompatible" };
+  expect(editor.canReplaceNode(bad)).toBe(false);
+  editor.replaceNode(bad);
+  expect(editor.history.getSnapshot()).toBe(before);
+  const next = { ...node, recipeId: "Alternative" };
+  expect(editor.canReplaceNode(next)).toBe(true);
+  editor.replaceNode(next);
+  expect(editor.getNode(node.id)).toBe(next);
+  expect(editor.history.getSnapshot().state.links).toBe(before.state.links);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before.state);
+});
+
+it("records belt tiers without changing connections and preserves them through copy/paste and undo", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const original = editor.history.getSnapshot().state;
+  const id = original.links[0]!.id;
+  editor.setLinkTier(id, 6);
+  const configured = editor.history.getSnapshot();
+  editor.setLinkTier(id, 6);
+  expect(editor.history.getSnapshot()).toBe(configured);
+  expect(editor.getLink(id)).toMatchObject({ tier: 6, output: editor.output, input: editor.input });
+  expect(() => editor.setLinkTier(id, 7)).toThrow("Invalid transport tier");
+  editor.controller.setSelection(new Set([editor.output.nodeId, editor.input.nodeId]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  expect(editor.history.getSnapshot().state.links.at(-1)?.tier).toBe(6);
+  editor.historyCommand("undo");
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(original);
+  const undone = editor.history.getSnapshot();
+  editor.setLinkTier(id, 1);
+  expect(editor.history.getSnapshot()).toBe(undone);
+  expect(undone.canRedo).toBe(true);
+});
+
+function createTransportEditor() {
+  const { catalog } = createTestEditor();
+  const base = {
+    description: "",
+    descriptorId: "station",
+    iconId: "station",
+    powerMegawatts: 20,
+    canOverclock: false,
+    powerConsumptionExponent: 1,
+    transport: "belt" as const,
+    capacity: 48,
+    fuels: [],
+    resourceIds: [],
+    baseRate: 0,
+    loadFollowing: false,
+  };
+  catalog.buildings = {
+    station: { ...base, id: "station", name: "Station", kind: "train-station" },
+    platform: { ...base, id: "platform", name: "Platform", kind: "freight-platform" },
+  };
+  const editor = createFactoryEditor(catalog, { nodes: [], links: [] });
+  const station = editor.placeNode({ kind: "facility", buildingId: "station" }, { x: 512, y: 512 });
+  if (station.kind !== "facility") throw new Error();
+  return { ...editor, catalog, station };
+}
+
+it("keeps shared research and routes through movement, cloning and deletion with undo", () => {
+  const editor = createTransportEditor(),
+    id = editor.station.id;
+  editor.setDepotResearch({ speedLevel: 3, capacityLevel: 2 });
+  const original = editor.history.getSnapshot().state,
+    route = original.routes![0]!;
+  editor.controller.setSelection(new Set([id]));
+  editor.controller.pointerDown({ id: 1, x: 500, y: 500 });
+  editor.controller.pointerMove({ id: 1, x: 532, y: 532 });
+  editor.controller.pointerUp({ id: 1, x: 532, y: 532 });
+  expect(editor.history.getSnapshot().state.depotResearch).toBe(original.depotResearch);
+  expect(editor.history.getSnapshot().state.routes).toBe(original.routes);
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  const pasted = editor.history.getSnapshot().state;
+  const clone = pasted.nodes.at(-1)!;
+  expect(clone).toMatchObject({
+    kind: "facility",
+    configuration: { routeId: pasted.routes![1]!.id },
+  });
+  expect(pasted.routes![1]!.id).not.toBe(route.id);
+  expect(pasted.routes![1]!.stops[0]!.nodeId).toBe(clone.id);
+  editor.controller.setSelection(new Set([id]));
+  editor.deleteSelection();
+  expect(
+    editor.history
+      .getSnapshot()
+      .state.routes!.some((candidate) => candidate.stops.some((stop) => stop.nodeId === id)),
+  ).toBe(false);
+  expect(editor.history.getSnapshot().state.depotResearch).toBe(original.depotResearch);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(pasted);
+});
+
+function configurePlatform(
+  editor: ReturnType<typeof createTransportEditor>,
+  index: number,
+  mode: "load" | "unload" = "unload",
+) {
+  const station = editor.getNode(editor.station.id);
+  if (station?.kind !== "facility" || station.configuration.type !== "train-station")
+    throw new Error();
+  const platforms = [...station.configuration.platforms];
+  platforms[index] = { buildingId: "platform", mode, materialId: null };
+  editor.replaceNode({ ...station, configuration: { ...station.configuration, platforms } });
+}
+
+it("copies station-owned platforms and restores the whole station with undo", () => {
+  const editor = createTransportEditor();
+  configurePlatform(editor, 0);
+  const before = editor.history.getSnapshot().state;
+  editor.controller.setSelection(new Set([editor.station.id]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  const clone = editor.history.getSnapshot().state.nodes.at(-1)!;
+  expect(clone).toMatchObject({
+    configuration: { platforms: [{ buildingId: "platform", mode: "unload" }] },
+  });
+  expect(editor.canReplaceNode(clone)).toBe(true);
+  editor.controller.setSelection(new Set([editor.station.id]));
+  editor.deleteSelection();
+  expect(editor.getNode(editor.station.id)).toBeUndefined();
+  editor.historyCommand("undo");
+  expect(editor.getNode(editor.station.id)).toBe(before.nodes[0]);
+});
+
+const depart = (node: { id: string }) => ({ nodeId: node.id, portKey: "route:output" });
+const arrive = (node: { id: string }) => ({ nodeId: node.id, portKey: "route:input" });
+
+it("builds a three-stop route loop without mixing material streams and restores it with undo", () => {
+  const editor = createTransportEditor();
+  const a = editor.station;
+  const b = editor.placeNode({ kind: "facility", buildingId: "station" }, { x: 1000, y: 500 });
+  const c = editor.placeNode({ kind: "facility", buildingId: "station" }, { x: 1500, y: 500 });
+  expect(editor.connect(depart(a), arrive(b)).compatible).toBe(true);
+  expect(editor.connect(depart(a), arrive(c)).compatible).toBe(false);
+  expect(editor.connect(depart(b), arrive(c)).compatible).toBe(true);
+  expect(routeTopology(editor.history.getSnapshot().state, a.id)).toEqual({
+    nodeIds: [a.id, b.id, c.id],
+    closed: false,
+  });
+  const route = editor.history.getSnapshot().state.routes![0]!;
+  editor.setRouteSettings({ ...route, vehicleCount: 3, roundTripSeconds: 300 });
+  expect(editor.connect(depart(c), arrive(a)).compatible).toBe(true);
+  const closed = editor.history.getSnapshot().state;
+  expect(routeTopology(closed, a.id).closed).toBe(true);
+  expect(closed.routes).toHaveLength(1);
+  expect(closed.routes![0]).toMatchObject({ vehicleCount: 3, roundTripSeconds: 300 });
+  expect(editor.getMaterials(depart(a)).size).toBe(0);
+  const link = closed.links.at(-1)!;
+  expect(() => editor.setLinkTier(link.id, 2)).toThrow("Invalid transport tier");
+  editor.controller.setSelection(new Set());
+  editor.controller.selectLink(link.id);
+  editor.deleteSelection();
+  expect(routeTopology(editor.history.getSnapshot().state, a.id).closed).toBe(false);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(closed);
+  editor.controller.setSelection(new Set([a.id, b.id, c.id]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  const cloned = editor.history.getSnapshot().state;
+  const clonedIds = new Set(cloned.nodes.slice(-3).map((node) => node.id));
+  const clonedTopology = routeTopology(cloned, cloned.nodes.at(-1)!.id);
+  expect(clonedTopology.closed).toBe(true);
+  expect(new Set(clonedTopology.nodeIds)).toEqual(clonedIds);
+});
+
+it("expands the station for four cars, exposes only car three and preserves connected ports", () => {
+  const editor = createTransportEditor();
+  expect(() =>
+    editor.placeNode({ kind: "facility", buildingId: "platform" }, { x: 0, y: 0 }),
+  ).toThrow("Configure freight platforms");
+  const second = editor.placeNode({ kind: "facility", buildingId: "station" }, { x: 1000, y: 500 });
+  editor.connect(depart(editor.station), arrive(second));
+  editor.setRouteSettings({
+    ...editor.history.getSnapshot().state.routes![0]!,
+    freightCarCount: 4,
+  });
+  configurePlatform(editor, 2);
+  const station = editor.getNode(editor.station.id);
+  if (station?.kind !== "facility") throw new Error();
+  const display = editor.getDisplay(station.id)!;
+  expect(display).toMatchObject({
+    height: 288,
+    bodyRows: [
+      { label: "1 · No transfer" },
+      { label: "2 · No transfer" },
+      { label: "3 · Freight" },
+      { label: "4 · No transfer" },
+    ],
+  });
+  expect(nodeBounds(station).height).toBe(288);
+  expect(nodeBounds(editor.getNode(second.id)!).height).toBe(256);
+  expect(display.ports.map((port) => port.key)).toEqual([
+    "route:input",
+    "route:output",
+    "car:3:output:0",
+    "car:3:output:1",
+  ]);
+  const target = editor.getNode(second.id);
+  if (target?.kind !== "facility") throw new Error();
+  if (target.configuration.type !== "train-station") throw new Error();
+  editor.replaceNode({
+    ...target,
+    configuration: {
+      ...target.configuration,
+      platforms: [{ buildingId: "platform", mode: "load", materialId: null }, null, null, null],
+    },
+  });
+  expect(
+    editor.connect(
+      { nodeId: station.id, portKey: "car:3:output:1" },
+      { nodeId: target.id, portKey: "car:1:input:0" },
+    ).compatible,
+  ).toBe(true);
+  const before = editor.history.getSnapshot().state;
+  if (station.configuration.type !== "train-station") throw new Error();
+  expect(
+    editor.canReplaceNode({
+      ...station,
+      configuration: { ...station.configuration, platforms: [null, null, null, null] },
+    }),
+  ).toBe(false);
+  expect(
+    editor.canReplaceNode({
+      ...station,
+      configuration: {
+        ...station.configuration,
+        platforms: [null, null, { buildingId: "platform", mode: "load", materialId: null }, null],
+      },
+    }),
+  ).toBe(false);
+  expect(() => editor.setRouteSettings({ ...before.routes![0]!, freightCarCount: 2 })).toThrow(
+    "assigned freight car",
+  );
+  editor.setRouteSettings({ ...before.routes![0]!, freightCarCount: 3 });
+  expect(nodeBounds(editor.getNode(station.id)!).height).toBe(256);
+  expect(editor.history.getSnapshot().state.links).toBe(before.links);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+});
+
+it("allows only one Space Elevator through placement and copy/paste", () => {
+  const editor = createTransportEditor();
+  editor.catalog.buildings!.elevator = {
+    ...editor.catalog.buildings!.station!,
+    id: "elevator",
+    kind: "space-elevator",
+  };
+  const configuration = { kind: "facility", buildingId: "elevator" } as const;
+  const elevator = editor.placeNode(configuration, { x: 0, y: 0 });
+  expect(editor.canPlace(configuration)).toBe(false);
+  expect(() => editor.placeNode(configuration, { x: 0, y: 0 })).toThrow("only one Space Elevator");
+  editor.controller.setSelection(new Set([elevator.id, editor.station.id]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  expect(editor.history.getSnapshot().state.nodes).toHaveLength(3);
+  editor.controller.setSelection(new Set([elevator.id]));
+  editor.deleteSelection();
+  expect(editor.canPlace(configuration)).toBe(true);
+});
+
+it("keeps drone routes as two-port loops and rejects other transport and cargo ports", () => {
+  const editor = createTransportEditor();
+  editor.catalog.buildings!.drone = {
+    ...editor.catalog.buildings!.station!,
+    id: "drone",
+    kind: "drone-port",
+    fuels: [{ itemId: "Desc_WAT1_C", supplementalPerMinute: 0 }],
+  };
+  const a = editor.placeNode({ kind: "facility", buildingId: "drone" }, { x: 1000, y: 500 });
+  const b = editor.placeNode({ kind: "facility", buildingId: "drone" }, { x: 1500, y: 500 });
+  const c = editor.placeNode({ kind: "facility", buildingId: "drone" }, { x: 2000, y: 500 });
+  expect(editor.getDisplay(a.id)!.ports.find((port) => port.key === "input:fuel")).toMatchObject({
+    purpose: "fuel",
+    transport: "belt",
+  });
+  expect(editor.connect(depart(a), arrive(editor.station)).compatible).toBe(false);
+  expect(editor.connect(depart(a), { nodeId: b.id, portKey: "input:cargo" }).compatible).toBe(
+    false,
+  );
+  expect(editor.connect(depart(a), arrive(b)).compatible).toBe(true);
+  expect(editor.connect(depart(b), arrive(c)).compatible).toBe(false);
+  expect(editor.connect(depart(c), arrive(a)).compatible).toBe(false);
+  expect(editor.connect(depart(b), arrive(a)).compatible).toBe(true);
+  expect(routeTopology(editor.history.getSnapshot().state, a.id).closed).toBe(true);
+});
+
+it("preserves redo and document identity when unchanged settings are submitted", () => {
+  const editor = createTransportEditor();
+  const route = editor.history.getSnapshot().state.routes![0]!;
+  editor.setRouteSettings({ ...route, roundTripSeconds: 300 });
+  editor.historyCommand("undo");
+  const before = editor.history.getSnapshot();
+  expect(before.canRedo).toBe(true);
+  editor.setRouteSettings(structuredClone(before.state.routes![0]!));
+  editor.setDepotResearch({ capacityLevel: 0, speedLevel: 0 });
+  editor.replaceNode(structuredClone(before.state.nodes[0]!));
+  editor.setMachineCount(editor.station.id, 1);
+  expect(editor.history.getSnapshot()).toBe(before);
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state.routes![0]!.roundTripSeconds).toBe(300);
 });

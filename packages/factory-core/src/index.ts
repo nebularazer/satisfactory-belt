@@ -2,7 +2,11 @@ import { GRID_SIZE, SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
-import { validateSplitterProgram } from "./splitters";
+import { resolveFacility, trainStationHeight } from "./facilities";
+import type { FacilityNode, Purity } from "./facilities";
+import { commonSetting, validateMachineMembers } from "./machine-settings";
+import type { PortTransport } from "./ports";
+import { DEFAULT_SPLITTER_PROGRAM, SPLITTER_OUTPUTS, validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
 
 export const NODE_SIZE = 8 * GRID_SIZE;
@@ -10,21 +14,31 @@ export const LOGISTICS_NODE_SIZE = 4 * GRID_SIZE;
 export const HEADER_HEIGHT = 2 * GRID_SIZE;
 export const FOOTER_Y = 7 * GRID_SIZE;
 export const PORT_RADIUS = 7;
+export const FUEL_PORT_RADIUS = PORT_RADIUS;
 export const PIPE_PORT_RADIUS = 9;
 export const SLOOP_ITEM_ID = "Desc_WAT1_C";
 
-type NodeBase = Readonly<{ id: string; x: number; y: number; machineCount: number }>;
+export type MachineMember = Readonly<{
+  id: string;
+  clockPercent: number;
+  sloopsUsed: number;
+  purity?: Purity;
+  loadPercent?: number;
+  suppliedMatrices?: boolean;
+  impureSatellites?: number;
+  normalSatellites?: number;
+  pureSatellites?: number;
+}>;
+type NodeBase = Readonly<{ id: string; x: number; y: number; machines: readonly MachineMember[] }>;
 export type ManufacturingNode = NodeBase &
   Readonly<{
     kind: "manufacturing";
     machineId: string;
     recipeId: string;
-    clockPercent: number;
-    /** Per machine, with the same configuration across the group. */
-    sloopsUsed: number;
   }>;
 export type FactoryNode =
   | ManufacturingNode
+  | FacilityNode
   | LogisticsNode
   | (NodeBase & Readonly<{ kind: "sink"; sinkId: string }>)
   | (NodeBase &
@@ -32,7 +46,6 @@ export type FactoryNode =
         kind: "extractor";
         extractorId: string;
         resourceId: string;
-        clockPercent: number;
       }>)
   | (NodeBase &
       Readonly<{
@@ -52,7 +65,9 @@ export type LogisticsNode = Readonly<{
 export type PortDisplay = Readonly<{
   key: string;
   direction: "input" | "output";
-  transport: "belt" | "pipe";
+  transport: PortTransport;
+  purpose?: "fuel";
+  disabled?: boolean;
   itemId: string | null;
   name: string;
   iconId: string | null;
@@ -62,10 +77,18 @@ export type PortDisplay = Readonly<{
 export type PowerDisplay =
   | Readonly<{ kind: "known"; megawatts: number }>
   | Readonly<{ kind: "unknown" }>
-  | Readonly<{ kind: "variable" }>;
+  | Readonly<{ kind: "variable" }>
+  | Readonly<{
+      kind: "range";
+      minMegawatts: number;
+      maxMegawatts: number;
+      averageMegawatts: number;
+    }>;
 export type MachineDisplay = Readonly<{
   layout: "machine";
   size: number;
+  height?: number;
+  bodyRows?: readonly Readonly<{ y: number; label: string }>[];
   title: string;
   subtitle: string;
   machineIconId: string;
@@ -73,7 +96,8 @@ export type MachineDisplay = Readonly<{
   power: PowerDisplay;
   powerLabel: string;
   clockLabel: string | null;
-  sloops: Readonly<{ used: number; slots: number; iconId: string }> | null;
+  footer?: Readonly<{ kind: "storage" | "fluid" | "generation"; label: string }>;
+  sloops: Readonly<{ used: number | null; slots: number; iconId: string }> | null;
 }>;
 export type LogisticsDisplay = Readonly<{
   layout: "logistics";
@@ -83,6 +107,8 @@ export type LogisticsDisplay = Readonly<{
   ports: readonly (Omit<PortDisplay, "itemId" | "iconId"> & {
     itemId: null;
     iconId: null;
+    /** Explicit filter choices, not evidence of incoming material flow. */
+    configuredItemIconIds: readonly string[];
   })[];
 }>;
 export type NodeDisplay = MachineDisplay | LogisticsDisplay;
@@ -97,7 +123,16 @@ export function portRows(count: number): readonly number[] {
 
 export function nodeBounds(node: FactoryNode): CanvasItem {
   const size = node.kind === "logistics" ? LOGISTICS_NODE_SIZE : NODE_SIZE;
-  return { id: node.id, x: node.x, y: node.y, width: size, height: size };
+  return {
+    id: node.id,
+    x: node.x,
+    y: node.y,
+    width: size,
+    height:
+      node.kind === "facility" && node.configuration.type === "train-station"
+        ? trainStationHeight(node.configuration.platforms)
+        : size,
+  };
 }
 
 export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): NodeDisplay {
@@ -107,17 +142,30 @@ export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): Nod
   const part = catalog.logistics[node.partId];
   if (!part) throw new Error(`Missing logistics part ${node.partId}.`);
   validateSplitterProgram(part.kind, node.program, catalog);
+  const program =
+    part.kind === "smart-splitter" || part.kind === "programmable-splitter"
+      ? (node.program ?? DEFAULT_SPLITTER_PROGRAM)
+      : undefined;
   const ports: LogisticsDisplay["ports"][number][] = [];
   for (const direction of ["input", "output"] as const) {
     const count = (part.kind !== "merger") === (direction === "output") ? 3 : 1;
     for (let slot = 0; slot < count; slot++) {
+      const rules = direction === "output" ? program?.[SPLITTER_OUTPUTS[slot]!] : undefined;
       ports.push({
         key: `${direction}:${slot}`,
         direction,
         transport: "belt",
         itemId: null,
         iconId: null,
-        name: `${direction === "input" ? "Input" : "Output"} ${slot + 1}`,
+        disabled: rules?.every((rule) => rule.kind === "none") ?? false,
+        configuredItemIconIds:
+          rules?.flatMap((rule) =>
+            rule.kind === "item" ? [catalog.items[rule.itemId]!.iconId] : [],
+          ) ?? [],
+        name:
+          direction === "output" && part.kind !== "merger"
+            ? `${["Left", "Center", "Right"][slot]} output`
+            : `${direction === "input" ? "Input" : "Output"} ${slot + 1}`,
         x: direction === "input" ? 0 : LOGISTICS_NODE_SIZE,
         y: LOGISTICS_NODE_SIZE / 2 + (slot - (count - 1) / 2) * GRID_SIZE,
       });
@@ -134,6 +182,8 @@ export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): Nod
 
 const numberLabel = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
 export function formatPower(power: PowerDisplay): string {
+  if (power.kind === "range")
+    return `${numberLabel.format(power.minMegawatts)}–${numberLabel.format(power.maxMegawatts)} MW (${numberLabel.format(power.averageMegawatts)} avg)`;
   if (power.kind === "unknown") return "— MW";
   if (power.kind === "variable") return "Variable";
   // Keep the unit explicit and bound unusually large totals without losing it to ellipsis.
@@ -148,8 +198,13 @@ export function resolveMachineNode(
   node: Exclude<FactoryNode, LogisticsNode>,
   catalog: GameCatalog,
 ): MachineDisplay {
-  if (!Number.isSafeInteger(node.machineCount) || node.machineCount < 1)
-    throw new Error(`Invalid machine count on ${node.id}.`);
+  validateMachineMembers(node, catalog);
+  if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
+    throw new Error(`Invalid position on ${node.id}.`);
+  if (node.kind === "facility") return resolveFacility(node, catalog);
+  const clock = commonSetting(node.machines, "clockPercent");
+  const sloops = commonSetting(node.machines, "sloopsUsed");
+  const clockLabel = clock === null ? "Mixed" : `${numberLabel.format(clock)}%`;
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
     throw new Error(`Invalid position on ${node.id}.`);
   function ports(
@@ -177,13 +232,13 @@ export function resolveMachineNode(
     if (!sink) throw new Error(`Missing AWESOME Sink ${node.sinkId}.`);
     const power: PowerDisplay = {
       kind: "known",
-      megawatts: node.machineCount * sink.powerMegawatts,
+      megawatts: node.machines.length * sink.powerMegawatts,
     };
     return {
       layout: "machine",
       size: NODE_SIZE,
       title: sink.name,
-      subtitle: `${node.machineCount}× ${sink.name}`,
+      subtitle: `${node.machines.length}× ${sink.name}`,
       machineIconId: sink.iconId,
       ports: [
         {
@@ -208,31 +263,27 @@ export function resolveMachineNode(
     if (!extractor) throw new Error(`Missing extractor ${node.extractorId}.`);
     if (!extractor.resourceIds.includes(node.resourceId))
       throw new Error(`Resource ${node.resourceId} is incompatible with ${extractor.id}.`);
-    if (
-      !Number.isFinite(node.clockPercent) ||
-      node.clockPercent < 1 ||
-      node.clockPercent > 250 ||
-      (!extractor.canOverclock && node.clockPercent !== 100)
-    )
-      throw new Error(`Invalid clock on ${node.id}.`);
     const output = ports([{ itemId: node.resourceId, amount: 1 }], "output");
     const power: PowerDisplay = {
       kind: "known",
-      megawatts:
-        node.machineCount *
-        extractor.powerMegawatts *
-        (node.clockPercent / 100) ** extractor.powerConsumptionExponent,
+      megawatts: node.machines.reduce(
+        (sum, member) =>
+          sum +
+          extractor.powerMegawatts *
+            (member.clockPercent / 100) ** extractor.powerConsumptionExponent,
+        0,
+      ),
     };
     return {
       layout: "machine",
       size: NODE_SIZE,
       title: output[0]!.name,
-      subtitle: `${node.machineCount}× ${extractor.name}`,
+      subtitle: `${node.machines.length}× ${extractor.name}`,
       machineIconId: extractor.iconId,
       ports: output,
       power,
       powerLabel: formatPower(power),
-      clockLabel: extractor.canOverclock ? `${numberLabel.format(node.clockPercent)}%` : null,
+      clockLabel: extractor.canOverclock ? clockLabel : null,
       sloops: null,
     };
   }
@@ -241,13 +292,13 @@ export function resolveMachineNode(
     if (!producer) throw new Error(`Missing producer ${node.producerId}.`);
     const power: PowerDisplay = {
       kind: "known",
-      megawatts: node.machineCount * producer.powerMegawatts,
+      megawatts: node.machines.length * producer.powerMegawatts,
     };
     return {
       layout: "machine",
       size: NODE_SIZE,
       title: producer.name,
-      subtitle: `${node.machineCount}× ${producer.name}`,
+      subtitle: `${node.machines.length}× ${producer.name}`,
       machineIconId: producer.iconId,
       ports: ports(producer.products, "output"),
       power,
@@ -261,30 +312,39 @@ export function resolveMachineNode(
   if (!machine || !recipe) throw new Error(`Missing machine or recipe on ${node.id}.`);
   if (!recipe.machineIds.includes(machine.id))
     throw new Error(`Recipe ${recipe.id} is incompatible with ${machine.id}.`);
-  if (
-    !Number.isFinite(node.clockPercent) ||
-    node.clockPercent < 1 ||
-    node.clockPercent > 250 ||
-    (!machine.canOverclock && node.clockPercent !== 100)
-  )
-    throw new Error(`Invalid clock on ${node.id}.`);
-  if (
-    !Number.isInteger(node.sloopsUsed) ||
-    node.sloopsUsed < 0 ||
-    node.sloopsUsed > machine.sloopSlots
-  )
-    throw new Error(`Invalid Sloop count on ${node.id}.`);
-  const boost = machine.productionBoost.base + node.sloopsUsed * machine.productionBoost.perSloop;
   const power: PowerDisplay =
     machine.power.kind === "variable"
-      ? { kind: "variable" }
+      ? {
+          kind: "range",
+          ...(() => {
+            const factor = node.machines.reduce(
+              (sum, member) =>
+                sum +
+                (member.clockPercent / 100) ** machine.powerConsumptionExponent *
+                  (machine.productionBoost.base +
+                    member.sloopsUsed * machine.productionBoost.perSloop) **
+                    machine.productionBoost.powerExponent,
+              0,
+            );
+            const min = recipe.variablePower.constantMegawatts * factor;
+            const max =
+              (recipe.variablePower.constantMegawatts + recipe.variablePower.factorMegawatts) *
+              factor;
+            return { minMegawatts: min, maxMegawatts: max, averageMegawatts: (min + max) / 2 };
+          })(),
+        }
       : {
           kind: "known",
-          megawatts:
-            node.machineCount *
-            machine.power.megawatts *
-            (node.clockPercent / 100) ** machine.powerConsumptionExponent *
-            boost ** machine.productionBoost.powerExponent,
+          megawatts: node.machines.reduce(
+            (sum, member) =>
+              sum +
+              (machine.power.kind === "fixed" ? machine.power.megawatts : 0) *
+                (member.clockPercent / 100) ** machine.powerConsumptionExponent *
+                (machine.productionBoost.base +
+                  member.sloopsUsed * machine.productionBoost.perSloop) **
+                  machine.productionBoost.powerExponent,
+            0,
+          ),
         };
   const sloopIcon = catalog.items[SLOOP_ITEM_ID]?.iconId;
   if (machine.sloopSlots > 0 && !sloopIcon) throw new Error("Missing Somersloop item icon.");
@@ -292,15 +352,15 @@ export function resolveMachineNode(
     layout: "machine",
     size: NODE_SIZE,
     title: recipe.name,
-    subtitle: `${node.machineCount}× ${machine.name}`,
+    subtitle: `${node.machines.length}× ${machine.name}`,
     machineIconId: machine.iconId,
     ports: [...ports(recipe.ingredients, "input"), ...ports(recipe.products, "output")],
     power,
     powerLabel: formatPower(power),
-    clockLabel: machine.canOverclock ? `${numberLabel.format(node.clockPercent)}%` : null,
+    clockLabel: machine.canOverclock ? clockLabel : null,
     sloops:
       machine.sloopSlots > 0
-        ? { used: node.sloopsUsed, slots: machine.sloopSlots, iconId: sloopIcon! }
+        ? { used: sloops, slots: machine.sloopSlots, iconId: sloopIcon! }
         : null,
   };
 }
@@ -311,3 +371,18 @@ export * from "./splitters";
 export * from "./semantic-ports";
 
 export * from "./placement";
+
+export * from "./machine-settings";
+export * from "./production";
+
+export * from "./facilities";
+
+export * from "./configuration";
+
+export * from "./configured-flow";
+
+export * from "./clipboard";
+
+export * from "./transport";
+
+export { settingsKey } from "./settings";

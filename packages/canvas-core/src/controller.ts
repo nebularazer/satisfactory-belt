@@ -272,6 +272,7 @@ export class CanvasController {
     this.portState = {
       ...this.portState,
       pending: [],
+      hover: this.portState.hover.filter(exists),
       compatible: new Set(anchor ? targets(anchor).map(portId) : []),
       preview:
         anchor && this.portState.preview && compatibility(anchor, this.portState.preview).compatible
@@ -313,6 +314,16 @@ export class CanvasController {
   hoverPort(pointer: CanvasPointer | null) {
     this.hoverPoint = pointer;
     const hover = pointer ? this.portHits(pointer) : [];
+    if (hover.map(portId).join() === this.portState.hover.map(portId).join()) return;
+    this.portState = { ...this.portState, hover };
+    this.emit();
+  }
+
+  /** Highlight an inspector-referenced port without starting a connection gesture. */
+  highlightPort(ref: PortReference | null) {
+    this.hoverPoint = null;
+    const port = ref && this.portGeometry.find((entry) => samePort(entry, ref));
+    const hover = port ? [port] : [];
     if (hover.map(portId).join() === this.portState.hover.map(portId).join()) return;
     this.portState = { ...this.portState, hover };
     this.emit();

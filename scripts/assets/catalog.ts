@@ -10,6 +10,7 @@ import type {
   Recipe,
 } from "@satisfactory-belt/game-data";
 
+import { parseBuildings } from "./buildings.ts";
 import { classId, parseUnreal } from "./unreal.ts";
 
 export interface ExcludedRecipe {
@@ -105,6 +106,20 @@ export function parseCatalog(
           id !== "Desc_ResourceSinkCoupon_C" &&
           (id === "Desc_AlienDNACapsule_C" ||
             (data.mResourceSinkPoints !== undefined && number(data, "mResourceSinkPoints") > 0)),
+        sinkPoints: id === "Desc_ResourceSinkCoupon_C" ? 0 : Number(data.mResourceSinkPoints ?? 0),
+        dnaPoints: id === "Desc_AlienDNACapsule_C" ? 1000 : 0,
+        energyMegajoules: Number(data.mEnergyValue ?? 0) * (form === "solid" ? 1 : 1000),
+        stackSize:
+          (
+            {
+              SS_ONE: 1,
+              SS_SMALL: 50,
+              SS_MEDIUM: 100,
+              SS_BIG: 200,
+              SS_HUGE: 500,
+              SS_FLUID: 50,
+            } as Record<string, number>
+          )[String(data.mStackSize)] ?? 1,
         unit: form === "solid" ? "item" : "m3",
         iconId: id,
       };
@@ -188,6 +203,15 @@ export function parseCatalog(
       name: string(data, "mDisplayName"),
       description: string(data, "mDescription"),
       resourceIds: resourceIds.toSorted(),
+      ...(data.mExtractCycleTime !== undefined
+        ? {
+            baseRate:
+              (60 * number(data, "mItemsPerCycle")) /
+              number(data, "mExtractCycleTime") /
+              (forms.includes("RF_SOLID") ? 1 : 1000),
+          }
+        : {}),
+      hasPurity: native !== "FGBuildableWaterPump",
       powerMegawatts: number(data, "mPowerConsumption"),
       powerConsumptionExponent: number(data, "mPowerConsumptionExponent"),
       canOverclock: boolean(data, "mCanChangePotential"),
@@ -258,6 +282,7 @@ export function parseCatalog(
       logistics: sorted(logistics),
       sinks: sorted(sinks),
       recipes: sorted(recipes),
+      buildings: sorted(parseBuildings(classes, items)),
     },
     excludedRecipes: excludedRecipes.toSorted((a, b) => a.id.localeCompare(b.id, "en")),
   };

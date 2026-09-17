@@ -16,6 +16,7 @@ export const CANVAS_PALETTES = {
     input: { stroke: "#d77732", fill: "#fff0df" },
     output: { stroke: "#239c83", fill: "#e1f5ed" },
     power: { stroke: "#cd921a", fill: "#f7ce65" },
+    generation: { stroke: "#239c83", fill: "#a3e4cf" },
     clock: { stroke: "#3299b5", fill: "#e2f3fb" },
   },
   dark: {
@@ -33,6 +34,7 @@ export const CANVAS_PALETTES = {
     input: { stroke: "#ed994f", fill: "#4a3020" },
     output: { stroke: "#4cc6a5", fill: "#193e35" },
     power: { stroke: "#f7ce65", fill: "#70551c" },
+    generation: { stroke: "#4cc6a5", fill: "#193e35" },
     clock: { stroke: "#70cce3", fill: "#204653" },
   },
 } as const;

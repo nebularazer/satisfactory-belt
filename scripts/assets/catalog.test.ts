@@ -361,3 +361,130 @@ it("extracts continuous sinkability including DNA's separate points counter", ()
   expect(items.Desc_ResourceSinkCoupon_C!.sinkable).toBe(false);
   expect(items.Desc_Water_C!.sinkable).toBe(false);
 });
+
+it("extracts generator fuel energy, supplemental water and nuclear waste without treating them as recipes", () => {
+  const docs = fixture();
+  docs[0]!.Classes.push({
+    ClassName: "Desc_Rod_C",
+    mDisplayName: "Rod",
+    mDescription: "",
+    mForm: "RF_SOLID",
+    mEnergyValue: "750000",
+    mStackSize: "SS_SMALL",
+  });
+  docs[1]!.Classes.push({ ClassName: "Desc_Reactor_C" });
+  docs.push(
+    group("FGBuildableGeneratorNuclear", [
+      {
+        ClassName: "Build_Reactor_C",
+        mDisplayName: "Reactor",
+        mDescription: "",
+        mPowerProduction: "2500",
+        mPowerConsumptionExponent: "1.6",
+        mCanChangePotential: "True",
+        mSupplementalToPowerRatio: "1.6",
+        mFuel: [
+          {
+            mFuelClass: "Desc_Rod_C",
+            mSupplementalResourceClass: "Desc_Water_C",
+            mByproduct: "Desc_Iron_C",
+            mByproductAmount: "50",
+          },
+        ],
+      },
+    ]),
+  );
+  const { catalog } = parseCatalog(docs, source);
+  expect(catalog.items.Desc_Rod_C).toMatchObject({ energyMegajoules: 750000, stackSize: 50 });
+  expect(catalog.buildings!.Build_Reactor_C).toMatchObject({
+    kind: "generator",
+    powerMegawatts: 2500,
+    fuels: [
+      {
+        itemId: "Desc_Rod_C",
+        supplementalItemId: "Desc_Water_C",
+        supplementalPerMinute: 240,
+        byproduct: { itemId: "Desc_Iron_C", amount: 50 },
+      },
+    ],
+  });
+  expect(catalog.machines.Build_Reactor_C).toBeUndefined();
+});
+
+it("normalizes liquid fuel energy to cubic metres and separates DNA from regular Sink points", () => {
+  const docs = fixture();
+  docs[0]!.Classes.push(
+    {
+      ClassName: "Desc_Fuel_C",
+      mDisplayName: "Fuel",
+      mDescription: "",
+      mForm: "RF_LIQUID",
+      mEnergyValue: "0.75",
+      mResourceSinkPoints: "0",
+    },
+    {
+      ClassName: "Desc_AlienDNACapsule_C",
+      mDisplayName: "DNA",
+      mDescription: "",
+      mForm: "RF_SOLID",
+      mResourceSinkPoints: "0",
+    },
+  );
+  const { catalog } = parseCatalog(docs, source);
+  expect(catalog.items.Desc_Fuel_C).toMatchObject({
+    energyMegajoules: 750,
+    unit: "m3",
+    sinkable: false,
+  });
+  expect(catalog.items.Desc_AlienDNACapsule_C).toMatchObject({
+    dnaPoints: 1000,
+    sinkPoints: 0,
+    sinkable: true,
+  });
+});
+
+it("keeps fluid-buffer capacities in cubic metres and excludes power storage/grid buildables", () => {
+  const docs = fixture();
+  docs[1]!.Classes.push({ ClassName: "Desc_Buffer_C" }, { ClassName: "Desc_PowerStorage_C" });
+  docs.push(
+    group("FGBuildablePipeReservoir", [
+      {
+        ClassName: "Build_Buffer_C",
+        mDisplayName: "Buffer",
+        mDescription: "",
+        mStorageCapacity: "400",
+      },
+    ]),
+    group("FGBuildablePowerStorage", [
+      { ClassName: "Build_PowerStorage_C", mDisplayName: "Battery" },
+    ]),
+  );
+  const { catalog } = parseCatalog(docs, source);
+  expect(catalog.buildings!.Build_Buffer_C).toMatchObject({
+    kind: "storage",
+    capacity: 400,
+    transport: "pipe",
+  });
+  expect(catalog.buildings!.Build_PowerStorage_C).toBeUndefined();
+});
+
+it("does not expose inherited clock controls on Alien Power Augmenters", () => {
+  const docs = fixture();
+  docs[1]!.Classes.push({ ClassName: "Desc_Augmenter_C" });
+  docs.push(
+    group("FGBuildablePowerBooster", [
+      {
+        ClassName: "Build_Augmenter_C",
+        mDisplayName: "Alien Power Augmenter",
+        mDescription: "",
+        mBasePowerProduction: "500",
+        mCanChangePotential: "True",
+      },
+    ]),
+  );
+  expect(parseCatalog(docs, source).catalog.buildings!.Build_Augmenter_C).toMatchObject({
+    kind: "augmenter",
+    canOverclock: false,
+    powerMegawatts: 500,
+  });
+});

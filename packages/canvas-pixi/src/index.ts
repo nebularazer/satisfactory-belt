@@ -91,17 +91,9 @@ export async function mountCanvas(
   const grid = createGrid(palette.grid);
   const linksLayer = new Graphics();
   const linkHandlesLayer = new Graphics();
-  const linkEndpointLayer = new Graphics();
   const itemsLayer = new Container();
   const overlay = new Graphics();
-  app.stage.addChild(
-    grid.view,
-    linksLayer,
-    linkHandlesLayer,
-    itemsLayer,
-    linkEndpointLayer,
-    overlay,
-  );
+  app.stage.addChild(grid.view, linksLayer, linkHandlesLayer, itemsLayer, overlay);
   const views = new Map<string, MachineNodeView>();
   const icons = new IconCache(options.iconManifest, options.assetBaseUrl, invalidate);
   let previousItems: readonly CanvasItem[] | null = null;
@@ -127,7 +119,7 @@ export async function mountCanvas(
     const { camera, viewport, selection, dragOffset, items, marquee } = snapshot;
     if (grid.view.visible) grid.update(camera, viewport, resolution);
     overlay.clear();
-    drawMaterialLinks(linksLayer, linkHandlesLayer, linkEndpointLayer, snapshot, palette);
+    drawMaterialLinks(linksLayer, linkHandlesLayer, snapshot, palette);
     if (items !== previousItems) {
       const ids = new Set(items.map((item) => item.id));
       for (const [id, view] of views) {
@@ -169,7 +161,7 @@ export async function mountCanvas(
         itemsLayer.addChild(view.container);
         views.set(item.id, view);
       }
-      // Lift the dragged group above stationary nodes while preserving its internal order.
+      // Lift the dragged group above stationary nodes, preserving its internal order.
       view.container.zIndex =
         index + (snapshot.interaction === "drag" && selected ? items.length : 0);
       view.container.visible = true;

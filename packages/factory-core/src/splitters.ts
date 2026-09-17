@@ -15,6 +15,7 @@ export const DEFAULT_SPLITTER_PROGRAM: SplitterProgram = Object.freeze({
   "output:1": Object.freeze([Object.freeze({ kind: "any" as const })]),
   "output:2": Object.freeze([Object.freeze({ kind: "none" as const })]),
 });
+export const MAX_SPLITTER_RULES = 64;
 export const SPLITTER_OUTPUTS: readonly SplitterOutput[] = ["output:0", "output:1", "output:2"];
 
 export function validateSplitterProgram(
@@ -36,10 +37,8 @@ export function validateSplitterProgram(
   let total = 0;
   for (const output of SPLITTER_OUTPUTS) {
     const filters = rules[output];
-    if (!filters.length || (kind === "smart-splitter" && filters.length !== 1))
-      throw new Error(
-        "A smart splitter requires one rule per output; programmable outputs require at least one rule.",
-      );
+    if (kind === "smart-splitter" && filters.length > 1)
+      throw new Error("A smart splitter supports at most one rule per output.");
     const seen = new Set<string>();
     for (const filter of filters) {
       if (!filter || !["item", "any", "none", "any-undefined", "overflow"].includes(filter.kind))
@@ -52,7 +51,8 @@ export function validateSplitterProgram(
     }
     total += filters.length;
   }
-  if (total > 64) throw new Error("A programmable splitter supports at most 64 rules.");
+  if (total > MAX_SPLITTER_RULES)
+    throw new Error("A programmable splitter supports at most 64 rules.");
 }
 
 export function splitterFilters(

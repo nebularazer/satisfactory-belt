@@ -1,15 +1,18 @@
 import type { Point, PortReference } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
+import { defaultFacilityConfiguration } from "./facilities";
 import { resolveFactoryNode } from "./index";
 import type { FactoryNode } from "./index";
 import { createConnectionIndex } from "./links";
 import type { MaterialLink } from "./links";
+import { createMachineMembers } from "./machine-settings";
 import { getPortCompatibility } from "./ports";
 import type { SemanticPort } from "./ports";
 import { resolveSemanticPorts } from "./semantic-ports";
 
 export type NodeConfiguration =
+  | { kind: "facility"; buildingId: string }
   | { kind: "manufacturing"; recipeId: string; machineId: string }
   | { kind: "extractor"; extractorId: string; resourceId: string }
   | { kind: "logistics"; partId: string }
@@ -23,15 +26,20 @@ export function createFactoryNode(
   id: string,
   position: Point,
 ): FactoryNode {
-  const base = { id, ...position, machineCount: 1 };
   const node: FactoryNode =
-    configuration.kind === "manufacturing"
-      ? { ...configuration, ...base, clockPercent: 100, sloopsUsed: 0 }
-      : configuration.kind === "extractor"
-        ? { ...configuration, ...base, clockPercent: 100 }
-        : configuration.kind === "logistics"
-          ? { ...configuration, id, ...position }
-          : { ...configuration, ...base };
+    configuration.kind === "facility"
+      ? {
+          ...configuration,
+          id,
+          ...position,
+          machines: createMachineMembers(1),
+          configuration: defaultFacilityConfiguration(
+            catalog.buildings![configuration.buildingId]!,
+          ),
+        }
+      : configuration.kind === "logistics"
+        ? { ...configuration, id, ...position }
+        : { ...configuration, id, ...position, machines: createMachineMembers(1) };
   resolveFactoryNode(node, catalog);
   return node;
 }

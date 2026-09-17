@@ -2,8 +2,25 @@ import { SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { describe, expect, it } from "vitest";
 
-import { formatPower, nodeBounds, portRows, resolveMachineNode, resolveFactoryNode } from "./index";
-import type { ManufacturingNode } from "./index";
+import {
+  withRecipe,
+  formatPower,
+  nodeBounds,
+  portRows,
+  resolveMachineNode,
+  resolveFactoryNode,
+} from "./index";
+import type { LogisticsNode, ManufacturingNode } from "./index";
+import { createConnectionIndex } from "./links";
+import {
+  commonSetting,
+  createMachineMembers,
+  resizeMachineGroup,
+  setMachineSetting,
+} from "./machine-settings";
+/* oxlint-disable oxc/no-map-spread -- Tests construct immutable settings and retain original snapshots. */
+import { resolveProduction } from "./production";
+import { resolveSemanticPorts } from "./semantic-ports";
 
 it.each(["splitter", "merger"] as const)(
   "projects %s slots on a compact snapping square without assigning material",
@@ -53,9 +70,7 @@ function fixture() {
     y: -32,
     recipeId: "Recipe",
     machineId: "Assembler",
-    machineCount: 3,
-    clockPercent: 100,
-    sloopsUsed: 0,
+    machines: createMachineMembers(3),
   };
   const catalog: GameCatalog = {
     schemaVersion: 1,
@@ -183,18 +198,29 @@ it.each([
   [2, 180],
 ])("shows %i/2 Sloops per machine and total group power", (sloopsUsed, megawatts) => {
   const { node, catalog } = fixture();
-  const display = resolveMachineNode({ ...node, sloopsUsed }, catalog);
+  const display = resolveMachineNode(
+    { ...node, machines: node.machines.map((member) => ({ ...member, sloopsUsed })) },
+    catalog,
+  );
   expect(display.sloops).toMatchObject({ used: sloopsUsed, slots: 2 });
   expect(display.power).toEqual({ kind: "known", megawatts });
 });
 
 it("applies the extracted clock exponent and keeps variable power distinct from zero", () => {
   const { node, catalog } = fixture();
-  const display = resolveMachineNode({ ...node, clockPercent: 200 }, catalog);
+  const display = resolveMachineNode(
+    { ...node, machines: node.machines.map((member) => ({ ...member, clockPercent: 200 })) },
+    catalog,
+  );
   expect(display.power.kind === "known" && display.power.megawatts).toBeCloseTo(112.5, 3);
   expect(display.clockLabel).toBe("200%");
   catalog.machines.Assembler.power = { kind: "variable" };
-  expect(resolveMachineNode(node, catalog).powerLabel).toBe("Variable");
+  expect(resolveMachineNode(node, catalog).power).toEqual({
+    kind: "range",
+    minMegawatts: 0,
+    maxMegawatts: 3,
+    averageMegawatts: 1.5,
+  });
   expect(formatPower({ kind: "unknown" })).toBe("— MW");
   expect(formatPower({ kind: "known", megawatts: 100000 })).toBe("1.0e+5 MW");
 });
@@ -202,7 +228,14 @@ it("applies the extracted clock exponent and keeps variable power distinct from 
 it("hides unsupported footer settings without moving a fixed producer's output", () => {
   const { catalog } = fixture();
   const display = resolveMachineNode(
-    { kind: "fixed-producer", id: "tree", producerId: "Tree", x: 0, y: 0, machineCount: 1 },
+    {
+      kind: "fixed-producer",
+      id: "tree",
+      producerId: "Tree",
+      x: 0,
+      y: 0,
+      machines: createMachineMembers(1),
+    },
     catalog,
   );
   expect(display).toMatchObject({
@@ -217,23 +250,29 @@ it("hides unsupported footer settings without moving a fixed producer's output",
   expect(resolveMachineNode(fixture().node, catalog).sloops).toBeNull();
 });
 
-it.each([
-  { machineCount: 0 },
-  { machineCount: 1.5 },
-  { clockPercent: 0 },
-  { clockPercent: 251 },
-  { sloopsUsed: -1 },
-  { sloopsUsed: 3 },
-  { sloopsUsed: 0.5 },
-])("rejects invalid machine configurations %j", (change) => {
+it.each(
+  [
+    [],
+    [{ id: "a", clockPercent: 0, sloopsUsed: 0 }],
+    [{ id: "a", clockPercent: 251, sloopsUsed: 0 }],
+    [{ id: "a", clockPercent: 100, sloopsUsed: -1 }],
+    [{ id: "a", clockPercent: 100, sloopsUsed: 3 }],
+    [{ id: "a", clockPercent: 100, sloopsUsed: 0.5 }],
+  ].map((machines) => ({ machines })),
+)("rejects invalid machine configurations %j", ({ machines }) => {
   const { node, catalog } = fixture();
-  expect(() => resolveMachineNode({ ...node, ...change }, catalog)).toThrow();
+  expect(() => resolveMachineNode({ ...node, machines }, catalog)).toThrow();
 });
 
 it("rejects incompatible recipes and unsupported clock changes", () => {
   const { node, catalog } = fixture();
   catalog.machines.Assembler.canOverclock = false;
-  expect(() => resolveMachineNode({ ...node, clockPercent: 125 }, catalog)).toThrow("clock");
+  expect(() =>
+    resolveMachineNode(
+      { ...node, machines: node.machines.map((member) => ({ ...member, clockPercent: 125 })) },
+      catalog,
+    ),
+  ).toThrow("clock");
   catalog.recipes.Recipe.machineIds = ["Other"];
   expect(() => resolveMachineNode(node, catalog)).toThrow("incompatible");
 });
@@ -281,8 +320,7 @@ it("resolves extraction as a single resource output with machine power, clock an
     resourceId: "Water",
     x: 16,
     y: 32,
-    machineCount: 2,
-    clockPercent: 100,
+    machines: createMachineMembers(2),
   } as const;
   const display = resolveMachineNode(node, catalog);
   expect(display).toMatchObject({
@@ -300,13 +338,21 @@ it("resolves extraction as a single resource output with machine power, clock an
     x: 256,
     y: 144,
   });
-  expect(resolveMachineNode({ ...node, clockPercent: 200 }, catalog).powerLabel).toBe("100 MW");
+  expect(
+    resolveMachineNode(
+      { ...node, machines: node.machines.map((member) => ({ ...member, clockPercent: 200 })) },
+      catalog,
+    ).powerLabel,
+  ).toBe("100 MW");
   expect(() => resolveMachineNode({ ...node, resourceId: "Iron" }, catalog)).toThrow(
     "incompatible",
   );
-  expect(() => resolveMachineNode({ ...node, clockPercent: 251 }, catalog)).toThrow(
-    "Invalid clock",
-  );
+  expect(() =>
+    resolveMachineNode(
+      { ...node, machines: node.machines.map((member) => ({ ...member, clockPercent: 251 })) },
+      catalog,
+    ),
+  ).toThrow("Invalid clock");
   expect(() => resolveMachineNode({ ...node, extractorId: "Missing" }, catalog)).toThrow(
     "Missing extractor",
   );
@@ -326,7 +372,7 @@ it("projects a grouped Sink as one terminal belt input with aggregate power", ()
     id: "sink-node",
     kind: "sink",
     sinkId: "sink",
-    machineCount: 2,
+    machines: createMachineMembers(2),
     x: 0,
     y: 0,
   } as const;
@@ -372,5 +418,228 @@ it.each(["smart-splitter", "programmable-splitter"] as const)(
       "output:1",
       "output:2",
     ]);
+    expect(display.ports.filter((port) => port.disabled).map((port) => port.key)).toEqual([
+      "output:0",
+      "output:2",
+    ]);
   },
 );
+
+it("shows configured splitter items without inventing incoming material flow", () => {
+  const { catalog } = fixture();
+  catalog.logistics.part = {
+    id: "part",
+    descriptorId: "desc",
+    iconId: "icon",
+    name: "Programmable Splitter",
+    description: "",
+    kind: "programmable-splitter",
+  };
+  const node: LogisticsNode = {
+    kind: "logistics",
+    id: "splitter",
+    partId: "part",
+    x: 0,
+    y: 0,
+    program: {
+      "output:0": [
+        { kind: "item", itemId: "Iron" },
+        { kind: "item", itemId: "Screw" },
+        { kind: "none" },
+      ],
+      "output:1": [{ kind: "any-undefined" }, { kind: "overflow" }],
+      "output:2": [],
+    },
+  };
+  const display = resolveFactoryNode(node, catalog);
+  expect(display.ports.find((port) => port.key === "output:0")).toMatchObject({
+    configuredItemIconIds: ["Iron-icon", "Screw-icon"],
+    itemId: null,
+    disabled: false,
+  });
+  expect(display.ports.find((port) => port.key === "output:1")).toMatchObject({
+    configuredItemIconIds: [],
+    disabled: false,
+  });
+  expect(display.ports.find((port) => port.key === "output:2")).toMatchObject({
+    configuredItemIconIds: [],
+    disabled: true,
+  });
+  const index = createConnectionIndex(resolveSemanticPorts(node, catalog), []);
+  expect(index.materials({ nodeId: node.id, portKey: "output:0" })).toEqual(new Set());
+});
+
+it("edits one member, represents mixed settings, and overwrites only the chosen All setting", () => {
+  const { node, catalog } = fixture();
+  const first = node.machines[0].id;
+  const clocked = setMachineSetting(node, catalog, first, "clockPercent", 200);
+  const amplified = setMachineSetting(clocked, catalog, node.machines[1].id, "sloopsUsed", 1);
+  expect(commonSetting(amplified.machines, "clockPercent")).toBeNull();
+  expect(commonSetting(amplified.machines, "sloopsUsed")).toBeNull();
+  expect(resolveFactoryNode(amplified, catalog)).toMatchObject({
+    clockLabel: "Mixed",
+    sloops: { used: null },
+  });
+  const uniformClock = setMachineSetting(amplified, catalog, "all", "clockPercent", 150);
+  expect(commonSetting(uniformClock.machines, "clockPercent")).toBe(150);
+  expect(uniformClock.machines.map((member) => member.sloopsUsed)).toEqual([0, 1, 0]);
+  expect(uniformClock.machines.map((member) => member.id)).toEqual(
+    node.machines.map((member) => member.id),
+  );
+  expect(
+    node.machines.every((member) => member.clockPercent === 100 && member.sloopsUsed === 0),
+  ).toBe(true);
+  expect(setMachineSetting(uniformClock, catalog, "all", "clockPercent", 150)).toBe(uniformClock);
+  expect(() => setMachineSetting(node, catalog, "missing", "clockPercent", 100)).toThrow(
+    "no longer",
+  );
+  expect(() => setMachineSetting(node, catalog, "all", "sloopsUsed", 0.5)).toThrow("Sloop");
+});
+
+it("retains surviving members when resizing and inherits common settings for new members", () => {
+  const { node } = fixture();
+  const shrunk = resizeMachineGroup(node, 2, () => "unused");
+  const grown = resizeMachineGroup(shrunk, 3, () => "new-member");
+  expect(grown.machines.slice(0, 2)).toEqual(node.machines.slice(0, 2));
+  expect(grown.machines[0]).toBe(node.machines[0]);
+  expect(grown.machines[2]).toEqual({ id: "new-member", clockPercent: 100, sloopsUsed: 0 });
+  expect(resizeMachineGroup(node, 3, () => "unused")).toBe(node);
+  expect(() => resizeMachineGroup(node, 0, () => "unused")).toThrow();
+  expect(() => resizeMachineGroup(node, 1.5, () => "unused")).toThrow();
+});
+
+it("sums per-member input/output rates without amplifying inputs and calculates individual power", () => {
+  const { node, catalog } = fixture();
+  const mixed = {
+    ...node,
+    machines: [
+      { id: "first", clockPercent: 200, sloopsUsed: 2 },
+      { id: "second", clockPercent: 50, sloopsUsed: 0 },
+    ],
+  };
+  const all = resolveProduction(mixed, catalog);
+  expect(all.inputs).toEqual([
+    { itemId: "Iron", perMinute: 75 },
+    { itemId: "Screw", perMinute: 150 },
+  ]);
+  expect(all.outputs).toEqual([
+    { itemId: "Plate", perMinute: 22.5 },
+    { itemId: "Water", perMinute: 45 },
+  ]);
+  expect(resolveProduction(mixed, catalog, "first").outputs[0].perMinute).toBe(20);
+  expect(resolveProduction(mixed, catalog, "second").outputs[0].perMinute).toBe(2.5);
+  const power = resolveMachineNode(mixed, catalog).power;
+  expect(power.kind === "known" && power.megawatts).toBeCloseTo(
+    15 * 2 ** 1.321929 * 4 + 15 * 0.5 ** 1.321929,
+  );
+  catalog.machines.Assembler.manufacturingSpeed = 2;
+  expect(resolveProduction(mixed, catalog).inputs[0].perMinute).toBe(150);
+});
+
+it("keeps consumed and produced copies of a material separate and sums duplicate entries", () => {
+  const { node, catalog } = fixture();
+  catalog.recipes.Recipe.ingredients = [
+    { itemId: "Water", amount: 1 },
+    { itemId: "Water", amount: 2 },
+  ];
+  const rates = resolveProduction(node, catalog);
+  expect(rates.inputs).toEqual([{ itemId: "Water", perMinute: 45 }]);
+  expect(rates.outputs.find((entry) => entry.itemId === "Water")!.perMinute).toBe(30);
+});
+
+it("calculates fixed production and keeps unsupported extraction rates unknown", () => {
+  const { catalog } = fixture();
+  expect(
+    resolveProduction(
+      {
+        kind: "fixed-producer",
+        id: "tree",
+        producerId: "Tree",
+        x: 0,
+        y: 0,
+        machines: createMachineMembers(2),
+      },
+      catalog,
+    ),
+  ).toMatchObject({
+    inputs: [],
+    outputs: [{ itemId: "Plate", perMinute: 30 }],
+    unavailableReason: null,
+  });
+  catalog.extractors.Miner = {
+    id: "Miner",
+    descriptorId: "desc",
+    name: "Miner",
+    description: "",
+    iconId: "miner",
+    resourceIds: ["Iron"],
+    powerMegawatts: 5,
+    powerConsumptionExponent: 1.321929,
+    canOverclock: true,
+  };
+  expect(
+    resolveProduction(
+      {
+        kind: "extractor",
+        id: "miner",
+        extractorId: "Miner",
+        resourceId: "Iron",
+        x: 0,
+        y: 0,
+        machines: createMachineMembers(2),
+      },
+      catalog,
+    ),
+  ).toMatchObject({
+    outputs: [{ itemId: "Iron", perMinute: null }],
+    unavailableReason: expect.any(String),
+  });
+});
+
+it("inherits All settings when growing and copies the last member for mixed settings", () => {
+  const { node, catalog } = fixture();
+  const clocked = setMachineSetting(node, catalog, "all", "clockPercent", 150);
+  const amplified = setMachineSetting(clocked, catalog, "all", "sloopsUsed", 2);
+  const grown = resizeMachineGroup(amplified, 4, () => "new");
+  expect(grown.machines[3]).toEqual({ id: "new", clockPercent: 150, sloopsUsed: 2 });
+  expect(commonSetting(grown.machines, "clockPercent")).toBe(150);
+  expect(commonSetting(grown.machines, "sloopsUsed")).toBe(2);
+  const mixed = setMachineSetting(amplified, catalog, amplified.machines[2].id, "sloopsUsed", 1);
+  expect(resizeMachineGroup(mixed, 4, () => "new").machines[3]).toEqual({
+    id: "new",
+    clockPercent: 150,
+    sloopsUsed: 1,
+  });
+});
+
+it("scales variable recipe power ranges with each member's clock and amplification", () => {
+  const { catalog, node } = fixture();
+  catalog.machines.Assembler.power = { kind: "variable" };
+  catalog.recipes.Recipe.variablePower = { constantMegawatts: 500, factorMegawatts: 1000 };
+  const members = createMachineMembers(1, { clockPercent: 200, sloopsUsed: 2 });
+  const display = resolveMachineNode({ ...node, machines: members }, catalog);
+  if (display.power.kind !== "range") throw new Error("Expected a power range");
+  expect(display.power.minMegawatts).toBeCloseTo(5000, 1);
+  expect(display.power.maxMegawatts).toBeCloseTo(15000, 1);
+  expect(display.power.averageMegawatts).toBeCloseTo(10000, 1);
+});
+
+it("switches producer for an alternative recipe while retaining members and supported settings", () => {
+  const { catalog, node } = fixture();
+  catalog.machines.Other = { ...catalog.machines.Assembler, id: "Other", sloopSlots: 1 };
+  catalog.recipes.Alternative = {
+    ...catalog.recipes.Recipe,
+    id: "Alternative",
+    machineIds: ["Other"],
+  };
+  const original = {
+    ...node,
+    machines: createMachineMembers(2, { clockPercent: 150, sloopsUsed: 2 }),
+  };
+  const changed = withRecipe(original, "Alternative", catalog);
+  expect(changed).toMatchObject({ machineId: "Other", recipeId: "Alternative" });
+  expect(changed.machines).toEqual(
+    original.machines.map((member) => ({ ...member, sloopsUsed: 1 })),
+  );
+  expect(withRecipe(original, original.recipeId, catalog)).toBe(original);
+});

@@ -1,6 +1,6 @@
 import { portId, samePort } from "@satisfactory-belt/canvas-core";
 import type { PortSelection } from "@satisfactory-belt/canvas-core";
-import { PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
+import { FUEL_PORT_RADIUS, PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
 import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import { Graphics } from "pixi.js";
 
@@ -14,6 +14,7 @@ export class PortHighlights {
 
   update(nodeId: string, display: NodeDisplay, state: PortSelection, palette: CanvasPalette) {
     const roles = display.ports.map((port) => {
+      if (port.disabled) return "muted";
       const ref = { nodeId, portKey: port.key };
       const anchor = samePort(state.anchor, ref);
       if (state.anchor && !anchor && !state.compatible.has(portId(ref))) return "muted";
@@ -38,9 +39,28 @@ export class PortHighlights {
       const port = display.ports[i]!;
       const colors = palette[port.direction];
       const muted = roles[i] === "muted";
-      const radius = port.transport === "pipe" ? PIPE_PORT_RADIUS : PORT_RADIUS;
+      const radius =
+        port.purpose === "fuel"
+          ? FUEL_PORT_RADIUS
+          : port.transport === "pipe"
+            ? PIPE_PORT_RADIUS
+            : PORT_RADIUS;
       const shape = (size = radius) => {
-        if (port.transport === "pipe")
+        if (port.purpose === "fuel") {
+          const halfHeight = (Math.sqrt(3) * radius) / 2;
+          const padding = (size - radius) / Math.sqrt(3);
+          // Equilateral, pointing up; expand the halo perpendicular to each side.
+          this.view.poly([
+            port.x,
+            port.y - halfHeight - padding * 2,
+            port.x + size,
+            port.y + halfHeight + padding,
+            port.x - size,
+            port.y + halfHeight + padding,
+          ]);
+        } else if (port.transport.endsWith("-route"))
+          this.view.rect(port.x - size, port.y - size, size * 2, size * 2);
+        else if (port.transport === "pipe")
           this.view.poly([
             port.x,
             port.y - size,
@@ -57,13 +77,21 @@ export class PortHighlights {
       // Keep a one-unit gap, with an opaque backing that hides the node border.
       // Offset diamond vertices further to match the circle's perpendicular spacing.
       if (roles[i] === "highlight")
-        shape(radius + 2.75 * (port.transport === "pipe" ? Math.SQRT2 : 1))
+        shape(
+          radius +
+            2.75 *
+              (port.purpose === "fuel" ? Math.sqrt(3) : port.transport === "pipe" ? Math.SQRT2 : 1),
+        )
           .fill(palette.card)
-          .stroke({ color: palette.highlight, width: 1.5 });
+          .stroke({ color: palette.highlight, width: 1.5, join: "round" });
       // Opaque muted fills keep the node border from showing through the port center.
       shape()
         .fill(muted ? palette.card : colors.fill)
-        .stroke({ color: muted ? palette.border : colors.stroke, width: 2 });
+        .stroke({
+          color: muted ? palette.border : colors.stroke,
+          width: 2,
+          join: "round",
+        });
     }
   }
 }
