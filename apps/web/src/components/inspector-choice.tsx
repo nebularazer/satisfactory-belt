@@ -1,5 +1,5 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Choices are scoped to the selected inspector. */
-import { useId, useRef, useState } from "react";
+import { useId, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
@@ -58,7 +58,6 @@ export function InspectorChoice({
   const id = useId();
   const anchor = useComboboxAnchor();
   const searchInput = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
   const selected = options.find((option) => option.value === value);
   return (
     <div
@@ -83,11 +82,6 @@ export function InspectorChoice({
         disabled={disabled}
         items={options}
         value={selected ?? null}
-        inputValue={query}
-        onInputValueChange={setQuery}
-        onOpenChange={(open) => {
-          if (open) setQuery("");
-        }}
         itemToStringLabel={labelFor}
         itemToStringValue={valueFor}
         onValueChange={(option) => {
