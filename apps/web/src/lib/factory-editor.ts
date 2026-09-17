@@ -41,8 +41,8 @@ import type {
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 /** The host owns document edits and the workspace-local clipboard. */
-export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly FactoryNode[]) {
-  const history = new EditHistory<FactoryDocument>({ nodes: initialNodes, links: [] });
+export function createFactoryEditor(catalog: GameCatalog, initialDocument: FactoryDocument) {
+  const history = new EditHistory<FactoryDocument>(initialDocument);
   let semanticPorts: SemanticPort[] = [];
   let publishedLinks: readonly MaterialLink[] | null = null;
   let routed = new Map<string, CanvasLink>();
@@ -74,7 +74,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
     previousNodes = new Map(nodes.map((node) => [node.id, node]));
     return nodes.map(nodeBounds);
   }
-  const items = project(initialNodes);
+  const items = project(initialDocument.nodes);
   function connect(a: PortReference, b: PortReference) {
     const result = portIndex.compatibility(a, b);
     if (result.compatible)

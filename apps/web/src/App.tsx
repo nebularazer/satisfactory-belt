@@ -54,6 +54,7 @@ import { createExampleFactory } from "@/lib/example-factory";
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
+import { createInspectorShowcase } from "@/lib/inspector-showcase";
 
 const searchMenuFocus = () =>
   document.querySelector<HTMLButtonElement>('button[aria-label="Canvas menu"]');
@@ -108,9 +109,13 @@ function CanvasWorkspace({
   const [insertion, setInsertion] = useState<CatalogRequest | null>(null);
   const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
-  const [editor] = useState(() =>
-    createFactoryEditor(assets.catalog, createExampleFactory(assets.catalog)),
-  );
+  const [editor] = useState(() => {
+    const showcase = createInspectorShowcase(assets.catalog);
+    return createFactoryEditor(assets.catalog, {
+      ...showcase,
+      nodes: [...createExampleFactory(assets.catalog), ...showcase.nodes],
+    });
+  });
   const { controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay } =
     editor;
   const index = useMemo(() => createSearchIndex(assets.catalog), [assets.catalog]);

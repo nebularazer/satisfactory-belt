@@ -22,7 +22,7 @@ it("starts an explicitly empty document without requiring any demo recipes", () 
     logistics: {},
     sinks: {},
   };
-  const editor = createFactoryEditor(catalog, []);
+  const editor = createFactoryEditor(catalog, { nodes: [], links: [] });
   expect(editor.history.getSnapshot().state.nodes).toEqual([]);
   expect(editor.controller.getSnapshot().items).toEqual([]);
   editor.clipboardCommand("paste");
@@ -297,7 +297,7 @@ function createTestEditor() {
     x: (5 + (index % 3) * 9) * 32,
     y: (5 + Math.floor(index / 3) * 10) * 32,
   }));
-  return { ...createFactoryEditor(catalog, nodes), catalog };
+  return { ...createFactoryEditor(catalog, { nodes, links: [] }), catalog };
 }
 
 it("reuses card content on movement and publishes new content before geometry notifications", () => {
@@ -844,7 +844,7 @@ it("filters consumers and producers by configured material and transport before 
   };
   const producer = { kind: "manufacturing" as const, recipeId: "Recipe", machineId: "Machine" };
   const consumer = { ...producer, recipeId: "Consumer" };
-  const editor = createFactoryEditor(catalog, []);
+  const editor = createFactoryEditor(catalog, { nodes: [], links: [] });
   const a = editor.placeNode(producer, { x: 0, y: 0 });
   const source = { nodeId: a.id, portKey: "output:Desc_WAT1_C" };
   expect(editor.canPlace(producer, source)).toBe(false);
@@ -1013,7 +1013,7 @@ function createTransportEditor() {
     station: { ...base, id: "station", name: "Station", kind: "train-station" },
     platform: { ...base, id: "platform", name: "Platform", kind: "freight-platform" },
   };
-  const editor = createFactoryEditor(catalog, []);
+  const editor = createFactoryEditor(catalog, { nodes: [], links: [] });
   const station = editor.placeNode({ kind: "facility", buildingId: "station" }, { x: 512, y: 512 });
   if (station.kind !== "facility") throw new Error();
   return { ...editor, catalog, station };
