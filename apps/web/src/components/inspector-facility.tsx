@@ -9,6 +9,7 @@ import {
 import type { FacilityNode, FacilityConfiguration } from "@satisfactory-belt/factory-core";
 import { PROJECT_PHASES } from "@satisfactory-belt/game-data";
 
+import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorChoice } from "@/components/inspector-choice";
 import { InspectorNumberField } from "@/components/inspector-number-field";
@@ -19,6 +20,7 @@ import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Editor = ReturnType<typeof createFactoryEditor>;
+const partCount = new Intl.NumberFormat("en");
 export const PURITY_OPTIONS = [
   { value: "0.5", label: "Impure" },
   { value: "1", label: "Normal" },
@@ -294,6 +296,23 @@ export function InspectorFacility({
             }))}
             onChange={(value) => commit({ ...c, phase: Number(value) })}
           />
+          <section aria-label="Required parts" className="space-y-3 border-t pt-4">
+            <h3 className="text-xs font-medium text-muted-foreground">Required parts</h3>
+            <dl className="space-y-3">
+              {PROJECT_PHASES[c.phase - 1]!.map(({ itemId, amount }) => {
+                const item = catalog.items[itemId]!;
+                return (
+                  <div key={itemId} className="flex items-center justify-between gap-3 text-xs">
+                    <dt className="flex min-w-0 items-center gap-2">
+                      <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
+                      <span>{item.name}</span>
+                    </dt>
+                    <dd className="shrink-0 tabular-nums">{partCount.format(amount)}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </section>
         </>
       )}
     </div>

@@ -83,14 +83,14 @@ export class PortHighlights {
               (port.purpose === "fuel" ? Math.sqrt(3) : port.transport === "pipe" ? Math.SQRT2 : 1),
         )
           .fill(palette.card)
-          .stroke({ color: palette.highlight, width: 1.5 });
+          .stroke({ color: palette.highlight, width: 1.5, join: "round" });
       // Opaque muted fills keep the node border from showing through the port center.
       shape()
         .fill(muted ? palette.card : colors.fill)
         .stroke({
           color: muted ? palette.border : colors.stroke,
           width: 2,
-          join: port.purpose === "fuel" ? "round" : "miter",
+          join: "round",
         });
     }
   }

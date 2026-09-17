@@ -83,10 +83,11 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   a complete loop and assumes a full nine-slot load per drone.
 - Transport: square arrival/departure ports connect compatible stations. A closed
   loop is required for a complete route; vehicle/train loops can have extra stops,
-  while drone loops have two ports. Open chains remain editable. Capsule-shaped fuel
+  while drone loops have two ports. Open chains remain editable. Triangular fuel
   inputs accept material connections; route links carry no material flow.
 - Space Elevator: five phase buttons, accepting phase parts as an unlimited planning
-  sink. There are no delivered/remaining counters. A node cannot be grouped;
+  sink. A separate Required parts section above inputs/outputs shows item images and
+  total quantities for the selected phase as reference only. There are no delivered/remaining counters. A node cannot be grouped;
   Only one can be placed in the plan, including through copy/paste.
 - Links: Conveyor Mk.1–6 or Pipeline Mk.1–2, materials, and nominal tier capacity.
   Tier is stored and undoable, but does not constrain calculated flow yet.
