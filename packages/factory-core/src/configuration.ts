@@ -5,6 +5,7 @@ import type { FactoryNode, ManufacturingNode } from "./index";
 import { createConnectionIndex } from "./links";
 import type { FactoryDocument } from "./links";
 import { resolveSemanticPorts } from "./semantic-ports";
+import { settingsKey } from "./settings";
 import { stationKind } from "./transport";
 
 /** A candidate must preserve every existing link, including downstream mixed-material paths. */
@@ -16,30 +17,79 @@ export function canReplaceNode(
   return createConfigurationValidator(document, catalog)(candidate);
 }
 
-/** Reuse unchanged port metadata while a recipe/filter menu evaluates many candidates. */
+/** Cache candidates per document; only their connected component can change material compatibility. */
 export function createConfigurationValidator(document: FactoryDocument, catalog: GameCatalog) {
   const basePorts = document.nodes.flatMap((node) => resolveSemanticPorts(node, catalog));
   const ids = new Set(document.nodes.map((node) => node.id));
-  return (candidate: FactoryNode): boolean => {
-    try {
-      if (!ids.has(candidate.id)) return false;
-      const candidatePorts = resolveSemanticPorts(candidate, catalog);
-      const ports = [
-        ...basePorts.filter((port) => port.nodeId !== candidate.id),
-        ...candidatePorts,
-      ];
-      const index = createConnectionIndex(ports, document.links);
-      for (const link of document.links)
-        if (!index.compatibility(link.output, link.input, true).compatible) return false;
-      if (candidate.kind === "facility")
-        validateFacilityReferences({
-          ...document,
-          nodes: document.nodes.map((node) => (node.id === candidate.id ? candidate : node)),
-        });
-      return true;
-    } catch {
-      return false;
+  const adjacent = new Map<string, Set<string>>();
+  for (const id of ids) adjacent.set(id, new Set());
+  for (const link of document.links) {
+    for (const [a, b] of [
+      [link.input.nodeId, link.output.nodeId],
+      [link.output.nodeId, link.input.nodeId],
+    ] as const) {
+      const neighbors = adjacent.get(a) ?? new Set<string>();
+      neighbors.add(b);
+      adjacent.set(a, neighbors);
     }
+  }
+  type Component = {
+    ports: typeof basePorts;
+    links: FactoryDocument["links"][number][];
+    valid: boolean;
+  };
+  const components = new Map<string, Component>();
+  for (const id of adjacent.keys()) {
+    if (components.has(id)) continue;
+    const component: Component = { ports: [], links: [], valid: true };
+    const pending = [id];
+    components.set(id, component);
+    for (let i = 0; i < pending.length; i++) {
+      for (const neighbor of adjacent.get(pending[i]!) ?? []) {
+        if (components.has(neighbor)) continue;
+        components.set(neighbor, component);
+        pending.push(neighbor);
+      }
+    }
+  }
+  for (const port of basePorts) components.get(port.nodeId)!.ports.push(port);
+  for (const link of document.links) components.get(link.output.nodeId)!.links.push(link);
+  let invalidComponents = 0;
+  for (const component of new Set(components.values())) {
+    const index = createConnectionIndex(component.ports, component.links);
+    component.valid = component.links.every(
+      (link) => index.compatibility(link.output, link.input, true).compatible,
+    );
+    if (!component.valid) invalidComponents++;
+  }
+  const results = new Map<string, boolean>();
+  return (candidate: FactoryNode): boolean => {
+    const key = settingsKey(candidate);
+    const cached = results.get(key);
+    if (cached !== undefined) return cached;
+    let valid = false;
+    try {
+      const component = components.get(candidate.id);
+      if (ids.has(candidate.id) && component && invalidComponents === (component.valid ? 0 : 1)) {
+        const ports = [
+          ...component.ports.filter((port) => port.nodeId !== candidate.id),
+          ...resolveSemanticPorts(candidate, catalog),
+        ];
+        const index = createConnectionIndex(ports, component.links);
+        valid = component.links.every(
+          (link) => index.compatibility(link.output, link.input, true).compatible,
+        );
+        if (valid && candidate.kind === "facility")
+          validateFacilityReferences({
+            ...document,
+            nodes: document.nodes.map((node) => (node.id === candidate.id ? candidate : node)),
+          });
+      }
+    } catch {
+      valid = false;
+    }
+    results.set(key, valid);
+    return valid;
   };
 }
 

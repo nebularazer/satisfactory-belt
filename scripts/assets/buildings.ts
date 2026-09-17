@@ -71,7 +71,8 @@ export function parseBuildings(
       description: text(data, "mDescription"),
       kind,
       powerMegawatts: power,
-      canOverclock: data.mCanChangePotential === "True",
+      // The augmenter inherits potential settings in Docs but has no clock controls in game.
+      canOverclock: kind !== "augmenter" && data.mCanChangePotential === "True",
       powerConsumptionExponent: n("mPowerConsumptionExponent"),
       transport: fluid ? "pipe" : "belt",
       capacity:

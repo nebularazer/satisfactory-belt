@@ -16,6 +16,8 @@ import {
   validateFacilityReferences,
   createConfigurationValidator,
   setMatrixSupply,
+  settingsKey,
+  DEFAULT_DEPOT_RESEARCH,
   createConnectionIndex,
   createFactoryNode,
   firstPlacementConnection,
@@ -363,7 +365,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       const node = current.nodes.find((entry) => entry.id === id);
       if (!node || node.kind === "logistics") return current;
       const next = change(node);
-      if (next === node) return current;
+      if (next === node || settingsKey(next) === settingsKey(node)) return current;
       // Validate before publishing to history or notifying canvas subscribers.
       resolveFactoryNode(next, catalog);
       return { ...current, nodes: current.nodes.map((entry) => (entry === node ? next : entry)) };
@@ -462,7 +464,9 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   function replaceNode(candidate: FactoryNode) {
     if (controller.getSnapshot().interaction !== "idle") return;
     history.update((current) => {
-      if (current.nodes.includes(candidate) || !canConfigure(candidate)) return current;
+      const previous = current.nodes.find((node) => node.id === candidate.id);
+      if (!previous || settingsKey(previous) === settingsKey(candidate) || !canConfigure(candidate))
+        return current;
       return {
         ...current,
         nodes: current.nodes.map((node) => (node.id === candidate.id ? candidate : node)),
@@ -484,12 +488,15 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       tier > (port.transport === "belt" ? 6 : 2)
     )
       throw new Error("Invalid transport tier.");
+    if ((link?.tier ?? 1) === tier) return;
     history.update((current) => ({
       ...current,
       links: current.links.map((entry) => (entry.id === id ? { ...entry, tier } : entry)),
     }));
   }
   function setRouteSettings(route: TransportRoute) {
+    const previous = history.getSnapshot().state.routes?.find((entry) => entry.id === route.id);
+    if (previous && settingsKey(previous) === settingsKey(route)) return;
     validateTransportRoute(history.getSnapshot().state, route);
     history.update((current) => {
       const next = reconcileTransportConnections({
@@ -510,7 +517,11 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       )
     )
       throw new Error("Invalid depot research.");
-    history.update((current) => ({ ...current, depotResearch: { ...research } }));
+    history.update((current) =>
+      settingsKey(current.depotResearch ?? DEFAULT_DEPOT_RESEARCH) === settingsKey(research)
+        ? current
+        : { ...current, depotResearch: { ...research } },
+    );
   }
   return {
     replaceNode,

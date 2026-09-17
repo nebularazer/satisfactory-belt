@@ -51,7 +51,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 - Gift Tree: fixed configured production, count, and power.
 - Fuel generators: shared fuel, individual clocks, supplemental water and waste.
   Biomass adds a load assumption. Geothermal is excluded from the catalog.
-  Alien Power Augmenters show individual matrix supply and boost contribution;
+  Alien Power Augmenters run at a fixed clock with no shard controls and show individual matrix supply and boost contribution;
   no power-grid simulation is introduced. Generated power uses a lightning-plus symbol
   and + prefix on nodes; consumed power keeps the lightning symbol.
 - Resource wells: grouped pressurizers share a resource. Each member has a clock

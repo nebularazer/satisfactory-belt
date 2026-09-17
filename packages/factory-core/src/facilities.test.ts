@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 
 import {
   canReplaceNode,
+  createConfigurationValidator,
   configuredIncomingRates,
   createConnectionIndex,
   createFactoryNode,
@@ -508,4 +509,54 @@ it("keeps fluid inventories separate per freight car and shares each platform's 
       { nodeId: station.id, portKey: "car:2:input:0" },
     ).compatible,
   ).toBe(true);
+});
+
+it("keeps the augmenter fixed at 100% with matrix supply as its only operating control", () => {
+  const { catalog, facility } = fixture();
+  const node = facility("augmenter");
+  expect(machineCapabilities(node, catalog)).toMatchObject({ clock: false, matrices: true });
+  expect(() => setMachineSetting(node, catalog, "all", "clockPercent", 250)).toThrow(
+    "Invalid clock",
+  );
+  expect(resolveFactoryNode(node, catalog).clockLabel).toBeNull();
+});
+
+it("validates the affected network while still rejecting invalid links in unrelated networks", () => {
+  const { catalog, facility, extractor } = fixture();
+  const source = extractor("source", "coal");
+  const generator = facility("coalGenerator");
+  const independent = facility("storage");
+  const document: FactoryDocument = {
+    nodes: [source, generator, independent],
+    links: [
+      {
+        id: "feed",
+        output: { nodeId: source.id, portKey: "output:coal" },
+        input: { nodeId: generator.id, portKey: "input:coal" },
+      },
+    ],
+  };
+  const validate = createConfigurationValidator(document, catalog);
+  expect(validate(structuredClone(independent))).toBe(true);
+  if (source.kind !== "extractor") throw new Error();
+  const invalid = { ...source, resourceId: "rod" };
+  expect(validate(invalid)).toBe(false);
+  expect(validate(structuredClone(invalid))).toBe(false);
+  expect(validate(structuredClone(source))).toBe(true);
+  const invalidDocument = { ...document, nodes: [invalid, generator, independent] };
+  const validateBroken = createConfigurationValidator(invalidDocument, catalog);
+  expect(validateBroken(independent)).toBe(false);
+  expect(validateBroken(source)).toBe(true);
+  const dangling = {
+    ...document,
+    links: [
+      ...document.links,
+      {
+        id: "dangling",
+        output: { nodeId: "missing", portKey: "output:0" },
+        input: { nodeId: independent.id, portKey: "input:0" },
+      },
+    ],
+  };
+  expect(createConfigurationValidator(dangling, catalog)(source)).toBe(false);
 });

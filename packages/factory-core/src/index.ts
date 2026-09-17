@@ -384,3 +384,5 @@ export * from "./configured-flow";
 export * from "./clipboard";
 
 export * from "./transport";
+
+export { settingsKey } from "./settings";

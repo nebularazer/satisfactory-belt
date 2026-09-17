@@ -467,3 +467,24 @@ it("keeps fluid-buffer capacities in cubic metres and excludes power storage/gri
   });
   expect(catalog.buildings!.Build_PowerStorage_C).toBeUndefined();
 });
+
+it("does not expose inherited clock controls on Alien Power Augmenters", () => {
+  const docs = fixture();
+  docs[1]!.Classes.push({ ClassName: "Desc_Augmenter_C" });
+  docs.push(
+    group("FGBuildablePowerBooster", [
+      {
+        ClassName: "Build_Augmenter_C",
+        mDisplayName: "Alien Power Augmenter",
+        mDescription: "",
+        mBasePowerProduction: "500",
+        mCanChangePotential: "True",
+      },
+    ]),
+  );
+  expect(parseCatalog(docs, source).catalog.buildings!.Build_Augmenter_C).toMatchObject({
+    kind: "augmenter",
+    canOverclock: false,
+    powerMegawatts: 500,
+  });
+});

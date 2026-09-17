@@ -994,6 +994,9 @@ it("records belt tiers without changing connections and preserves them through c
   const original = editor.history.getSnapshot().state;
   const id = original.links[0]!.id;
   editor.setLinkTier(id, 6);
+  const configured = editor.history.getSnapshot();
+  editor.setLinkTier(id, 6);
+  expect(editor.history.getSnapshot()).toBe(configured);
   expect(editor.getLink(id)).toMatchObject({ tier: 6, output: editor.output, input: editor.input });
   expect(() => editor.setLinkTier(id, 7)).toThrow("Invalid transport tier");
   editor.controller.setSelection(new Set([editor.output.nodeId, editor.input.nodeId]));
@@ -1003,6 +1006,10 @@ it("records belt tiers without changing connections and preserves them through c
   editor.historyCommand("undo");
   editor.historyCommand("undo");
   expect(editor.history.getSnapshot().state).toBe(original);
+  const undone = editor.history.getSnapshot();
+  editor.setLinkTier(id, 1);
+  expect(editor.history.getSnapshot()).toBe(undone);
+  expect(undone.canRedo).toBe(true);
 });
 
 function createTransportEditor() {
@@ -1257,4 +1264,20 @@ it("keeps drone routes as two-port loops and rejects other transport and cargo p
   expect(editor.connect(depart(c), arrive(a)).compatible).toBe(false);
   expect(editor.connect(depart(b), arrive(a)).compatible).toBe(true);
   expect(routeTopology(editor.history.getSnapshot().state, a.id).closed).toBe(true);
+});
+
+it("preserves redo and document identity when unchanged settings are submitted", () => {
+  const editor = createTransportEditor();
+  const route = editor.history.getSnapshot().state.routes![0]!;
+  editor.setRouteSettings({ ...route, roundTripSeconds: 300 });
+  editor.historyCommand("undo");
+  const before = editor.history.getSnapshot();
+  expect(before.canRedo).toBe(true);
+  editor.setRouteSettings(structuredClone(before.state.routes![0]!));
+  editor.setDepotResearch({ capacityLevel: 0, speedLevel: 0 });
+  editor.replaceNode(structuredClone(before.state.nodes[0]!));
+  editor.setMachineCount(editor.station.id, 1);
+  expect(editor.history.getSnapshot()).toBe(before);
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state.routes![0]!.roundTripSeconds).toBe(300);
 });
