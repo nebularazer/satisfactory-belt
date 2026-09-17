@@ -160,19 +160,21 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     publishedIndex = portIndex;
     controller.setPorts(
       [...displays].flatMap(([nodeId, display]) =>
-        display.ports.map((port) => ({
-          nodeId,
-          portKey: port.key,
-          direction: port.direction,
-          x: port.x,
-          y: port.y,
-          radius:
-            port.purpose === "fuel"
-              ? FUEL_PORT_RADIUS
-              : port.transport === "pipe"
-                ? PIPE_PORT_RADIUS
-                : PORT_RADIUS,
-        })),
+        display.ports
+          .filter((port) => !port.disabled)
+          .map((port) => ({
+            nodeId,
+            portKey: port.key,
+            direction: port.direction,
+            x: port.x,
+            y: port.y,
+            radius:
+              port.purpose === "fuel"
+                ? FUEL_PORT_RADIUS
+                : port.transport === "pipe"
+                  ? PIPE_PORT_RADIUS
+                  : PORT_RADIUS,
+          })),
       ),
       portIndex.compatibility,
       portIndex.targets,

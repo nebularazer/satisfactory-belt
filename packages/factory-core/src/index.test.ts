@@ -10,7 +10,8 @@ import {
   resolveMachineNode,
   resolveFactoryNode,
 } from "./index";
-import type { ManufacturingNode } from "./index";
+import type { LogisticsNode, ManufacturingNode } from "./index";
+import { createConnectionIndex } from "./links";
 import {
   commonSetting,
   createMachineMembers,
@@ -19,6 +20,7 @@ import {
 } from "./machine-settings";
 /* oxlint-disable oxc/no-map-spread -- Tests construct immutable settings and retain original snapshots. */
 import { resolveProduction } from "./production";
+import { resolveSemanticPorts } from "./semantic-ports";
 
 it.each(["splitter", "merger"] as const)(
   "projects %s slots on a compact snapping square without assigning material",
@@ -416,8 +418,56 @@ it.each(["smart-splitter", "programmable-splitter"] as const)(
       "output:1",
       "output:2",
     ]);
+    expect(display.ports.filter((port) => port.disabled).map((port) => port.key)).toEqual([
+      "output:0",
+      "output:2",
+    ]);
   },
 );
+
+it("shows configured splitter items without inventing incoming material flow", () => {
+  const { catalog } = fixture();
+  catalog.logistics.part = {
+    id: "part",
+    descriptorId: "desc",
+    iconId: "icon",
+    name: "Programmable Splitter",
+    description: "",
+    kind: "programmable-splitter",
+  };
+  const node: LogisticsNode = {
+    kind: "logistics",
+    id: "splitter",
+    partId: "part",
+    x: 0,
+    y: 0,
+    program: {
+      "output:0": [
+        { kind: "item", itemId: "Iron" },
+        { kind: "item", itemId: "Screw" },
+        { kind: "none" },
+      ],
+      "output:1": [{ kind: "any-undefined" }, { kind: "overflow" }],
+      "output:2": [],
+    },
+  };
+  const display = resolveFactoryNode(node, catalog);
+  expect(display.ports.find((port) => port.key === "output:0")).toMatchObject({
+    configuredItemIconIds: ["Iron-icon", "Screw-icon"],
+    itemId: null,
+    disabled: false,
+  });
+  expect(display.ports.find((port) => port.key === "output:1")).toMatchObject({
+    configuredItemIconIds: [],
+    disabled: false,
+  });
+  expect(display.ports.find((port) => port.key === "output:2")).toMatchObject({
+    configuredItemIconIds: [],
+    disabled: true,
+  });
+  const index = createConnectionIndex(resolveSemanticPorts(node, catalog), []);
+  expect(index.materials({ nodeId: node.id, portKey: "output:0" })).toEqual(new Set());
+});
 
 it("edits one member, represents mixed settings, and overwrites only the chosen All setting", () => {
   const { node, catalog } = fixture();

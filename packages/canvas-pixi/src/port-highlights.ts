@@ -14,6 +14,7 @@ export class PortHighlights {
 
   update(nodeId: string, display: NodeDisplay, state: PortSelection, palette: CanvasPalette) {
     const roles = display.ports.map((port) => {
+      if (port.disabled) return "muted";
       const ref = { nodeId, portKey: port.key };
       const anchor = samePort(state.anchor, ref);
       if (state.anchor && !anchor && !state.compatible.has(portId(ref))) return "muted";

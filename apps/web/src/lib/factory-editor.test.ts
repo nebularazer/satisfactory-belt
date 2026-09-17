@@ -667,7 +667,15 @@ it("stores splitter programs, revalidates connected outputs and restores everyth
     "output:1": [{ kind: "none" }],
     "output:2": [{ kind: "any-undefined" }],
   } as const;
+  controller.selectPort(center);
+  expect(controller.getPortSnapshot().anchor).toEqual(center);
   setSplitterProgram("smart-node", program);
+  expect(controller.getPortSnapshot().anchor).toBeNull();
+  controller.selectPort(center);
+  expect(controller.getPortSnapshot().anchor).toBeNull();
+  expect(
+    editor.getDisplay("smart-node")!.ports.find((port) => port.key === center.portKey)?.disabled,
+  ).toBe(true);
   expect(history.getSnapshot().state.links).toHaveLength(1);
   expect(editor.getMaterials({ nodeId: "smart-node", portKey: "output:0" })).toEqual(
     new Set(["Desc_WAT1_C"]),
@@ -675,7 +683,10 @@ it("stores splitter programs, revalidates connected outputs and restores everyth
   expect(connect(center, input)).toEqual({ compatible: false, reason: "disabled-output" });
   historyCommand("undo");
   expect(history.getSnapshot().state).toBe(before);
+  controller.selectPort(center);
+  expect(controller.getPortSnapshot().anchor).toEqual(center);
   historyCommand("redo");
+  expect(controller.getPortSnapshot().anchor).toBeNull();
   controller.setSelection(new Set(["smart-node"]));
   clipboardCommand("copy");
   clipboardCommand("paste");

@@ -28,6 +28,11 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   their summary shows remaining program slots out of 64. Empty lists close the output.
   Hover/focus identifies the canvas port. Already-added programmable choices are
   disabled without an Incompatible badge. Splitter type changes are not exposed.
+  Explicit output item rules appear beside canvas ports (two icons, then a +N count).
+  These depict configured filters, not inferred supply. None-only and empty outputs
+  are muted and cannot be selected or connected; undo restores their interaction.
+  Any, Any undefined, and Overflow remain rules without dedicated canvas indicators;
+  bottleneck warnings and conditional overflow simulation are deferred.
 - Sink: incoming materials, points per item, and estimated points/min across the group on
   unambiguous paths. DNA points have their own counter. Coupon progression is not
   modeled. Individual sink allocation is unknown.

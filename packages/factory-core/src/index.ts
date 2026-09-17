@@ -6,7 +6,7 @@ import { resolveFacility, trainStationHeight } from "./facilities";
 import type { FacilityNode, Purity } from "./facilities";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
 import type { PortTransport } from "./ports";
-import { validateSplitterProgram } from "./splitters";
+import { DEFAULT_SPLITTER_PROGRAM, SPLITTER_OUTPUTS, validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
 
 export const NODE_SIZE = 8 * GRID_SIZE;
@@ -67,6 +67,7 @@ export type PortDisplay = Readonly<{
   direction: "input" | "output";
   transport: PortTransport;
   purpose?: "fuel";
+  disabled?: boolean;
   itemId: string | null;
   name: string;
   iconId: string | null;
@@ -106,6 +107,8 @@ export type LogisticsDisplay = Readonly<{
   ports: readonly (Omit<PortDisplay, "itemId" | "iconId"> & {
     itemId: null;
     iconId: null;
+    /** Explicit filter choices, not evidence of incoming material flow. */
+    configuredItemIconIds: readonly string[];
   })[];
 }>;
 export type NodeDisplay = MachineDisplay | LogisticsDisplay;
@@ -139,16 +142,26 @@ export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): Nod
   const part = catalog.logistics[node.partId];
   if (!part) throw new Error(`Missing logistics part ${node.partId}.`);
   validateSplitterProgram(part.kind, node.program, catalog);
+  const program =
+    part.kind === "smart-splitter" || part.kind === "programmable-splitter"
+      ? (node.program ?? DEFAULT_SPLITTER_PROGRAM)
+      : undefined;
   const ports: LogisticsDisplay["ports"][number][] = [];
   for (const direction of ["input", "output"] as const) {
     const count = (part.kind !== "merger") === (direction === "output") ? 3 : 1;
     for (let slot = 0; slot < count; slot++) {
+      const rules = direction === "output" ? program?.[SPLITTER_OUTPUTS[slot]!] : undefined;
       ports.push({
         key: `${direction}:${slot}`,
         direction,
         transport: "belt",
         itemId: null,
         iconId: null,
+        disabled: rules?.every((rule) => rule.kind === "none") ?? false,
+        configuredItemIconIds:
+          rules?.flatMap((rule) =>
+            rule.kind === "item" ? [catalog.items[rule.itemId]!.iconId] : [],
+          ) ?? [],
         name:
           direction === "output" && part.kind !== "merger"
             ? `${["Left", "Center", "Right"][slot]} output`
