@@ -11,7 +11,7 @@ import {
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode, MaterialRate } from "@satisfactory-belt/factory-core";
 import { MinusIcon, PlusIcon } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
@@ -20,15 +20,12 @@ import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facili
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorStatistics } from "@/components/inspector-statistics";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Editor = ReturnType<typeof createFactoryEditor>;
-const MATRIX_OPTIONS = [
-  { value: "false", label: "Not supplied" },
-  { value: "true", label: "Supplied" },
-];
 const rateFormat = new Intl.NumberFormat("en", { maximumSignificantDigits: 5 });
 
 export function InspectorBody({
@@ -40,6 +37,7 @@ export function InspectorBody({
   editor: Editor;
   assets: GameAssets;
 }) {
+  const matrixId = useId();
   const [selected, setSelected] = useState("all");
   const scope =
     node.kind !== "logistics" && node.machines.some((member) => member.id === selected)
@@ -204,12 +202,19 @@ export function InspectorBody({
                 />
               )}
               {capabilities.matrices && (
-                <InspectorButtonGroup
-                  label="Alien Power Matrices"
-                  value={commonMatrices(members) === null ? null : String(commonMatrices(members))}
-                  options={MATRIX_OPTIONS}
-                  onChange={(value) => editor.setMatrixSupply(node.id, scope, value === "true")}
-                />
+                <div className="flex min-h-11 items-center justify-between gap-2 sm:min-h-8">
+                  <label htmlFor={matrixId} className="text-xs sm:text-sm">
+                    Alien Power Matrices
+                    {commonMatrices(members) === null && (
+                      <span className="ml-1 text-xs text-muted-foreground">· Mixed</span>
+                    )}
+                  </label>
+                  <Switch
+                    id={matrixId}
+                    checked={commonMatrices(members) === true}
+                    onCheckedChange={(checked) => editor.setMatrixSupply(node.id, scope, checked)}
+                  />
+                </div>
               )}
               {capabilities.clock && (
                 <InspectorNumberField

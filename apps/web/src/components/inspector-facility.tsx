@@ -284,12 +284,12 @@ export function InspectorFacility({
       )}
       {c.type === "space-elevator" && (
         <>
-          <InspectorChoice
-            label="Project Assembly phase"
+          <InspectorButtonGroup
+            label="Phase"
             value={String(c.phase)}
             options={PROJECT_PHASES.map((_, i) => ({
               value: String(i + 1),
-              label: `Phase ${i + 1}`,
+              label: String(i + 1),
               disabled: () => !compatible({ ...c, phase: i + 1 }),
             }))}
             onChange={(value) => commit({ ...c, phase: Number(value) })}

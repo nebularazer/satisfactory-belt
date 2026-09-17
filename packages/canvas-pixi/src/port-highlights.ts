@@ -46,16 +46,19 @@ export class PortHighlights {
             ? PIPE_PORT_RADIUS
             : PORT_RADIUS;
       const shape = (size = radius) => {
-        if (port.purpose === "fuel")
+        if (port.purpose === "fuel") {
+          const halfHeight = (Math.sqrt(3) * radius) / 2;
+          const padding = (size - radius) / Math.sqrt(3);
+          // Equilateral, pointing up; expand the halo perpendicular to each side.
           this.view.poly([
-            port.x - size,
-            port.y - size,
+            port.x,
+            port.y - halfHeight - padding * 2,
             port.x + size,
-            port.y,
+            port.y + halfHeight + padding,
             port.x - size,
-            port.y + size,
+            port.y + halfHeight + padding,
           ]);
-        else if (port.transport.endsWith("-route"))
+        } else if (port.transport.endsWith("-route"))
           this.view.rect(port.x - size, port.y - size, size * 2, size * 2);
         else if (port.transport === "pipe")
           this.view.poly([
@@ -74,7 +77,11 @@ export class PortHighlights {
       // Keep a one-unit gap, with an opaque backing that hides the node border.
       // Offset diamond vertices further to match the circle's perpendicular spacing.
       if (roles[i] === "highlight")
-        shape(radius + 2.75 * (port.transport === "pipe" ? Math.SQRT2 : 1))
+        shape(
+          radius +
+            2.75 *
+              (port.purpose === "fuel" ? Math.sqrt(3) : port.transport === "pipe" ? Math.SQRT2 : 1),
+        )
           .fill(palette.card)
           .stroke({ color: palette.highlight, width: 1.5 });
       // Opaque muted fills keep the node border from showing through the port center.

@@ -161,8 +161,9 @@ export async function mountCanvas(
         itemsLayer.addChild(view.container);
         views.set(item.id, view);
       }
-      // Keep drawing and hit testing in document order, including during a drag.
-      view.container.zIndex = index;
+      // Lift the dragged group above stationary nodes, preserving its internal order.
+      view.container.zIndex =
+        index + (snapshot.interaction === "drag" && selected ? items.length : 0);
       view.container.visible = true;
       view.container.position.set(position.x, position.y);
       const display = options.getDisplay(item.id);

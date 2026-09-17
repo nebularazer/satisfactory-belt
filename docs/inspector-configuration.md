@@ -12,7 +12,8 @@ Tier/purity button groups and numeric controls share a common width. Operating-s
 labels have no icons; node footers use a gauge for clock speed. Power statistics
 come last and share their light/dark colors with the canvas footer. Generated power
 uses the same Lucide Zap icon as consumption in both the canvas and inspector,
-with green generation and yellow consumption colors.
+with green generation and yellow consumption colors. Alien Power Matrix supply uses
+a switch; mixed groups retain a Mixed label and toggling applies to the current scope.
 Searchable choices keep the selected value in a trigger and open a separate, initially
 empty search field. Popups align to the full control width, including icons and Add
 actions. Canceling a search preserves the selection. Every selected option with an
@@ -64,7 +65,8 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 - Truck/Fluid Truck Stations: the same fluid/freight load/unload icon buttons as trains,
   an aligned cargo selector, station fuel, and shared
   road-route assumptions (fuel per trip, vehicles, round-trip time). Fuel has its
-  own triangular conveyor input, sized like the square route port, and displays the selected item image.
+  own upward-pointing equilateral triangle input, matching the route port width,
+  and displays the selected item image.
 - Train Stations: connected routes with wait assumptions
   at each stop. The shared route defines freight-car count. Each station configures its car
   positions with one inline icon button group: No transfer, Fluid · Load/Unload,
@@ -83,7 +85,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   loop is required for a complete route; vehicle/train loops can have extra stops,
   while drone loops have two ports. Open chains remain editable. Capsule-shaped fuel
   inputs accept material connections; route links carry no material flow.
-- Space Elevator: phase selection, accepting phase parts as an unlimited planning
+- Space Elevator: five phase buttons, accepting phase parts as an unlimited planning
   sink. There are no delivered/remaining counters. A node cannot be grouped;
   Only one can be placed in the plan, including through copy/paste.
 - Links: Conveyor Mk.1–6 or Pipeline Mk.1–2, materials, and nominal tier capacity.
