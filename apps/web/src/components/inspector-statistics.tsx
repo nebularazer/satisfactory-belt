@@ -15,7 +15,6 @@ import { ZapIcon } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
-import { PowerGenerationIcon } from "@/components/inspector-icons";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 const footerColors: CSSProperties & Record<`--${string}`, string> = {
@@ -25,6 +24,10 @@ const footerColors: CSSProperties & Record<`--${string}`, string> = {
   "--power-stroke-dark": CANVAS_PALETTES.dark.power.stroke,
   "--power-fill": CANVAS_PALETTES.light.power.fill,
   "--power-fill-dark": CANVAS_PALETTES.dark.power.fill,
+  "--generation-stroke": CANVAS_PALETTES.light.generation.stroke,
+  "--generation-stroke-dark": CANVAS_PALETTES.dark.generation.stroke,
+  "--generation-fill": CANVAS_PALETTES.light.generation.fill,
+  "--generation-fill-dark": CANVAS_PALETTES.dark.generation.fill,
 };
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 3 });
 export function InspectorStatistics({
@@ -164,7 +167,7 @@ export function InspectorStatistics({
       power: true,
       value: display.powerLabel.replace(/ generated$/, ""),
       icon: generated ? (
-        <PowerGenerationIcon className="size-4" />
+        <ZapIcon className="size-4 text-[var(--generation-stroke)] fill-[var(--generation-fill)] dark:text-[var(--generation-stroke-dark)] dark:fill-[var(--generation-fill-dark)]" />
       ) : (
         <ZapIcon className="size-4 text-[var(--power-stroke)] fill-[var(--power-fill)] dark:text-[var(--power-stroke-dark)] dark:fill-[var(--power-fill-dark)]" />
       ),

@@ -47,13 +47,14 @@ export class PortHighlights {
             : PORT_RADIUS;
       const shape = (size = radius) => {
         if (port.purpose === "fuel")
-          this.view.roundRect(
+          this.view.poly([
             port.x - size,
-            port.y - (size - 4),
-            size * 2,
-            (size - 4) * 2,
-            size - 4,
-          );
+            port.y - size,
+            port.x + size,
+            port.y,
+            port.x - size,
+            port.y + size,
+          ]);
         else if (port.transport.endsWith("-route"))
           this.view.rect(port.x - size, port.y - size, size * 2, size * 2);
         else if (port.transport === "pipe")
@@ -79,7 +80,11 @@ export class PortHighlights {
       // Opaque muted fills keep the node border from showing through the port center.
       shape()
         .fill(muted ? palette.card : colors.fill)
-        .stroke({ color: muted ? palette.border : colors.stroke, width: 2 });
+        .stroke({
+          color: muted ? palette.border : colors.stroke,
+          width: 2,
+          join: port.purpose === "fuel" ? "round" : "miter",
+        });
     }
   }
 }

@@ -14,7 +14,7 @@ export const LOGISTICS_NODE_SIZE = 4 * GRID_SIZE;
 export const HEADER_HEIGHT = 2 * GRID_SIZE;
 export const FOOTER_Y = 7 * GRID_SIZE;
 export const PORT_RADIUS = 7;
-export const FUEL_PORT_RADIUS = 9;
+export const FUEL_PORT_RADIUS = PORT_RADIUS;
 export const PIPE_PORT_RADIUS = 9;
 export const SLOOP_ITEM_ID = "Desc_WAT1_C";
 

@@ -5,8 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./theme": "./src/theme.ts",
-    "./icon-paths": "./src/icon-paths.ts"
+    "./theme": "./src/theme.ts"
   },
   "scripts": {
     "build": "tsc -b",

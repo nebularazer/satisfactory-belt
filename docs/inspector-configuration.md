@@ -11,7 +11,8 @@ buildings with no grouping tabs or count controls.
 Tier/purity button groups and numeric controls share a common width. Operating-setting
 labels have no icons; node footers use a gauge for clock speed. Power statistics
 come last and share their light/dark colors with the canvas footer. Generated power
-uses one shared Lucide-style lightning-plus icon in both the canvas and inspector.
+uses the same Lucide Zap icon as consumption in both the canvas and inspector,
+with green generation and yellow consumption colors.
 Searchable choices keep the selected value in a trigger and open a separate, initially
 empty search field. Popups align to the full control width, including icons and Add
 actions. Canceling a search preserves the selection. Every selected option with an
@@ -63,12 +64,12 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 - Truck/Fluid Truck Stations: the same fluid/freight load/unload icon buttons as trains,
   an aligned cargo selector, station fuel, and shared
   road-route assumptions (fuel per trip, vehicles, round-trip time). Fuel has its
-  own conveyor input and displays the selected item image.
+  own triangular conveyor input, sized like the square route port, and displays the selected item image.
 - Train Stations: connected routes with wait assumptions
   at each stop. The shared route defines freight-car count. Each station configures its car
   positions with one inline icon button group: No transfer, Fluid · Load/Unload,
-  or Freight · Load/Unload. Transfer symbols combine the droplet/box outline and
-  an inward/outward arrow into one Lucide-style icon. Cargo is always shown in an aligned row and is disabled
+  or Freight · Load/Unload. Transfer symbols use Lucide WavesArrowDown/WavesArrowUp
+  for fluid load/unload and Package/PackageOpen for freight load/unload, with tooltips. Cargo is always shown in an aligned row and is disabled
   for No transfer.
   The station node expands with one row per car and two active material ports per
   configured platform. Compact labeled dividers identify each car and its platform
