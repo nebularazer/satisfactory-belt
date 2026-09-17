@@ -6,6 +6,8 @@ bottom drawer matching catalog search. Machine groups retain the All/member tabs
 Mixed when appropriate and write to all members. All and the count buttons stay
 fixed while member numbers scroll without a scrollbar. Numeric drafts clamp on Enter or
 blur, integer settings round, and empty/non-numeric drafts restore the prior value.
+Stations, logistics buffers, depot uploaders and the Space Elevator are individual
+buildings with no grouping tabs or count controls.
 There is no enabled/standby setting. Editable input/output rate targets remain deferred.
 
 ## Supported bodies
@@ -35,29 +37,32 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   and Impure / Normal / Pure satellite counts, starting at zero, with up to ten
   satellites per well. All supports Mixed and bulk edits; new members inherit
   common counts. Production sums each member’s purity-weighted output and clock.
-- Solid and fluid storage: compatible variant, count, material streams and capacity.
+- Solid and fluid storage: compatible variant, material streams and capacity.
   Industrial storage has two inputs and two outputs. Node footers show slots or
   m³ with storage/fluid icons instead of zero power.
-- Dimensional Depot: count and shared plan-wide speed/capacity research.
-- Truck/Fluid Truck Stations: compatible variant, load/unload, cargo, and shared
-  road-route assumptions (fuel, vehicles, round-trip time).
+- Dimensional Depot: shared plan-wide speed/capacity research.
+- Truck/Fluid Truck Stations: compatible variant, load/unload, cargo, station fuel, and shared
+  road-route assumptions (fuel per trip, vehicles, round-trip time). Fuel has its
+  own conveyor input and displays the selected item image.
 - Train Stations: connected routes with load/unload item filters and wait assumptions
-  at each stop. The shared route defines freight-car count. Rectangular ports link cargo
-  platforms directly to a station, where each car is assigned a platform or No
-  transfer. Separate empty-platform nodes are unnecessary.
+  at each stop. The shared route defines freight-car count. Each station configures its car
+  positions as Freight, Fluid, or No transfer, plus cargo and load/unload mode.
+  The station node expands with one row per car and two active material ports per
+  configured platform. There are no standalone platform nodes or platform links.
+  Removing configured trailing cars is blocked until those transfers are cleared.
 - Drone Ports: fuel, incoming/outgoing cargo and two-port round trips. Ownership,
   names, and destination selectors are omitted. Cargo capacity is shown only for
   a complete loop and assumes a full nine-slot load per drone.
 - Transport: square arrival/departure ports connect compatible stations. A closed
   loop is required for a complete route; vehicle/train loops can have extra stops,
   while drone loops have two ports. Open chains remain editable. Hexagonal fuel
-  inputs accept material connections; route/platform links carry no material flow.
+  inputs accept material connections; route links carry no material flow.
 - Space Elevator: phase selection, accepting phase parts as an unlimited planning
   sink. There are no delivered/remaining counters. A node cannot be grouped;
-  Satisfactory permits one Space Elevator per world.
+  Only one can be placed in the plan, including through copy/paste.
 - Links: Conveyor Mk.1–6 or Pipeline Mk.1–2, materials, and nominal tier capacity.
   Tier is stored and undoable, but does not constrain calculated flow yet.
-  Link inspectors omit endpoint subtitles; route/platform links have no tiers.
+  Link inspectors omit endpoint subtitles; route links have no tiers.
 
 Power Storage, power-grid controls, pipeline junctions/pumps/valves, portals, and
 throughput monitors remain out of scope. Transport calculations do not simulate
@@ -72,11 +77,12 @@ same Incompatible badge used by catalog alternatives when they would invalidate
 existing links or building references. Validation includes downstream material
 sets, including sushi belts, and never silently deletes links from these controls.
 
-Route membership and stop order come from station links. Platform links determine
-station ownership; the station inspector assigns carriage positions. Link edits and deletion reconcile those
-relationships in the same undo step. Copying preserves internal connections and
-clones route settings; a platform copied without its station becomes unassigned. Depot research
-is shared by every uploader and survives edits, moves, and undo.
+Route membership and stop order come from station links. Link edits and deletion
+reconcile those relationships in the same undo step. Freight platforms live inside
+their station configuration; copying a station includes all its platform settings.
+Changing shared train length resizes every station on the route. Each fluid platform
+has one inventory shared by its two ports, separate from other car positions.
+Depot research is shared by every uploader and survives edits, moves, and undo.
 
 Configured supply can be traced through an unambiguous source/storage/merger path.
 Branches and feedback cycles produce an unknown rate rather than an assumed split.

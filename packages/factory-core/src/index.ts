@@ -2,7 +2,7 @@ import { GRID_SIZE, SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
-import { resolveFacility } from "./facilities";
+import { resolveFacility, trainStationHeight } from "./facilities";
 import type { FacilityNode, Purity } from "./facilities";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
 import type { PortTransport } from "./ports";
@@ -85,6 +85,8 @@ export type PowerDisplay =
 export type MachineDisplay = Readonly<{
   layout: "machine";
   size: number;
+  height?: number;
+  bodyRows?: readonly Readonly<{ y: number; title: string; subtitle: string }>[];
   title: string;
   subtitle: string;
   machineIconId: string;
@@ -117,7 +119,16 @@ export function portRows(count: number): readonly number[] {
 
 export function nodeBounds(node: FactoryNode): CanvasItem {
   const size = node.kind === "logistics" ? LOGISTICS_NODE_SIZE : NODE_SIZE;
-  return { id: node.id, x: node.x, y: node.y, width: size, height: size };
+  return {
+    id: node.id,
+    x: node.x,
+    y: node.y,
+    width: size,
+    height:
+      node.kind === "facility" && node.configuration.type === "train-station"
+        ? trainStationHeight(node.configuration.platforms.length)
+        : size,
+  };
 }
 
 export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): NodeDisplay {

@@ -1,12 +1,24 @@
+import { GRID_SIZE } from "@satisfactory-belt/canvas-core";
 import type { Building, GameCatalog } from "@satisfactory-belt/game-data";
 import { PROJECT_PHASES } from "@satisfactory-belt/game-data";
 
-import { NODE_SIZE, portRows, formatPower } from "./index";
+import { NODE_SIZE, HEADER_HEIGHT, portRows, formatPower } from "./index";
 import type { MachineMember, MachineDisplay, PortDisplay, PowerDisplay } from "./index";
 import type { PortTransport } from "./ports";
 import type { Production } from "./production";
 
 export type Purity = 0.5 | 1 | 2;
+export type FreightPlatform = Readonly<{
+  buildingId: string;
+  mode: "load" | "unload";
+  materialId: string | null;
+}>;
+export const TRAIN_PLATFORM_HEIGHT = 3 * GRID_SIZE;
+export const TRAIN_PLATFORMS_Y = 4 * GRID_SIZE;
+export function trainStationHeight(carCount: number) {
+  return TRAIN_PLATFORMS_Y + carCount * TRAIN_PLATFORM_HEIGHT + GRID_SIZE;
+}
+
 export type FacilityConfiguration =
   | Readonly<{ type: "generator"; fuelId: string }>
   | Readonly<{ type: "geothermal" | "augmenter" | "storage" | "depot" }>
@@ -18,15 +30,13 @@ export type FacilityConfiguration =
       type: "truck-station";
       mode: "load" | "unload";
       materialId: string | null;
+      fuelId: string | null;
       routeId: string | null;
     }>
-  | Readonly<{ type: "train-station"; routeId: string | null }>
   | Readonly<{
-      type: "freight-platform";
-      stationId: string | null;
-      position: number;
-      mode: "load" | "unload";
-      materialId: string | null;
+      type: "train-station";
+      routeId: string | null;
+      platforms: readonly (FreightPlatform | null)[];
     }>
   | Readonly<{
       type: "drone-port";
@@ -62,7 +72,6 @@ export type TransportRoute = Readonly<{
   vehicleCount: number;
   freightCarCount?: number;
   roundTripSeconds: number;
-  fuelId: string | null;
   fuelPerTrip: number;
   stops: readonly TransportStop[];
 }>;
@@ -84,18 +93,13 @@ export function defaultFacilityConfiguration(building: Building): FacilityConfig
         type: "truck-station",
         mode: "load",
         materialId: null,
+        fuelId: null,
         routeId: null,
       };
     case "train-station":
-      return { type: "train-station", routeId: null };
+      return { type: "train-station", routeId: null, platforms: [null] };
     case "freight-platform":
-      return {
-        type: "freight-platform",
-        stationId: null,
-        position: 1,
-        mode: "load",
-        materialId: null,
-      };
+      throw new Error("Configure freight platforms in a train station.");
     case "drone-port":
       return {
         type: "drone-port",
@@ -111,9 +115,7 @@ export function defaultFacilityConfiguration(building: Building): FacilityConfig
   }
 }
 export function facilityCanGroup(building: Building) {
-  return ["generator", "geothermal", "augmenter", "storage", "depot", "well"].includes(
-    building.kind,
-  );
+  return ["generator", "geothermal", "augmenter", "well"].includes(building.kind);
 }
 export function validateFacility(node: FacilityNode, catalog: GameCatalog) {
   const b = catalog.buildings?.[node.buildingId],
@@ -121,8 +123,7 @@ export function validateFacility(node: FacilityNode, catalog: GameCatalog) {
   if (!b || b.kind !== c.type) throw new Error("Invalid building configuration.");
   if (!facilityCanGroup(b) && node.machines.length !== 1)
     throw new Error("This building has its own identity and cannot be grouped.");
-  const transport = b.transport;
-  function material(id: string | null) {
+  function material(id: string | null, transport = b!.transport) {
     if (
       id !== null &&
       (!catalog.items[id] || (catalog.items[id].form === "solid") !== (transport === "belt"))
@@ -133,15 +134,26 @@ export function validateFacility(node: FacilityNode, catalog: GameCatalog) {
     if (!b.fuels.some((f) => f.itemId === c.fuelId)) throw new Error("Invalid fuel.");
   if (c.type === "well" && !b.resourceIds.includes(c.resourceId))
     throw new Error("Invalid well resource.");
-  if (c.type === "truck-station" || c.type === "freight-platform") {
+  if (c.type === "truck-station") {
     material(c.materialId);
     if (!["load", "unload"].includes(c.mode)) throw new Error("Invalid transfer mode.");
   }
-  if (
-    c.type === "freight-platform" &&
-    (!Number.isSafeInteger(c.position) || c.position < 0 || c.position > 100)
-  )
-    throw new Error("Invalid platform position.");
+  if (c.type === "truck-station" && c.fuelId !== null) {
+    const fuel = catalog.items[c.fuelId];
+    if (!fuel || fuel.form !== "solid" || (fuel.energyMegajoules ?? 0) <= 0)
+      throw new Error("Invalid vehicle fuel.");
+  }
+  if (c.type === "train-station") {
+    if (!c.platforms.length || c.platforms.length > 100)
+      throw new Error("Invalid freight car count.");
+    for (const platform of c.platforms) {
+      if (!platform) continue;
+      const building = catalog.buildings?.[platform.buildingId];
+      if (building?.kind !== "freight-platform") throw new Error("Invalid freight platform.");
+      if (!["load", "unload"].includes(platform.mode)) throw new Error("Invalid transfer mode.");
+      material(platform.materialId, building.transport);
+    }
+  }
   if (c.type === "drone-port") {
     material(c.outgoingItemId);
     material(c.incomingItemId);
@@ -209,8 +221,7 @@ export function facilityProduction(node: FacilityNode, catalog: GameCatalog): Pr
       outputs: [],
       unavailableReason: null,
     };
-  if (c.type === "geothermal" || c.type === "train-station")
-    return { inputs: [], outputs: [], unavailableReason: null };
+  if (c.type === "geothermal") return { inputs: [], outputs: [], unavailableReason: null };
   if (c.type === "space-elevator")
     return {
       inputs: PROJECT_PHASES[c.phase - 1]!.map((p) => ({ itemId: p.itemId, perMinute: null })),
@@ -257,14 +268,13 @@ export function resolveFacility(node: FacilityNode, catalog: GameCatalog): Machi
     }
   }
   if (c.type === "depot") port("input", "input:0", null);
-  if (c.type === "truck-station" || c.type === "freight-platform") {
-    if (!b.id.includes("Empty"))
-      port(
-        c.mode === "load" ? "input" : "output",
-        c.mode === "load" ? "input:cargo" : "output:cargo",
-        c.materialId,
-      );
-    if (c.type === "truck-station") port("input", "input:fuel", null, "belt", "Vehicle fuel");
+  if (c.type === "truck-station") {
+    port(
+      c.mode === "load" ? "input" : "output",
+      c.mode === "load" ? "input:cargo" : "output:cargo",
+      c.materialId,
+    );
+    port("input", "input:fuel", c.fuelId, "belt", "Vehicle fuel");
   }
   if (c.type === "drone-port") {
     port("input", "input:cargo", c.outgoingItemId);
@@ -281,25 +291,54 @@ export function resolveFacility(node: FacilityNode, catalog: GameCatalog): Machi
     port("input", "route:input", null, transport, "Route arrival");
     port("output", "route:output", null, transport, "Route departure");
   }
-  if (c.type === "train-station" || c.type === "freight-platform") {
-    if (c.type === "freight-platform")
-      port("input", "platform:input", null, "platform", "Train station");
-    if (c.type === "train-station")
-      port("output", "platform:output", null, "platform", "Freight platforms");
-  }
-  for (const direction of ["input", "output"] as const) {
-    const side = ports.filter((p) => p.direction === direction);
-    const rows = portRows(side.length);
-    side.forEach((p, i) => {
-      ports[ports.indexOf(p)] = { ...p, y: rows[i]! };
+  const bodyRows: NonNullable<MachineDisplay["bodyRows"]>[number][] = [];
+  if (c.type === "train-station") {
+    for (let index = 0; index < ports.length; index++)
+      ports[index] = { ...ports[index]!, y: HEADER_HEIGHT + 32 };
+    c.platforms.forEach((platform, index) => {
+      const y = TRAIN_PLATFORMS_Y + index * TRAIN_PLATFORM_HEIGHT;
+      const building = platform ? catalog.buildings![platform.buildingId]! : null;
+      bodyRows.push({
+        y,
+        title: `Car ${index + 1}${platform ? ` · ${platform.mode === "load" ? "Load" : "Unload"}` : ""}`,
+        subtitle: building?.name ?? "No transfer",
+      });
+      if (!platform || !building) return;
+      const direction = platform.mode === "load" ? "input" : "output";
+      for (let slot = 0; slot < 2; slot++) {
+        port(
+          direction,
+          `car:${index + 1}:${direction}:${slot}`,
+          platform.materialId,
+          building.transport,
+        );
+        ports[ports.length - 1] = { ...ports.at(-1)!, y: y + 32 + slot * 32 };
+      }
     });
+  } else {
+    for (const direction of ["input", "output"] as const) {
+      const side = ports.filter((p) => p.direction === direction);
+      const rows = portRows(side.length);
+      side.forEach((p, i) => {
+        ports[ports.indexOf(p)] = { ...p, y: rows[i]! };
+      });
+    }
   }
+  const basePower =
+    b.powerMegawatts +
+    (c.type === "train-station"
+      ? c.platforms.reduce(
+          (total, platform) =>
+            total + (platform ? catalog.buildings![platform.buildingId]!.powerMegawatts : 0),
+          0,
+        )
+      : 0);
   let power: PowerDisplay = {
     kind: "known",
     megawatts: node.machines.reduce(
       (sum, m) =>
         sum +
-        b.powerMegawatts *
+        basePower *
           (b.kind === "well"
             ? (m.clockPercent / 100) ** b.powerConsumptionExponent
             : b.kind === "generator"
@@ -321,13 +360,20 @@ export function resolveFacility(node: FacilityNode, catalog: GameCatalog): Machi
   return {
     layout: "machine",
     size: NODE_SIZE,
+    ...(c.type === "train-station"
+      ? { height: trainStationHeight(c.platforms.length), bodyRows }
+      : {}),
     title:
       c.type === "well"
         ? catalog.items[c.resourceId]!.name
         : c.type === "generator"
           ? catalog.items[c.fuelId]!.name
           : b.name,
-    subtitle: `${node.machines.length}× ${b.name}`,
+    subtitle: facilityCanGroup(b)
+      ? `${node.machines.length}× ${b.name}`
+      : c.type === "train-station"
+        ? `${c.platforms.length} freight ${c.platforms.length === 1 ? "car" : "cars"}`
+        : "",
     machineIconId: b.iconId,
     ports,
     power,

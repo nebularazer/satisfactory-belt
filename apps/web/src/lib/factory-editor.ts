@@ -15,7 +15,6 @@ import {
   validateTransportRoute,
   validateFacilityReferences,
   createConfigurationValidator,
-  clearRemovedReferences,
   setMatrixSupply,
   createConnectionIndex,
   createFactoryNode,
@@ -245,7 +244,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
         ? current
         : reconcileTransportConnections({
             ...current,
-            nodes: clearRemovedReferences(nodes),
+            nodes,
             links,
             routes: current.routes?.map((route) => ({
               ...route,
@@ -277,6 +276,12 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       return;
     }
     if (!clipboard.nodes.length) return;
+    const copiedNodes = clipboard.nodes.filter(
+      (node) =>
+        node.kind !== "facility" ||
+        !isExistingElevator({ kind: "facility", buildingId: node.buildingId }),
+    );
+    if (!copiedNodes.length) return;
     const offset = (pasteCount + 1) * GRID_SIZE;
     const origin = clipboard.nodes.reduce(
       (point, item) => ({ x: Math.min(point.x, item.x), y: Math.min(point.y, item.y) }),
@@ -286,13 +291,13 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     const dx = gridSnapping ? snapToGrid(origin.x + offset) - origin.x : offset;
     const dy = gridSnapping ? snapToGrid(origin.y + offset) - origin.y : offset;
     // oxlint-disable-next-line oxc/no-map-spread -- History and clipboard snapshots must stay immutable.
-    let pasted: FactoryNode[] = clipboard.nodes.map((item) => ({
+    let pasted: FactoryNode[] = copiedNodes.map((item) => ({
       ...item,
       id: crypto.randomUUID(),
       x: item.x + dx,
       y: item.y + dy,
     }));
-    const ids = new Map(clipboard.nodes.map((node, index) => [node.id, pasted[index]!.id]));
+    const ids = new Map(copiedNodes.map((node, index) => [node.id, pasted[index]!.id]));
     const remapped = remapCopiedFacilities(
       pasted,
       clipboard.routes ?? [],
@@ -301,14 +306,16 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       () => crypto.randomUUID(),
     );
     pasted = [...remapped.nodes];
-    // oxlint-disable-next-line oxc/no-map-spread -- Clipboard links and endpoint references are immutable.
-    const links = clipboard.links.map((link) => ({
-      ...link,
-      id: crypto.randomUUID(),
-      output: { ...link.output, nodeId: ids.get(link.output.nodeId)! },
-      input: { ...link.input, nodeId: ids.get(link.input.nodeId)! },
-      guides: translateGuides(link.guides, { x: dx, y: dy }),
-    }));
+    const links = clipboard.links
+      .filter((link) => ids.has(link.output.nodeId) && ids.has(link.input.nodeId))
+      // oxlint-disable-next-line oxc/no-map-spread -- Clipboard links and endpoint references are immutable.
+      .map((link) => ({
+        ...link,
+        id: crypto.randomUUID(),
+        output: { ...link.output, nodeId: ids.get(link.output.nodeId)! },
+        input: { ...link.input, nodeId: ids.get(link.input.nodeId)! },
+        guides: translateGuides(link.guides, { x: dx, y: dy }),
+      }));
     history.update((current) =>
       reconcileTransportConnections({
         ...current,
@@ -334,7 +341,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
           links.push(link);
       return reconcileTransportConnections({
         ...current,
-        nodes: clearRemovedReferences(nodes),
+        nodes,
         links,
       });
     });
@@ -374,7 +381,19 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       nodes.map((entry) => (entry.id === id ? { ...node, program: copied } : entry)),
     );
   }
+  function isExistingElevator(configuration: NodeConfiguration) {
+    return (
+      configuration.kind === "facility" &&
+      catalog.buildings?.[configuration.buildingId]?.kind === "space-elevator" &&
+      history
+        .getSnapshot()
+        .state.nodes.some(
+          (node) => node.kind === "facility" && node.configuration.type === "space-elevator",
+        )
+    );
+  }
   function canPlace(configuration: NodeConfiguration, source?: PortReference) {
+    if (isExistingElevator(configuration)) return false;
     const id = crypto.randomUUID();
     const node = createFactoryNode(catalog, configuration, id, { x: 0, y: 0 });
     return (
@@ -392,6 +411,8 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   }
 
   function placeNode(configuration: NodeConfiguration, center: Point, source?: PortReference) {
+    if (isExistingElevator(configuration))
+      throw new Error("A plan can contain only one Space Elevator.");
     let node = createFactoryNode(catalog, configuration, crypto.randomUUID(), center);
     const bounds = nodeBounds(node);
     const snap = controller.getSnapshot().gridSnapping ? snapToGrid : (value: number) => value;
@@ -462,51 +483,14 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   }
   function setRouteSettings(route: TransportRoute) {
     validateTransportRoute(history.getSnapshot().state, route, catalog);
-    history.update((current) => ({
-      ...current,
-      routes: [...(current.routes ?? []).filter((r) => r.id !== route.id), structuredClone(route)],
-    }));
-  }
-  function setPlatformAssignment(stationId: string, position: number, platformId: string | null) {
     history.update((current) => {
-      const station = current.nodes.find((node) => node.id === stationId);
-      if (station?.kind !== "facility" || station.configuration.type !== "train-station")
-        return current;
-      const routeId = station.configuration.routeId;
-      const route = current.routes?.find((entry) => entry.id === routeId);
-      if (!Number.isInteger(position) || position < 1 || position > (route?.freightCarCount ?? 1))
-        return current;
-      if (
-        platformId &&
-        !current.nodes.some(
-          (node) =>
-            node.id === platformId &&
-            node.kind === "facility" &&
-            node.configuration.type === "freight-platform" &&
-            node.configuration.stationId === stationId,
-        )
-      )
-        return current;
-      const next = {
+      const next = reconcileTransportConnections({
         ...current,
-        nodes: current.nodes.map((node) => {
-          if (
-            node.kind !== "facility" ||
-            node.configuration.type !== "freight-platform" ||
-            node.configuration.stationId !== stationId
-          )
-            return node;
-          const assignedPosition =
-            node.id === platformId
-              ? position
-              : node.configuration.position === position
-                ? 0
-                : node.configuration.position;
-          return assignedPosition === node.configuration.position
-            ? node
-            : { ...node, configuration: { ...node.configuration, position: assignedPosition } };
-        }),
-      };
+        routes: [
+          ...(current.routes ?? []).filter((r) => r.id !== route.id),
+          structuredClone(route),
+        ],
+      });
       validateFacilityReferences(next);
       return next;
     });
@@ -526,7 +510,6 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     setLinkTier,
     setRouteSettings,
     setDepotResearch,
-    setPlatformAssignment,
     setMatrixSupply: (id: string, scope: string, supplied: boolean) =>
       editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,

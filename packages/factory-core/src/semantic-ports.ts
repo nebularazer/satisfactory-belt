@@ -34,6 +34,9 @@ export function resolveSemanticPorts(
     itemId: port.itemId,
     ...(node.kind === "facility"
       ? {
+          ...(node.configuration.type === "train-station" && port.transport === "pipe"
+            ? { materialGroup: port.key.split(":").slice(0, 2).join(":") }
+            : {}),
           forwardsMaterials:
             node.configuration.type === "storage" && isMaterialTransport(port.transport),
           allowsUnknownFluid: port.transport === "pipe" && port.itemId === null,
@@ -41,6 +44,7 @@ export function resolveSemanticPorts(
             ? {
                 accepts: new Set(
                   Object.values(catalog.items)
+                    .filter((item) => port.itemId === null || port.itemId === item.id)
                     .filter((item) => item.form === "solid" && (item.energyMegajoules ?? 0) > 0)
                     .map((item) => item.id),
                 ),

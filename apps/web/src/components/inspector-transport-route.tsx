@@ -22,7 +22,6 @@ export function InspectorTransportRoute({
   const document = editor.history.getSnapshot().state;
   const route = stationRoute(document, node);
   const topology = routeTopology(document, node.id);
-  const stationIds = new Set(route?.stops.map((stop) => stop.nodeId));
   if (!route)
     return (
       <p className="text-xs text-muted-foreground">
@@ -69,26 +68,6 @@ export function InspectorTransportRoute({
         revision={route}
         onCommit={(vehicleCount) => update({ ...route, vehicleCount })}
       />
-      {route.kind === "rail" && (
-        <InspectorNumberField
-          label="Freight cars"
-          value={route.freightCarCount ?? 1}
-          min={Math.max(
-            1,
-            ...document.nodes.flatMap((platform) =>
-              platform.kind === "facility" &&
-              platform.configuration.type === "freight-platform" &&
-              stationIds.has(platform.configuration.stationId ?? "")
-                ? [platform.configuration.position]
-                : [],
-            ),
-          )}
-          max={100}
-          integer
-          revision={route}
-          onCommit={(freightCarCount) => update({ ...route, freightCarCount })}
-        />
-      )}
       <InspectorNumberField
         label="Round trip"
         value={route.roundTripSeconds}
@@ -100,18 +79,6 @@ export function InspectorTransportRoute({
       />
       {route.kind === "road" && (
         <>
-          <InspectorChoice
-            label="Vehicle fuel"
-            value={route.fuelId ?? "none"}
-            assets={assets}
-            options={[
-              { value: "none", label: "Unspecified" },
-              ...Object.values(assets.catalog.items)
-                .filter((item) => item.form === "solid" && (item.energyMegajoules ?? 0) > 0)
-                .map((item) => ({ value: item.id, label: item.name, iconId: item.iconId })),
-            ]}
-            onChange={(id) => update({ ...route, fuelId: id === "none" ? null : id })}
-          />
           <InspectorNumberField
             label="Fuel per trip"
             value={route.fuelPerTrip}

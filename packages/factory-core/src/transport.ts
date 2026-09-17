@@ -50,11 +50,10 @@ export function routeTopology(document: FactoryDocument, nodeId: string) {
   };
 }
 
-/** Derive station membership, stop order and platform ownership from canvas connections in one edit. */
+/** Derive station membership, stop order and freight car count from canvas connections in one edit. */
 export function reconcileTransportConnections(document: FactoryDocument): FactoryDocument {
   const stations = document.nodes.filter((node) => stationKind(node) !== null);
-  const platformLinks = document.links.filter((link) => link.output.portKey === "platform:output");
-  if (!stations.length && !platformLinks.length && !document.routes?.length) return document;
+  if (!stations.length && !document.routes?.length) return document;
   const assigned = new Map<string, string>();
   const routes: TransportRoute[] = [];
   const usedRoutes = new Set<string>();
@@ -76,6 +75,13 @@ export function reconcileTransportConnections(document: FactoryDocument): Factor
         ? {
             freightCarCount: Math.max(
               1,
+              ...stations.flatMap((node) =>
+                node.kind === "facility" &&
+                node.configuration.type === "train-station" &&
+                topology.nodeIds.includes(node.id)
+                  ? [node.configuration.platforms.findLastIndex(Boolean) + 1]
+                  : [],
+              ),
               ...(document.routes ?? [])
                 .filter((route) =>
                   route.stops.some((stop) => topology.nodeIds.includes(stop.nodeId)),
@@ -85,7 +91,6 @@ export function reconcileTransportConnections(document: FactoryDocument): Factor
           }
         : {}),
       roundTripSeconds: previous?.roundTripSeconds ?? 120,
-      fuelId: previous?.fuelId ?? null,
       fuelPerTrip: previous?.fuelPerTrip ?? 0,
       stops: topology.nodeIds.map(
         (nodeId) =>
@@ -101,28 +106,6 @@ export function reconcileTransportConnections(document: FactoryDocument): Factor
       ),
     });
   }
-  const platforms = new Map<string, { stationId: string; position: number }>();
-  for (const station of stations.filter((node) => stationKind(node) === "rail")) {
-    const count =
-      routes.find((route) => route.id === assigned.get(station.id))?.freightCarCount ?? 1;
-    const occupied = new Set<number>();
-    for (const link of platformLinks.filter(
-      (connection) => connection.output.nodeId === station.id,
-    )) {
-      const node = document.nodes.find((candidate) => candidate.id === link.input.nodeId);
-      if (node?.kind !== "facility" || node.configuration.type !== "freight-platform") continue;
-      const c = node.configuration;
-      const requested = c.position;
-      const position =
-        c.stationId === station.id && requested === 0
-          ? 0
-          : requested > 0 && requested <= count && !occupied.has(requested)
-            ? requested
-            : (Array.from({ length: count }, (_, i) => i + 1).find((i) => !occupied.has(i)) ?? 0);
-      if (position) occupied.add(position);
-      platforms.set(node.id, { stationId: station.id, position });
-    }
-  }
   return {
     ...document,
     routes,
@@ -131,15 +114,17 @@ export function reconcileTransportConnections(document: FactoryDocument): Factor
       const c = node.configuration;
       if (c.type === "truck-station" || c.type === "train-station" || c.type === "drone-port") {
         const routeId = assigned.get(node.id) ?? null;
+        const count = routes.find((route) => route.id === routeId)?.freightCarCount ?? 1;
+        if (c.type === "train-station" && c.platforms.length !== count)
+          return {
+            ...node,
+            configuration: {
+              ...c,
+              routeId,
+              platforms: Array.from({ length: count }, (_, index) => c.platforms[index] ?? null),
+            },
+          };
         return c.routeId === routeId ? node : { ...node, configuration: { ...c, routeId } };
-      }
-      if (c.type === "freight-platform") {
-        const reference = platforms.get(node.id);
-        const stationId = reference?.stationId ?? null;
-        const position = reference?.position ?? 1;
-        return c.stationId === stationId && c.position === position
-          ? node
-          : { ...node, configuration: { ...c, stationId, position } };
       }
       return node;
     }),

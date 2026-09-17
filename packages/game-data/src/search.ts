@@ -104,6 +104,7 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
   ] as const;
   for (const [kind, entities, subtitle] of collections) {
     for (const entity of Object.values(entities)) {
+      if (kind === "facility" && "kind" in entity && entity.kind === "freight-platform") continue;
       add(
         {
           ...base,

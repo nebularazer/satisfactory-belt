@@ -166,7 +166,7 @@ export function InspectorFacility({
           />
         </section>
       )}
-      {(c.type === "truck-station" || c.type === "freight-platform") && (
+      {c.type === "truck-station" && (
         <>
           <InspectorChoice
             label="Building variant"
@@ -222,20 +222,25 @@ export function InspectorFacility({
           )}
         </>
       )}
-      {(c.type === "truck-station" || c.type === "train-station" || c.type === "drone-port") && (
-        <InspectorTransportRoute node={node} editor={editor} assets={assets} />
-      )}
       {c.type === "train-station" && (
         <InspectorTrainPlatforms node={node} editor={editor} assets={assets} />
       )}
-      {c.type === "freight-platform" && (
-        <p className="text-xs text-muted-foreground">
-          {c.stationId
-            ? c.position
-              ? `Car ${c.position}`
-              : "Connected to station · no car assigned"
-            : "Connect the rectangular platform port to a train station and assign its car number there."}
-        </p>
+      {c.type === "truck-station" && (
+        <InspectorChoice
+          label="Fuel"
+          value={c.fuelId ?? "auto"}
+          assets={assets}
+          options={[
+            { value: "auto", label: "From connections" },
+            ...Object.values(catalog.items)
+              .filter((item) => item.form === "solid" && (item.energyMegajoules ?? 0) > 0)
+              .map((item) => ({
+                ...itemOption(item.id),
+                disabled: () => !compatible({ ...c, fuelId: item.id }),
+              })),
+          ]}
+          onChange={(fuelId) => commit({ ...c, fuelId: fuelId === "auto" ? null : fuelId })}
+        />
       )}
       {c.type === "drone-port" && (
         <>
@@ -266,6 +271,9 @@ export function InspectorFacility({
             />
           ))}
         </>
+      )}
+      {(c.type === "truck-station" || c.type === "train-station" || c.type === "drone-port") && (
+        <InspectorTransportRoute node={node} editor={editor} assets={assets} />
       )}
       {c.type === "space-elevator" && (
         <>

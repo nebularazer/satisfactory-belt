@@ -44,7 +44,6 @@ export function createConfigurationValidator(document: FactoryDocument, catalog:
 }
 
 export function validateFacilityReferences(document: FactoryDocument) {
-  const nodes = new Map(document.nodes.map((n) => [n.id, n]));
   for (const node of document.nodes) {
     if (node.kind !== "facility") continue;
     const c = node.configuration;
@@ -55,35 +54,12 @@ export function validateFacilityReferences(document: FactoryDocument) {
       )
         throw new Error("Incompatible transport route.");
     }
-    if (c.type === "freight-platform" && c.stationId) {
-      const station = nodes.get(c.stationId);
-      if (station?.kind !== "facility" || station.configuration.type !== "train-station")
-        throw new Error("Missing train station.");
-      if (
-        c.position > 0 &&
-        document.nodes.some(
-          (other) =>
-            other.id !== node.id &&
-            other.kind === "facility" &&
-            other.configuration.type === "freight-platform" &&
-            other.configuration.stationId === c.stationId &&
-            other.configuration.position === c.position,
-        )
-      )
-        throw new Error("Platform position already occupied.");
+    if (c.type === "train-station" && c.routeId) {
+      const route = document.routes?.find((entry) => entry.id === c.routeId);
+      if (c.platforms.length !== (route?.freightCarCount ?? 1))
+        throw new Error("Platform positions must match the train's freight cars.");
     }
   }
-}
-
-export function clearRemovedReferences(nodes: readonly FactoryNode[]): readonly FactoryNode[] {
-  const ids = new Set(nodes.map((n) => n.id));
-  return nodes.map((node) => {
-    if (node.kind !== "facility") return node;
-    const c = node.configuration;
-    if (c.type === "freight-platform" && c.stationId && !ids.has(c.stationId))
-      return { ...node, configuration: { ...c, stationId: null } };
-    return node;
-  });
 }
 
 /** Keep the current producer when supported; alternatives may select another producer. */
@@ -129,13 +105,6 @@ export function validateTransportRoute(
     route.fuelPerTrip < 0
   )
     throw new Error("Invalid route settings.");
-  if (
-    route.fuelId &&
-    (!catalog.items[route.fuelId] ||
-      catalog.items[route.fuelId]!.form !== "solid" ||
-      !catalog.items[route.fuelId]!.energyMegajoules)
-  )
-    throw new Error("Invalid vehicle fuel.");
   if (route.kind === "rail") {
     const count = route.freightCarCount ?? 1;
     const stations = new Set(route.stops.map((stop) => stop.nodeId));
@@ -146,10 +115,9 @@ export function validateTransportRoute(
       document.nodes.some(
         (node) =>
           node.kind === "facility" &&
-          node.configuration.type === "freight-platform" &&
-          node.configuration.stationId &&
-          stations.has(node.configuration.stationId) &&
-          node.configuration.position > count,
+          node.configuration.type === "train-station" &&
+          stations.has(node.id) &&
+          node.configuration.platforms.slice(count).some(Boolean),
       )
     )
       throw new Error("Train must include every assigned freight car.");
@@ -169,8 +137,4 @@ export function validateTransportRoute(
     if (stop?.kind !== "facility" || stationKind(stop) !== route.kind)
       throw new Error("Invalid route stop.");
   }
-  validateFacilityReferences({
-    ...document,
-    routes: [...(document.routes ?? []).filter((existing) => existing.id !== route.id), route],
-  });
 }

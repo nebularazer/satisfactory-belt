@@ -1,4 +1,4 @@
-import { FOOTER_Y, HEADER_HEIGHT, NODE_SIZE } from "@satisfactory-belt/factory-core";
+import { HEADER_HEIGHT, NODE_SIZE } from "@satisfactory-belt/factory-core";
 import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import { CanvasTextMetrics, Container, Graphics, Sprite, Text } from "pixi.js";
 
@@ -62,7 +62,13 @@ export class MachineNodeView {
     if (changed || this.zoom !== zoom || this.selected !== selected) {
       this.background
         .clear()
-        .roundRect(0, 0, display.size, display.size, 8)
+        .roundRect(
+          0,
+          0,
+          display.size,
+          display.layout === "machine" ? (display.height ?? display.size) : display.size,
+          8,
+        )
         .fill(this.palette.card)
         .stroke({
           color: selected ? this.palette.highlight : this.palette.separator,
@@ -89,6 +95,8 @@ export class MachineNodeView {
   }
 
   private build(display: NodeDisplay) {
+    const footerY =
+      (display.layout === "machine" ? (display.height ?? display.size) : display.size) - 32;
     if (display.layout === "logistics") {
       this.icon(display.machineIconId, display.size / 2, display.size / 2, 64, 0.7);
     } else {
@@ -96,15 +104,28 @@ export class MachineNodeView {
       const lines = new Graphics()
         .moveTo(0.5, HEADER_HEIGHT)
         .lineTo(NODE_SIZE - 0.5, HEADER_HEIGHT)
-        .moveTo(0.5, FOOTER_Y)
-        .lineTo(NODE_SIZE - 0.5, FOOTER_Y)
+        .moveTo(0.5, footerY)
+        .lineTo(NODE_SIZE - 0.5, footerY)
         .stroke({ color: this.palette.separator, width: 1 });
       this.content.addChild(lines);
       this.icon(display.machineIconId, 32, 32, 40);
-      this.label(display.title, 64, 23, 176, 15, "600", this.palette.title);
-      this.label(display.subtitle, 64, 44, 176, 12, "400", this.palette.muted);
+      this.label(display.title, 64, display.subtitle ? 23 : 32, 176, 15, "600", this.palette.title);
+      if (display.subtitle)
+        this.label(display.subtitle, 64, 44, 176, 12, "400", this.palette.muted);
     }
 
+    if (display.layout === "machine") {
+      for (const row of display.bodyRows ?? []) {
+        this.content.addChild(
+          new Graphics()
+            .moveTo(0.5, row.y)
+            .lineTo(display.size - 0.5, row.y)
+            .stroke({ color: this.palette.separator, width: 1 }),
+        );
+        this.label(row.title, 56, row.y + 34, 144, 12, "500", this.palette.title);
+        this.label(row.subtitle, 56, row.y + 55, 144, 11, "400", this.palette.muted);
+      }
+    }
     for (const port of display.ports) {
       if (port.iconId)
         this.icon(port.iconId, port.direction === "input" ? 28 : display.size - 28, port.y, 24);
@@ -122,7 +143,7 @@ export class MachineNodeView {
     this.symbol(
       symbol,
       12,
-      232,
+      footerY + 8,
       footer ? this.palette.footer : this.palette.power.stroke,
       footer ? "none" : this.palette.power.fill,
     );
@@ -133,22 +154,22 @@ export class MachineNodeView {
     this.label(
       footer?.label ?? powerLabel,
       32,
-      240,
+      footerY + 16,
       display.clockLabel ? 92 : 208,
       11,
       "500",
       this.palette.footer,
     );
     if (display.clockLabel) {
-      this.symbol(CLOCK, 124, 232, this.palette.clock.stroke, this.palette.clock.fill);
-      this.label(display.clockLabel, 144, 240, 42, 11, "500", this.palette.footer);
+      this.symbol(CLOCK, 124, footerY + 8, this.palette.clock.stroke, this.palette.clock.fill);
+      this.label(display.clockLabel, 144, footerY + 16, 42, 11, "500", this.palette.footer);
     }
     if (display.sloops) {
-      this.icon(display.sloops.iconId, 197, 240, 16);
+      this.icon(display.sloops.iconId, 197, footerY + 16, 16);
       this.label(
         display.sloops.used === null ? "Mixed" : `${display.sloops.used}/${display.sloops.slots}`,
         208,
-        240,
+        footerY + 16,
         42,
         11,
         "500",

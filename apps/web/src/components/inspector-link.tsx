@@ -25,11 +25,9 @@ export function InspectorLink({
     const closed = routeTopology(editor.history.getSnapshot().state, link.output.nodeId).closed;
     return (
       <p className="text-xs text-muted-foreground">
-        {port.transport === "platform"
-          ? "Connects a freight platform to its station. Assign its car number in the station inspector."
-          : closed
-            ? "Complete route loop. Select a station to edit its shared route settings."
-            : "Incomplete route. Connect the last departure to the first arrival to close the loop."}
+        {closed
+          ? "Complete route loop. Select a station to edit its shared route settings."
+          : "Incomplete route. Connect the last departure to the first arrival to close the loop."}
       </p>
     );
   }

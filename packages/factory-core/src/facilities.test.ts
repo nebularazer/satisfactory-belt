@@ -15,6 +15,7 @@ import {
   commonSetting,
   resizeMachineGroup,
   setMatrixSupply,
+  machineCapabilities,
 } from "./index";
 import type { FacilityNode, FactoryNode, FactoryDocument, MaterialLink } from "./index";
 
@@ -364,6 +365,7 @@ it("does not propagate truck fuel into its outgoing cargo", () => {
       ...facility("truck"),
       configuration: {
         type: "truck-station",
+        fuelId: null,
         mode: "unload",
         materialId: null,
         routeId: null,
@@ -420,4 +422,90 @@ it("exposes two industrial storage ports per side and refuses a downgrade that l
     ],
   };
   expect(canReplaceNode(doc, { ...node, buildingId: "storage" }, catalog)).toBe(false);
+});
+
+it("keeps buffers, stations and the elevator individual while wells remain groupable", () => {
+  const { catalog, facility } = fixture();
+  for (const id of ["storage", "buffer", "truck", "elevator"]) {
+    const node = facility(id);
+    expect(machineCapabilities(node, catalog).groupable).toBe(false);
+    expect(() =>
+      resolveFactoryNode({ ...node, machines: createMachineMembers(2) }, catalog),
+    ).toThrow("cannot be grouped");
+  }
+  expect(machineCapabilities(facility("well"), catalog).groupable).toBe(true);
+});
+
+it("shows the selected station fuel and rejects a mixed fuel stream", () => {
+  const { catalog, facility, extractor } = fixture();
+  const truck = facility("truck");
+  if (truck.configuration.type !== "truck-station") throw new Error();
+  const selected = { ...truck, configuration: { ...truck.configuration, fuelId: "coal" } };
+  expect(
+    resolveFactoryNode(selected, catalog).ports.find((port) => port.key === "input:fuel"),
+  ).toMatchObject({ purpose: "fuel", itemId: "coal", iconId: "coal", transport: "belt" });
+  const coal = extractor("coal", "coal"),
+    rod = extractor("rod", "rod");
+  const merger = createFactoryNode(catalog, { kind: "logistics", partId: "merger" }, "merger", {
+    x: 0,
+    y: 0,
+  });
+  const index = createConnectionIndex(
+    [selected, coal, rod, merger].flatMap((node) => resolveSemanticPorts(node, catalog)),
+    [
+      link("coal", coal.id, "output:coal", merger.id, "input:0"),
+      link("rod", rod.id, "output:rod", merger.id, "input:1"),
+    ],
+  );
+  expect(
+    index.compatibility(
+      { nodeId: merger.id, portKey: "output:0" },
+      { nodeId: selected.id, portKey: "input:fuel" },
+    ).compatible,
+  ).toBe(false);
+});
+
+it("keeps fluid inventories separate per freight car and shares each platform's two inputs", () => {
+  const { catalog, facility, extractor } = fixture();
+  catalog.buildings!.station = {
+    ...catalog.buildings!.truck,
+    id: "station",
+    kind: "train-station",
+  };
+  catalog.buildings!.platform = {
+    ...catalog.buildings!.buffer,
+    id: "platform",
+    kind: "freight-platform",
+  };
+  const station = facility("station");
+  if (station.configuration.type !== "train-station") throw new Error();
+  const configured = {
+    ...station,
+    configuration: {
+      ...station.configuration,
+      platforms: [1, 2].map(() => ({
+        buildingId: "platform",
+        mode: "load" as const,
+        materialId: null,
+      })),
+    },
+  };
+  const water = extractor("water", "water"),
+    oil = extractor("oil", "oil");
+  const index = createConnectionIndex(
+    [configured, water, oil].flatMap((node) => resolveSemanticPorts(node, catalog)),
+    [link("water", water.id, "output:water", station.id, "car:1:input:0")],
+  );
+  expect(
+    index.compatibility(
+      { nodeId: oil.id, portKey: "output:oil" },
+      { nodeId: station.id, portKey: "car:1:input:1" },
+    ).compatible,
+  ).toBe(false);
+  expect(
+    index.compatibility(
+      { nodeId: oil.id, portKey: "output:oil" },
+      { nodeId: station.id, portKey: "car:2:input:0" },
+    ).compatible,
+  ).toBe(true);
 });

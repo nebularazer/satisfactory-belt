@@ -63,7 +63,7 @@ export function InspectorBody({
       node.kind !== "sink" &&
       !(
         node.kind === "facility" &&
-        ["storage", "depot", "truck-station", "freight-platform", "drone-port"].includes(
+        ["storage", "depot", "truck-station", "train-station", "drone-port"].includes(
           node.configuration.type,
         )
       )
@@ -102,7 +102,7 @@ export function InspectorBody({
         event.stopPropagation();
       }}
     >
-      {node.kind !== "logistics" && (
+      {node.kind !== "logistics" && capabilities?.groupable && (
         <div className="sticky top-0 z-10 bg-card py-1">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
             <TabsList

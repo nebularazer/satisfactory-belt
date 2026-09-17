@@ -24,11 +24,6 @@ export function remapCopiedFacilities(
     nodes: nodes.map((node) => {
       if (node.kind !== "facility") return node;
       const c = node.configuration;
-      if (c.type === "freight-platform")
-        return {
-          ...node,
-          configuration: { ...c, stationId: c.stationId ? (ids.get(c.stationId) ?? null) : null },
-        };
       if (c.type === "truck-station" || c.type === "train-station" || c.type === "drone-port")
         return {
           ...node,

@@ -41,11 +41,9 @@ export function inspectorSummary(
     title:
       output.transport === "pipe"
         ? "Pipeline"
-        : output.transport === "platform"
-          ? "Platform connection"
-          : output.transport.endsWith("-route")
-            ? "Transport route"
-            : "Conveyor",
+        : output.transport.endsWith("-route")
+          ? "Transport route"
+          : "Conveyor",
     subtitle: null,
     deleteLabel: "Delete link",
   };

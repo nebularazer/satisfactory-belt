@@ -15,7 +15,6 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
   const nodes: FactoryNode[] = [];
   const recipes = Object.values(catalog.recipes);
   let row = 0;
-  let platformPosition = 0;
 
   function addSection(entries: readonly { id: string; configuration: NodeConfiguration }[]) {
     entries.forEach(({ id, configuration }, index) => {
@@ -49,23 +48,30 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
             configuration: {
               ...c,
               materialId: building.transport === "belt" ? "Desc_IronPlate_C" : "Desc_Water_C",
+              fuelId: "Desc_Coal_C",
               routeId: showcaseId("road-route"),
             },
           };
         if (c.type === "train-station")
-          node = { ...node, configuration: { ...c, routeId: showcaseId("rail-route") } };
-        if (c.type === "freight-platform")
           node = {
             ...node,
             configuration: {
               ...c,
-              stationId: showcaseId("Build_TrainStation_C"),
-              position: 2 + ++platformPosition,
-              materialId: node.buildingId.includes("Empty")
-                ? null
-                : building.transport === "belt"
-                  ? "Desc_IronPlate_C"
-                  : "Desc_Water_C",
+              routeId: showcaseId("rail-route"),
+              platforms: [
+                null,
+                null,
+                {
+                  buildingId: "Build_TrainDockingStation_C",
+                  mode: "unload",
+                  materialId: "Desc_IronPlate_C",
+                },
+                {
+                  buildingId: "Build_TrainDockingStationLiquid_C",
+                  mode: "load",
+                  materialId: "Desc_Water_C",
+                },
+              ],
             },
           };
         if (c.type === "drone-port")
@@ -80,7 +86,9 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
       }
       nodes.push(node);
     });
-    row += Math.ceil(entries.length / 6);
+    row +=
+      Math.ceil(entries.length / 6) +
+      (entries.some((entry) => entry.id === "Build_TrainStation_C") ? 1 : 0);
   }
 
   // Connected examples occupy the first row, keeping their links short and easy to select.
@@ -161,7 +169,7 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
     ["generator", "augmenter"],
     ["well", "storage", "depot"],
     ["truck-station", "train-station", "drone-port"],
-    ["freight-platform", "space-elevator"],
+    ["space-elevator"],
   ])
     addSection(
       buildings
@@ -182,7 +190,6 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
     vehicleCount: 1,
     freightCarCount: kind === "rail" ? 4 : undefined,
     roundTripSeconds: 120,
-    fuelId: kind === "road" ? "Desc_Coal_C" : null,
     fuelPerTrip: kind === "road" ? 4 : 0,
     stops: nodes
       .filter(
@@ -211,19 +218,6 @@ export function createInspectorShowcase(catalog: GameCatalog): FactoryDocument {
         id: showcaseId("road-return"),
         output: { nodeId: showcaseId("Build_FluidTruckStation_C"), portKey: "route:output" },
         input: { nodeId: showcaseId("Build_TruckStation_C"), portKey: "route:input" },
-      },
-      {
-        id: showcaseId("platform-1"),
-        output: { nodeId: showcaseId("Build_TrainStation_C"), portKey: "platform:output" },
-        input: { nodeId: showcaseId("Build_TrainDockingStation_C"), portKey: "platform:input" },
-      },
-      {
-        id: showcaseId("platform-2"),
-        output: { nodeId: showcaseId("Build_TrainStation_C"), portKey: "platform:output" },
-        input: {
-          nodeId: showcaseId("Build_TrainDockingStationLiquid_C"),
-          portKey: "platform:input",
-        },
       },
       {
         id: showcaseId("belt"),

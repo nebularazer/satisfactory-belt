@@ -3,13 +3,7 @@ import type { PortCompatibility, PortReference } from "@satisfactory-belt/canvas
 
 import type { MaterialFilter } from "./splitters";
 export type { PortReference } from "@satisfactory-belt/canvas-core";
-export type PortTransport =
-  | "belt"
-  | "pipe"
-  | "road-route"
-  | "rail-route"
-  | "drone-route"
-  | "platform";
+export type PortTransport = "belt" | "pipe" | "road-route" | "rail-route" | "drone-route";
 export const isMaterialTransport = (transport: PortTransport) =>
   transport === "belt" || transport === "pipe";
 
@@ -22,6 +16,8 @@ export type SemanticPort = PortReference &
     /** Sink acceptance and output filtering are derived from node configuration. */
     accepts?: ReadonlySet<string>;
     forwardsMaterials?: boolean;
+    /** Ports sharing one fluid inventory within a composite node. */
+    materialGroup?: string;
     /** Fluid buffers accept a single fluid inferred from their connected network. */
     allowsUnknownFluid?: boolean;
     filter?: MaterialFilter;

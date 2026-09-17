@@ -8,6 +8,8 @@ A factory plan describes machines and the materials exchanged between them.
 One or more machines of the same type sharing a recipe or resource, represented
 together with their combined material inputs and outputs. Each machine has its own
 operating settings, including clock speed and amplification where supported.
+Stations, logistics buffers and the Space Elevator are individual buildings; they
+cannot form machine groups.
 
 **Group member**:
 An individual machine within a machine group, retaining its identity when its
@@ -66,9 +68,11 @@ path. It does not account for transport capacity, demand, or allocation between 
 A station’s arrival or departure point connecting it to other stations of the same
 transport type. It carries a route relationship, not a material stream.
 
-**Platform connection**:
-A link assigning a freight platform to its train station. Each station maps its
-connected platforms to freight-car numbers; unassigned cars have no transfer.
+**Freight-car position**:
+A numbered car in the train shared by a rail route. Each station configures that
+position as a solid freight platform, a fluid freight platform, or no transfer.
+Platforms belong to their station and expose its cargo inputs or outputs; they
+are not separate nodes.
 
 **Fuel port**:
 A material input reserved for transport fuel, distinct from cargo inputs.

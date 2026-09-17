@@ -63,6 +63,18 @@ export function createConnectionIndex(
       port.forwardsMaterials !== false
     )
       for (const output of outputs.get(port.nodeId) ?? []) edge(portId(port), output);
+  const inventories = new Map<string, string[]>();
+  for (const port of ports) {
+    if (!port.materialGroup) continue;
+    const key = JSON.stringify([port.nodeId, port.materialGroup]);
+    const peers = inventories.get(key) ?? [];
+    for (const peer of peers) {
+      edge(peer, portId(port));
+      edge(portId(port), peer);
+    }
+    peers.push(portId(port));
+    inventories.set(key, peers);
+  }
   for (const link of links) {
     if (isMaterialTransport(byId.get(portId(link.output))?.transport ?? "belt"))
       edge(portId(link.output), portId(link.input));
@@ -101,7 +113,7 @@ export function createConnectionIndex(
       if (
         others.some(
           (link) =>
-            (output.transport !== "platform" && portId(link.output) === portId(result.output)) ||
+            portId(link.output) === portId(result.output) ||
             portId(link.input) === portId(result.input),
         )
       )
