@@ -43,7 +43,6 @@ export function InspectorChoice({
   disabled = false,
   inline = false,
   hideLabel = false,
-  showSelectedIcon = false,
   inputAction,
 }: {
   label: string;
@@ -55,7 +54,6 @@ export function InspectorChoice({
   disabled?: boolean;
   inline?: boolean;
   hideLabel?: boolean;
-  showSelectedIcon?: boolean;
   inputAction?: ReactNode;
 }) {
   const id = useId();
@@ -79,7 +77,7 @@ export function InspectorChoice({
         />
       }
     >
-      {showSelectedIcon && selected?.iconId && assets && (
+      {selected?.iconId && assets && (
         <CatalogIcon iconId={selected.iconId} assets={assets} size={24} />
       )}
       <span

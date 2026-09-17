@@ -186,7 +186,6 @@ function SplitterOutputRules({
       {smart ? (
         <InspectorChoice
           hideLabel
-          showSelectedIcon
           label={`${label} output`}
           value={rules[0] ? ruleKey(rules[0]) : "none"}
           options={choices}
@@ -220,7 +219,6 @@ function SplitterOutputRules({
           </ul>
           <InspectorChoice
             hideLabel
-            showSelectedIcon
             label={`Add item or rule to ${label} output`}
             value={pending ?? "choose"}
             options={choices}

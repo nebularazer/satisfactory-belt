@@ -10,10 +10,12 @@ Stations, logistics buffers, depot uploaders and the Space Elevator are individu
 buildings with no grouping tabs or count controls.
 Tier/purity button groups and numeric controls share a common width. Operating-setting
 labels have no icons; node footers use a gauge for clock speed. Power statistics
-come last and share their light/dark colors with the canvas footer.
+come last and share their light/dark colors with the canvas footer. Generated power
+uses one shared Lucide-style lightning-plus icon in both the canvas and inspector.
 Searchable choices keep the selected value in a trigger and open a separate, initially
 empty search field. Popups align to the full control width, including icons and Add
-actions. Canceling a search preserves the selection. Triggers use the shadcn outline
+actions. Canceling a search preserves the selection. Every selected option with an
+item/building image shows it in the trigger, including cargo and recipes. Triggers use the shadcn outline
 button style and lists use its compact rows with 16px item icons. Choices are sorted
 alphabetically by display name, with natural numeric order; splitter rules and
 From connections remain pinned above the items.
@@ -48,7 +50,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 - Fuel generators: shared fuel, individual clocks, supplemental water and waste.
   Biomass adds a load assumption. Geothermal is excluded from the catalog.
   Alien Power Augmenters show individual matrix supply and boost contribution;
-  no power-grid simulation is introduced. Generated power uses a charging symbol
+  no power-grid simulation is introduced. Generated power uses a lightning-plus symbol
   and + prefix on nodes; consumed power keeps the lightning symbol.
 - Resource wells: grouped pressurizers share a resource. Each member has a clock
   and Impure / Normal / Pure satellite counts, starting at zero, with up to ten
@@ -65,7 +67,8 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 - Train Stations: connected routes with wait assumptions
   at each stop. The shared route defines freight-car count. Each station configures its car
   positions with one inline icon button group: No transfer, Fluid · Load/Unload,
-  or Freight · Load/Unload. Cargo is always shown in an aligned row and is disabled
+  or Freight · Load/Unload. Transfer symbols combine the droplet/box outline and
+  an inward/outward arrow into one Lucide-style icon. Cargo is always shown in an aligned row and is disabled
   for No transfer.
   The station node expands with one row per car and two active material ports per
   configured platform. Compact labeled dividers identify each car and its platform

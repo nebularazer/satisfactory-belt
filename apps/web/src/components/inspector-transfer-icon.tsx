@@ -1,4 +1,9 @@
-import { ArrowDownToLineIcon, ArrowUpFromLineIcon, DropletIcon, PackageIcon } from "lucide-react";
+import {
+  FluidLoadIcon,
+  FluidUnloadIcon,
+  FreightLoadIcon,
+  FreightUnloadIcon,
+} from "@/components/inspector-icons";
 
 export function InspectorTransferIcon({
   fluid,
@@ -7,14 +12,12 @@ export function InspectorTransferIcon({
   fluid: boolean;
   mode: "load" | "unload";
 }) {
-  return (
-    <span className="flex items-center" aria-hidden="true">
-      {fluid ? <DropletIcon className="size-4" /> : <PackageIcon className="size-4" />}
-      {mode === "load" ? (
-        <ArrowDownToLineIcon className="size-3" />
-      ) : (
-        <ArrowUpFromLineIcon className="size-3" />
-      )}
-    </span>
-  );
+  const Icon = fluid
+    ? mode === "load"
+      ? FluidLoadIcon
+      : FluidUnloadIcon
+    : mode === "load"
+      ? FreightLoadIcon
+      : FreightUnloadIcon;
+  return <Icon className="size-4" aria-hidden="true" />;
 }

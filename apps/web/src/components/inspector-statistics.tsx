@@ -11,10 +11,11 @@ import {
   configuredIncomingRates,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode } from "@satisfactory-belt/factory-core";
-import { ZapIcon, BatteryChargingIcon } from "lucide-react";
+import { ZapIcon } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
+import { PowerGenerationIcon } from "@/components/inspector-icons";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 const footerColors: CSSProperties & Record<`--${string}`, string> = {
@@ -163,7 +164,7 @@ export function InspectorStatistics({
       power: true,
       value: display.powerLabel.replace(/ generated$/, ""),
       icon: generated ? (
-        <BatteryChargingIcon className="size-4" />
+        <PowerGenerationIcon className="size-4" />
       ) : (
         <ZapIcon className="size-4 text-[var(--power-stroke)] fill-[var(--power-fill)] dark:text-[var(--power-stroke-dark)] dark:fill-[var(--power-fill-dark)]" />
       ),
