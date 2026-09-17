@@ -99,19 +99,12 @@ export class MachineNodeView {
     const footerY =
       (display.layout === "machine" ? (display.height ?? display.size) : display.size) - 32;
     if (display.layout === "logistics") {
-      const configured = display.ports.some((port) => port.configuredItemIconIds.length > 0);
-      this.icon(
-        display.machineIconId,
-        configured ? 28 : display.size / 2,
-        display.size / 2,
-        configured ? 40 : 64,
-        0.7,
-      );
+      this.icon(display.machineIconId, display.size / 2, display.size / 2, 64, 0.7);
       for (const port of display.ports) {
         const icons = port.configuredItemIconIds;
         icons
           .slice(0, 2)
-          .forEach((id, index) => this.icon(id, display.size - 24 - index * 24, port.y, 20));
+          .forEach((id, index) => this.icon(id, display.size - 28 - index * 24, port.y, 24));
         if (icons.length > 2)
           this.label(`+${icons.length - 2}`, 50, port.y, 20, 10, "500", this.palette.muted);
       }
