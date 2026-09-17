@@ -44,7 +44,8 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   Industrial storage has two inputs and two outputs. Node footers show slots or
   m³ with storage/fluid icons instead of zero power.
 - Dimensional Depot: shared plan-wide speed/capacity research.
-- Truck/Fluid Truck Stations: compatible variant, load/unload, cargo, station fuel, and shared
+- Truck/Fluid Truck Stations: the same fluid/freight load/unload icon buttons as trains,
+  an aligned cargo selector, station fuel, and shared
   road-route assumptions (fuel per trip, vehicles, round-trip time). Fuel has its
   own conveyor input and displays the selected item image.
 - Train Stations: connected routes with an unload item filter and wait assumptions
@@ -62,7 +63,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   a complete loop and assumes a full nine-slot load per drone.
 - Transport: square arrival/departure ports connect compatible stations. A closed
   loop is required for a complete route; vehicle/train loops can have extra stops,
-  while drone loops have two ports. Open chains remain editable. Hexagonal fuel
+  while drone loops have two ports. Open chains remain editable. Capsule-shaped fuel
   inputs accept material connections; route links carry no material flow.
 - Space Elevator: phase selection, accepting phase parts as an unlimited planning
   sink. There are no delivered/remaining counters. A node cannot be grouped;

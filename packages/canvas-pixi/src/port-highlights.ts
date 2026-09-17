@@ -1,6 +1,6 @@
 import { portId, samePort } from "@satisfactory-belt/canvas-core";
 import type { PortSelection } from "@satisfactory-belt/canvas-core";
-import { PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
+import { FUEL_PORT_RADIUS, PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
 import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import { Graphics } from "pixi.js";
 
@@ -38,23 +38,21 @@ export class PortHighlights {
       const port = display.ports[i]!;
       const colors = palette[port.direction];
       const muted = roles[i] === "muted";
-      const radius = port.transport === "pipe" ? PIPE_PORT_RADIUS : PORT_RADIUS;
+      const radius =
+        port.purpose === "fuel"
+          ? FUEL_PORT_RADIUS
+          : port.transport === "pipe"
+            ? PIPE_PORT_RADIUS
+            : PORT_RADIUS;
       const shape = (size = radius) => {
         if (port.purpose === "fuel")
-          this.view.poly([
+          this.view.roundRect(
             port.x - size,
-            port.y,
-            port.x - size / 2,
-            port.y - (size * Math.sqrt(3)) / 2,
-            port.x + size / 2,
-            port.y - (size * Math.sqrt(3)) / 2,
-            port.x + size,
-            port.y,
-            port.x + size / 2,
-            port.y + (size * Math.sqrt(3)) / 2,
-            port.x - size / 2,
-            port.y + (size * Math.sqrt(3)) / 2,
-          ]);
+            port.y - (size - 4),
+            size * 2,
+            (size - 4) * 2,
+            size - 4,
+          );
         else if (port.transport.endsWith("-route"))
           this.view.rect(port.x - size, port.y - size, size * 2, size * 2);
         else if (port.transport === "pipe")

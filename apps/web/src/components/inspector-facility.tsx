@@ -9,9 +9,11 @@ import {
 import type { FacilityNode, FacilityConfiguration } from "@satisfactory-belt/factory-core";
 import { PROJECT_PHASES } from "@satisfactory-belt/game-data";
 
+import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorChoice } from "@/components/inspector-choice";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorTrainPlatforms } from "@/components/inspector-train-platforms";
+import { InspectorTransferIcon } from "@/components/inspector-transfer-icon";
 import { InspectorTransportRoute } from "@/components/inspector-transport-route";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
@@ -53,6 +55,34 @@ export function InspectorFacility({
       .filter((i) => (i.form === "solid") === (transport === "belt"))
       .map((i) => itemOption(i.id));
   }
+  const truckVariants =
+    c.type === "truck-station"
+      ? Object.values(catalog.buildings!)
+          .filter((option) => option.kind === "truck-station")
+          .toSorted(
+            (a, option) => Number(option.transport === "pipe") - Number(a.transport === "pipe"),
+          )
+          .flatMap((option) =>
+            (["load", "unload"] as const).map((mode) => {
+              const candidate: FacilityNode = {
+                ...node,
+                buildingId: option.id,
+                configuration: {
+                  ...c,
+                  mode,
+                  materialId: b.transport === option.transport ? c.materialId : null,
+                },
+              };
+              return {
+                value: `${option.id}:${mode}`,
+                label: `${option.transport === "pipe" ? "Fluid" : "Freight"} · ${mode === "load" ? "Load" : "Unload"}`,
+                icon: <InspectorTransferIcon fluid={option.transport === "pipe"} mode={mode} />,
+                candidate,
+                disabled: () => !editor.canReplaceNode(candidate),
+              };
+            }),
+          )
+      : [];
   return (
     <div className="space-y-4">
       {c.type === "generator" && (
@@ -168,58 +198,34 @@ export function InspectorFacility({
       )}
       {c.type === "truck-station" && (
         <>
-          <InspectorChoice
-            label="Building variant"
-            value={b.id}
-            assets={assets}
-            options={Object.values(catalog.buildings!)
-              .filter((option) => option.kind === c.type)
-              .map((option) => ({
-                value: option.id,
-                label: option.name,
-                iconId: option.iconId,
-                disabled: () => !editor.canReplaceNode({ ...node, buildingId: option.id }),
-              }))}
-            onChange={(buildingId) => editor.replaceNode({ ...node, buildingId })}
+          <InspectorButtonGroup
+            iconOnly
+            label="Transfer"
+            value={`${b.id}:${c.mode}`}
+            options={truckVariants}
+            onChange={(value) => {
+              const variant = truckVariants.find((option) => option.value === value);
+              if (variant) editor.replaceNode(variant.candidate);
+            }}
           />
-          {!b.id.includes("Empty") && (
-            <>
-              <InspectorChoice
-                label="Transfer mode"
-                value={c.mode}
-                options={[
-                  {
-                    value: "load",
-                    label: "Load",
-                    disabled: () => !compatible({ ...c, mode: "load" }),
-                  },
-                  {
-                    value: "unload",
-                    label: "Unload",
-                    disabled: () => !compatible({ ...c, mode: "unload" }),
-                  },
-                ]}
-                onChange={(mode) => commit({ ...c, mode: mode === "load" ? "load" : "unload" })}
-              />
-              <InspectorChoice
-                label="Cargo"
-                value={c.materialId ?? "auto"}
-                assets={assets}
-                options={[
-                  {
-                    value: "auto",
-                    label: "From connections",
-                    disabled: () => !compatible({ ...c, materialId: null }),
-                  },
-                  ...items().map((option) => ({
-                    ...option,
-                    disabled: () => !compatible({ ...c, materialId: option.value }),
-                  })),
-                ]}
-                onChange={(id) => commit({ ...c, materialId: id === "auto" ? null : id })}
-              />
-            </>
-          )}
+          <InspectorChoice
+            inline
+            label="Cargo"
+            value={c.materialId ?? "auto"}
+            assets={assets}
+            options={[
+              {
+                value: "auto",
+                label: "From connections",
+                disabled: () => !compatible({ ...c, materialId: null }),
+              },
+              ...items().map((option) => ({
+                ...option,
+                disabled: () => !compatible({ ...c, materialId: option.value }),
+              })),
+            ]}
+            onChange={(id) => commit({ ...c, materialId: id === "auto" ? null : id })}
+          />
         </>
       )}
       {c.type === "train-station" && (

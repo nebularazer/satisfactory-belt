@@ -1,17 +1,12 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Station-local platform configuration. */
 import { stationRoute } from "@satisfactory-belt/factory-core";
 import type { FacilityNode, FreightPlatform } from "@satisfactory-belt/factory-core";
-import {
-  ArrowDownToLineIcon,
-  ArrowUpFromLineIcon,
-  DropletIcon,
-  PackageIcon,
-  XIcon,
-} from "lucide-react";
+import { XIcon } from "lucide-react";
 
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorChoice } from "@/components/inspector-choice";
 import { InspectorNumberField } from "@/components/inspector-number-field";
+import { InspectorTransferIcon } from "@/components/inspector-transfer-icon";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
@@ -70,7 +65,7 @@ export function InspectorTrainPlatforms({
           (["load", "unload"] as const).map((mode) => ({
             value: `${option.id}:${mode}`,
             label: `${option.transport === "pipe" ? "Fluid" : "Freight"} · ${mode === "load" ? "Load" : "Unload"}`,
-            icon: <TransferIcon fluid={option.transport === "pipe"} mode={mode} />,
+            icon: <InspectorTransferIcon fluid={option.transport === "pipe"} mode={mode} />,
             configuration: {
               buildingId: option.id,
               mode,
@@ -140,18 +135,5 @@ export function InspectorTrainPlatforms({
         );
       })}
     </section>
-  );
-}
-
-function TransferIcon({ fluid, mode }: { fluid: boolean; mode: "load" | "unload" }) {
-  return (
-    <span className="flex items-center" aria-hidden="true">
-      {fluid ? <DropletIcon className="size-4" /> : <PackageIcon className="size-4" />}
-      {mode === "load" ? (
-        <ArrowDownToLineIcon className="size-3" />
-      ) : (
-        <ArrowUpFromLineIcon className="size-3" />
-      )}
-    </span>
   );
 }

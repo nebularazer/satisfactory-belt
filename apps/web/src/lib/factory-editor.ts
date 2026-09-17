@@ -20,6 +20,7 @@ import {
   createFactoryNode,
   firstPlacementConnection,
   PIPE_PORT_RADIUS,
+  FUEL_PORT_RADIUS,
   PORT_RADIUS,
   nodeBounds,
   resolveFactoryNode,
@@ -165,7 +166,12 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
           direction: port.direction,
           x: port.x,
           y: port.y,
-          radius: port.transport === "pipe" ? PIPE_PORT_RADIUS : PORT_RADIUS,
+          radius:
+            port.purpose === "fuel"
+              ? FUEL_PORT_RADIUS
+              : port.transport === "pipe"
+                ? PIPE_PORT_RADIUS
+                : PORT_RADIUS,
         })),
       ),
       portIndex.compatibility,
