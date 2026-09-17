@@ -1143,16 +1143,16 @@ it("expands the station for four cars, exposes only car three and preserves conn
   if (station?.kind !== "facility") throw new Error();
   const display = editor.getDisplay(station.id)!;
   expect(display).toMatchObject({
-    height: 544,
+    height: 288,
     bodyRows: [
-      { title: "Car 1", subtitle: "No transfer" },
-      { title: "Car 2", subtitle: "No transfer" },
-      { title: "Car 3 · Unload", subtitle: "Platform" },
-      { title: "Car 4", subtitle: "No transfer" },
+      { label: "1 · No transfer" },
+      { label: "2 · No transfer" },
+      { label: "3 · Freight" },
+      { label: "4 · No transfer" },
     ],
   });
-  expect(nodeBounds(station).height).toBe(544);
-  expect(nodeBounds(editor.getNode(second.id)!).height).toBe(544);
+  expect(nodeBounds(station).height).toBe(288);
+  expect(nodeBounds(editor.getNode(second.id)!).height).toBe(256);
   expect(display.ports.map((port) => port.key)).toEqual([
     "route:input",
     "route:output",
@@ -1196,7 +1196,7 @@ it("expands the station for four cars, exposes only car three and preserves conn
     "assigned freight car",
   );
   editor.setRouteSettings({ ...before.routes![0]!, freightCarCount: 3 });
-  expect(nodeBounds(editor.getNode(station.id)!).height).toBe(448);
+  expect(nodeBounds(editor.getNode(station.id)!).height).toBe(256);
   expect(editor.history.getSnapshot().state.links).toBe(before.links);
   editor.historyCommand("undo");
   expect(editor.history.getSnapshot().state).toBe(before);

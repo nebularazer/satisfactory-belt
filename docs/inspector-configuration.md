@@ -48,7 +48,9 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   at each stop. The shared route defines freight-car count. Each station configures its car
   positions as Freight, Fluid, or No transfer, plus cargo and load/unload mode.
   The station node expands with one row per car and two active material ports per
-  configured platform. There are no standalone platform nodes or platform links.
+  configured platform. Compact labeled dividers identify each car and its platform
+  type; port side/color indicates load or unload. No-transfer positions take less
+  height. There are no standalone platform nodes or platform links.
   Removing configured trailing cars is blocked until those transfers are cleared.
 - Drone Ports: fuel, incoming/outgoing cargo and two-port round trips. Ownership,
   names, and destination selectors are omitted. Cargo capacity is shown only for

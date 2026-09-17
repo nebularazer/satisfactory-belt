@@ -1,4 +1,4 @@
-import { GRID_SIZE } from "@satisfactory-belt/canvas-core";
+import { GRID_SIZE, SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { Building, GameCatalog } from "@satisfactory-belt/game-data";
 import { PROJECT_PHASES } from "@satisfactory-belt/game-data";
 
@@ -13,10 +13,14 @@ export type FreightPlatform = Readonly<{
   mode: "load" | "unload";
   materialId: string | null;
 }>;
-export const TRAIN_PLATFORM_HEIGHT = 3 * GRID_SIZE;
-export const TRAIN_PLATFORMS_Y = 4 * GRID_SIZE;
-export function trainStationHeight(carCount: number) {
-  return TRAIN_PLATFORMS_Y + carCount * TRAIN_PLATFORM_HEIGHT + GRID_SIZE;
+const TRAIN_PLATFORMS_Y = 3 * GRID_SIZE;
+const platformHeight = (platform: FreightPlatform | null) => (platform ? 2 : 1) * GRID_SIZE;
+export function trainStationHeight(platforms: readonly (FreightPlatform | null)[]) {
+  return (
+    TRAIN_PLATFORMS_Y +
+    platforms.reduce((height, platform) => height + platformHeight(platform), 0) +
+    GRID_SIZE
+  );
 }
 
 export type FacilityConfiguration =
@@ -294,14 +298,15 @@ export function resolveFacility(node: FacilityNode, catalog: GameCatalog): Machi
   const bodyRows: NonNullable<MachineDisplay["bodyRows"]>[number][] = [];
   if (c.type === "train-station") {
     for (let index = 0; index < ports.length; index++)
-      ports[index] = { ...ports[index]!, y: HEADER_HEIGHT + 32 };
+      ports[index] = { ...ports[index]!, y: HEADER_HEIGHT + SNAP_SIZE };
+    let nextY = TRAIN_PLATFORMS_Y;
     c.platforms.forEach((platform, index) => {
-      const y = TRAIN_PLATFORMS_Y + index * TRAIN_PLATFORM_HEIGHT;
+      const y = nextY;
+      nextY += platformHeight(platform);
       const building = platform ? catalog.buildings![platform.buildingId]! : null;
       bodyRows.push({
         y,
-        title: `Car ${index + 1}${platform ? ` · ${platform.mode === "load" ? "Load" : "Unload"}` : ""}`,
-        subtitle: building?.name ?? "No transfer",
+        label: `${index + 1} · ${building ? (building.transport === "pipe" ? "Fluid" : "Freight") : "No transfer"}`,
       });
       if (!platform || !building) return;
       const direction = platform.mode === "load" ? "input" : "output";
@@ -312,7 +317,7 @@ export function resolveFacility(node: FacilityNode, catalog: GameCatalog): Machi
           platform.materialId,
           building.transport,
         );
-        ports[ports.length - 1] = { ...ports.at(-1)!, y: y + 32 + slot * 32 };
+        ports[ports.length - 1] = { ...ports.at(-1)!, y: y + SNAP_SIZE + slot * GRID_SIZE };
       }
     });
   } else {
@@ -360,9 +365,7 @@ export function resolveFacility(node: FacilityNode, catalog: GameCatalog): Machi
   return {
     layout: "machine",
     size: NODE_SIZE,
-    ...(c.type === "train-station"
-      ? { height: trainStationHeight(c.platforms.length), bodyRows }
-      : {}),
+    ...(c.type === "train-station" ? { height: trainStationHeight(c.platforms), bodyRows } : {}),
     title:
       c.type === "well"
         ? catalog.items[c.resourceId]!.name

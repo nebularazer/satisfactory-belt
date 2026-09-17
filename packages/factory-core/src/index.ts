@@ -86,7 +86,7 @@ export type MachineDisplay = Readonly<{
   layout: "machine";
   size: number;
   height?: number;
-  bodyRows?: readonly Readonly<{ y: number; title: string; subtitle: string }>[];
+  bodyRows?: readonly Readonly<{ y: number; label: string }>[];
   title: string;
   subtitle: string;
   machineIconId: string;
@@ -126,7 +126,7 @@ export function nodeBounds(node: FactoryNode): CanvasItem {
     width: size,
     height:
       node.kind === "facility" && node.configuration.type === "train-station"
-        ? trainStationHeight(node.configuration.platforms.length)
+        ? trainStationHeight(node.configuration.platforms)
         : size,
   };
 }

@@ -116,14 +116,26 @@ export class MachineNodeView {
 
     if (display.layout === "machine") {
       for (const row of display.bodyRows ?? []) {
+        const label = this.label(
+          row.label,
+          0,
+          row.y,
+          display.size - 64,
+          11,
+          "400",
+          this.palette.muted,
+        );
+        const width = CanvasTextMetrics.measureText(label.text, label.style).width;
+        label.x = (display.size - width) / 2;
+        // Marker-style separator: the centered type label interrupts two decorative lines.
         this.content.addChild(
           new Graphics()
-            .moveTo(0.5, row.y)
-            .lineTo(display.size - 0.5, row.y)
+            .moveTo(12, row.y)
+            .lineTo(label.x - 8, row.y)
+            .moveTo(label.x + width + 8, row.y)
+            .lineTo(display.size - 12, row.y)
             .stroke({ color: this.palette.separator, width: 1 }),
         );
-        this.label(row.title, 56, row.y + 34, 144, 12, "500", this.palette.title);
-        this.label(row.subtitle, 56, row.y + 55, 144, 11, "400", this.palette.muted);
       }
     }
     for (const port of display.ports) {
@@ -211,6 +223,7 @@ export class MachineNodeView {
     label.position.set(x, y);
     this.texts.push(label);
     this.content.addChild(label);
+    return label;
   }
 
   private icon(id: string, x: number, y: number, size: number, opacity = 1) {
