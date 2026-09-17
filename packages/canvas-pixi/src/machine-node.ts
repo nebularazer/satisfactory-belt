@@ -99,14 +99,20 @@ export class MachineNodeView {
     const footerY =
       (display.layout === "machine" ? (display.height ?? display.size) : display.size) - 32;
     if (display.layout === "logistics") {
-      this.icon(display.machineIconId, display.size / 2, display.size / 2, 64, 0.7);
+      this.icon(display.machineIconId, display.size / 2, display.size / 2, 40, 0.7);
       for (const port of display.ports) {
         const icons = port.configuredItemIconIds;
-        icons
-          .slice(0, 2)
-          .forEach((id, index) => this.icon(id, display.size - 28 - index * 24, port.y, 24));
-        if (icons.length > 2)
-          this.label(`+${icons.length - 2}`, 50, port.y, 20, 10, "500", this.palette.muted);
+        if (icons[0]) this.icon(icons[0], display.size - 28, port.y, 24);
+        if (icons.length > 1) {
+          const x = display.size - 30;
+          this.content.addChild(
+            new Graphics()
+              .roundRect(x, port.y + 6, 24, 12, 4)
+              .fill(this.palette.card)
+              .stroke({ color: this.palette.separator, width: 1 }),
+          );
+          this.label(`+${icons.length - 1}`, x + 2, port.y + 12, 20, 9, "600", this.palette.title);
+        }
       }
     } else {
       // Stop at the inner edge of the one-unit node border.

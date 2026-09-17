@@ -11,6 +11,10 @@ buildings with no grouping tabs or count controls.
 Tier/purity button groups and numeric controls share a common width. Operating-setting
 labels have no icons; node footers use a gauge for clock speed. Power statistics
 come last and share their light/dark colors with the canvas footer.
+Searchable choices keep the selected value in a trigger and open a separate, initially
+empty search field. Popups align to the full control width, including icons and Add
+actions. Canceling a search preserves the selection.
+
 There is no enabled/standby setting. Editable input/output rate targets remain deferred.
 
 ## Supported bodies
@@ -28,7 +32,8 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   their summary shows remaining program slots out of 64. Empty lists close the output.
   Hover/focus identifies the canvas port. Already-added programmable choices are
   disabled without an Incompatible badge. Splitter type changes are not exposed.
-  Explicit output item rules appear beside canvas ports (two icons, then a +N count).
+  Explicit output item rules appear beside canvas ports (one 24px icon with a +N badge).
+  The logistics image stays centered at a fixed 40px size, leaving clear space for items.
   These depict configured filters, not inferred supply. None-only and empty outputs
   are muted and cannot be selected or connected; undo restores their interaction.
   Any, Any undefined, and Overflow remain rules without dedicated canvas indicators;

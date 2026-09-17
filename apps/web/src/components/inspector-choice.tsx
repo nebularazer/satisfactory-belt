@@ -1,5 +1,5 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Choices are scoped to the selected inspector. */
-import { useId } from "react";
+import { useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
@@ -11,8 +11,10 @@ import {
   ComboboxList,
   ComboboxItem,
   ComboboxEmpty,
+  ComboboxTrigger,
+  useComboboxAnchor,
 } from "@/components/ui/combobox";
-import { InputGroupAddon } from "@/components/ui/input-group";
+import { InputGroup, InputGroupAddon } from "@/components/ui/input-group";
 import type { GameAssets } from "@/lib/game-assets";
 
 export type InspectorOption = {
@@ -54,6 +56,9 @@ export function InspectorChoice({
   inputAction?: ReactNode;
 }) {
   const id = useId();
+  const anchor = useComboboxAnchor();
+  const searchInput = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
   const selected = options.find((option) => option.value === value);
   return (
     <div
@@ -62,6 +67,7 @@ export function InspectorChoice({
       }
     >
       <label
+        id={`${id}-label`}
         htmlFor={id}
         className={
           hideLabel
@@ -77,26 +83,53 @@ export function InspectorChoice({
         disabled={disabled}
         items={options}
         value={selected ?? null}
+        inputValue={query}
+        onInputValueChange={setQuery}
+        onOpenChange={(open) => {
+          if (open) setQuery("");
+        }}
         itemToStringLabel={labelFor}
         itemToStringValue={valueFor}
         onValueChange={(option) => {
           if (option && !isDisabled(option)) onChange(option.value);
         }}
       >
-        <ComboboxInput
-          id={id}
-          disabled={disabled}
-          placeholder={value === null ? "Mixed" : "Choose…"}
-          className={`${inline ? "w-55 min-w-0 shrink-0" : "w-full"} ${inputAction ? "has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30" : ""}`}
+        <InputGroup
+          ref={anchor}
+          className={`${inline ? "w-55 min-w-0 shrink-0" : "w-full"} has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50 ${inputAction && !disabled ? "has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30" : ""}`}
         >
-          {showSelectedIcon && selected?.iconId && assets && (
-            <InputGroupAddon align="inline-start">
+          <ComboboxTrigger
+            id={id}
+            disabled={disabled}
+            aria-labelledby={`${id}-label ${id}-value`}
+            className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-left text-sm outline-none [&>svg]:shrink-0"
+          >
+            {showSelectedIcon && selected?.iconId && assets && (
               <CatalogIcon iconId={selected.iconId} assets={assets} size={24} />
-            </InputGroupAddon>
-          )}
+            )}
+            <span
+              id={`${id}-value`}
+              className={`min-w-0 flex-1 truncate ${selected ? "" : "text-muted-foreground"}`}
+            >
+              {selected?.label ?? (value === null ? "Mixed" : "Choose…")}
+            </span>
+          </ComboboxTrigger>
           {inputAction && <InputGroupAddon align="inline-end">{inputAction}</InputGroupAddon>}
-        </ComboboxInput>
-        <ComboboxContent onKeyDown={(event) => event.stopPropagation()}>
+        </InputGroup>
+        <ComboboxContent
+          anchor={anchor}
+          align="start"
+          className="min-w-0"
+          initialFocus={searchInput}
+          aria-label={`${label} options`}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <ComboboxInput
+            ref={searchInput}
+            aria-label={`Search ${label}`}
+            placeholder="Search…"
+            showTrigger={false}
+          />
           <ComboboxEmpty>No matches.</ComboboxEmpty>
           <ComboboxList>
             {(option: InspectorOption) => (
