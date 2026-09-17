@@ -47,7 +47,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 - Truck/Fluid Truck Stations: compatible variant, load/unload, cargo, station fuel, and shared
   road-route assumptions (fuel per trip, vehicles, round-trip time). Fuel has its
   own conveyor input and displays the selected item image.
-- Train Stations: connected routes with load/unload item filters and wait assumptions
+- Train Stations: connected routes with an unload item filter and wait assumptions
   at each stop. The shared route defines freight-car count. Each station configures its car
   positions with one inline icon button group: No transfer, Fluid · Load/Unload,
   or Freight · Load/Unload. Cargo is always shown in an aligned row and is disabled
@@ -74,9 +74,9 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
 Power Storage, power-grid controls, pipeline junctions/pumps/valves, portals, and
 throughput monitors remain out of scope. Transport calculations do not simulate
 travel, queues, loading windows, fluid hydraulics, inventory fill, or power networks.
-Load/unload filters store the cargo allowed to transfer for that route at this stop;
-empty lists mean any cargo. These filters respect platform direction and currently
-do not affect calculated material flow.
+The unload filter stores the cargo allowed to leave the train at this stop; an
+empty list means any cargo. It respects platform direction and currently does not
+affect calculated material flow. Loading is configured through each platform’s cargo.
 Round-trip assumptions include docking and waiting. Routes do not yet propagate
 material streams between stations; selected cargo describes their material ports.
 

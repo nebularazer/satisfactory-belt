@@ -99,7 +99,6 @@ export function reconcileTransportConnections(document: FactoryDocument): Factor
             .find((stop) => stop.nodeId === nodeId) ?? {
             id: `stop:${nodeId}`,
             nodeId,
-            loadItemIds: [],
             unloadItemIds: [],
             waitSeconds: 0,
           },

@@ -94,19 +94,6 @@ export function InspectorTransportRoute({
           .map((stop) => (
             <div key={stop.id} className="space-y-3">
               <InspectorItemFilter
-                label="Load filter"
-                values={stop.loadItemIds}
-                assets={assets}
-                onChange={(loadItemIds) =>
-                  update({
-                    ...route,
-                    stops: route.stops.map((entry) =>
-                      entry.id === stop.id ? { ...entry, loadItemIds } : entry,
-                    ),
-                  })
-                }
-              />
-              <InspectorItemFilter
                 label="Unload filter"
                 values={stop.unloadItemIds}
                 assets={assets}

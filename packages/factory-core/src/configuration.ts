@@ -131,7 +131,7 @@ export function validateTransportRoute(
       !Number.isFinite(setting.waitSeconds) ||
       setting.waitSeconds < 0 ||
       setting.waitSeconds > 86400 ||
-      [...setting.loadItemIds, ...setting.unloadItemIds].some((id) => !catalog.items[id])
+      setting.unloadItemIds.some((id) => !catalog.items[id])
     )
       throw new Error("Invalid stop settings.");
     if (stop?.kind !== "facility" || stationKind(stop) !== route.kind)
