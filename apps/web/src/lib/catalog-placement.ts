@@ -4,6 +4,8 @@ import type { SearchEntry, SearchScope } from "@satisfactory-belt/game-data/sear
 /** Alternatives keep the selected machine when supported, otherwise use their displayed default. */
 export function catalogConfiguration(entry: SearchEntry, scope?: SearchScope): NodeConfiguration {
   switch (entry.kind) {
+    case "facility":
+      return { kind: "facility", buildingId: entry.entityId };
     case "recipe": {
       const machineId =
         scope?.kind === "machine" && entry.machineIds.includes(scope.id)

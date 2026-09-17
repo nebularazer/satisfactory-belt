@@ -2,6 +2,8 @@ import { GRID_SIZE, SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
+import { resolveFacility } from "./facilities";
+import type { FacilityNode, Purity } from "./facilities";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
 import { validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
@@ -14,7 +16,14 @@ export const PORT_RADIUS = 7;
 export const PIPE_PORT_RADIUS = 9;
 export const SLOOP_ITEM_ID = "Desc_WAT1_C";
 
-export type MachineMember = Readonly<{ id: string; clockPercent: number; sloopsUsed: number }>;
+export type MachineMember = Readonly<{
+  id: string;
+  clockPercent: number;
+  sloopsUsed: number;
+  purity?: Purity;
+  loadPercent?: number;
+  suppliedMatrices?: boolean;
+}>;
 type NodeBase = Readonly<{ id: string; x: number; y: number; machines: readonly MachineMember[] }>;
 export type ManufacturingNode = NodeBase &
   Readonly<{
@@ -24,6 +33,7 @@ export type ManufacturingNode = NodeBase &
   }>;
 export type FactoryNode =
   | ManufacturingNode
+  | FacilityNode
   | LogisticsNode
   | (NodeBase & Readonly<{ kind: "sink"; sinkId: string }>)
   | (NodeBase &
@@ -60,7 +70,13 @@ export type PortDisplay = Readonly<{
 export type PowerDisplay =
   | Readonly<{ kind: "known"; megawatts: number }>
   | Readonly<{ kind: "unknown" }>
-  | Readonly<{ kind: "variable" }>;
+  | Readonly<{ kind: "variable" }>
+  | Readonly<{
+      kind: "range";
+      minMegawatts: number;
+      maxMegawatts: number;
+      averageMegawatts: number;
+    }>;
 export type MachineDisplay = Readonly<{
   layout: "machine";
   size: number;
@@ -132,6 +148,8 @@ export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): Nod
 
 const numberLabel = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
 export function formatPower(power: PowerDisplay): string {
+  if (power.kind === "range")
+    return `${numberLabel.format(power.minMegawatts)}–${numberLabel.format(power.maxMegawatts)} MW (${numberLabel.format(power.averageMegawatts)} avg)`;
   if (power.kind === "unknown") return "— MW";
   if (power.kind === "variable") return "Variable";
   // Keep the unit explicit and bound unusually large totals without losing it to ellipsis.
@@ -147,6 +165,9 @@ export function resolveMachineNode(
   catalog: GameCatalog,
 ): MachineDisplay {
   validateMachineMembers(node, catalog);
+  if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
+    throw new Error(`Invalid position on ${node.id}.`);
+  if (node.kind === "facility") return resolveFacility(node, catalog);
   const clock = commonSetting(node.machines, "clockPercent");
   const sloops = commonSetting(node.machines, "sloopsUsed");
   const clockLabel = clock === null ? "Mixed" : `${numberLabel.format(clock)}%`;
@@ -259,7 +280,25 @@ export function resolveMachineNode(
     throw new Error(`Recipe ${recipe.id} is incompatible with ${machine.id}.`);
   const power: PowerDisplay =
     machine.power.kind === "variable"
-      ? { kind: "variable" }
+      ? {
+          kind: "range",
+          ...(() => {
+            const factor = node.machines.reduce(
+              (sum, member) =>
+                sum +
+                (member.clockPercent / 100) ** machine.powerConsumptionExponent *
+                  (machine.productionBoost.base +
+                    member.sloopsUsed * machine.productionBoost.perSloop) **
+                    machine.productionBoost.powerExponent,
+              0,
+            );
+            const min = recipe.variablePower.constantMegawatts * factor;
+            const max =
+              (recipe.variablePower.constantMegawatts + recipe.variablePower.factorMegawatts) *
+              factor;
+            return { minMegawatts: min, maxMegawatts: max, averageMegawatts: (min + max) / 2 };
+          })(),
+        }
       : {
           kind: "known",
           megawatts: node.machines.reduce(
@@ -301,3 +340,11 @@ export * from "./placement";
 
 export * from "./machine-settings";
 export * from "./production";
+
+export * from "./facilities";
+
+export * from "./configuration";
+
+export * from "./configured-flow";
+
+export * from "./clipboard";

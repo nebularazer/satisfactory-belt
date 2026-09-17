@@ -3,6 +3,7 @@ import { memo, useCallback, useId, useSyncExternalStore } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 
 import { InspectorBody } from "@/components/inspector-body";
+import { InspectorLink } from "@/components/inspector-link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -49,6 +50,7 @@ export const Inspector = memo(function Inspector({
   }, [editor, focusCanvas]);
   const summary = inspectorSummary(editor, target);
   const node = target?.startsWith("node:") ? editor.getNode(target.slice(5)) : undefined;
+  const link = target?.startsWith("link:") ? editor.getLink(target.slice(5)) : undefined;
   if (!summary) return null;
 
   return (
@@ -68,6 +70,7 @@ export const Inspector = memo(function Inspector({
         </CardHeader>
         <CardContent className="min-h-0 overflow-y-auto overscroll-contain">
           {node && <InspectorBody key={node.id} node={node} editor={editor} assets={assets} />}
+          {link && <InspectorLink key={link.id} link={link} editor={editor} assets={assets} />}
         </CardContent>
         <CardFooter className="shrink-0">
           <Button

@@ -1,6 +1,7 @@
 import { portId } from "@satisfactory-belt/canvas-core";
 import type { PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
 
+import type { TransportRoute, DepotResearch } from "./facilities";
 import type { FactoryNode } from "./index";
 import { createPortIndex } from "./ports";
 import type { SemanticPort } from "./ports";
@@ -11,8 +12,12 @@ export type MaterialLink = Readonly<{
   output: PortReference;
   input: PortReference;
   guides?: readonly RouteGuide[];
+  /** Selected physical tier; currently informational, never a flow constraint. */
+  tier?: number;
 }>;
 export type FactoryDocument = Readonly<{
+  routes?: readonly TransportRoute[];
+  depotResearch?: DepotResearch;
   nodes: readonly FactoryNode[];
   links: readonly MaterialLink[];
 }>;
@@ -47,7 +52,7 @@ export function createConnectionIndex(
     }
   }
   for (const port of ports)
-    if (port.itemId === null && port.direction === "input")
+    if (port.itemId === null && port.direction === "input" && port.forwardsMaterials !== false)
       for (const output of outputs.get(port.nodeId) ?? []) edge(portId(port), output);
   for (const link of links) {
     edge(portId(link.output), portId(link.input));
@@ -68,7 +73,11 @@ export function createConnectionIndex(
   }
   const base = createPortIndex(ports);
   const cache = new Map<string, ReturnType<typeof base.compatibility>>();
-  const compatibility: typeof base.compatibility = (a, b) => {
+  const compatibility = (
+    a: PortReference,
+    b: PortReference,
+    allowExisting = false,
+  ): ReturnType<typeof base.compatibility> => {
     const result = base.compatibility(a, b);
     if (!result.compatible) return result;
     const output = byId.get(portId(result.output))!;
@@ -78,7 +87,7 @@ export function createConnectionIndex(
     if (input.itemId !== null && !filterAllows(output.filter, input.itemId))
       return { compatible: false, reason: "filtered-material" };
     const key = pairKey(result.output, result.input);
-    if (pairs.has(key)) return { compatible: false, reason: "duplicate-link" };
+    if (!allowExisting && pairs.has(key)) return { compatible: false, reason: "duplicate-link" };
     const cached = cache.get(key);
     if (cached) return cached;
     const source = portId(result.output),
@@ -94,6 +103,12 @@ export function createConnectionIndex(
       visited.add(visit);
       const port = byId.get(id);
       if (!port || !filterAllows(port.filter, item)) continue;
+      if (
+        port.transport === "pipe" &&
+        port.itemId === null &&
+        [...(flows.get(id) ?? [])].some((existing) => existing !== item)
+      )
+        return { compatible: false, reason: "mixed-material" };
       if (
         port.direction === "input" &&
         (port.accepts ? !port.accepts.has(item) : port.itemId !== null && port.itemId !== item)

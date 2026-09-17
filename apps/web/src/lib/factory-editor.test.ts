@@ -945,3 +945,147 @@ it("keeps links and member identities through settings edits, count changes, and
   editor.historyCommand("undo");
   expect(editor.history.getSnapshot().state).toBe(before);
 });
+
+it("disables incompatible recipe changes and records compatible changes as one undo step", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const node = editor.getNode(editor.output.nodeId)!;
+  if (node.kind !== "manufacturing") throw new Error();
+  editor.catalog.recipes.Alternative = {
+    ...editor.catalog.recipes[node.recipeId]!,
+    id: "Alternative",
+    name: "Alternative",
+    durationSeconds: 20,
+  };
+  editor.catalog.recipes.Incompatible = {
+    ...editor.catalog.recipes[node.recipeId]!,
+    id: "Incompatible",
+    products: [],
+  };
+  const before = editor.history.getSnapshot();
+  const bad = { ...node, recipeId: "Incompatible" };
+  expect(editor.canReplaceNode(bad)).toBe(false);
+  editor.replaceNode(bad);
+  expect(editor.history.getSnapshot()).toBe(before);
+  const next = { ...node, recipeId: "Alternative" };
+  expect(editor.canReplaceNode(next)).toBe(true);
+  editor.replaceNode(next);
+  expect(editor.getNode(node.id)).toBe(next);
+  expect(editor.history.getSnapshot().state.links).toBe(before.state.links);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before.state);
+});
+
+it("records belt tiers without changing connections and preserves them through copy/paste and undo", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const original = editor.history.getSnapshot().state;
+  const id = original.links[0]!.id;
+  editor.setLinkTier(id, 6);
+  expect(editor.getLink(id)).toMatchObject({ tier: 6, output: editor.output, input: editor.input });
+  expect(() => editor.setLinkTier(id, 7)).toThrow("Invalid transport tier");
+  editor.controller.setSelection(new Set([editor.output.nodeId, editor.input.nodeId]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  expect(editor.history.getSnapshot().state.links.at(-1)?.tier).toBe(6);
+  editor.historyCommand("undo");
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(original);
+});
+
+function createTransportEditor() {
+  const { catalog } = createTestEditor();
+  const base = {
+    description: "",
+    descriptorId: "station",
+    iconId: "station",
+    powerMegawatts: 20,
+    canOverclock: false,
+    powerConsumptionExponent: 1,
+    transport: "belt" as const,
+    capacity: 48,
+    fuels: [],
+    resourceIds: [],
+    baseRate: 0,
+    loadFollowing: false,
+  };
+  catalog.buildings = {
+    station: { ...base, id: "station", name: "Station", kind: "train-station" },
+    platform: { ...base, id: "platform", name: "Platform", kind: "freight-platform" },
+  };
+  const editor = createFactoryEditor(catalog, []);
+  const station = editor.placeNode({ kind: "facility", buildingId: "station" }, { x: 512, y: 512 });
+  if (station.kind !== "facility") throw new Error();
+  return { ...editor, catalog, station };
+}
+
+it("keeps shared research and routes through movement, cloning and deletion with undo", () => {
+  const editor = createTransportEditor(),
+    id = editor.station.id;
+  editor.setDepotResearch({ speedLevel: 3, capacityLevel: 2 });
+  editor.createTransportRoute(id);
+  const original = editor.history.getSnapshot().state,
+    route = original.routes![0]!;
+  editor.controller.setSelection(new Set([id]));
+  editor.controller.pointerDown({ id: 1, x: 500, y: 500 });
+  editor.controller.pointerMove({ id: 1, x: 532, y: 532 });
+  editor.controller.pointerUp({ id: 1, x: 532, y: 532 });
+  expect(editor.history.getSnapshot().state.depotResearch).toBe(original.depotResearch);
+  expect(editor.history.getSnapshot().state.routes).toBe(original.routes);
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  const pasted = editor.history.getSnapshot().state;
+  const clone = pasted.nodes.at(-1)!;
+  expect(clone).toMatchObject({
+    kind: "facility",
+    configuration: { routeId: pasted.routes![1]!.id },
+  });
+  expect(pasted.routes![1]!.id).not.toBe(route.id);
+  expect(pasted.routes![1]!.stops[0]!.nodeId).toBe(clone.id);
+  editor.controller.setSelection(new Set([id]));
+  editor.deleteSelection();
+  expect(editor.history.getSnapshot().state.routes![0]!.stops).toEqual([]);
+  expect(editor.history.getSnapshot().state.depotResearch).toBe(original.depotResearch);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(pasted);
+});
+
+it("clears a deleted station reference and restores the platform assignment with undo", () => {
+  const editor = createTransportEditor();
+  const platform = editor.placeNode(
+    { kind: "facility", buildingId: "platform" },
+    { x: 1000, y: 512 },
+  );
+  if (platform.kind !== "facility" || platform.configuration.type !== "freight-platform")
+    throw new Error();
+  editor.replaceNode({
+    ...platform,
+    configuration: { ...platform.configuration, stationId: editor.station.id },
+  });
+  const before = editor.history.getSnapshot().state;
+  editor.controller.setSelection(new Set([editor.station.id]));
+  editor.deleteSelection();
+  expect(editor.getNode(platform.id)).toMatchObject({ configuration: { stationId: null } });
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state).toBe(before);
+});
+
+it("copies a platform without its station as unassigned, avoiding duplicate positions", () => {
+  const editor = createTransportEditor();
+  const platform = editor.placeNode(
+    { kind: "facility", buildingId: "platform" },
+    { x: 1000, y: 512 },
+  );
+  if (platform.kind !== "facility" || platform.configuration.type !== "freight-platform")
+    throw new Error();
+  editor.replaceNode({
+    ...platform,
+    configuration: { ...platform.configuration, stationId: editor.station.id },
+  });
+  editor.controller.setSelection(new Set([platform.id]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  const clone = editor.history.getSnapshot().state.nodes.at(-1)!;
+  expect(clone).toMatchObject({ configuration: { stationId: null, position: 1 } });
+  expect(editor.canReplaceNode(clone)).toBe(true);
+});

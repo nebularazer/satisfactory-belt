@@ -1,0 +1,94 @@
+/* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Choices are scoped to the selected inspector. */
+import { useId } from "react";
+
+import { CatalogIcon } from "@/components/catalog-search-details";
+import { Badge } from "@/components/ui/badge";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
+import type { GameAssets } from "@/lib/game-assets";
+
+export type InspectorOption = {
+  value: string;
+  label: string;
+  disabled?: boolean | (() => boolean);
+  iconId?: string;
+  description?: string;
+};
+const labelFor = (option: InspectorOption) => option.label;
+const disabled = (option: InspectorOption) =>
+  typeof option.disabled === "function" ? option.disabled() : option.disabled;
+const valueFor = (option: InspectorOption) => option.value;
+export function InspectorChoice({
+  label,
+  value,
+  options,
+  onChange,
+  assets,
+  description,
+}: {
+  label: string;
+  value: string | null;
+  options: readonly InspectorOption[];
+  onChange: (value: string) => void;
+  assets?: GameAssets;
+  description?: string;
+}) {
+  const id = useId();
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      <Combobox
+        items={options}
+        value={options.find((option) => option.value === value) ?? null}
+        itemToStringLabel={labelFor}
+        itemToStringValue={valueFor}
+        onValueChange={(option) => {
+          if (option && !disabled(option)) onChange(option.value);
+        }}
+      >
+        <ComboboxInput
+          id={id}
+          placeholder={value === null ? "Mixed" : "Choose…"}
+          className="w-full"
+        />
+        <ComboboxContent onKeyDown={(event) => event.stopPropagation()}>
+          <ComboboxEmpty>No matches.</ComboboxEmpty>
+          <ComboboxList>
+            {(option: InspectorOption) => (
+              <InspectorChoiceItem key={option.value} option={option} assets={assets} />
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+    </div>
+  );
+}
+
+function InspectorChoiceItem({ option, assets }: { option: InspectorOption; assets?: GameAssets }) {
+  const incompatible = disabled(option);
+  return (
+    <ComboboxItem value={option} disabled={incompatible} className="min-h-11 sm:min-h-9">
+      {assets && option.iconId && <CatalogIcon iconId={option.iconId} assets={assets} size={24} />}
+      <span className="min-w-0 flex-1 whitespace-normal">
+        {option.label}
+        {option.description && (
+          <span className="block text-xs text-muted-foreground">{option.description}</span>
+        )}
+      </span>
+      {incompatible && (
+        <Badge variant="outline" title="Doesn’t support the existing connections or configuration">
+          Incompatible
+        </Badge>
+      )}
+    </ComboboxItem>
+  );
+}

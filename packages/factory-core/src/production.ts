@@ -1,5 +1,6 @@
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
+import { facilityProduction } from "./facilities";
 import { resolveFactoryNode } from "./index";
 import type { FactoryNode } from "./index";
 import { scopedMachines } from "./machine-settings";
@@ -26,11 +27,30 @@ export function resolveProduction(
       unavailableReason: "Rates depend on connected material flow.",
     };
   const members = scopedMachines(node, scope);
+  if (node.kind === "facility") return facilityProduction({ ...node, machines: members }, catalog);
   if (node.kind === "extractor")
     return {
       inputs: [],
-      outputs: [{ itemId: node.resourceId, perMinute: null }],
-      unavailableReason: "Extraction rates are not available yet.",
+      outputs: [
+        {
+          itemId: node.resourceId,
+          perMinute:
+            catalog.extractors[node.extractorId]!.baseRate === undefined
+              ? null
+              : members.reduce(
+                  (sum, member) =>
+                    sum +
+                    ((catalog.extractors[node.extractorId]!.baseRate! * member.clockPercent) /
+                      100) *
+                      (catalog.extractors[node.extractorId]!.hasPurity ? (member.purity ?? 1) : 1),
+                  0,
+                ),
+        },
+      ],
+      unavailableReason:
+        catalog.extractors[node.extractorId]!.baseRate === undefined
+          ? "Extraction rates are not available yet."
+          : null,
     };
   if (node.kind === "fixed-producer") {
     const producer = catalog.fixedProducers[node.producerId]!;

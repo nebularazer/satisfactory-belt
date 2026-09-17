@@ -1,3 +1,6 @@
+import type { Building } from "./buildings";
+export * from "./buildings";
+
 export type ItemForm = "solid" | "liquid" | "gas";
 export type IconSize = 64 | 128 | 256;
 
@@ -9,6 +12,11 @@ export interface Item {
   form: ItemForm;
   /** Whether the AWESOME Sink can consume this item continuously. */
   sinkable: boolean;
+  sinkPoints?: number;
+  dnaPoints?: number;
+  /** MJ per planner unit (item or cubic metre). */
+  energyMegajoules?: number;
+  stackSize?: number;
   /** Recipe quantities use pieces for solids, cubic metres for liquids and gases. */
   unit: "item" | "m3";
   iconId: string;
@@ -52,6 +60,8 @@ export interface FixedProducer {
 
 /** Resource extraction is independent of manufacturing recipes. */
 export interface Extractor {
+  baseRate?: number;
+  hasPurity?: boolean;
   id: string;
   name: string;
   description: string;
@@ -99,6 +109,7 @@ export interface Recipe {
 
 export interface GameCatalog {
   schemaVersion: 1;
+  buildings?: Record<string, Building>;
   source: { locale: string; docsSha256: string };
   items: Record<string, Item>;
   machines: Record<string, Machine>;
@@ -143,6 +154,12 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
       `Invalid sinkability for ${id}.`,
     );
     check(iconIds.has(item.iconId), `Missing icon for ${id}.`);
+    for (const value of [item.sinkPoints, item.dnaPoints, item.energyMegajoules])
+      check(value === undefined || nonnegative(value), `Invalid material value for ${id}.`);
+    check(
+      item.stackSize === undefined || (Number.isSafeInteger(item.stackSize) && item.stackSize > 0),
+      `Invalid stack size for ${id}.`,
+    );
   }
   for (const [id, machine] of Object.entries(catalog.machines)) {
     check(id === machine.id && Boolean(machine.name.trim()), `Invalid machine ${id}.`);
@@ -197,6 +214,15 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
   for (const [id, extractor] of Object.entries(catalog.extractors)) {
     check(id === extractor.id && Boolean(extractor.name.trim()), `Invalid extractor ${id}.`);
     check(iconIds.has(extractor.iconId), `Missing icon for ${id}.`);
+    check(
+      extractor.baseRate === undefined ||
+        (Number.isFinite(extractor.baseRate) && extractor.baseRate > 0),
+      `Invalid extraction rate for ${id}.`,
+    );
+    check(
+      extractor.hasPurity === undefined || typeof extractor.hasPurity === "boolean",
+      `Invalid purity capability for ${id}.`,
+    );
     check(nonnegative(extractor.powerMegawatts), `Invalid power for ${id}.`);
     check(nonnegative(extractor.powerConsumptionExponent), `Invalid power exponent for ${id}.`);
     check(typeof extractor.canOverclock === "boolean", `Invalid clock capability for ${id}.`);
@@ -221,6 +247,69 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
     check(id === sink.id && Boolean(sink.name.trim()), `Invalid AWESOME Sink ${id}.`);
     check(iconIds.has(sink.iconId), `Missing icon for ${id}.`);
     check(nonnegative(sink.powerMegawatts), `Invalid power for ${id}.`);
+  }
+  for (const [id, building] of Object.entries(catalog.buildings ?? {})) {
+    check(id === building.id && Boolean(building.name.trim()), `Invalid building ${id}.`);
+    check(iconIds.has(building.iconId), `Missing icon for ${id}.`);
+    check(
+      [
+        "generator",
+        "geothermal",
+        "augmenter",
+        "well",
+        "storage",
+        "depot",
+        "truck-station",
+        "train-station",
+        "freight-platform",
+        "drone-port",
+        "space-elevator",
+      ].includes(building.kind),
+      `Invalid building kind for ${id}.`,
+    );
+    check(
+      ["belt", "pipe"].includes(building.transport) &&
+        typeof building.canOverclock === "boolean" &&
+        typeof building.loadFollowing === "boolean" &&
+        nonnegative(building.powerConsumptionExponent),
+      `Invalid building capabilities for ${id}.`,
+    );
+    check(
+      !["generator", "drone-port"].includes(building.kind) || building.fuels.length > 0,
+      `Missing fuels for ${id}.`,
+    );
+    check(
+      building.kind !== "well" || (building.resourceIds.length > 0 && building.baseRate > 0),
+      `Missing well resources for ${id}.`,
+    );
+    check(
+      nonnegative(building.powerMegawatts) &&
+        nonnegative(building.baseRate) &&
+        nonnegative(building.capacity),
+      `Invalid building rates for ${id}.`,
+    );
+    for (const fuel of building.fuels) {
+      check(
+        nonnegative(fuel.supplementalPerMinute) &&
+          (!fuel.byproduct ||
+            (Number.isFinite(fuel.byproduct.amount) && fuel.byproduct.amount > 0)),
+        `Invalid fuel rates for ${id}.`,
+      );
+      check(
+        Boolean(catalog.items[fuel.itemId]?.energyMegajoules),
+        `Missing fuel energy for ${id}.`,
+      );
+      check(
+        !fuel.supplementalItemId || Boolean(catalog.items[fuel.supplementalItemId]),
+        `Missing supplemental resource for ${id}.`,
+      );
+      check(
+        !fuel.byproduct || Boolean(catalog.items[fuel.byproduct.itemId]),
+        `Missing waste for ${id}.`,
+      );
+    }
+    for (const resourceId of building.resourceIds)
+      check(Boolean(catalog.items[resourceId]), `Missing resource for ${id}.`);
   }
   for (const [id, recipe] of Object.entries(catalog.recipes)) {
     check(id === recipe.id && Boolean(recipe.name.trim()), `Invalid recipe ${id}.`);

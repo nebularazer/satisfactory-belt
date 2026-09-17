@@ -31,6 +31,21 @@ export function resolveSemanticPorts(
     direction: port.direction,
     transport: port.transport,
     itemId: port.itemId,
+    ...(node.kind === "facility"
+      ? {
+          forwardsMaterials: node.configuration.type === "storage",
+          allowsUnknownFluid: port.transport === "pipe" && port.itemId === null,
+          ...(port.key === "input:fuel" && node.configuration.type === "truck-station"
+            ? {
+                accepts: new Set(
+                  Object.values(catalog.items)
+                    .filter((item) => item.form === "solid" && (item.energyMegajoules ?? 0) > 0)
+                    .map((item) => item.id),
+                ),
+              }
+            : {}),
+        }
+      : {}),
     ...(accepts && port.direction === "input" ? { accepts } : {}),
     ...(filters && port.direction === "output" ? { filter: filters.get(port.key) } : {}),
   }));

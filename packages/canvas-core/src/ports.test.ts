@@ -216,3 +216,17 @@ it.each([194, 200, 206])("port hit area owns x=%s across the node border", (x) =
   expect(canvas.getPortSnapshot().anchor).toEqual(ports[1]);
   expect(move).not.toHaveBeenCalled();
 });
+
+it("highlights an inspector port without changing selection or starting a connection", () => {
+  const { canvas } = setup();
+  const before = canvas.getSnapshot().selection;
+  canvas.highlightPort(ports[0]);
+  expect(canvas.getPortSnapshot().hover).toEqual([ports[0]]);
+  expect(canvas.getPortSnapshot().anchor).toBeNull();
+  expect(canvas.getSnapshot().selection).toBe(before);
+  canvas.setPorts(ports.slice(1));
+  expect(canvas.getPortSnapshot().hover).toEqual([]);
+  canvas.highlightPort(ports[1]);
+  canvas.highlightPort(null);
+  expect(canvas.getPortSnapshot().hover).toEqual([]);
+});

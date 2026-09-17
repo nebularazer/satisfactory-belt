@@ -42,3 +42,23 @@ multiple rules.
 **Sinkable material**:
 A material the AWESOME Sink can consume continuously. A mixed stream is sinkable
 only when all of its possible materials are sinkable.
+
+**Resource purity**:
+The yield class of an individual extraction site: impure, normal, or pure.
+Sites in one machine group may have different purities while sharing their resource.
+
+**Resource well**:
+A pressurizer and its satellite extractors, sharing one resource and pressurizer
+clock. Each satellite has its own purity; only the pressurizer consumes power.
+
+**Transport route**:
+A shared sequence of vehicle or train stops with fleet and round-trip assumptions.
+Station loading modes and train cargo filters describe how materials are transferred.
+
+**Configured supply**:
+The nominal material supply implied by machine settings along an unambiguous
+path. It does not account for transport capacity, demand, or allocation between branches.
+
+**Delivery objective**:
+A finite quantity of Project Assembly parts still required for a Space Elevator
+phase, distinct from a continuous material consumption rate.

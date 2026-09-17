@@ -1,12 +1,13 @@
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
+import { facilityCanGroup, parsePurity } from "./facilities";
 import type { FactoryNode, MachineMember } from "./index";
 
 /** Bounds allocations for user-entered machine counts. */
 export const MAX_MACHINE_COUNT = 10_000;
 
 export type MachineGroup = Exclude<FactoryNode, { kind: "logistics" }>;
-export type MachineSetting = "clockPercent" | "sloopsUsed";
+export type MachineSetting = "clockPercent" | "sloopsUsed" | "purity" | "loadPercent";
 /** "all" or a member ID local to its group. */
 export type MachineScope = string;
 
@@ -28,8 +29,13 @@ export function createMachineMembers(
 export function machineCapabilities(node: MachineGroup, catalog: GameCatalog) {
   const machine = node.kind === "manufacturing" ? catalog.machines[node.machineId] : null;
   const extractor = node.kind === "extractor" ? catalog.extractors[node.extractorId] : null;
+  const building = node.kind === "facility" ? catalog.buildings?.[node.buildingId] : null;
   return {
-    clock: machine?.canOverclock ?? extractor?.canOverclock ?? false,
+    purity: extractor?.hasPurity ?? building?.kind === "geothermal",
+    load: building?.loadFollowing ?? false,
+    matrices: building?.kind === "augmenter",
+    groupable: !building || facilityCanGroup(building),
+    clock: machine?.canOverclock ?? extractor?.canOverclock ?? building?.canOverclock ?? false,
     sloopSlots: machine?.sloopSlots ?? 0,
   };
 }
@@ -38,8 +44,10 @@ export function commonSetting(
   members: readonly MachineMember[],
   setting: MachineSetting,
 ): number | null {
-  const value = members[0]?.[setting];
-  return value !== undefined && members.every((member) => member[setting] === value) ? value : null;
+  const value = members[0] ? memberSetting(members[0], setting) : undefined;
+  return value !== undefined && members.every((member) => memberSetting(member, setting) === value)
+    ? value
+    : null;
 }
 
 export function scopedMachines(node: MachineGroup, scope: MachineScope): readonly MachineMember[] {
@@ -53,11 +61,26 @@ export function validateMachineMembers(node: MachineGroup, catalog: GameCatalog)
   if (!node.machines.length || node.machines.length > MAX_MACHINE_COUNT)
     throw new Error(`A group must contain 1 to ${MAX_MACHINE_COUNT} machines.`);
   const ids = new Set<string>();
-  const { clock, sloopSlots } = machineCapabilities(node, catalog);
+  const { clock, sloopSlots, purity, load, matrices } = machineCapabilities(node, catalog);
   for (const member of node.machines) {
     if (!member.id || member.id === "all" || ids.has(member.id))
       throw new Error("Invalid machine identity.");
     ids.add(member.id);
+    if (member.purity !== undefined && (!purity || ![0.5, 1, 2].includes(member.purity)))
+      throw new Error("Invalid resource purity.");
+    if (
+      member.loadPercent !== undefined &&
+      (!load ||
+        !Number.isFinite(member.loadPercent) ||
+        member.loadPercent < 0 ||
+        member.loadPercent > 100)
+    )
+      throw new Error("Invalid generator load.");
+    if (
+      member.suppliedMatrices !== undefined &&
+      (!matrices || typeof member.suppliedMatrices !== "boolean")
+    )
+      throw new Error("Invalid matrix supply setting.");
     if (
       !Number.isFinite(member.clockPercent) ||
       member.clockPercent < 1 ||
@@ -107,6 +130,15 @@ export function resizeMachineGroup(
   const inherited = {
     clockPercent: commonSetting(node.machines, "clockPercent") ?? last.clockPercent,
     sloopsUsed: commonSetting(node.machines, "sloopsUsed") ?? last.sloopsUsed,
+    ...(last.purity !== undefined
+      ? { purity: parsePurity(commonSetting(node.machines, "purity") ?? last.purity) }
+      : {}),
+    ...(last.loadPercent !== undefined
+      ? { loadPercent: commonSetting(node.machines, "loadPercent") ?? last.loadPercent }
+      : {}),
+    ...(last.suppliedMatrices !== undefined
+      ? { suppliedMatrices: commonMatrices(node.machines) ?? last.suppliedMatrices }
+      : {}),
   };
   return {
     ...node,
@@ -118,4 +150,28 @@ export function resizeMachineGroup(
             ...createMachineMembers(count - node.machines.length, inherited, createId),
           ],
   };
+}
+
+export function memberSetting(member: MachineMember, setting: MachineSetting): number {
+  return member[setting] ?? (setting === "purity" ? 1 : 100);
+}
+export function commonMatrices(members: readonly MachineMember[]): boolean | null {
+  const value = members[0]?.suppliedMatrices ?? false;
+  return members.every((member) => (member.suppliedMatrices ?? false) === value) ? value : null;
+}
+export function setMatrixSupply(
+  node: MachineGroup,
+  catalog: GameCatalog,
+  scope: MachineScope,
+  supplied: boolean,
+): MachineGroup {
+  scopedMachines(node, scope);
+  const next = {
+    ...node,
+    machines: node.machines.map((member) =>
+      scope === "all" || member.id === scope ? { ...member, suppliedMatrices: supplied } : member,
+    ),
+  };
+  validateMachineMembers(next, catalog);
+  return next;
 }

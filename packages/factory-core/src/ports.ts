@@ -11,6 +11,9 @@ export type SemanticPort = PortReference &
     itemId: string | null;
     /** Sink acceptance and output filtering are derived from node configuration. */
     accepts?: ReadonlySet<string>;
+    forwardsMaterials?: boolean;
+    /** Fluid buffers accept a single fluid inferred from their connected network. */
+    allowsUnknownFluid?: boolean;
     filter?: MaterialFilter;
   }>;
 export function getPortCompatibility(
@@ -21,7 +24,9 @@ export function getPortCompatibility(
   if (a.nodeId === b.nodeId) return { compatible: false, reason: "same-node" };
   if (a.direction === b.direction) return { compatible: false, reason: "same-direction" };
   if (a.transport !== b.transport) return { compatible: false, reason: "different-transport" };
-  const wildcard = a.transport === "belt" && (a.itemId === null || b.itemId === null);
+  const wildcard =
+    (a.transport === "belt" || a.allowsUnknownFluid || b.allowsUnknownFluid) &&
+    (a.itemId === null || b.itemId === null);
   if (!wildcard && (a.itemId === null || b.itemId === null || a.itemId !== b.itemId))
     return { compatible: false, reason: "different-material" };
   return {
@@ -50,6 +55,8 @@ export function createPortIndex(ports: readonly SemanticPort[]) {
       const port = byId.get(portId(ref));
       if (!port) return [];
       const opposite = port.direction === "input" ? "output" : "input";
+      if (port.transport === "pipe")
+        return ports.filter((candidate) => getPortCompatibility(port, candidate).compatible);
       const candidates =
         port.transport === "belt" && port.itemId === null
           ? belts[opposite]

@@ -138,9 +138,19 @@ export function CatalogSearchDetails({
   const resource = entry.kind === "resource" ? catalog.items[entry.entityId] : undefined;
   const extractor = entry.extractorId ? catalog.extractors[entry.extractorId] : undefined;
   const buildingName =
-    machine?.name ?? extractor?.name ?? producer?.name ?? sink?.name ?? part?.name ?? entry.name;
+    catalog.buildings?.[entry.entityId]?.name ??
+    machine?.name ??
+    extractor?.name ??
+    producer?.name ??
+    sink?.name ??
+    part?.name ??
+    entry.name;
   const description =
-    producer?.description ?? sink?.description ?? part?.description ?? resource?.description;
+    catalog.buildings?.[entry.entityId]?.description ??
+    producer?.description ??
+    sink?.description ??
+    part?.description ??
+    resource?.description;
   const hasRelated = Boolean(recipe || entry.kind === "machine" || entry.kind === "extractor");
   return (
     <TooltipProvider delay={700} closeDelay={0} timeout={0}>

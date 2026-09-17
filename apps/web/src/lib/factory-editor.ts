@@ -8,6 +8,12 @@ import {
 import type { CanvasLink, Point, PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
 import { EditHistory } from "@satisfactory-belt/edit-history";
 import {
+  remapCopiedFacilities,
+  copiedTransportRoutes,
+  validateTransportRoute,
+  createConfigurationValidator,
+  clearRemovedReferences,
+  setMatrixSupply,
   createConnectionIndex,
   createFactoryNode,
   firstPlacementConnection,
@@ -20,6 +26,8 @@ import {
   resolveSemanticPorts,
 } from "@satisfactory-belt/factory-core";
 import type {
+  TransportRoute,
+  DepotResearch,
   FactoryNode,
   MachineScope,
   MachineSetting,
@@ -121,6 +129,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
             : link;
         });
         return {
+          ...current,
           nodes: next,
           links: links.every((link, index) => link === current.links[index])
             ? current.links
@@ -229,7 +238,15 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       );
       return nodes.length === current.nodes.length && links.length === current.links.length
         ? current
-        : { nodes, links };
+        : {
+            ...current,
+            nodes: clearRemovedReferences(nodes),
+            links,
+            routes: current.routes?.map((route) => ({
+              ...route,
+              stops: route.stops.filter((stop) => !selection.has(stop.nodeId)),
+            })),
+          };
     });
   }
 
@@ -244,6 +261,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       // Document items are immutable, so later edits cannot change this snapshot.
       clipboard = {
         nodes: selected,
+        routes: copiedTransportRoutes(history.getSnapshot().state, selection),
         links: history
           .getSnapshot()
           .state.links.filter(
@@ -263,13 +281,21 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
     const dx = gridSnapping ? snapToGrid(origin.x + offset) - origin.x : offset;
     const dy = gridSnapping ? snapToGrid(origin.y + offset) - origin.y : offset;
     // oxlint-disable-next-line oxc/no-map-spread -- History and clipboard snapshots must stay immutable.
-    const pasted = clipboard.nodes.map((item) => ({
+    let pasted: FactoryNode[] = clipboard.nodes.map((item) => ({
       ...item,
       id: crypto.randomUUID(),
       x: item.x + dx,
       y: item.y + dy,
     }));
     const ids = new Map(clipboard.nodes.map((node, index) => [node.id, pasted[index]!.id]));
+    const remapped = remapCopiedFacilities(
+      pasted,
+      clipboard.routes ?? [],
+      ids,
+      new Set(history.getSnapshot().state.nodes.map((node) => node.id)),
+      () => crypto.randomUUID(),
+    );
+    pasted = [...remapped.nodes];
     // oxlint-disable-next-line oxc/no-map-spread -- Clipboard links and endpoint references are immutable.
     const links = clipboard.links.map((link) => ({
       ...link,
@@ -279,7 +305,11 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       guides: translateGuides(link.guides, { x: dx, y: dy }),
     }));
     history.update((current) => ({
+      ...current,
       nodes: [...current.nodes, ...pasted],
+      ...(remapped.routes.length
+        ? { routes: [...(current.routes ?? []), ...remapped.routes] }
+        : {}),
       links: [...current.links, ...links],
     }));
     pasteCount++;
@@ -295,7 +325,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       for (const link of current.links)
         if (createConnectionIndex(ports, links).compatibility(link.output, link.input).compatible)
           links.push(link);
-      return { nodes, links };
+      return { ...current, nodes: clearRemovedReferences(nodes), links };
     });
   }
   function editMachine(
@@ -368,6 +398,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
       throw new Error("This choice no longer supports the connection. Choose another result.");
     controller.cancel();
     history.update((current) => ({
+      ...current,
       nodes: [...current.nodes, node],
       links: connection
         ? [...current.links, { id: crypto.randomUUID(), ...connection }]
@@ -376,7 +407,102 @@ export function createFactoryEditor(catalog: GameCatalog, initialNodes: readonly
     controller.setSelection(new Set([node.id]));
     return node;
   }
+  let configurationDocument: FactoryDocument | null = null;
+  let configurationValidator: ReturnType<typeof createConfigurationValidator> | null = null;
+  function canConfigure(candidate: FactoryNode) {
+    const document = history.getSnapshot().state;
+    if (document !== configurationDocument) {
+      configurationDocument = document;
+      configurationValidator = createConfigurationValidator(document, catalog);
+    }
+    return configurationValidator!(candidate);
+  }
+  function replaceNode(candidate: FactoryNode) {
+    if (controller.getSnapshot().interaction !== "idle") return;
+    history.update((current) => {
+      if (current.nodes.includes(candidate) || !canConfigure(candidate)) return current;
+      return {
+        ...current,
+        nodes: current.nodes.map((node) => (node.id === candidate.id ? candidate : node)),
+      };
+    });
+  }
+  function setLinkTier(id: string, tier: number) {
+    const link = history.getSnapshot().state.links.find((entry) => entry.id === id);
+    const port =
+      link &&
+      semanticPorts.find(
+        (entry) => entry.nodeId === link.output.nodeId && entry.portKey === link.output.portKey,
+      );
+    if (!port || !Number.isInteger(tier) || tier < 1 || tier > (port.transport === "belt" ? 6 : 2))
+      throw new Error("Invalid transport tier.");
+    history.update((current) => ({
+      ...current,
+      links: current.links.map((entry) => (entry.id === id ? { ...entry, tier } : entry)),
+    }));
+  }
+  function setRouteSettings(route: TransportRoute) {
+    validateTransportRoute(history.getSnapshot().state, route, catalog);
+    history.update((current) => ({
+      ...current,
+      routes: [...(current.routes ?? []).filter((r) => r.id !== route.id), structuredClone(route)],
+    }));
+  }
+  function setDepotResearch(research: DepotResearch) {
+    if (
+      ![research.speedLevel, research.capacityLevel].every(
+        (n) => Number.isInteger(n) && n >= 0 && n <= 4,
+      )
+    )
+      throw new Error("Invalid depot research.");
+    history.update((current) => ({ ...current, depotResearch: { ...research } }));
+  }
+  function createTransportRoute(id: string) {
+    history.update((current) => {
+      const node = current.nodes.find((entry) => entry.id === id);
+      if (
+        node?.kind !== "facility" ||
+        (node.configuration.type !== "truck-station" && node.configuration.type !== "train-station")
+      )
+        return current;
+      const route: TransportRoute = {
+        id: crypto.randomUUID(),
+        name: `${node.configuration.name} route`,
+        kind: node.configuration.type === "truck-station" ? "road" : "rail",
+        vehicleCount: 1,
+        roundTripSeconds: 120,
+        fuelId: null,
+        fuelPerTrip: 0,
+        stops: [
+          {
+            id: crypto.randomUUID(),
+            nodeId: id,
+            loadItemIds: [],
+            unloadItemIds: [],
+            waitSeconds: 0,
+          },
+        ],
+      };
+      return {
+        ...current,
+        routes: [...(current.routes ?? []), route],
+        nodes: current.nodes.map((entry) =>
+          entry.id === id
+            ? { ...node, configuration: { ...node.configuration, routeId: route.id } }
+            : entry,
+        ),
+      };
+    });
+  }
   return {
+    createTransportRoute,
+    replaceNode,
+    canReplaceNode: canConfigure,
+    setLinkTier,
+    setRouteSettings,
+    setDepotResearch,
+    setMatrixSupply: (id: string, scope: string, supplied: boolean) =>
+      editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,
     setMachineCount,
     getNode: (id: string) => history.getSnapshot().state.nodes.find((node) => node.id === id),
@@ -406,6 +532,8 @@ function sameConfiguration(a: FactoryNode, b: FactoryNode): boolean {
       a.program === b.program
     );
   if (a.kind !== b.kind || a.machines !== b.machines) return false;
+  if (a.kind === "facility" && b.kind === "facility")
+    return a.buildingId === b.buildingId && a.configuration === b.configuration;
   if (a.kind === "sink" && b.kind === "sink") return a.sinkId === b.sinkId;
   if (a.kind === "fixed-producer" && b.kind === "fixed-producer")
     return a.producerId === b.producerId;

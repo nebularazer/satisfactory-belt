@@ -1,6 +1,7 @@
 import type { GameCatalog } from "./index";
 
 export type SearchKind =
+  | "facility"
   | "recipe"
   | "machine"
   | "extractor"
@@ -99,6 +100,7 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
     ["fixed-producer", catalog.fixedProducers, "Fixed producer"],
     ["logistics", catalog.logistics, "Logistics"],
     ["sink", catalog.sinks, "AWESOME Sink"],
+    ["facility", catalog.buildings ?? {}, "Building"],
   ] as const;
   for (const [kind, entities, subtitle] of collections) {
     for (const entity of Object.values(entities)) {
@@ -113,7 +115,11 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
           subtitle,
           events: "events" in entity ? entity.events : [],
         },
-        kind === "sink" ? "awesome sink" : "",
+        kind === "sink"
+          ? "awesome sink"
+          : kind === "facility" && "kind" in entity && entity.kind === "well"
+            ? "resource well extractor nitrogen gas crude oil water"
+            : "",
       );
     }
   }
