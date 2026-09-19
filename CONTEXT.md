@@ -117,4 +117,7 @@ It saves a preferred clock, never a count limit. Later demand changes resize the
 using that clock, underclocking as needed to balance whole counts. Standalone recipes
 and extractors start with a visible output target.
 Shortages remain visible instead of overriding constraints. Storage only collects
-surplus. There is no temporary-edit anchor or generic node lock.
+surplus. The inspector has one production-rate lock for the entire recipe: editing
+one output locks it and updates coproducts by recipe ratio; unlocking removes the
+target and displays the calculated rates. There is no temporary-edit anchor or generic
+node lock. Link text has a constant canvas-space font size and scales with zoom.

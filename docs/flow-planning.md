@@ -7,10 +7,13 @@ references; refreshing restores them.
 
 ## Targets, clock and automatic sizing
 
-A production group's inspector exposes a target for each output and a clock speed.
+A production group's inspector displays current output rates in equal-width fields,
+with one shared production lock and a clock speed. Unlocked fields follow the connected
+plan. Locking captures the current production; editing any output rate locks the recipe
+at that rate and updates all coproducts in their fixed recipe ratio. Unlocking clears the
+recipe's target. Merely focusing or blurring an unchanged field never locks it.
 Targets are gross production rates, not additional exports: connected consumers use
 that production. An unconnected target output is the final product of the plan.
-Clear a target with Auto (or an empty field).
 
 Targets and preferred clocks persist through later edits, clipboard, and undo/redo.
 There are no temporary anchors, machine limits or construction-direction flags.
@@ -54,7 +57,8 @@ The JavaScript LP solver is contained in this module; callers do not manage its 
 `prepareFlowPlan(document, catalog)` separately exposes ports, compatible connections,
 inferred materials and cached configured-rate allocation. Per-material max flow serves
 recipe inputs and exports first, explicit disposal second, and storage last. Link/port
-labels are plain numbers. Recipe output numbers are configured potential, not actual
+labels are plain numbers. Link labels use a constant canvas-space font size and scale
+with zoom; they have no screen-space size compensation. Recipe output numbers are configured potential, not actual
 starvation-limited throughput. Inspector shortages make unfinished requirements visible.
 
 Storage implicitly collects surplus and forwards connected flow. It has no production
@@ -79,5 +83,5 @@ Editor regressions cover persistent targets, production-preserving count edits, 
 shared suppliers, forward/backward placement, unfinished ingredients, reversed graph
 order, equivalent purity/count changes, undo/redo, and surplus storage. The recycling
 reference verifies both groups can become 20 at 100% while still collecting 600 plastic
-and 750 rubber. Inspector interaction tests exercise target, count and clock controls.
+and 750 rubber. Inspector interaction tests exercise rate editing, the shared production lock, count and clock controls.
 Existing material-allocation, facility, canvas and configuration checks remain in place.

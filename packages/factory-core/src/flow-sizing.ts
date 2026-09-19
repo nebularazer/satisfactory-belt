@@ -23,6 +23,25 @@ export type FlowGroup = Extract<FactoryNode, { kind: "manufacturing" | "extracto
 export const isFlowGroup = (node: FactoryNode): node is FlowGroup =>
   node.kind === "manufacturing" || node.kind === "extractor";
 
+/** A recipe has one production rate; its coproduct rates always move together. */
+export function flowOutputRates(node: FlowGroup, catalog: GameCatalog) {
+  const production = resolveProduction(node, catalog);
+  if (!Object.keys(node.flow?.targets ?? {}).length) return production.outputs;
+  const unit = resolveProduction(
+    { ...node, machines: node.machines.map((member) => ({ ...member, clockPercent: 100 })) },
+    catalog,
+  );
+  const factor = Math.max(
+    ...unit.outputs.map((output) =>
+      output.perMinute ? (node.flow?.targets?.[output.itemId] ?? 0) / output.perMinute : 0,
+    ),
+  );
+  return unit.outputs.map((output) => ({
+    ...output,
+    perMinute: output.perMinute === null ? null : output.perMinute * factor,
+  }));
+}
+
 export function validateFlowSettings(node: FlowGroup, catalog: GameCatalog) {
   const { clockPercent, targets, memberClocks } = node.flow ?? {};
   if (

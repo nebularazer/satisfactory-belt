@@ -1,12 +1,18 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSyncExternalStore } from "react";
 import { expect, it } from "vitest";
 
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { minerFlowFixture } from "@/test/flow-fixture";
+import { recyclingFlowFixture } from "@/test/recycling-flow-fixture";
 
 import { InspectorBody } from "./inspector-body";
+import { InspectorFlow } from "./inspector-flow";
+
+const field = (name: string) =>
+  screen.getByRole<HTMLInputElement>("textbox", { name: `${name} output rate` });
+const lock = () => screen.getByRole("button", { name: "Lock production" });
 
 it("edits targets and clock, with count buttons preserving production and no machine-limit control", async () => {
   const user = userEvent.setup();
@@ -25,12 +31,12 @@ it("edits targets and clock, with count buttons preserving production and no mac
   }
   render(<Harness />);
   async function enter(label: string, value: string) {
-    const field = screen.getByRole("textbox", { name: label });
-    await user.clear(field);
-    await user.type(field, value);
+    const input = screen.getByRole("textbox", { name: label });
+    await user.clear(input);
+    await user.type(input, value);
     await user.tab();
   }
-  await enter("Iron Ingot target", "150");
+  await enter("Iron Ingot output rate", "150");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
   expect(screen.queryByRole("textbox", { name: "Machine limit" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Add machine" }));
@@ -47,7 +53,7 @@ it("edits targets and clock, with count buttons preserving production and no mac
       expect.objectContaining({ clockPercent: expect.closeTo(500 / 3) }),
     ),
   });
-  await enter("Iron Ingot target", "300");
+  await enter("Iron Ingot output rate", "300");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("300");
   expect(editor.getNode(smelter.id)).toMatchObject({
     machines: Array.from({ length: 5 }, () => expect.objectContaining({ clockPercent: 200 })),
@@ -63,4 +69,67 @@ it("edits targets and clock, with count buttons preserving production and no mac
     screen.getByRole<HTMLButtonElement>("button", { name: "Remove last machine" }).disabled,
   ).toBe(true);
   expect(screen.queryByText(/Target shortfall/)).toBeNull();
+});
+
+it("shows calculated coproducts and locks or unlocks the entire recipe without independent targets", async () => {
+  const user = userEvent.setup();
+  const { assets, document } = recyclingFlowFixture();
+  assets.catalog.items.Desc_HeavyOilResidue_C!.name = "Heavy Oil Residue";
+  assets.catalog.items.Desc_PolymerResin_C!.name = "Polymer Resin";
+  const editor = createFactoryEditor(assets.catalog, document);
+  const id = "recycling-residue";
+  function Harness() {
+    const snapshot = useSyncExternalStore(editor.history.subscribe, editor.history.getSnapshot);
+    const node = snapshot.state.nodes.find((entry) => entry.id === id)!;
+    return node.kind === "manufacturing" ? (
+      <InspectorFlow node={node} editor={editor} assets={assets} />
+    ) : null;
+  }
+  render(<Harness />);
+  const rates = (oil: string, resin: string) => {
+    expect(field("Heavy Oil Residue").value).toBe(oil);
+    expect(field("Polymer Resin").value).toBe(resin);
+  };
+  async function enter(name: string, value: string) {
+    await user.clear(field(name));
+    await user.type(field(name), value);
+    await user.tab();
+  }
+  rates("600", "300");
+  expect(lock().getAttribute("aria-pressed")).toBe("false");
+  await user.click(field("Heavy Oil Residue"));
+  await user.tab();
+  expect(lock().getAttribute("aria-pressed")).toBe("false");
+  await enter("Polymer Resin", "-1");
+  rates("600", "300");
+  expect(lock().getAttribute("aria-pressed")).toBe("false");
+  await user.click(lock());
+  expect(lock().getAttribute("aria-pressed")).toBe("true");
+  act(() => editor.setOperatingSetting(id, "all", "clockPercent", 100));
+  rates("600", "300");
+  expect(editor.getNode(id)).toMatchObject({
+    machines: Array.from({ length: 15 }, () => expect.objectContaining({ clockPercent: 100 })),
+  });
+  await enter("Polymer Resin", "150");
+  rates("300", "150");
+  expect(editor.getNode(id)).toMatchObject({ flow: { targets: { Desc_PolymerResin_C: 150 } } });
+  await enter("Heavy Oil Residue", "800");
+  rates("800", "400");
+  const node = editor.getNode(id);
+  expect(node?.kind === "manufacturing" && node.flow?.targets).toEqual({
+    Desc_HeavyOilResidue_C: 800,
+  });
+  await user.click(lock());
+  expect(lock().getAttribute("aria-pressed")).toBe("false");
+  rates("600", "300");
+  act(() => editor.historyCommand("undo"));
+  rates("800", "400");
+  expect(lock().getAttribute("aria-pressed")).toBe("true");
+  act(() => editor.historyCommand("redo"));
+  rates("600", "300");
+  expect(lock().getAttribute("aria-pressed")).toBe("false");
+  // Editing an automatic output also locks every coproduct at the new recipe rate.
+  await enter("Polymer Resin", "400");
+  rates("800", "400");
+  expect(lock().getAttribute("aria-pressed")).toBe("true");
 });

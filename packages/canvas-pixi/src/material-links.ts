@@ -112,6 +112,8 @@ export function drawMaterialLinks(
         }
         const midpoint = pathMidpoint(points);
         label.position.set(midpoint.x, midpoint.y);
+        // Link graphics live in screen space; labels retain their canvas-space size.
+        label.scale.set(camera.zoom);
       }
     }
     if (!selected || link.id === null) continue;

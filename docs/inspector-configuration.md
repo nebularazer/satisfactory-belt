@@ -22,11 +22,14 @@ button style and lists use its compact rows with 16px item icons. Choices are so
 alphabetically by display name, with natural numeric order; splitter rules and
 From connections remain pinned above the items.
 
-Flow production groups additionally expose output targets and clock speed under All.
+Flow production groups additionally expose output rates and clock speed under All.
+Rate fields show calculated values when unlocked. A single lock applies to the recipe
+and all its coproducts. Editing any rate updates the others by recipe ratio and locks
+production; unlocking removes the target so the connected plan can resize the group.
+Inputs keep the same width in both states, with no per-output Auto button.
 The count buttons preserve current production by adjusting clock speed; they are disabled
 when the requested count would require a clock outside 1–250%. Counts are not persistent
-limits. Later demand changes resize groups using the chosen clock. Auto or an empty
-target field clears that target. Targets use strict positive numbers; invalid drafts
+limits. Later demand changes resize groups using the chosen clock. Output rates use strict positive numbers; empty or invalid drafts
 restore the previous value. Shortfalls appear beside these controls. Calculated clocks
 remain visible on the canvas and can be lower than the chosen clock to balance whole counts.
 There is no authored enabled/standby setting. The inspector omits the separate Flow balance

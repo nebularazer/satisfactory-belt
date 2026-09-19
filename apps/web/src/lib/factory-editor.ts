@@ -471,13 +471,23 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   function setProductionTarget(id: string, itemId: string, rate: number | null) {
     editMachine(id, (node) => {
       if (!isFlowGroup(node)) return node;
-      const targets = { ...node.flow?.targets };
-      if (rate === null) delete targets[itemId];
-      else targets[itemId] = rate;
+      // One recipe workload controls every coproduct. Editing a different output
+      // replaces the anchor instead of leaving conflicting independent targets.
+      const targets = rate === null ? {} : { [itemId]: rate };
       const next = { ...node, flow: { ...node.flow, targets } };
       validateFlowSettings(next, catalog);
       return next;
     });
+  }
+  function setProductionLocked(id: string, locked: boolean) {
+    const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
+    if (!node || !isFlowGroup(node)) return;
+    if (locked && Object.keys(node.flow?.targets ?? {}).length) return;
+    const output = resolveProduction(node, catalog).outputs.find(
+      (rate) => (rate.perMinute ?? 0) > 0,
+    );
+    if (locked && !output) return;
+    setProductionTarget(id, output?.itemId ?? "", locked ? output!.perMinute : null);
   }
   function setSplitterProgram(id: string, program: SplitterProgram) {
     const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
@@ -744,6 +754,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     setOperatingSetting,
     setMachineCount,
     setProductionTarget,
+    setProductionLocked,
     getNode: (id: string) => history.getSnapshot().state.nodes.find((node) => node.id === id),
     canPlace,
     placeNode,
