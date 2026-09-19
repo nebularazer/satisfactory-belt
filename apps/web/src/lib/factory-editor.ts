@@ -67,11 +67,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   const history = new EditHistory<FactoryDocument>(
     resizeFlowGroups(reconcileTransportConnections(initialDocument), catalog),
   );
-  function updateDocument(
-    transform: (state: FactoryDocument) => FactoryDocument,
-    group?: object,
-    editedGroupId?: string,
-  ) {
+  function updateDocument(transform: (state: FactoryDocument) => FactoryDocument, group?: object) {
     history.update((before) => {
       const next = transform(before);
       if (next === before) return before;
@@ -85,12 +81,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
             link.input === before.links[i]!.input && link.output === before.links[i]!.output,
         );
       if (sameNodes && sameLinks && next.externalFlows === before.externalFlows) return next;
-      const edited = next.nodes.find((node) => node.id === editedGroupId);
-      return resizeFlowGroups(
-        next,
-        catalog,
-        edited && isFlowGroup(edited) && !isProductionLocked(edited) ? editedGroupId : undefined,
-      );
+      return resizeFlowGroups(next, catalog, before);
     }, group);
   }
   let semanticPorts: SemanticPort[] = [];
@@ -432,22 +423,17 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   function editMachine(
     id: string,
     change: (node: Exclude<FactoryNode, { kind: "logistics" }>) => FactoryNode,
-    preserveUnlockedSettings = false,
   ) {
     if (controller.getSnapshot().interaction !== "idle") return;
-    updateDocument(
-      (current) => {
-        const node = current.nodes.find((entry) => entry.id === id);
-        if (!node || node.kind === "logistics") return current;
-        const next = change(node);
-        if (next === node || settingsKey(next) === settingsKey(node)) return current;
-        // Validate before publishing to history or notifying canvas subscribers.
-        resolveFactoryNode(next, catalog);
-        return { ...current, nodes: current.nodes.map((entry) => (entry === node ? next : entry)) };
-      },
-      undefined,
-      preserveUnlockedSettings ? id : undefined,
-    );
+    updateDocument((current) => {
+      const node = current.nodes.find((entry) => entry.id === id);
+      if (!node || node.kind === "logistics") return current;
+      const next = change(node);
+      if (next === node || settingsKey(next) === settingsKey(node)) return current;
+      // Validate before publishing to history or notifying canvas subscribers.
+      resolveFactoryNode(next, catalog);
+      return { ...current, nodes: current.nodes.map((entry) => (entry === node ? next : entry)) };
+    });
   }
   function setOperatingSetting(
     id: string,
@@ -455,41 +441,34 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     setting: MachineSetting,
     value: number,
   ) {
-    editMachine(
-      id,
-      (node) => {
-        const next = setMachineSetting(node, catalog, scope, setting, value);
-        if (!isFlowGroup(next)) return next;
-        return {
-          ...next,
-          flow: {
-            ...next.flow,
-            ...(setting === "clockPercent"
-              ? scope === "all"
-                ? { clockPercent: value, memberClocks: undefined }
-                : {
-                    memberClocks: Object.fromEntries(
-                      next.machines.map((member) => [
-                        member.id,
-                        member.clockPercent || next.flow?.clockPercent || 100,
-                      ]),
-                    ),
-                  }
-              : {}),
-          },
-        };
-      },
-      true,
-    );
+    editMachine(id, (node) => {
+      const next = setMachineSetting(node, catalog, scope, setting, value);
+      if (!isFlowGroup(next)) return next;
+      return {
+        ...next,
+        flow: {
+          ...next.flow,
+          ...(setting === "clockPercent"
+            ? scope === "all"
+              ? { clockPercent: value, memberClocks: undefined }
+              : {
+                  memberClocks: Object.fromEntries(
+                    next.machines.map((member) => [
+                      member.id,
+                      member.clockPercent || next.flow?.clockPercent || 100,
+                    ]),
+                  ),
+                }
+            : {}),
+        },
+      };
+    });
   }
   function setMachineCount(id: string, count: number) {
-    editMachine(
-      id,
-      (node) =>
-        isFlowGroup(node) && isProductionLocked(node)
-          ? (rebalanceFlowGroup(node, catalog, count) ?? node)
-          : resizeMachineGroup(node, count, () => crypto.randomUUID()),
-      true,
+    editMachine(id, (node) =>
+      isFlowGroup(node) && isProductionLocked(node)
+        ? (rebalanceFlowGroup(node, catalog, count) ?? node)
+        : resizeMachineGroup(node, count, () => crypto.randomUUID()),
     );
   }
   function setFlowClock(id: string, clock: number) {
@@ -783,11 +762,8 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     setMachineCount,
     setFlowClock,
     rebalanceAt100: (id: string) =>
-      editMachine(
-        id,
-        (node) =>
-          isFlowGroup(node) ? (rebalanceFlowGroupAtClock(node, catalog, 100) ?? node) : node,
-        true,
+      editMachine(id, (node) =>
+        isFlowGroup(node) ? (rebalanceFlowGroupAtClock(node, catalog, 100) ?? node) : node,
       ),
     setProductionTarget,
     setProductionLocked,

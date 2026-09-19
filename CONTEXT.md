@@ -109,7 +109,10 @@ counts stay fixed during allocation. Connected placement initially sizes a group
 to the anchor port’s remaining supply or demand, preferring uniform underclocking.
 Sizing is calculated simultaneously from output targets and preferred clocks,
 independent of construction order. An unlocked operating edit holds that group's
-settings for the current solve without saving a target. Targets describe gross output;
+settings for the current solve without saving a target. The solver derives edited
+groups from the before/after document, covering count, clock, purity, tier, recipe,
+machine and Sloop changes through every editor command. Layout and lock toggles
+are excluded from this comparison. Targets describe gross output;
 connected consumers use that output, and an unconnected target is the final product.
 Automatic suppliers meet combined demand, including extraction and recycling loops.
 Finite extractors expose available supply; automatic downstream groups use it.

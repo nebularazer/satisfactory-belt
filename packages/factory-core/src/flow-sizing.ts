@@ -145,15 +145,32 @@ export function reconcileFlowTargets(node: FactoryNode, catalog: GameCatalog): F
     : { ...node, flow: { ...node.flow, targets: Object.fromEntries(retained) } };
 }
 
-/** Solve each connected component from persistent constraints and an optional current edit.
+/** Solve each connected component from persistent constraints and authored configuration edits.
+ * Comparing documents here keeps every editor command on the same sizing rules.
  * Missing inputs are explicit slack: incomplete plans can be extended backwards without
  * silently changing a production target.
  */
 export function resizeFlowGroups(
   document: FactoryDocument,
   catalog: GameCatalog,
-  editedGroupId?: string,
+  previous?: FactoryDocument,
 ): FactoryDocument {
+  const previousNodes = new Map(previous?.nodes.map((node) => [node.id, node]));
+  const editedGroups = new Set(
+    document.nodes
+      .filter(isFlowGroup)
+      .filter((node) => {
+        const before = previousNodes.get(node.id);
+        return (
+          before &&
+          before !== node &&
+          isFlowGroup(before) &&
+          !isProductionLocked(node) &&
+          productionSettingsKey(before) !== productionSettingsKey(node)
+        );
+      })
+      .map((node) => node.id),
+  );
   const adjacent = new Map(document.nodes.map((node) => [node.id, new Set<string>()]));
   for (const link of document.links) {
     adjacent.get(link.output.nodeId)?.add(link.input.nodeId);
@@ -186,7 +203,7 @@ export function resizeFlowGroups(
       links: document.links.filter((link) => ids.has(link.output.nodeId)),
       externalFlows: document.externalFlows?.filter((entry) => ids.has(entry.port.nodeId)),
     };
-    for (const next of solveComponent(component, catalog, editedGroupId))
+    for (const next of solveComponent(component, catalog, editedGroups))
       replacements.set(next.id, next);
   }
   return replacements.size
@@ -194,10 +211,20 @@ export function resizeFlowGroups(
     : document;
 }
 
+/** Layout and output locks are not production configuration edits. */
+function productionSettingsKey(node: FlowGroup): string {
+  const { x: _x, y: _y, flow, ...configuration } = node;
+  return settingsKey({
+    ...configuration,
+    clockPercent: flow?.clockPercent,
+    memberClocks: flow?.memberClocks,
+  });
+}
+
 function solveComponent(
   document: FactoryDocument,
   catalog: GameCatalog,
-  editedGroupId?: string,
+  editedGroups: ReadonlySet<string>,
 ): readonly FactoryNode[] {
   const plan = prepareFlowPlan(document, catalog);
   if (plan.invalidLinks().length) return [];
@@ -246,7 +273,7 @@ function solveComponent(
   // unconstrained upstream factory merely to create surplus.
   const supplied = new Set(
     groups
-      .filter((node) => isProductionLocked(node) || node.id === editedGroupId)
+      .filter((node) => isProductionLocked(node) || editedGroups.has(node.id))
       .map((node) => node.id),
   );
   const supplyQueue = [...supplied];
@@ -261,7 +288,7 @@ function solveComponent(
   // the plan's demand. Derive this from topology on each solve; never save a lock.
   const requirements = new Map(groups.map((node) => [node.id, node.flow?.targets ?? {}]));
   for (const node of groups) {
-    if (node.id !== editedGroupId && (supplied.has(node.id) || hasConsumer(node.id))) continue;
+    if (!editedGroups.has(node.id) && (supplied.has(node.id) || hasConsumer(node.id))) continue;
     requirements.set(
       node.id,
       Object.fromEntries(
@@ -277,7 +304,7 @@ function solveComponent(
   for (const node of groups) {
     // Averaging members at 100% preserves mixed purities/amplification when count is fixed.
     const template =
-      node.id === editedGroupId && node.machines.some((member) => member.clockPercent > 0)
+      editedGroups.has(node.id) && node.machines.some((member) => member.clockPercent > 0)
         ? node.machines
         : node.machines.map((m) => ({
             ...m,
@@ -353,7 +380,7 @@ function solveComponent(
     if (requested.length) constraints[cap] = { max: Math.min(capacity, Math.max(...requested)) };
     // An unlocked operating edit defines this solve's production without saving a lock.
     // Preserve its exact members/settings; other unlocked groups can still follow it.
-    if (node.id === editedGroupId)
+    if (editedGroups.has(node.id))
       constraints[cap] = {
         equal: node.machines.reduce((sum, member) => sum + member.clockPercent / 100, 0),
       };
@@ -432,7 +459,7 @@ function solveComponent(
   }
   if (!result) return [];
   return groups.flatMap((node) => {
-    if (node.id === editedGroupId) return [];
+    if (editedGroups.has(node.id)) return [];
     const solved = Math.max(0, Number(result[`group:${node.id}`]) || 0);
     const equivalent = Math.abs(solved - Math.round(solved)) < 1e-8 ? Math.round(solved) : solved;
     const clockPercent = node.flow?.clockPercent ?? 100;

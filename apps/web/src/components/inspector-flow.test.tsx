@@ -1,3 +1,4 @@
+import { createMachineMembers } from "@satisfactory-belt/factory-core";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSyncExternalStore } from "react";
@@ -228,4 +229,56 @@ it("shows calculated coproducts and locks or unlocks the entire recipe without i
   await enter("Polymer Resin", "400");
   rates("800", "400");
   expect(lock().getAttribute("aria-pressed")).toBe("true");
+});
+
+it("propagates miner tier and purity clicks through the inspector, including member scope", async () => {
+  const user = userEvent.setup();
+  const { assets, document, smelter } = minerFlowFixture();
+  assets.catalog.items.Desc_CrystalShard_C = {
+    ...assets.catalog.items.iron!,
+    id: "Desc_CrystalShard_C",
+  };
+  assets.catalog.extractors.mk1 = {
+    ...assets.catalog.extractors.miner!,
+    id: "mk1",
+    name: "Miner Mk.1",
+    baseRate: 60,
+  };
+  assets.catalog.extractors.mk3 = {
+    ...assets.catalog.extractors.miner!,
+    id: "mk3",
+    name: "Miner Mk.3",
+    baseRate: 240,
+  };
+  const editor = createFactoryEditor(assets.catalog, {
+    ...document,
+    nodes: [document.nodes[0]!, { ...smelter, machines: createMachineMembers(4) }],
+  });
+  function Harness() {
+    const snapshot = useSyncExternalStore(editor.history.subscribe, editor.history.getSnapshot);
+    return <InspectorBody node={snapshot.state.nodes[0]!} editor={editor} assets={assets} />;
+  }
+  render(<Harness />);
+  for (const [button, count, rate] of [
+    ["Pure", 8, "240"],
+    ["Mk.3", 16, "480"],
+    ["Impure", 4, "120"],
+    ["Normal", 8, "240"],
+    ["Mk.1", 2, "60"],
+    ["Add machine", 4, "120"],
+  ] as const) {
+    // oxlint-disable-next-line no-await-in-loop -- Each click edits the state used by the next click.
+    await user.click(screen.getByRole("button", { name: button }));
+    expect(editor.getLinkRates("ore")).toEqual([rate]);
+    expect(editor.getNode(smelter.id)).toMatchObject({
+      machines: Array.from({ length: count }, () => expect.objectContaining({ clockPercent: 100 })),
+    });
+    expect(lock().getAttribute("aria-pressed")).toBe("false");
+  }
+  await user.click(screen.getByRole("tab", { name: "Machine 1" }));
+  await user.click(screen.getByRole("button", { name: "Pure" }));
+  expect(editor.getLinkRates("ore")).toEqual(["180"]);
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    machines: Array.from({ length: 6 }, () => expect.objectContaining({ clockPercent: 100 })),
+  });
 });
