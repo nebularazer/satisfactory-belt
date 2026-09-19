@@ -30,6 +30,13 @@ it("edits targets and clock, with count buttons preserving production and no mac
     return <InspectorBody node={snapshot.state.nodes[0]!} editor={editor} assets={assets} />;
   }
   render(<Harness />);
+  await user.click(screen.getByRole("button", { name: "How clock speed works" }));
+  expect((await screen.findByRole("tooltip")).textContent).toContain("3 miners at 83⅓%");
+  await user.keyboard("{Escape}");
+  expect(screen.queryByText("Running clock")).toBeNull();
+  const details = screen.getByText(/Supply details/).closest("details");
+  expect(details?.open).toBe(false);
+  expect(document.querySelector('[aria-label="Production rates"] .text-destructive')).toBeNull();
   async function enter(label: string, value: string) {
     const input = screen.getByRole("textbox", { name: label });
     await user.clear(input);
@@ -39,50 +46,59 @@ it("edits targets and clock, with count buttons preserving production and no mac
   await enter("Iron Ingot output rate", "150");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
   expect(screen.queryByRole("textbox", { name: "Machine limit" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Add machine" }));
+  await user.click(screen.getByRole("button", { name: "Lower clock: add one machine" }));
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
   expect(editor.getNode(smelter.id)).toMatchObject({
     machines: Array.from({ length: 6 }, () =>
       expect.objectContaining({ clockPercent: expect.closeTo(250 / 3) }),
     ),
   });
-  await enter("Maximum clock", "200");
+  await enter("Clock speed", "200");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
   expect(editor.getNode(smelter.id)).toMatchObject({
     machines: Array.from({ length: 3 }, () =>
       expect.objectContaining({ clockPercent: expect.closeTo(500 / 3) }),
     ),
   });
-  expect(screen.getByLabelText("Running clock").textContent).toBe("166⅔%");
-  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Maximum clock" }).value).toBe(
-    "200",
-  );
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("166⅔");
+  expect(screen.queryByRole("textbox", { name: "Maximum clock" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Rebalance at 100%" }));
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
-  expect(screen.getByLabelText("Running clock").textContent).toBe("100%");
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("100");
   expect(editor.getNode(smelter.id)).toMatchObject({
     machines: Array.from({ length: 5 }, () =>
       expect.objectContaining({ clockPercent: expect.closeTo(100, 8) }),
     ),
   });
   act(() => editor.historyCommand("undo"));
-  expect(screen.getByLabelText("Running clock").textContent).toBe("166⅔%");
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("166⅔");
   await enter("Iron Ingot output rate", "300");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("300");
   expect(editor.getNode(smelter.id)).toMatchObject({
     machines: Array.from({ length: 5 }, () => expect.objectContaining({ clockPercent: 200 })),
   });
   expect(
-    screen.getByRole<HTMLButtonElement>("button", { name: "Remove last machine" }).disabled,
+    screen.getByRole<HTMLButtonElement>("button", { name: "Raise clock: remove one machine" })
+      .disabled,
   ).toBe(false);
-  await user.click(screen.getByRole("button", { name: "Remove last machine" }));
+  await user.click(screen.getByRole("button", { name: "Raise clock: remove one machine" }));
   expect(editor.getNode(smelter.id)).toMatchObject({
     machines: Array.from({ length: 4 }, () => expect.objectContaining({ clockPercent: 250 })),
   });
   expect(
-    screen.getByRole<HTMLButtonElement>("button", { name: "Remove last machine" }).disabled,
+    screen.getByRole<HTMLButtonElement>("button", { name: "Raise clock: remove one machine" })
+      .disabled,
   ).toBe(true);
   expect(screen.queryByText(/Target shortfall/)).toBeNull();
+  const clockInput = screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" });
+  await user.click(clockInput);
+  await user.keyboard("{ArrowDown}");
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    machines: Array.from({ length: 5 }, () => expect.objectContaining({ clockPercent: 200 })),
+  });
+  await user.keyboard("{ArrowUp}");
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("300");
+  await user.tab();
   act(() => editor.setProductionTarget(smelter.id, "iron", 500 / 3));
   const unchanged = editor.history.getSnapshot().state;
   expect(field("Iron Ingot").value).toBe("166⅔");

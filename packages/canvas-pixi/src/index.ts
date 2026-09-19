@@ -133,6 +133,7 @@ export async function mountCanvas(
       palette,
       linkLabels,
       options.getLinkRates,
+      resolution,
     );
     if (items !== previousItems) {
       const ids = new Set(items.map((item) => item.id));

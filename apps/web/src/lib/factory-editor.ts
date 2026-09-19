@@ -470,9 +470,9 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
         : resizeMachineGroup(node, count, () => crypto.randomUUID()),
     );
   }
-  function rebalanceAt100(id: string) {
+  function setFlowClock(id: string, clock: number) {
     editMachine(id, (node) =>
-      isFlowGroup(node) ? (rebalanceFlowGroupAtClock(node, catalog, 100) ?? node) : node,
+      isFlowGroup(node) ? (rebalanceFlowGroupAtClock(node, catalog, clock) ?? node) : node,
     );
   }
   function setProductionTarget(id: string, itemId: string, rate: number | null) {
@@ -554,13 +554,6 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       throw new Error("This choice no longer supports the connection. Choose another result.");
     if (source && connection)
       node = sizeFlowPlacement(history.getSnapshot().state, catalog, source, node, connection);
-    if (!source && isFlowGroup(node)) {
-      const output = resolveProduction(node, catalog).outputs[0];
-      node = {
-        ...node,
-        flow: output?.perMinute ? { targets: { [output.itemId]: output.perMinute } } : {},
-      };
-    }
     controller.cancel();
     updateDocument((current) =>
       reconcileTransportConnections({
@@ -759,7 +752,8 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,
     setMachineCount,
-    rebalanceAt100,
+    setFlowClock,
+    rebalanceAt100: (id: string) => setFlowClock(id, 100),
     setProductionTarget,
     setProductionLocked,
     getNode: (id: string) => history.getSnapshot().state.nodes.find((node) => node.id === id),

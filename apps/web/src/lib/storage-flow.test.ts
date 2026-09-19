@@ -4,7 +4,7 @@ import { storageFlowFixture } from "../test/storage-flow-fixture";
 import { createFactoryEditor } from "./factory-editor";
 
 it.each([false, true])(
-  "collects surplus without targets, with or without a splitter (%s)",
+  "storage collects surplus after locked production, with or without a splitter (%s)",
   (split) => {
     const { assets, document } = storageFlowFixture(split);
     const editor = createFactoryEditor(assets.catalog, document);
@@ -17,6 +17,7 @@ it.each([false, true])(
       { kind: "manufacturing", recipeId: "ingot", machineId: "smelter" },
       { x: 600, y: 400 },
     );
+    editor.setProductionTarget(consumer.id, "iron", 30);
     const source = {
       nodeId: split ? "splitter" : "miner",
       portKey: split ? "output:1" : "output:copper",

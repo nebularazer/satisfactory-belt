@@ -1,3 +1,4 @@
+/* oxlint-disable oxc/no-map-spread -- Test fixtures keep their source documents immutable. */
 import { createMachineMembers, resolveProduction } from "@satisfactory-belt/factory-core";
 import { expect, it } from "vitest";
 
@@ -7,7 +8,18 @@ import { createFactoryEditor } from "./factory-editor";
 const recipe = { kind: "manufacturing", recipeId: "ingot", machineId: "smelter" } as const;
 
 it("sizes downstream placement from remaining supply and keeps the edit atomic", () => {
-  const { assets, document } = minerFlowFixture();
+  const { assets, document: initial } = minerFlowFixture();
+  const document = {
+    ...initial,
+    nodes: initial.nodes.map((node) => ({
+      ...node,
+      flow: {
+        targets: {
+          [node.kind === "extractor" ? "copper" : "iron"]: node.kind === "extractor" ? 120 : 30,
+        },
+      },
+    })),
+  };
   const editor = createFactoryEditor(assets.catalog, document);
   const node = editor.placeNode(
     recipe,
@@ -222,3 +234,45 @@ it("sizes a downstream recipe from available material while exposing its unfinis
     }),
   );
 });
+
+it.each([false, true])(
+  "new nodes start unlocked and suppliers follow demand regardless of placement order (%s)",
+  (consumerFirst) => {
+    const { assets } = minerFlowFixture();
+    const editor = createFactoryEditor(assets.catalog, { nodes: [], links: [] });
+    const addMiner = () =>
+      editor.placeNode(
+        { kind: "extractor", extractorId: "miner", resourceId: "copper" },
+        { x: 0, y: 0 },
+      );
+    const addConsumer = () => editor.placeNode(recipe, { x: 400, y: 0 });
+    const first = consumerFirst ? addConsumer() : addMiner();
+    const second = consumerFirst ? addMiner() : addConsumer();
+    const miner = consumerFirst ? second : first;
+    const consumer = consumerFirst ? first : second;
+    for (const node of [miner, consumer]) {
+      if (node.kind !== "extractor" && node.kind !== "manufacturing")
+        throw new Error("Expected production group");
+      expect(node.flow?.targets).toBeUndefined();
+    }
+    editor.setProductionTarget(consumer.id, "iron", 240);
+    editor.connect(
+      { nodeId: miner.id, portKey: "output:copper" },
+      { nodeId: consumer.id, portKey: "input:copper" },
+    );
+    expect(editor.getPortRate(miner.id, "output:copper")).toBe("240");
+    const resized = editor.getNode(miner.id);
+    expect(resized?.kind === "extractor" && resized.flow?.targets).toBeUndefined();
+    editor.setProductionLocked(consumer.id, false);
+    expect(editor.getPortRate(miner.id, "output:copper")).toBe("240");
+    // Without any locks, the final product still supplies demand for automatic suppliers.
+    const extra = editor.placeNode(recipe, { x: 400, y: 400 });
+    editor.connect(
+      { nodeId: miner.id, portKey: "output:copper" },
+      { nodeId: extra.id, portKey: "input:copper" },
+    );
+    expect(editor.getPortRate(miner.id, "output:copper")).toBe("270");
+    editor.historyCommand("undo");
+    expect(editor.getPortRate(miner.id, "output:copper")).toBe("240");
+  },
+);

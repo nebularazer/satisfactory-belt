@@ -2,7 +2,6 @@
 import {
   formatPlanningNumber,
   isFlowGroup,
-  rebalanceFlowGroup,
   commonMatrices,
   commonSetting,
   machineCapabilities,
@@ -19,8 +18,10 @@ import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
 import { InspectorFlow } from "@/components/inspector-flow";
+import { InspectorFlowClock } from "@/components/inspector-flow-clock";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorStatistics } from "@/components/inspector-statistics";
+import { InspectorSupplyDetails } from "@/components/inspector-supply-details";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,14 +48,6 @@ export function InspectorBody({
   const members = node.kind === "logistics" ? null : scopedMachines(node, scope);
   const capabilities = node.kind === "logistics" ? null : machineCapabilities(node, assets.catalog);
   const production = resolveProduction(node, assets.catalog, scope);
-  const clockPercents = new Set(
-    isFlowGroup(node)
-      ? (members ?? []).map(
-          (member) => node.flow?.memberClocks?.[member.id] ?? node.flow?.clockPercent ?? 100,
-        )
-      : [],
-  );
-  const configuredClock = clockPercents.size === 1 ? clockPercents.values().next().value! : null;
   // Production is configured potential; logistics rates come from the planned allocation.
   const networkRates =
     node.kind === "logistics" ||
@@ -123,7 +116,7 @@ export function InspectorBody({
                 ))}
               </div>
             </TabsList>
-            {capabilities?.groupable && (
+            {capabilities?.groupable && !isFlowGroup(node) && (
               <fieldset
                 aria-label="Machine count"
                 className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
@@ -133,12 +126,8 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Remove last machine"
-                  title={isFlowGroup(node) ? "Fewer machines, higher clock" : "Remove last machine"}
-                  disabled={
-                    node.machines.length <= 1 ||
-                    (isFlowGroup(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
-                  }
+                  title="Remove last machine"
+                  disabled={node.machines.length <= 1}
                   onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
                 >
                   <MinusIcon />
@@ -148,12 +137,8 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Add machine"
-                  title={isFlowGroup(node) ? "More machines, lower clock" : "Add machine"}
-                  disabled={
-                    node.machines.length >= MAX_MACHINE_COUNT ||
-                    (isFlowGroup(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
-                  }
+                  title="Add machine"
+                  disabled={node.machines.length >= MAX_MACHINE_COUNT}
                   onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
                 >
                   <PlusIcon />
@@ -222,45 +207,23 @@ export function InspectorBody({
                   />
                 </div>
               )}
-              {capabilities.clock && isFlowGroup(node) && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
-                    <span>Running clock</span>
-                    <output aria-label="Running clock" className="text-sm font-medium tabular-nums">
-                      {commonSetting(members, "clockPercent") === null
-                        ? "Mixed"
-                        : `${formatPlanningNumber(commonSetting(members, "clockPercent")!)}%`}
-                    </output>
-                  </div>
-                  {scope === "all" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      title="Use the fewest whole machines without overclocking, preserving output"
-                      onClick={() => editor.rebalanceAt100(node.id)}
-                    >
-                      Rebalance at 100%
-                    </Button>
-                  )}
-                </div>
-              )}
-              {capabilities.clock && (
-                <InspectorNumberField
-                  key={`${scope}:clock`}
-                  label={isFlowGroup(node) ? "Maximum clock" : "Clock speed"}
-                  value={
-                    isFlowGroup(node) ? configuredClock : commonSetting(members, "clockPercent")
-                  }
-                  revision={node.machines}
-                  min={1}
-                  max={250}
-                  unit="%"
-                  onCommit={(value) =>
-                    editor.setOperatingSetting(node.id, scope, "clockPercent", value)
-                  }
-                />
-              )}
+              {capabilities.clock &&
+                (isFlowGroup(node) ? (
+                  <InspectorFlowClock node={node} editor={editor} assets={assets} />
+                ) : (
+                  <InspectorNumberField
+                    key={`${scope}:clock`}
+                    label="Clock speed"
+                    value={commonSetting(members, "clockPercent")}
+                    revision={node.machines}
+                    min={1}
+                    max={250}
+                    unit="%"
+                    onCommit={(value) =>
+                      editor.setOperatingSetting(node.id, scope, "clockPercent", value)
+                    }
+                  />
+                ))}
               {capabilities.sloopSlots > 0 && (
                 <InspectorNumberField
                   key={`${scope}:sloops`}
@@ -309,6 +272,7 @@ export function InspectorBody({
             )
           )}
         </section>
+        <InspectorSupplyDetails node={node} editor={editor} assets={assets} />
         <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
       </TabsContent>
     </Tabs>

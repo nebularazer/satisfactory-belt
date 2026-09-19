@@ -115,14 +115,20 @@ Finite extractors expose available supply; automatic downstream groups use it.
 A machine-count edit preserves production by adjusting clock speed within 1–250%.
 It saves a preferred clock, never a count limit. Later demand changes resize the group
 using that clock, underclocking as needed to balance whole counts. Standalone recipes
-and extractors start with a visible output target.
+and extractors start unlocked. Terminal production provides demand for automatic
+suppliers when no locked supply feeds it; these requirements are derived, never saved
+as hidden locks.
 Shortages remain visible instead of overriding constraints. Storage only collects
 surplus. The inspector has one production-rate lock for the entire recipe: editing
 one output locks it and updates coproducts by recipe ratio; unlocking removes the
 target and displays the calculated rates. There is no temporary-edit anchor or generic
 node lock. Link text has a constant canvas-space font size and scales with zoom.
 
-Running clock displays actual utilization; Maximum clock is the sizing ceiling.
-Rebalance at 100% preserves output and lock state while selecting whole machines
-without overclocking. Clock/rate displays use common fraction glyphs or two decimal
-places; editing uses full decimals without committing formatting on focus/blur.
+Clock speed shows the actual group clock. Its − button adds a machine and lowers
+the clock; + removes a machine and raises it. Typed percentages are requests:
+whole counts and exact production take precedence, so the displayed clock may adjust.
+An info tooltip explains this with an example. Rebalance at 100% preserves output
+and lock state while selecting whole machines without overclocking. Clock/rate
+displays use common fractions or two decimals; editing uses full decimals without
+committing formatting on focus/blur. Supply details are collapsed and neutral.
+Link text render resolution follows zoom/display density to remain sharp.

@@ -1,3 +1,4 @@
+/* oxlint-disable oxc/no-map-spread -- Test fixtures keep their source documents immutable. */
 import { createMachineMembers } from "@satisfactory-belt/factory-core";
 import { expect, it } from "vitest";
 
@@ -5,7 +6,18 @@ import { minerFlowFixture } from "../test/flow-fixture";
 import { createFactoryEditor } from "./factory-editor";
 
 it("shows known miner production and downstream allocation before exports are configured", () => {
-  const { assets, document } = minerFlowFixture();
+  const { assets, document: initial } = minerFlowFixture();
+  const document = {
+    ...initial,
+    nodes: initial.nodes.map((node) => ({
+      ...node,
+      flow: {
+        targets: {
+          [node.kind === "extractor" ? "copper" : "iron"]: node.kind === "extractor" ? 120 : 30,
+        },
+      },
+    })),
+  };
   const editor = createFactoryEditor(assets.catalog, document);
   expect(editor.getFlowAnalysis().status).toBe("infeasible");
   expect(editor.getPortRate("miner", "output:copper")).toBe("120");
@@ -82,8 +94,12 @@ it("shows a shortage without replacing configured demand with the supplied rate"
   const editor = createFactoryEditor(assets.catalog, {
     ...document,
     nodes: [
-      { ...miner, machines: createMachineMembers(1, { clockPercent: 1 }) },
-      { ...smelter, machines: createMachineMembers(5) },
+      {
+        ...miner,
+        machines: createMachineMembers(1, { clockPercent: 1 }),
+        flow: { targets: { copper: 1.2 } },
+      },
+      { ...smelter, machines: createMachineMembers(5), flow: { targets: { iron: 150 } } },
     ],
   });
   expect(editor.getLinkRates("ore")).toEqual(["1.2"]);
@@ -117,7 +133,7 @@ it("rebalances an unlocked standalone group while preserving its production", ()
   const { assets, miner } = minerFlowFixture();
   const node = { ...miner, machines: createMachineMembers(2, { clockPercent: 125 }) };
   const editor = createFactoryEditor(assets.catalog, { nodes: [node], links: [] });
-  editor.rebalanceAt100(node.id);
+  editor.setFlowClock(node.id, 100);
   const after = editor.getNode(node.id);
   if (after?.kind !== "extractor") throw new Error("Expected miner");
   expect(after.machines).toHaveLength(3);

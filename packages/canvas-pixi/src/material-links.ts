@@ -43,6 +43,7 @@ export function drawMaterialLinks(
   palette: CanvasPalette,
   labels: Map<string, Text>,
   getLinkRates?: (id: string) => readonly string[],
+  resolution = 1,
 ) {
   lines.clear();
   handles.clear();
@@ -114,6 +115,8 @@ export function drawMaterialLinks(
         label.position.set(midpoint.x, midpoint.y);
         // Link graphics live in screen space; labels retain their canvas-space size.
         label.scale.set(camera.zoom);
+        const textResolution = resolution * Math.max(1, 2 ** Math.ceil(Math.log2(camera.zoom)));
+        if (label.resolution !== textResolution) label.resolution = textResolution;
       }
     }
     if (!selected || link.id === null) continue;

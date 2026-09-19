@@ -8,8 +8,11 @@ references; refreshing restores them.
 ## Targets, clock and automatic sizing
 
 A production group's inspector displays current output rates in equal-width fields,
-with one shared production lock. Running clock shows the actual calculated clock;
-Maximum clock controls the ceiling used to size whole machines. Unlocked fields follow the connected
+with one shared production lock and a single Clock speed field showing the actual
+calculated clock. − adds a machine and lowers the clock; + removes one and raises it.
+Typing a percentage requests the fewest whole machines able to meet output at or
+below that speed; the displayed clock then adjusts to preserve output exactly.
+The adjacent info tooltip explains the controls and rounding with a worked example. Unlocked fields follow the connected
 plan. Locking captures the current production; editing any output rate locks the recipe
 at that rate and updates all coproducts in their fixed recipe ratio. Unlocking clears the
 recipe's target. Merely focusing or blurring an unchanged field never locks it.
@@ -38,9 +41,13 @@ otherwise at most two decimal places (153.85), without trailing zeros. Inputs sh
 the full decimal value on focus. Focusing and leaving an unchanged field never
 commits a rounded value; calculations retain full precision.
 
-Standalone recipes and extractors start with a visible target equal to their initial
-output. This provides the starting supply for resource-first plans. Connected placements
-are automatic. Automatic extractors in a demand-led plan resize with demand. Individual
+Standalone recipes and extractors start unlocked at their default configuration.
+Only an explicit output edit or lock action saves a production target. Without a
+locked supply feeding a terminal production group, that group’s current output
+provides demand for automatic suppliers. This is derived from graph topology each
+time, never saved as a hidden lock. Locked supplies drive their automatic downstream
+groups; set a consumer output explicitly when reserving a particular rate.
+Connected placements are sized from the source port’s available supply or demand. Automatic extractors in a demand-led plan resize with demand. Individual
 member edits retain member clock preferences; bulk clock edits replace those preferences.
 
 Dragging from an input sizes the supplier for the required material. Dragging from
@@ -66,8 +73,9 @@ The JavaScript LP solver is contained in this module; callers do not manage its 
 inferred materials and cached configured-rate allocation. Per-material max flow serves
 recipe inputs and exports first, explicit disposal second, and storage last. Link/port
 labels are plain numbers. Link labels use a constant canvas-space font size and scale
-with zoom; they have no screen-space size compensation. Recipe output numbers are configured potential, not actual
-starvation-limited throughput. Inspector shortages make unfinished requirements visible.
+with zoom; they have no screen-space size compensation. Their render resolution
+tracks zoom and display density, matching node text. Recipe output numbers are configured potential, not actual
+starvation-limited throughput. Unmet requirements remain available in a collapsed, neutral Supply details section.
 
 Storage implicitly collects surplus and forwards connected flow. It has no production
 target and contributes no demand to sizing. Collection is an accumulation rate, not a

@@ -22,13 +22,6 @@ export function InspectorFlow({
 }) {
   const rates = flowOutputRates(node, assets.catalog);
   const locked = Object.keys(node.flow?.targets ?? {}).length > 0;
-  const issues = editor
-    .getFlowAnalysis()
-    .issues.filter(
-      (issue) =>
-        issue.nodeId === node.id &&
-        (issue.code === "missing-input" || issue.code === "target-shortfall"),
-    );
   return (
     <section aria-label="Production rates" className="space-y-3">
       <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
@@ -57,13 +50,6 @@ export function InspectorFlow({
           value={output.perMinute}
           onCommit={(value) => editor.setProductionTarget(node.id, output.itemId, value)}
         />
-      ))}
-      {issues.map((issue) => (
-        <output key={`${issue.code}:${issue.itemId}`} className="block text-xs text-destructive">
-          {issue.code === "target-shortfall" ? "Target shortfall" : "Missing input"}:{" "}
-          {assets.catalog.items[issue.itemId!]?.name} ·{" "}
-          {issue.perMinute == null ? "—" : formatPlanningNumber(issue.perMinute)}
-        </output>
       ))}
     </section>
   );

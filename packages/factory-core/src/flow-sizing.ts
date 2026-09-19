@@ -168,7 +168,11 @@ export function resizeFlowGroups(document: FactoryDocument, catalog: GameCatalog
         }
     }
     const nodes = document.nodes.filter((entry) => ids.has(entry.id));
-    if (!nodes.some((entry) => isFlowGroup(entry) && Object.keys(entry.flow?.targets ?? {}).length))
+    if (
+      nodes.length === 1 &&
+      !document.links.some((link) => ids.has(link.output.nodeId)) &&
+      !nodes.some((entry) => isFlowGroup(entry) && Object.keys(entry.flow?.targets ?? {}).length)
+    )
       continue;
     const component = {
       ...document,
@@ -207,7 +211,7 @@ function solveComponent(document: FactoryDocument, catalog: GameCatalog): readon
   const missingCosts: Record<string, number> = {};
   const workCosts: Record<string, number> = {};
   const terminalCosts: Record<string, number> = {};
-  const hasTargets = groups.some((node) => Object.keys(node.flow?.targets ?? {}).length);
+
   const outgoing = new Map<string, string[]>();
   for (const link of document.links) {
     const targets = outgoing.get(link.output.nodeId) ?? [];
@@ -239,6 +243,23 @@ function solveComponent(document: FactoryDocument, catalog: GameCatalog): readon
         supplied.add(id);
         supplyQueue.push(id);
       }
+
+  // With no locked source feeding a terminal group, its current production supplies
+  // the plan's demand. Derive this from topology on each solve; never save a lock.
+  const requirements = new Map(groups.map((node) => [node.id, node.flow?.targets ?? {}]));
+  for (const node of groups) {
+    if (supplied.has(node.id) || hasConsumer(node.id)) continue;
+    requirements.set(
+      node.id,
+      Object.fromEntries(
+        resolveProduction(node, catalog)
+          .outputs.filter((rate) => rate.perMinute !== null && rate.perMinute > 0)
+          .map((rate) => [rate.itemId, rate.perMinute!]),
+      ),
+    );
+  }
+  const hasTargets = [...requirements.values()].some((targets) => Object.keys(targets).length);
+  if (!hasTargets) return [];
 
   for (const node of groups) {
     // Averaging members at 100% preserves mixed purities/amplification when count is fixed.
@@ -286,13 +307,13 @@ function solveComponent(document: FactoryDocument, catalog: GameCatalog): readon
         // ingredient; the other ingredients remain visible as missing inputs.
         if (
           !supplied.has(node.id) ||
-          Object.keys(node.flow?.targets ?? {}).length ||
+          Object.keys(requirements.get(node.id)!).length ||
           document.links.some((link) => portId(link.input) === portId(port))
         )
           missingCosts[missing] = 1;
       } else {
         add(`surplus:${k}`, { [k]: -1 });
-        const target = node.flow?.targets?.[port.itemId];
+        const target = requirements.get(node.id)![port.itemId];
         if (target !== undefined) {
           const t = `target:${k}`;
           constraints[t] = { min: target };
@@ -303,13 +324,13 @@ function solveComponent(document: FactoryDocument, catalog: GameCatalog): readon
         // In supply-led plans use remaining finite capacity to make terminal products.
         if (
           supplied.has(node.id) &&
-          !Object.keys(node.flow?.targets ?? {}).length &&
+          !Object.keys(requirements.get(node.id)!).length &&
           !hasConsumer(node.id)
         )
           terminalCosts[variable] = (terminalCosts[variable] ?? 0) - rate;
       }
     }
-    const requested = Object.entries(node.flow?.targets ?? {}).map(
+    const requested = Object.entries(requirements.get(node.id)!).map(
       ([item, target]) =>
         target / (normalized.outputs.find((rate) => rate.itemId === item)?.perMinute ?? Infinity),
     );
