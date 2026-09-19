@@ -165,7 +165,7 @@ export function InspectorBody({
         </div>
       )}
       <TabsContent value={scope} className="space-y-4">
-        <InspectorConfiguration node={node} editor={editor} assets={assets} />
+        <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
         {isFlowGroup(node) && <InspectorFlow node={node} editor={editor} assets={assets} />}
         {node.kind === "facility" && (
           <InspectorFacility node={node} scope={scope} editor={editor} assets={assets} />
@@ -180,7 +180,7 @@ export function InspectorBody({
             capabilities.load ||
             capabilities.matrices) && (
             <div className="space-y-3">
-              {capabilities.purity && (
+              {capabilities.purity && node.kind !== "extractor" && (
                 <InspectorButtonGroup
                   label="Purity"
                   value={

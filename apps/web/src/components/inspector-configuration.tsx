@@ -4,6 +4,8 @@
 import {
   DEFAULT_SPLITTER_PROGRAM,
   SPLITTER_OUTPUTS,
+  commonSetting,
+  scopedMachines,
   withRecipe,
 } from "@satisfactory-belt/factory-core";
 import type {
@@ -19,6 +21,7 @@ import { useEffect, useState } from "react";
 import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorChoice } from "@/components/inspector-choice";
+import { PURITY_OPTIONS } from "@/components/inspector-facility";
 import { Button } from "@/components/ui/button";
 import { InputGroupButton } from "@/components/ui/input-group";
 import { Marker, MarkerContent } from "@/components/ui/marker";
@@ -35,10 +38,12 @@ const fromKey = (key: string): SplitterRule => {
 };
 export function InspectorConfiguration({
   node,
+  scope,
   editor,
   assets,
 }: {
   node: FactoryNode;
+  scope: string;
   editor: Editor;
   assets: GameAssets;
 }) {
@@ -74,7 +79,8 @@ export function InspectorConfiguration({
     const tiers = Object.values(c.extractors).filter((entry) =>
       entry.resourceIds.includes(node.resourceId),
     );
-    if (extractor.resourceIds.length <= 1 && tiers.length <= 1) return null;
+    if (extractor.resourceIds.length <= 1 && tiers.length <= 1 && !extractor.hasPurity) return null;
+    const purity = commonSetting(scopedMachines(node, scope), "purity");
     return (
       <div className="space-y-3">
         {extractor.resourceIds.length > 1 && (
@@ -102,6 +108,16 @@ export function InspectorConfiguration({
               disabled: () => !editor.canReplaceNode({ ...node, extractorId: e.id }),
             }))}
             onChange={(extractorId) => editor.replaceNode({ ...node, extractorId })}
+          />
+        )}
+        {extractor.hasPurity && (
+          <InspectorButtonGroup
+            label="Purity"
+            value={purity === null ? null : String(purity)}
+            options={PURITY_OPTIONS}
+            onChange={(value) =>
+              editor.setOperatingSetting(node.id, scope, "purity", Number(value))
+            }
           />
         )}
       </div>
