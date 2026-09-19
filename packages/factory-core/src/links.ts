@@ -15,7 +15,16 @@ export type MaterialLink = Readonly<{
   /** Selected physical tier; currently informational, never a flow constraint. */
   tier?: number;
 }>;
+/** Declared continuous supply at an input, or export at an output; never implicit. */
+export type ExternalFlow = Readonly<{
+  port: PortReference;
+  itemId: string;
+  perMinute: number;
+}>;
+
+/** All current documents are Flow plans. Physical Build documents are a later feature. */
 export type FactoryDocument = Readonly<{
+  externalFlows?: readonly ExternalFlow[];
   routes?: readonly TransportRoute[];
   depotResearch?: DepotResearch;
   nodes: readonly FactoryNode[];
@@ -182,8 +191,49 @@ export function createConnectionIndex(
     cache.set(key, result);
     return result;
   };
+  // Validate an existing graph from the already-propagated material sets, rather than
+  // repeating a downstream traversal for each link. Preview additions still use compatibility.
+  const invalidPorts = new Set<string>();
+  for (const port of ports) {
+    const items = flows.get(portId(port))!;
+    if (port.direction !== "input" || !isMaterialTransport(port.transport)) continue;
+    if (
+      (port.transport === "pipe" && items.size > 1) ||
+      [...items].some((item) =>
+        port.accepts ? !port.accepts.has(item) : port.itemId !== null && port.itemId !== item,
+      )
+    )
+      invalidPorts.add(portId(port));
+  }
+  function invalidLinks(): readonly string[] {
+    const seen = new Set<string>();
+    return links
+      .filter((link) => {
+        const output = byId.get(portId(link.output)),
+          input = byId.get(portId(link.input));
+        const key = pairKey(link.output, link.input);
+        const duplicate = seen.has(key);
+        seen.add(key);
+        if (
+          duplicate ||
+          output?.direction !== "output" ||
+          input?.direction !== "input" ||
+          !base.compatibility(link.output, link.input).compatible
+        )
+          return true;
+        if (!isMaterialTransport(output.transport))
+          return !compatibility(link.output, link.input, true).compatible;
+        return (
+          invalidPorts.has(portId(input)) ||
+          (output.filter?.rules.every((rule) => rule.kind === "none") ?? false) ||
+          (input.itemId !== null && !filterAllows(output.filter, input.itemId))
+        );
+      })
+      .map((link) => link.id);
+  }
   return {
     compatibility,
+    invalidLinks,
     targets: (ref: PortReference) =>
       base.targets(ref).filter((target) => compatibility(ref, target).compatible),
     materials: (ref: PortReference): ReadonlySet<string> =>

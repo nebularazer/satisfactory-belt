@@ -80,3 +80,41 @@ A material input reserved for transport fuel, distinct from cargo inputs.
 **Project Assembly sink**:
 A Space Elevator accepting the parts for a selected phase without a delivery limit
 in the factory plan. A world has only one Space Elevator.
+
+**Flow plan**:
+A production plan whose nodes represent machine groups and whose material links
+share supply without requiring physical logistics or transport capacities.
+
+**External supply**:
+A declared continuous material input from outside the planned factory, assigned to
+a material input at a specified rate.
+
+**Export**:
+A declared continuous material output leaving the planned factory at a specified
+rate. Finite storage alone is not an export.
+
+**Configured-rate feasibility**:
+Whether the connected plan can sustain all configured production, declared supply
+and exports simultaneously. It does not establish startup feasibility.
+
+**Feasible allocation**:
+One distribution of material across links satisfying the configured rates and
+material conservation; it is not a prediction of machine starvation or timing.
+
+**Planned allocation**:
+A distribution of configured production across connected material ports. Partial
+allocations remain inspectable in unfinished plans. Recipe outputs are configured
+potential, not predicted actual throughput under ingredient shortages. Configured
+counts stay fixed during allocation. Connected placement initially sizes a group
+to the anchor port’s remaining supply or demand, preferring uniform underclocking.
+Sizing is calculated simultaneously from persistent output targets and preferred
+clocks, independent of construction or edit order. Targets describe gross output;
+connected consumers use that output, and an unconnected target is the final product.
+Automatic suppliers meet combined demand, including extraction and recycling loops.
+Finite extractors expose available supply; automatic downstream groups use it.
+A machine-count edit preserves production by adjusting clock speed within 1–250%.
+It saves a preferred clock, never a count limit. Later demand changes resize the group
+using that clock, underclocking as needed to balance whole counts. Standalone recipes
+and extractors start with a visible output target.
+Shortages remain visible instead of overriding constraints. Storage only collects
+surplus. There is no temporary-edit anchor or generic node lock.

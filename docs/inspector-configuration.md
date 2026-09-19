@@ -22,7 +22,16 @@ button style and lists use its compact rows with 16px item icons. Choices are so
 alphabetically by display name, with natural numeric order; splitter rules and
 From connections remain pinned above the items.
 
-There is no enabled/standby setting. Editable input/output rate targets remain deferred.
+Flow production groups additionally expose output targets and clock speed under All.
+The count buttons preserve current production by adjusting clock speed; they are disabled
+when the requested count would require a clock outside 1–250%. Counts are not persistent
+limits. Later demand changes resize groups using the chosen clock. Auto or an empty
+target field clears that target. Targets use strict positive numbers; invalid drafts
+restore the previous value. Shortfalls appear beside these controls. Calculated clocks
+remain visible on the canvas and can be lower than the chosen clock to balance whole counts.
+There is no authored enabled/standby setting. The inspector omits the separate Flow balance
+section and manual external supply/export controls. See
+[Flow planning](flow-planning.md).
 
 ## Supported bodies
 
@@ -46,7 +55,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   Any, Any undefined, and Overflow remain rules without dedicated canvas indicators;
   bottleneck warnings and conditional overflow simulation are deferred.
 - Sink: incoming materials, points per item, and estimated points/min across the group on
-  unambiguous paths. DNA points have their own counter. Coupon progression is not
+  the planned allocation. Missing ingredients can reduce actual output. DNA points have their own counter. Coupon progression is not
   modeled. Individual sink allocation is unknown.
 - Gift Tree: fixed configured production, count, and power.
 - Fuel generators: shared fuel, individual clocks, supplemental water and waste.
@@ -59,8 +68,13 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   satellites per well. All supports Mixed and bulk edits; new members inherit
   common counts. Production sums each member’s purity-weighted output and clock.
 - Solid and fluid storage: compatible variant, material streams and capacity.
+  Storage implicitly collects surplus after consumers have been supplied. It has
+  no production target or required-input control. Input rates show received material;
+  output rates show forwarded material, with the difference accumulating in storage.
   Industrial storage has two inputs and two outputs. Node footers show slots or
   m³ with storage/fluid icons instead of zero power.
+  Storage and logistics ports show inferred material icons, refreshed as connections
+  change; multi-material ports show the first icon and a remaining-item count.
 - Dimensional Depot: shared plan-wide speed/capacity research.
 - Truck/Fluid Truck Stations: the same fluid/freight load/unload icon buttons as trains,
   an aligned cargo selector, station fuel, and shared
@@ -89,9 +103,9 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   sink. A separate Required parts section above inputs/outputs shows item images and
   total quantities for the selected phase as reference only. There are no delivered/remaining counters. A node cannot be grouped;
   Only one can be placed in the plan, including through copy/paste.
-- Links: Conveyor Mk.1–6 or Pipeline Mk.1–2, materials, and nominal tier capacity.
-  Tier is stored and undoable, but does not constrain calculated flow yet.
-  Link inspectors omit endpoint subtitles; route links have no tiers.
+- Flow links: material names and planned allocation, including partial allocations
+  while the plan is unfinished. No tier control or transport capacity applies to abstract links.
+  Link inspectors omit endpoint subtitles; route links carry no material flow.
 
 Power Storage, power-grid controls, pipeline junctions/pumps/valves, portals, and
 throughput monitors remain out of scope. Transport calculations do not simulate

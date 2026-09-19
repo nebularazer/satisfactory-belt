@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@satisfactory-belt/canvas-core": "workspace:*",
-    "@satisfactory-belt/game-data": "workspace:*"
+    "@satisfactory-belt/game-data": "workspace:*",
+    "javascript-lp-solver": "^1.0.3"
   }
 }

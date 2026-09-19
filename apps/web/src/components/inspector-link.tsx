@@ -1,14 +1,11 @@
-/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- Keep editing shortcuts inside the inspector. */
-/* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Only the selected link is rendered. */
 import { isMaterialTransport, routeTopology } from "@satisfactory-belt/factory-core";
 import type { MaterialLink } from "@satisfactory-belt/factory-core";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
-import { InspectorChoice } from "@/components/inspector-choice";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
-const BELT_CAPACITIES = [60, 120, 270, 480, 780, 1200];
-const PIPE_CAPACITIES = [300, 600];
+
+const number = new Intl.NumberFormat("en", { maximumSignificantDigits: 6 });
 export function InspectorLink({
   link,
   editor,
@@ -25,42 +22,46 @@ export function InspectorLink({
     const closed = routeTopology(editor.history.getSnapshot().state, link.output.nodeId).closed;
     return (
       <p className="text-xs text-muted-foreground">
-        {closed
-          ? "Complete route loop. Select a station to edit its shared route settings."
-          : "Incomplete route. Connect the last departure to the first arrival to close the loop."}
+        {closed ? "Complete route loop." : "Incomplete route."} Route throughput is not part of Flow
+        analysis.
       </p>
     );
   }
-  const pipe = port?.transport === "pipe",
-    capacities = pipe ? PIPE_CAPACITIES : BELT_CAPACITIES;
+  const analysis = editor.getFlowAnalysis();
+  const rates = analysis.links.get(link.id) ?? [];
   return (
-    <section
-      aria-label="Link settings"
-      className="space-y-4"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" && !(event.ctrlKey || event.metaKey)) event.stopPropagation();
-      }}
-    >
-      <InspectorChoice
-        label={pipe ? "Pipeline tier" : "Conveyor tier"}
-        value={String(link.tier ?? 1)}
-        options={capacities.map((capacity, index) => ({
-          value: String(index + 1),
-          label: `Mk.${index + 1} · ${capacity} ${pipe ? "m³" : "items"}/min`,
-        }))}
-        onChange={(tier) => editor.setLinkTier(link.id, Number(tier))}
-      />
+    <section aria-label="Material flow" className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Tier is recorded for planning. It does not limit calculated rates yet.
+        Abstract material connection. Multiple links share the group's supply; belt and pipe
+        capacities do not apply.
       </p>
-      <section className="space-y-2" aria-label="Link materials">
-        {[...editor.getMaterials(link.output)].map((id) => (
+      {[...editor.getMaterials(link.output)].map((id) => {
+        const item = assets.catalog.items[id]!;
+        const rate = rates.find((entry) => entry.itemId === id)?.perMinute ?? 0;
+        return (
           <div key={id} className="flex items-center gap-2 text-sm">
-            <CatalogIcon iconId={assets.catalog.items[id]!.iconId} assets={assets} size={24} />
-            {assets.catalog.items[id]!.name}
+            <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
+            <div>
+              <p>{item.name}</p>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {analysis.status === "feasible" || analysis.status === "infeasible"
+                  ? `${number.format(rate)} ${item.unit === "m3" ? "m³" : "items"}/min`
+                  : "Rate unavailable"}
+              </p>
+            </div>
           </div>
-        ))}
-      </section>
+        );
+      })}
+      {analysis.status === "infeasible" && (
+        <p className="text-xs text-muted-foreground">
+          Planned allocation from configured production. Unmet ingredients can reduce actual output.
+        </p>
+      )}
+      {analysis.status === "feasible" && (
+        <p className="text-xs text-muted-foreground">
+          One feasible allocation; other distributions may also satisfy the plan.
+        </p>
+      )}
     </section>
   );
 }

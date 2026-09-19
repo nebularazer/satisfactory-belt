@@ -1,10 +1,10 @@
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
 import { facilityProduction } from "./facilities";
-import { resolveFactoryNode } from "./index";
 import type { FactoryNode } from "./index";
 import { scopedMachines } from "./machine-settings";
 import type { MachineScope } from "./machine-settings";
+import { validateFactoryNode } from "./validation";
 
 export type MaterialRate = Readonly<{ itemId: string; perMinute: number | null }>;
 export type Production = Readonly<{
@@ -19,7 +19,7 @@ export function resolveProduction(
   catalog: GameCatalog,
   scope: MachineScope = "all",
 ): Production {
-  resolveFactoryNode(node, catalog);
+  validateFactoryNode(node, catalog);
   if (node.kind === "logistics" || node.kind === "sink")
     return {
       inputs: [],

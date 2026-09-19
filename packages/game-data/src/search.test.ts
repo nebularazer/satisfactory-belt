@@ -92,7 +92,7 @@ describe("catalog search", () => {
     expect(names("iron plate")).toEqual(["Iron Plate", "Coated Plate"]);
     expect(names("plate iron")).toEqual(["Iron Plate", "Coated Plate"]);
     expect(names("constructor")).toEqual(["Constructor", "Coated Plate", "Iron Plate"]);
-    expect(names("iron ore")).toEqual([]); // Ingredients do not pollute ordinary search.
+    expect(names("iron ore")).toEqual(["Iron Ore"]); // Ingredients do not pollute ordinary search.
   });
   it("normalizes miner tiers and finds alternate aliases and the AWESOME Sink", () => {
     expect(names("mk 2")).toEqual(["Miner Mk.2"]);
@@ -107,7 +107,12 @@ describe("catalog search", () => {
     expect(names("unknown")).toEqual([]);
   });
   it("filters categories and displays alternate badges without a name prefix", () => {
-    expect(names("", { category: "recipes" })).toEqual(["Coated Plate", "Iron Plate"]);
+    expect(names("", { category: "recipes" })).toEqual([
+      "Coated Plate",
+      "Copper Ore",
+      "Iron Ore",
+      "Iron Plate",
+    ]);
     expect(names("constructor", { category: "buildings" })).toEqual(["Constructor"]);
     expect(index.find((entry) => entry.entityId === "Coated Plate")).toMatchObject({
       name: "Coated Plate",
@@ -136,8 +141,19 @@ describe("catalog search", () => {
       "Iron Ore",
     ]);
     expect(names("", { scope: { kind: "machine", id: "missing" } })).toEqual([]);
-    expect(searchCatalog(index, "").every((entry) => entry.kind !== "resource")).toBe(true);
     expect(new Set(index.map((entry) => entry.id)).size).toBe(index.length);
+  });
+  it("offers extraction directly in global and recipe search while respecting eligibility", () => {
+    for (const category of ["all", "recipes"] as const) {
+      expect(searchCatalog(index, "iron ore", { category })).toMatchObject([
+        { kind: "resource", entityId: "Iron Ore", extractorId: "Miner", subtitle: "Miner Mk.2" },
+      ]);
+      expect(
+        names("ore", { category, allowedEntryIds: new Set(["resource:Miner:Iron Ore"]) }),
+      ).toEqual(["Iron Ore"]);
+    }
+    expect(names("iron ore", { category: "buildings" })).toEqual([]);
+    expect(names("iron ore", { allowedEntryIds: new Set(["recipe:Iron Plate"]) })).toEqual([]);
   });
 });
 

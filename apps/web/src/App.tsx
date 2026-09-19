@@ -50,11 +50,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { BrowserTheme } from "@/lib/browser-theme";
 import { catalogConfiguration, eligibleCatalogEntries } from "@/lib/catalog-placement";
-import { createExampleFactory } from "@/lib/example-factory";
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
-import { createInspectorShowcase } from "@/lib/inspector-showcase";
+import { createReferencePlans } from "@/lib/reference-plans";
 
 const searchMenuFocus = () =>
   document.querySelector<HTMLButtonElement>('button[aria-label="Canvas menu"]');
@@ -109,15 +108,18 @@ function CanvasWorkspace({
   const [insertion, setInsertion] = useState<CatalogRequest | null>(null);
   const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
-  const [editor] = useState(() => {
-    const showcase = createInspectorShowcase(assets.catalog);
-    return createFactoryEditor(assets.catalog, {
-      ...showcase,
-      nodes: [...createExampleFactory(assets.catalog), ...showcase.nodes],
-    });
-  });
-  const { controller, history, historyCommand, clipboardCommand, deleteSelection, getDisplay } =
-    editor;
+  const [editor] = useState(() => createFactoryEditor(assets.catalog, createReferencePlans()));
+  const {
+    controller,
+    history,
+    historyCommand,
+    clipboardCommand,
+    deleteSelection,
+    getDisplay,
+    getPortRate,
+    getPortIcons,
+    getLinkRates,
+  } = editor;
   const index = useMemo(() => createSearchIndex(assets.catalog), [assets.catalog]);
   const documentState = useSyncExternalStore(history.subscribe, history.getSnapshot).state;
   const allowedEntryIds = useMemo(
@@ -199,6 +201,9 @@ function CanvasWorkspace({
       signal: abort.signal,
       theme: theme.getSnapshot(),
       getDisplay,
+      getPortRate,
+      getPortIcons,
+      getLinkRates,
       iconManifest: assets.icons,
       assetBaseUrl: assets.baseUrl,
       fontFamily: "Inter Variable",
@@ -211,6 +216,7 @@ function CanvasWorkspace({
         mounted.setShowGrid(preferences.getSnapshot().showGrid);
         mounted.setShowPerformance(preferences.getSnapshot().showPerformance);
         setPerformanceMonitor(mounted.performance);
+        controller.command("fit");
         mounted.focus();
       })
       .catch((reason: unknown) => {
@@ -221,7 +227,17 @@ function CanvasWorkspace({
       abort.abort();
       view.current = null;
     };
-  }, [controller, historyCommand, preferences, assets, getDisplay, theme]);
+  }, [
+    controller,
+    historyCommand,
+    preferences,
+    assets,
+    getDisplay,
+    getPortRate,
+    getPortIcons,
+    getLinkRates,
+    theme,
+  ]);
 
   const {
     reset,
@@ -312,6 +328,19 @@ function CanvasWorkspace({
         allowedEntryIds={allowedEntryIds}
       />
       <div ref={host} className="absolute inset-0" />
+      {!documentState.nodes.length && !searchOpen && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="space-y-3 text-center">
+            <p className="text-sm text-muted-foreground">
+              Plan production with groups of machines.
+            </p>
+            <Button className="pointer-events-auto" onClick={openAdd}>
+              <PlusIcon />
+              Add a building
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))]">
         <DropdownMenu>
           <DropdownMenuTrigger render={menuButton}>

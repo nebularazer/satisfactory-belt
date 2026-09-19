@@ -1,11 +1,11 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop -- Only the selected entity's bounded inspector controls are rendered. */
 import {
-  configuredIncomingRates,
+  isFlowGroup,
+  rebalanceFlowGroup,
   commonMatrices,
   commonSetting,
   machineCapabilities,
   MAX_MACHINE_COUNT,
-  resolveFactoryNode,
   resolveProduction,
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
@@ -17,6 +17,7 @@ import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
+import { InspectorFlow } from "@/components/inspector-flow";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorStatistics } from "@/components/inspector-statistics";
 import { Button } from "@/components/ui/button";
@@ -45,43 +46,39 @@ export function InspectorBody({
       : "all";
   const members = node.kind === "logistics" ? null : scopedMachines(node, scope);
   const capabilities = node.kind === "logistics" ? null : machineCapabilities(node, assets.catalog);
-  const display = resolveFactoryNode(
-    node.kind !== "logistics" && members ? { ...node, machines: members } : node,
-    assets.catalog,
-  );
   const production = resolveProduction(node, assets.catalog, scope);
-  const sinkRates =
-    node.kind === "sink"
-      ? configuredIncomingRates(editor.history.getSnapshot().state, assets.catalog, node.id)
-      : null;
-  // Logistics and sinks have network-dependent streams, not a configured recipe rate.
-  const streams = (direction: "input" | "output"): readonly MaterialRate[] => {
-    if (
-      node.kind !== "logistics" &&
-      node.kind !== "sink" &&
-      !(
-        node.kind === "facility" &&
-        ["storage", "depot", "truck-station", "train-station", "drone-port"].includes(
-          node.configuration.type,
+  const clockPercents = new Set(
+    isFlowGroup(node)
+      ? (members ?? []).map(
+          (member) => node.flow?.memberClocks?.[member.id] ?? node.flow?.clockPercent ?? 100,
         )
-      )
-    )
-      return direction === "input" ? production.inputs : production.outputs;
-    const ids = new Set(
-      display.ports
-        .filter((port) => port.direction === direction)
-        .flatMap((port) =>
-          port.itemId
-            ? [port.itemId]
-            : Array.from(editor.getMaterials({ nodeId: node.id, portKey: port.key })),
-        ),
-    );
-    return [...ids].map((itemId) => ({
+      : [],
+  );
+  const configuredClock = clockPercents.size === 1 ? clockPercents.values().next().value! : null;
+  // Production is configured potential; logistics rates come from the planned allocation.
+  const networkRates =
+    node.kind === "logistics" ||
+    node.kind === "sink" ||
+    (node.kind === "facility" &&
+      ["storage", "depot", "truck-station", "train-station", "drone-port"].includes(
+        node.configuration.type,
+      ));
+  const streams = (direction: "input" | "output"): readonly MaterialRate[] => {
+    if (!networkRates) return direction === "input" ? production.inputs : production.outputs;
+    const totals = new Map<string, number | null>();
+    for (const port of editor.getPorts(node.id)) {
+      if (port.direction !== direction) continue;
+      for (const rate of editor.getPortFlows(port)) {
+        const previous = totals.get(rate.itemId);
+        totals.set(
+          rate.itemId,
+          rate.perMinute === null || previous === null ? null : (previous ?? 0) + rate.perMinute,
+        );
+      }
+    }
+    return [...totals].map(([itemId, perMinute]) => ({
       itemId,
-      perMinute:
-        node.kind === "sink" && scope === "all"
-          ? (sinkRates?.find((rate) => rate.itemId === itemId)?.perMinute ?? null)
-          : null,
+      perMinute: scope === "all" ? perMinute : null,
     }));
   };
   return (
@@ -136,8 +133,12 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Remove last machine"
-                  title="Remove last machine"
-                  disabled={node.machines.length <= 1}
+                  title={isFlowGroup(node) ? "Fewer machines, higher clock" : "Remove last machine"}
+                  disabled={
+                    node.machines.length <= 1 ||
+                    (isFlowGroup(node) &&
+                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
+                  }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
                 >
                   <MinusIcon />
@@ -147,8 +148,12 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Add machine"
-                  title="Add machine"
-                  disabled={node.machines.length >= MAX_MACHINE_COUNT}
+                  title={isFlowGroup(node) ? "More machines, lower clock" : "Add machine"}
+                  disabled={
+                    node.machines.length >= MAX_MACHINE_COUNT ||
+                    (isFlowGroup(node) &&
+                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
+                  }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
                 >
                   <PlusIcon />
@@ -160,6 +165,7 @@ export function InspectorBody({
       )}
       <TabsContent value={scope} className="space-y-4">
         <InspectorConfiguration node={node} editor={editor} assets={assets} />
+        {isFlowGroup(node) && <InspectorFlow node={node} editor={editor} assets={assets} />}
         {node.kind === "facility" && (
           <InspectorFacility node={node} scope={scope} editor={editor} assets={assets} />
         )}
@@ -220,7 +226,9 @@ export function InspectorBody({
                 <InspectorNumberField
                   key={`${scope}:clock`}
                   label="Clock speed"
-                  value={commonSetting(members, "clockPercent")}
+                  value={
+                    isFlowGroup(node) ? configuredClock : commonSetting(members, "clockPercent")
+                  }
                   revision={node.machines}
                   min={1}
                   max={250}
@@ -246,7 +254,10 @@ export function InspectorBody({
               )}
             </div>
           )}
-        <section aria-label="Configured material rates" className="space-y-2 border-t pt-4">
+        <section
+          aria-label={networkRates ? "Planned material flow" : "Configured material rates"}
+          className="space-y-2 border-t pt-4"
+        >
           <div className="grid grid-cols-2 gap-4">
             <RateColumn
               title="Inputs"
@@ -265,8 +276,14 @@ export function InspectorBody({
               empty={node.kind === "logistics" ? "No known materials" : "No outputs"}
             />
           </div>
-          {production.unavailableReason && (
-            <p className="text-xs text-muted-foreground">{production.unavailableReason}</p>
+          {networkRates ? (
+            <p className="text-xs text-muted-foreground">
+              Planned flow from configured production.
+            </p>
+          ) : (
+            production.unavailableReason && (
+              <p className="text-xs text-muted-foreground">{production.unavailableReason}</p>
+            )
           )}
         </section>
         <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
