@@ -131,6 +131,16 @@ minimum clock, and finite machine-count bounds. Power minimization must not keep
 adding underclocked machines without limit. Overclocking and amplification need
 explicit shard/sloop budgets before becoming optimization choices.
 
+Use the supported game's 1% minimum clock; the initial 100% ceiling is a planner
+policy, not the game's maximum. Allocate realizable clocks before final validation.
+Round-trip the displayed/exported settings through domain calculations and reject
+target shortfalls caused by rounding. See the wiki checks below for examples.
+
+Separate average power used for an optimization preference from a power-budget
+constraint. Default a hard power cap to a conservative sum of modeled maximum
+draws, including supported auxiliaries; average consumption cannot guarantee that
+a grid will stay within capacity.
+
 Do not claim exact power optimality from a linear recipe-rate model. Actual count
 and nonlinear per-machine power require an integer/settings model or an explicitly
 labeled approximation, followed by evaluation with shared domain formulas.
@@ -266,3 +276,142 @@ These are candidates for discussion, not accepted implementation requirements:
 5. Should surplus export be allowed by default, with disposal always opt-in?
 6. Is shipping Plan/Flow generation first acceptable while Build construction and
    validation are completed in the following milestone?
+
+## Research: what players value and dislike
+
+Reviewed on 2026-09-19. This is a qualitative sample of Satisfactory discussions,
+not a survey or a ranking of all planners. Search-indexed posts/comments were
+available; direct page fetches failed for several threads. Summaries below reflect
+the visible excerpts, not an exhaustive reading of every comment. Complaints are
+user experiences, not independently reproduced defects in competing products.
+Developer launch posts alone are not evidence that players want a feature.
+
+The clearest recurring themes are understandable numbers, control over recipes,
+and a readable plan that can actually guide building. Preferences differ on how
+much logistics detail a planner should require.
+
+| Observed feedback                                                                                                                                                                                       | Evidence                                                                                                                                                                                                                 | What we should do                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Players like entering targets and receiving a simple flowchart with resource, machine and power totals; some explicitly do not want to configure every belt. Others value editable connected factories. | [Recommended factory planner, May 2026](https://www.reddit.com/r/SatisfactoryGame/comments/1tltu8t/is_there_a_1_recommended_factory_planner/)                                                                            | Keep Plan/Flow usable with targets alone. Make Build detail opt-in; retain manual editing after generation.                                                                                        |
+| Alternate recipes can feel ignored or chosen for unclear reasons. Users describe excluding other recipes to force the one they intended.                                                                | [Large build planning, March 2025](https://www.reddit.com/r/SatisfactoryGame/comments/1jkjiid/); [Calculator/tool recommendations, July 2024](https://www.reddit.com/r/satisfactory/comments/1dtlj6j/)                   | Expose optional versus required versus exclusive clearly. Show why a selected optional recipe was unused and which constraint or priority drove the result.                                        |
+| Dense interfaces and large dependency graphs overwhelm some players; others want layout guidance beyond a flowchart.                                                                                    | [Overwhelming planning, July 2025](https://www.reddit.com/r/SatisfactoryGame/comments/1m7ljz4/); [Calculator overload, April 2025](https://www.reddit.com/r/SatisfactoryGame/comments/1jvjuqu/)                          | Lead with totals and targets, then let users inspect individual production chains. Suggest collapsible groups and upstream/downstream highlighting; avoid exposing every solver setting initially. |
+| Recipe selection can be hard to discover, and abstract many-to-many connections are difficult to translate into game logistics.                                                                         | [Visual planner feedback, May 2026](https://www.reddit.com/r/SatisfactoryGame/comments/1tazatc/been_working_on_a_visual_factory_plannerbuilder/)                                                                         | Put recipe state beside the material/recipe search results. Label abstract connections and require real branching/capacity checks in Build.                                                        |
+| A planner using unavailable miners is frustrating even when the production math is otherwise useful.                                                                                                    | [Unavailable equipment, March 2026](https://www.reddit.com/r/SatisfactoryGame/comments/1s65vtk/overwhelmed/)                                                                                                             | Before generating extraction or Build logistics, expose allowed miner/belt/pipe tiers. Full progression/save import can remain a later suggestion.                                                 |
+| Account requirements deter trial; users also struggle to discover how to save a plan.                                                                                                                   | [Account requirement feedback, November 2025](https://www.reddit.com/r/SatisfactoryGame/comments/1ox4x8i/new_planning_tool/); [Saving plans, February 2023](https://www.reddit.com/r/SatisfactoryGame/comments/119go0v/) | Recommend account-free planning and a visible save/export action that includes the request and recipe settings. Sharing and cross-device accounts are separate later decisions.                    |
+
+Recommended priority for this project: correct, explainable results first; a simple
+Plan/Flow path and discoverable recipe controls next; physically checked Build
+generation after that. Preserve the existing editable canvas as the differentiator.
+Collapsing chains, persistence/export and scenario comparison are recommendations
+for iteration, not authorization to implement additional features in this change.
+
+## Wiki validation of planning logic
+
+The following checks use the official community wiki at `satisfactory.wiki.gg`,
+not the legacy Fandom wiki. Values describe the pages indexed when researched;
+pin implementation to the extracted game catalog/version and recheck differences.
+This validates selected design assumptions and supplies acceptance examples. It
+does not certify an automatic solver, which has not been implemented.
+
+### Rates, clocks and power
+
+Production rates scale linearly with clock speed; ordinary production power scales
+approximately as `baseMW × (clockPercent / 100)^1.321928`. Generators have different
+clock behavior and must not inherit that consumer formula. The wiki lists clocks
+from 1% to 250%, with up to four decimal places. Use per-building catalog parameters
+and sum individual members. Sources: [Clock speed](https://satisfactory.wiki.gg/wiki/Overclock),
+[Advanced clock speed](https://satisfactory.wiki.gg/wiki/Tutorial%3AAdvanced_clock_speed).
+
+Acceptance example, using the wiki's 4 MW Iron Rod Constructor: one machine at
+50% consumes approximately 1.6 MW; two at 50% produce the same throughput as one
+at 100% but consume approximately 3.2 MW rather than 4 MW. One at 200% consumes
+approximately 10 MW. These arithmetic checks confirm why minimizing buildings and
+minimizing power can disagree. They do not establish an optimal clock allocation.
+
+Derived rounding check: a recipe producing 60/min at 100%, set to 33.33%, produces
+19.998/min, not 20/min. Even 33.3333% remains fractionally below 20. Allocate a
+representable setting and report surplus or infeasibility as appropriate; never
+round a displayed result into a claim of exact target satisfaction. Numerical
+solver tolerance and configurable game-clock precision are separate concerns.
+
+### Amplification
+
+Amplification raises outputs without raising ingredient consumption. For ordinary
+supported machines, with amplification factor `a = 1 + filledSlots / totalSlots`,
+output is multiplied by `a` and power by `a²`, in addition to clock scaling.
+Fully amplified output is 2× and power is 4×. Fractional output per cycle can be
+realized across several cycles, so these are long-run rates. Source:
+[Production amplifier](https://satisfactory.wiki.gg/wiki/Production_Amplifier).
+
+Acceptance example: at 100% clock, a fully amplified 4 MW Constructor consumes
+16 MW and doubles its output while retaining its original input rate. At 200%
+clock with full amplification it consumes approximately 40 MW; inputs are 2×
+and outputs 4× their unmodified rates. Enforce slot availability per member.
+
+Source conflict: the indexed [Power overview](https://satisfactory.wiki.gg/wiki/Power)
+says amplification increases consumption by up to 2×, conflicting with the dedicated
+amplifier page's formula and 4× example. Prefer the dedicated formula provisionally
+and confirm it against the target game's extracted parameters before release.
+The existing domain already uses a catalog-provided amplification power exponent;
+this review does not verify every extracted catalog value.
+
+[Packagers cannot use Somersloops](https://satisfactory.wiki.gg/wiki/Packager).
+Add a rejection fixture so optimization cannot invent an amplified packaging loop.
+Do not generalize ordinary building rules to every special building.
+
+### Coproducts and recycling
+
+At 100%, standard Plastic consumes 30 m³/min Crude Oil and produces 20 Plastic/min
+plus 10 m³/min Heavy Oil Residue. The residue must have a destination. The wiki
+also notes that a Refinery stops when an output slot is full. Sources:
+[Plastic recipe table](https://satisfactory.wiki.gg/wiki/Plastic),
+[How to play: refinery outputs](https://satisfactory.wiki.gg/wiki/Tutorial%3AHow_to_play).
+
+Recycled Plastic consumes 30 Rubber/min and 30 m³/min Fuel to make 60 Plastic/min;
+Recycled Rubber consumes 30 Plastic/min and 30 m³/min Fuel to make 60 Rubber/min.
+Both recipes appear in the [Plastic recipe table](https://satisfactory.wiki.gg/wiki/Plastic).
+
+Derived acceptance fixture: one of each refinery at 100%, without amplification,
+consumes 60 m³/min external Fuel and exports **30 Plastic/min and 30 Rubber/min**.
+The other 30/min of each product feeds the opposite recipe. Reporting 60/min of
+each as net export would double-count internal consumption. The balance permits
+steady operation; starting from empty still requires initial plastic or rubber.
+
+Retain the strict destination rule: storage only delays a backlog. External export
+is an assumption of a continuous consumer, not automatic disposal. Surface that
+assumption for every surplus stream; use catalog sinkability rather than treating
+all byproducts as sinkable.
+
+### Extraction and transport
+
+A Water Extractor produces 120 m³/min at 100% and 300 at 250%. Water bodies have
+no resource-node purity. Acceptance fixture: changing an ore-purity preference
+must not multiply this extractor's output. Source:
+[Water resource acquisition](https://satisfactory.wiki.gg/wiki/Water).
+
+Belt capacities for Mk.1–Mk.6 are 60, 120, 270, 480, 780 and 1,200 items/min.
+A shared Mk.1 segment carrying two 40/min allocations is overloaded at 80/min,
+even though each allocation separately fits. Branching after an overloaded
+segment does not fix it. Source:
+[Conveyor Belts](https://satisfactory.wiki.gg/wiki/Conveyor_Belts).
+
+Pipes nominally carry 300 or 600 m³/min. A 400 m³/min shared segment therefore
+exceeds Mk.1 capacity. Head lift, filling and sloshing affect actual liquid flow;
+a steady-state capacity check does not verify those behaviors. Label successful
+Build results **validated for modeled steady-state constraints**, not guaranteed
+in-game operation. Source: [Pipelines](https://satisfactory.wiki.gg/wiki/Pipe).
+
+### Implementation acceptance gate
+
+The existing `factory-core` production calculation scales ingredients with clock,
+products with clock and amplification, and extractor rates with applicable purity.
+Its power projection sums per-member clock/amplification factors. These structures
+agree with the reviewed rules; this is a code inspection, not a complete numerical
+audit. Variable-power averages and special facilities remain to be checked against
+their individual definitions before optimization relies on them.
+
+During implementation, turn the numeric examples above into focused domain/solver
+fixtures. Independently recompute balances, clocks, counts, power and capacities
+from the generated document and pinned catalog. Check required recipe constraints
+again after materialization. A solver success flag or a visually connected graph
+alone is not evidence that the resulting factory meets the request.
