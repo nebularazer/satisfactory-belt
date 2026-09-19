@@ -1,5 +1,5 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Controls belong to the selected group. */
-import { flowOutputRates } from "@satisfactory-belt/factory-core";
+import { flowOutputRates, formatPlanningNumber } from "@satisfactory-belt/factory-core";
 import type { FlowGroup } from "@satisfactory-belt/factory-core";
 import { LockIcon, LockOpenIcon } from "lucide-react";
 import { useState } from "react";
@@ -61,7 +61,8 @@ export function InspectorFlow({
       {issues.map((issue) => (
         <output key={`${issue.code}:${issue.itemId}`} className="block text-xs text-destructive">
           {issue.code === "target-shortfall" ? "Target shortfall" : "Missing input"}:{" "}
-          {assets.catalog.items[issue.itemId!]?.name} · {Number(issue.perMinute?.toFixed(3))}
+          {assets.catalog.items[issue.itemId!]?.name} ·{" "}
+          {issue.perMinute == null ? "—" : formatPlanningNumber(issue.perMinute)}
         </output>
       ))}
     </section>
@@ -77,14 +78,15 @@ function RateField({
   value: number | null;
   onCommit: (value: number) => void;
 }) {
-  const formatted = value === null ? "" : String(Number(value.toFixed(3)));
-  const [draft, setDraft] = useState(formatted);
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
   function commit() {
-    // Focusing or tabbing through an automatic rate must not lock production.
-    if (draft === formatted) return;
+    // Display formatting and focus must never change precision or lock automatic production.
+    if (draft === null) return;
     const next = Number(draft);
-    if (draft.trim() && Number.isFinite(next) && next > 0 && next <= 1e9) onCommit(next);
-    else setDraft(formatted);
+    if (draft.trim() && Number.isFinite(next) && next > 0 && next <= 1e9 && next !== value)
+      onCommit(next);
+    setDraft(null);
   }
   return (
     <label className="flex items-center justify-between gap-2 text-xs sm:text-sm">
@@ -92,12 +94,18 @@ function RateField({
       <Input
         aria-label={`${label} output rate`}
         inputMode="decimal"
-        value={draft}
+        value={
+          draft ?? (value === null ? "" : focused ? String(value) : formatPlanningNumber(value))
+        }
         disabled={value === null}
         placeholder="Unknown"
         className="w-42 shrink-0 text-right tabular-nums"
         onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          commit();
+          setFocused(false);
+        }}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();

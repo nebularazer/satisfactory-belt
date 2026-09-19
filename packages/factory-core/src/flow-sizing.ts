@@ -70,7 +70,6 @@ export function rebalanceFlowGroup(
   count: number,
 ): FlowGroup | null {
   if (!Number.isInteger(count) || count < 1 || count > MAX_MACHINE_COUNT) return null;
-  if (count === node.machines.length) return node;
   const output = resolveProduction(node, catalog).outputs.find((rate) => (rate.perMinute ?? 0) > 0);
   if (!output?.perMinute) return null;
   const ids = new Set(node.machines.map((member) => member.id));
@@ -100,6 +99,37 @@ export function rebalanceFlowGroup(
     flow: { ...node.flow, clockPercent: clock, memberClocks: undefined },
     machines: resized.machines.map((member) => ({ ...member, clockPercent: clock })),
   };
+}
+
+/** Choose the smallest whole group at the given ceiling, keeping current output and its lock state. */
+export function rebalanceFlowGroupAtClock(
+  node: FlowGroup,
+  catalog: GameCatalog,
+  maximumClock: number,
+): FlowGroup | null {
+  if (!Number.isFinite(maximumClock) || maximumClock < 1 || maximumClock > 250) return null;
+  const output = resolveProduction(node, catalog).outputs.find((rate) => (rate.perMinute ?? 0) > 0);
+  if (!output?.perMinute) return null;
+  let capacity = 0;
+  let count = 0;
+  let lastCapacity = 0;
+  // Preserve heterogeneous member settings; new members inherit the last member's settings.
+  for (const member of node.machines) {
+    lastCapacity =
+      resolveProduction(
+        { ...node, machines: [{ ...member, clockPercent: maximumClock }] },
+        catalog,
+      ).outputs.find((rate) => rate.itemId === output.itemId)?.perMinute ?? 0;
+    capacity += lastCapacity;
+    count++;
+    if (capacity >= output.perMinute - 1e-7) break;
+  }
+  if (capacity < output.perMinute - 1e-7) {
+    if (!lastCapacity) return null;
+    count += Math.ceil((output.perMinute - capacity) / lastCapacity - 1e-7);
+  }
+  const balanced = rebalanceFlowGroup(node, catalog, count);
+  return balanced ? { ...balanced, flow: { ...balanced.flow, clockPercent: maximumClock } } : null;
 }
 
 /** Deliberate recipe/resource changes discard targets for outputs that no longer exist. */
@@ -362,7 +392,19 @@ function solveComponent(document: FactoryDocument, catalog: GameCatalog): readon
     const solved = Math.max(0, Number(result[`group:${node.id}`]) || 0);
     const equivalent = Math.abs(solved - Math.round(solved)) < 1e-8 ? Math.round(solved) : solved;
     const clockPercent = node.flow?.clockPercent ?? 100;
-    const count = Math.max(1, Math.ceil((equivalent * 100) / clockPercent - 1e-7));
+    let count = Math.max(1, Math.ceil((equivalent * 100) / clockPercent - 1e-7));
+    if (node.flow?.memberClocks) {
+      // Individual ceilings can require more machines than the group's default.
+      let capacity = 0;
+      count = 0;
+      for (const member of node.machines) {
+        capacity += (node.flow.memberClocks[member.id] ?? clockPercent) / 100;
+        count++;
+        if (capacity >= equivalent - 1e-7) break;
+      }
+      count += Math.max(0, Math.ceil(((equivalent - capacity) * 100) / clockPercent - 1e-7));
+      count = Math.min(MAX_MACHINE_COUNT, Math.max(1, count));
+    }
     const clock = Math.min(clockPercent, (equivalent / count) * 100);
     const current = resolveProduction(node, catalog);
     const unit = units.get(node.id)!;

@@ -46,13 +46,27 @@ it("edits targets and clock, with count buttons preserving production and no mac
       expect.objectContaining({ clockPercent: expect.closeTo(250 / 3) }),
     ),
   });
-  await enter("Clock speed", "200");
+  await enter("Maximum clock", "200");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
   expect(editor.getNode(smelter.id)).toMatchObject({
     machines: Array.from({ length: 3 }, () =>
       expect.objectContaining({ clockPercent: expect.closeTo(500 / 3) }),
     ),
   });
+  expect(screen.getByLabelText("Running clock").textContent).toBe("166⅔%");
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Maximum clock" }).value).toBe(
+    "200",
+  );
+  await user.click(screen.getByRole("button", { name: "Rebalance at 100%" }));
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
+  expect(screen.getByLabelText("Running clock").textContent).toBe("100%");
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    machines: Array.from({ length: 5 }, () =>
+      expect.objectContaining({ clockPercent: expect.closeTo(100, 8) }),
+    ),
+  });
+  act(() => editor.historyCommand("undo"));
+  expect(screen.getByLabelText("Running clock").textContent).toBe("166⅔%");
   await enter("Iron Ingot output rate", "300");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("300");
   expect(editor.getNode(smelter.id)).toMatchObject({
@@ -69,6 +83,15 @@ it("edits targets and clock, with count buttons preserving production and no mac
     screen.getByRole<HTMLButtonElement>("button", { name: "Remove last machine" }).disabled,
   ).toBe(true);
   expect(screen.queryByText(/Target shortfall/)).toBeNull();
+  act(() => editor.setProductionTarget(smelter.id, "iron", 500 / 3));
+  const unchanged = editor.history.getSnapshot().state;
+  expect(field("Iron Ingot").value).toBe("166⅔");
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("166⅔");
+  await user.click(field("Iron Ingot"));
+  expect(field("Iron Ingot").value).toBe(String(500 / 3));
+  await user.tab();
+  expect(field("Iron Ingot").value).toBe("166⅔");
+  expect(editor.history.getSnapshot().state).toBe(unchanged);
 });
 
 it("shows calculated coproducts and locks or unlocks the entire recipe without independent targets", async () => {

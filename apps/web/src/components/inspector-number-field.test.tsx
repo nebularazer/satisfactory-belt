@@ -54,3 +54,34 @@ it("rounds integer settings and clears Mixed drafts after an external edit", asy
   await user.type(input, "-2{Enter}");
   expect(commit).toHaveBeenLastCalledWith(0);
 });
+
+it("shows fractions at rest, edits full decimals and never commits on focus alone", async () => {
+  const user = userEvent.setup();
+  const commit = vi.fn();
+  const value = 500 / 3;
+  render(
+    <InspectorNumberField
+      label="Maximum clock"
+      value={value}
+      revision={0}
+      min={1}
+      max={250}
+      onCommit={commit}
+    />,
+  );
+  const input = screen.getByRole<HTMLInputElement>("textbox", { name: "Maximum clock" });
+  expect(input.value).toBe("166⅔");
+  await user.click(input);
+  expect(input.value).toBe(String(value));
+  await user.tab();
+  expect(input.value).toBe("166⅔");
+  expect(commit).not.toHaveBeenCalled();
+  await user.click(input);
+  await user.keyboard("{Enter}");
+  await user.tab();
+  expect(commit).not.toHaveBeenCalled();
+  await user.clear(input);
+  await user.type(input, "125");
+  await user.tab();
+  expect(commit).toHaveBeenCalledExactlyOnceWith(125);
+});

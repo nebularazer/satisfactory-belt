@@ -121,3 +121,8 @@ surplus. The inspector has one production-rate lock for the entire recipe: editi
 one output locks it and updates coproducts by recipe ratio; unlocking removes the
 target and displays the calculated rates. There is no temporary-edit anchor or generic
 node lock. Link text has a constant canvas-space font size and scales with zoom.
+
+Running clock displays actual utilization; Maximum clock is the sizing ceiling.
+Rebalance at 100% preserves output and lock state while selecting whole machines
+without overclocking. Clock/rate displays use common fraction glyphs or two decimal
+places; editing uses full decimals without committing formatting on focus/blur.

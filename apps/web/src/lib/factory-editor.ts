@@ -10,6 +10,8 @@ import {
 import type { CanvasLink, Point, PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
 import { EditHistory } from "@satisfactory-belt/edit-history";
 import {
+  formatPlanningNumber,
+  rebalanceFlowGroupAtClock,
   prepareFlowPlan,
   sizeFlowPlacement,
   resizeFlowGroups,
@@ -468,6 +470,11 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
         : resizeMachineGroup(node, count, () => crypto.randomUUID()),
     );
   }
+  function rebalanceAt100(id: string) {
+    editMachine(id, (node) =>
+      isFlowGroup(node) ? (rebalanceFlowGroupAtClock(node, catalog, 100) ?? node) : node,
+    );
+  }
   function setProductionTarget(id: string, itemId: string, rate: number | null) {
     editMachine(id, (node) => {
       if (!isFlowGroup(node)) return node;
@@ -664,7 +671,6 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       return { ...current, externalFlows };
     });
   }
-  const rateFormat = new Intl.NumberFormat("en", { maximumSignificantDigits: 5 });
   let rateIndex: typeof portIndex | null = null;
   const portLabels = new Map<string, string>();
   const portIcons = new Map<string, readonly string[]>();
@@ -706,7 +712,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
           const rate =
             configured.find((entry) => entry.itemId === itemId) ??
             rates.find((entry) => entry.itemId === itemId);
-          return rate?.perMinute == null ? "?" : rateFormat.format(rate.perMinute);
+          return rate?.perMinute == null ? "?" : formatPlanningNumber(rate.perMinute);
         });
         if (labels.length) portLabels.set(key, labels.join("\n"));
       }
@@ -718,7 +724,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
         link.id,
         materials.map((itemId) =>
           available
-            ? rateFormat.format(rates.find((rate) => rate.itemId === itemId)?.perMinute ?? 0)
+            ? formatPlanningNumber(rates.find((rate) => rate.itemId === itemId)?.perMinute ?? 0)
             : "?",
         ),
       );
@@ -753,6 +759,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,
     setMachineCount,
+    rebalanceAt100,
     setProductionTarget,
     setProductionLocked,
     getNode: (id: string) => history.getSnapshot().state.nodes.find((node) => node.id === id),

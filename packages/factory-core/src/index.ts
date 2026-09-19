@@ -5,6 +5,7 @@ import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 import { resolveFacility, trainStationHeight } from "./facilities";
 import type { FacilityNode, Purity } from "./facilities";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
+import { formatPlanningNumber } from "./number-format";
 import type { PortTransport } from "./ports";
 import { DEFAULT_SPLITTER_PROGRAM, SPLITTER_OUTPUTS, validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
@@ -211,7 +212,7 @@ export function resolveMachineNode(
   if (node.kind === "facility") return resolveFacility(node, catalog);
   const clock = commonSetting(node.machines, "clockPercent");
   const sloops = commonSetting(node.machines, "sloopsUsed");
-  const clockLabel = clock === null ? "Mixed" : `${numberLabel.format(clock)}%`;
+  const clockLabel = clock === null ? "Mixed" : `${formatPlanningNumber(clock)}%`;
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
     throw new Error(`Invalid position on ${node.id}.`);
   function ports(
@@ -398,3 +399,5 @@ export * from "./validation";
 export * from "./flow-placement";
 
 export * from "./flow-sizing";
+
+export { formatPlanningNumber } from "./number-format";

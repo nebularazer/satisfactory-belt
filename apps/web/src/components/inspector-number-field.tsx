@@ -1,4 +1,5 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Handlers belong to this small controlled field. */
+import { formatPlanningNumber } from "@satisfactory-belt/factory-core";
 import { MinusIcon, PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 
@@ -32,6 +33,7 @@ export function InspectorNumberField({
 }) {
   const id = useId();
   const [source, setSource] = useState(revision);
+  const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   // An external edit or undo wins over a draft, even when the displayed value stays Mixed.
   if (source !== revision) {
@@ -73,12 +75,18 @@ export function InspectorNumberField({
             id={id}
             inputMode={integer ? "numeric" : "decimal"}
             className="min-h-11 px-1 text-right text-xs tabular-nums sm:min-h-8"
-            value={draft ?? (value === null ? "" : String(Number(value.toPrecision(12))))}
+            value={
+              draft ?? (value === null ? "" : focused ? String(value) : formatPlanningNumber(value))
+            }
             placeholder={value === null ? "Mixed" : undefined}
             onChange={(event) => {
               setDraft(event.target.value);
             }}
-            onBlur={commit}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              commit();
+              setFocused(false);
+            }}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing) return;
               if (event.key === "ArrowUp" || event.key === "ArrowDown") {

@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop -- Only the selected entity's bounded inspector controls are rendered. */
 import {
+  formatPlanningNumber,
   isFlowGroup,
   rebalanceFlowGroup,
   commonMatrices,
@@ -27,7 +28,6 @@ import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Editor = ReturnType<typeof createFactoryEditor>;
-const rateFormat = new Intl.NumberFormat("en", { maximumSignificantDigits: 5 });
 
 export function InspectorBody({
   node,
@@ -222,10 +222,33 @@ export function InspectorBody({
                   />
                 </div>
               )}
+              {capabilities.clock && isFlowGroup(node) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+                    <span>Running clock</span>
+                    <output aria-label="Running clock" className="text-sm font-medium tabular-nums">
+                      {commonSetting(members, "clockPercent") === null
+                        ? "Mixed"
+                        : `${formatPlanningNumber(commonSetting(members, "clockPercent")!)}%`}
+                    </output>
+                  </div>
+                  {scope === "all" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      title="Use the fewest whole machines without overclocking, preserving output"
+                      onClick={() => editor.rebalanceAt100(node.id)}
+                    >
+                      Rebalance at 100%
+                    </Button>
+                  )}
+                </div>
+              )}
               {capabilities.clock && (
                 <InspectorNumberField
                   key={`${scope}:clock`}
-                  label="Clock speed"
+                  label={isFlowGroup(node) ? "Maximum clock" : "Clock speed"}
                   value={
                     isFlowGroup(node) ? configuredClock : commonSetting(members, "clockPercent")
                   }
@@ -318,7 +341,7 @@ function RateColumn({
                   <p className="text-muted-foreground tabular-nums">
                     {rate.perMinute === null
                       ? "Rate unavailable"
-                      : `${rateFormat.format(rate.perMinute)} ${item.unit === "m3" ? "m³" : "items"}/min`}
+                      : `${formatPlanningNumber(rate.perMinute)} ${item.unit === "m3" ? "m³" : "items"}/min`}
                   </p>
                 </div>
               </li>

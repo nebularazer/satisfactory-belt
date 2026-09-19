@@ -8,7 +8,8 @@ references; refreshing restores them.
 ## Targets, clock and automatic sizing
 
 A production group's inspector displays current output rates in equal-width fields,
-with one shared production lock and a clock speed. Unlocked fields follow the connected
+with one shared production lock. Running clock shows the actual calculated clock;
+Maximum clock controls the ceiling used to size whole machines. Unlocked fields follow the connected
 plan. Locking captures the current production; editing any output rate locks the recipe
 at that rate and updates all coproducts in their fixed recipe ratio. Unlocking clears the
 recipe's target. Merely focusing or blurring an unchanged field never locks it.
@@ -26,9 +27,16 @@ later demand changes can resize the group again using the chosen clock.
 Automatic groups calculate whole counts at or below the chosen clock (100% by
 default), sharing the workload by underclocking. For example, a target of 1,200 recycled
 plastic can use 12 refineries at 166⅔%, 13 at 153.846…%, or 20 at 100%. Setting the
-clock to 100% calculates 20 machines. Calculated zero clock denotes an idle group;
+maximum clock to 100% calculates 20 machines. Rebalance at 100% preserves current
+output and the production lock state while selecting the fewest whole machines that
+need no overclocking. Calculated zero clock denotes an idle group;
 authored clocks remain between 1% and 250%. Flow calculations can express small
 fractional utilization; physical minimum clocks are a Build-mode concern.
+
+Clock and rate displays use common fractions when accurate within 1e-7 (166⅔, 83⅓),
+otherwise at most two decimal places (153.85), without trailing zeros. Inputs show
+the full decimal value on focus. Focusing and leaving an unchanged field never
+commits a rounded value; calculations retain full precision.
 
 Standalone recipes and extractors start with a visible target equal to their initial
 output. This provides the starting supply for resource-first plans. Connected placements

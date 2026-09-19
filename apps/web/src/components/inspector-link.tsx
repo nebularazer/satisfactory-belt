@@ -1,11 +1,14 @@
-import { isMaterialTransport, routeTopology } from "@satisfactory-belt/factory-core";
+import {
+  formatPlanningNumber,
+  isMaterialTransport,
+  routeTopology,
+} from "@satisfactory-belt/factory-core";
 import type { MaterialLink } from "@satisfactory-belt/factory-core";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
-const number = new Intl.NumberFormat("en", { maximumSignificantDigits: 6 });
 export function InspectorLink({
   link,
   editor,
@@ -45,7 +48,7 @@ export function InspectorLink({
               <p>{item.name}</p>
               <p className="text-xs text-muted-foreground tabular-nums">
                 {analysis.status === "feasible" || analysis.status === "infeasible"
-                  ? `${number.format(rate)} ${item.unit === "m3" ? "m³" : "items"}/min`
+                  ? `${formatPlanningNumber(rate)} ${item.unit === "m3" ? "m³" : "items"}/min`
                   : "Rate unavailable"}
               </p>
             </div>

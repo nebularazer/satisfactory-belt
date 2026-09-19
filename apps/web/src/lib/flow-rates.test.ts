@@ -92,3 +92,36 @@ it("shows a shortage without replacing configured demand with the supplied rate"
   ).toBeCloseTo(1.2);
   expect(editor.getPortRate("smelter", "input:copper")).toBe("150");
 });
+
+it("respects individual maximum clocks by adding machines instead of exceeding ceilings", () => {
+  const { assets, smelter } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, {
+    nodes: [{ ...smelter, flow: { targets: { iron: 150 } } }],
+    links: [],
+  });
+  const before = editor.getNode(smelter.id);
+  if (before?.kind !== "manufacturing") throw new Error("Expected smelter");
+  const memberId = before.machines[0]!.id;
+  editor.setOperatingSetting(smelter.id, memberId, "clockPercent", 50);
+  const after = editor.getNode(smelter.id);
+  if (after?.kind !== "manufacturing") throw new Error("Expected smelter");
+  expect(after.machines).toHaveLength(6);
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
+  for (const member of after.machines)
+    expect(member.clockPercent).toBeLessThanOrEqual(member.id === memberId ? 50 : 100);
+  editor.historyCommand("undo");
+  expect(editor.getNode(smelter.id)).toEqual(before);
+});
+
+it("rebalances an unlocked standalone group while preserving its production", () => {
+  const { assets, miner } = minerFlowFixture();
+  const node = { ...miner, machines: createMachineMembers(2, { clockPercent: 125 }) };
+  const editor = createFactoryEditor(assets.catalog, { nodes: [node], links: [] });
+  editor.rebalanceAt100(node.id);
+  const after = editor.getNode(node.id);
+  if (after?.kind !== "extractor") throw new Error("Expected miner");
+  expect(after.machines).toHaveLength(3);
+  expect(after.flow?.targets).toBeUndefined();
+  expect(after.machines[0]!.clockPercent).toBeCloseTo(250 / 3);
+  expect(editor.getPortRate(node.id, "output:copper")).toBe("300");
+});

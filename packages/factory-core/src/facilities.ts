@@ -4,6 +4,7 @@ import { PROJECT_PHASES } from "@satisfactory-belt/game-data";
 
 import { NODE_SIZE, HEADER_HEIGHT, portRows, formatPower } from "./index";
 import type { MachineMember, MachineDisplay, PortDisplay, PowerDisplay } from "./index";
+import { formatPlanningNumber } from "./number-format";
 import type { PortTransport } from "./ports";
 import type { Production } from "./production";
 
@@ -391,7 +392,7 @@ export function resolveFacility(node: FacilityNode, catalog: GameCatalog): Machi
         : {}),
     clockLabel: b.canOverclock
       ? node.machines.every((member) => member.clockPercent === node.machines[0]!.clockPercent)
-        ? `${node.machines[0]!.clockPercent}%`
+        ? `${formatPlanningNumber(node.machines[0]!.clockPercent)}%`
         : "Mixed"
       : null,
     sloops: null,

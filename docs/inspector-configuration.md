@@ -22,7 +22,10 @@ button style and lists use its compact rows with 16px item icons. Choices are so
 alphabetically by display name, with natural numeric order; splitter rules and
 From connections remain pinned above the items.
 
-Flow production groups additionally expose output rates and clock speed under All.
+Flow production groups expose output rates, Running clock and Maximum clock.
+Running clock shows the actual calculated value; Maximum clock is the sizing ceiling.
+Rebalance at 100% chooses the fewest whole machines without overclocking while
+preserving production and its lock state.
 Rate fields show calculated values when unlocked. A single lock applies to the recipe
 and all its coproducts. Editing any rate updates the others by recipe ratio and locks
 production; unlocking removes the target so the connected plan can resize the group.
@@ -31,7 +34,10 @@ The count buttons preserve current production by adjusting clock speed; they are
 when the requested count would require a clock outside 1–250%. Counts are not persistent
 limits. Later demand changes resize groups using the chosen clock. Output rates use strict positive numbers; empty or invalid drafts
 restore the previous value. Shortfalls appear beside these controls. Calculated clocks
-remain visible on the canvas and can be lower than the chosen clock to balance whole counts.
+remain visible on the canvas and can be lower than the maximum to balance whole counts.
+Clock and material rates use common fraction glyphs or at most two decimal places,
+without trailing zeros. Focused fields show full decimal values; leaving an unchanged
+field preserves precision and lock state.
 There is no authored enabled/standby setting. The inspector omits the separate Flow balance
 section and manual external supply/export controls. See
 [Flow planning](flow-planning.md).
