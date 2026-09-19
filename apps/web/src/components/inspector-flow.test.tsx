@@ -46,6 +46,20 @@ it("edits targets and clock, with count buttons preserving production and no mac
   await enter("Iron Ingot output rate", "150");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
   expect(screen.queryByRole("textbox", { name: "Machine limit" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Add machine" }));
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    machines: Array.from({ length: 6 }, () =>
+      expect.objectContaining({ clockPercent: expect.closeTo(250 / 3) }),
+    ),
+  });
+  await user.click(screen.getByRole("button", { name: "Remove last machine" }));
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    machines: Array.from({ length: 5 }, () =>
+      expect.objectContaining({ clockPercent: expect.closeTo(100, 8) }),
+    ),
+  });
   await user.click(screen.getByRole("button", { name: "Lower clock: add one machine" }));
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("150");
   expect(editor.getNode(smelter.id)).toMatchObject({
@@ -90,6 +104,9 @@ it("edits targets and clock, with count buttons preserving production and no mac
       .disabled,
   ).toBe(true);
   expect(screen.queryByText(/Target shortfall/)).toBeNull();
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Remove last machine" }).disabled,
+  ).toBe(true);
   const clockInput = screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" });
   await user.click(clockInput);
   await user.keyboard("{ArrowDown}");

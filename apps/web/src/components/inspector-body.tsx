@@ -6,6 +6,7 @@ import {
   commonSetting,
   machineCapabilities,
   MAX_MACHINE_COUNT,
+  rebalanceFlowGroup,
   resolveProduction,
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
@@ -116,7 +117,7 @@ export function InspectorBody({
                 ))}
               </div>
             </TabsList>
-            {capabilities?.groupable && !isFlowGroup(node) && (
+            {capabilities?.groupable && (
               <fieldset
                 aria-label="Machine count"
                 className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
@@ -126,8 +127,12 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Remove last machine"
-                  title="Remove last machine"
-                  disabled={node.machines.length <= 1}
+                  title={isFlowGroup(node) ? "Fewer machines, higher clock" : "Remove last machine"}
+                  disabled={
+                    node.machines.length <= 1 ||
+                    (isFlowGroup(node) &&
+                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
+                  }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
                 >
                   <MinusIcon />
@@ -137,8 +142,12 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Add machine"
-                  title="Add machine"
-                  disabled={node.machines.length >= MAX_MACHINE_COUNT}
+                  title={isFlowGroup(node) ? "More machines, lower clock" : "Add machine"}
+                  disabled={
+                    node.machines.length >= MAX_MACHINE_COUNT ||
+                    (isFlowGroup(node) &&
+                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
+                  }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
                 >
                   <PlusIcon />

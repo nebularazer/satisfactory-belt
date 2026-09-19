@@ -3,8 +3,8 @@
 Single-node or single-link selection opens the inspector. Multiple selected canvas
 nodes do not. Desktop uses a top-right card; mobile uses a swipe-dismissable
 bottom drawer matching catalog search. Machine groups retain the All/member tabs; settings under All show
-Mixed when appropriate and write to all members. All stays fixed while member numbers scroll without a scrollbar. Flow group count
-adjustments live beside the clock; other groupable buildings retain count buttons. Numeric drafts clamp on Enter or
+Mixed when appropriate and write to all members. All and the count buttons stay fixed while member numbers scroll without a scrollbar. Flow group count
+buttons preserve production by adjusting clock speed; the clock controls provide the same adjustment from the clock's perspective. Numeric drafts clamp on Enter or
 blur, integer settings round, and empty/non-numeric drafts restore the prior value.
 Stations, logistics buffers, depot uploaders and the Space Elevator are individual
 buildings with no grouping tabs or count controls.
