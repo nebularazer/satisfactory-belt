@@ -1,6 +1,7 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-jsx-as-prop -- Selected group controls. */
 import {
   commonSetting,
+  isProductionLocked,
   rebalanceFlowGroup,
   MAX_MACHINE_COUNT,
 } from "@satisfactory-belt/factory-core";
@@ -26,9 +27,12 @@ export function InspectorFlowClock({
   const helpId = useId();
   const [helpOpen, setHelpOpen] = useState(false);
   const count = node.machines.length;
+  const locked = isProductionLocked(node);
   const more =
-    count < MAX_MACHINE_COUNT && Boolean(rebalanceFlowGroup(node, assets.catalog, count + 1));
-  const fewer = count > 1 && Boolean(rebalanceFlowGroup(node, assets.catalog, count - 1));
+    locked &&
+    count < MAX_MACHINE_COUNT &&
+    Boolean(rebalanceFlowGroup(node, assets.catalog, count + 1));
+  const fewer = locked && count > 1 && Boolean(rebalanceFlowGroup(node, assets.catalog, count - 1));
   return (
     <div className="space-y-2">
       <InspectorNumberField
@@ -39,18 +43,22 @@ export function InspectorFlowClock({
         max={250}
         unit="%"
         onCommit={(value) => editor.setFlowClock(node.id, value)}
-        steps={{
-          decrease: {
-            label: "Lower clock: add one machine",
-            disabled: !more,
-            run: () => editor.setMachineCount(node.id, count + 1),
-          },
-          increase: {
-            label: "Raise clock: remove one machine",
-            disabled: !fewer,
-            run: () => editor.setMachineCount(node.id, count - 1),
-          },
-        }}
+        steps={
+          locked
+            ? {
+                decrease: {
+                  label: "Lower clock: add one machine",
+                  disabled: !more,
+                  run: () => editor.setMachineCount(node.id, count + 1),
+                },
+                increase: {
+                  label: "Raise clock: remove one machine",
+                  disabled: !fewer,
+                  run: () => editor.setMachineCount(node.id, count - 1),
+                },
+              }
+            : undefined
+        }
         labelHint={
           <Tooltip triggerId={helpId} open={helpOpen} onOpenChange={setHelpOpen}>
             <TooltipTrigger
@@ -75,24 +83,27 @@ export function InspectorFlowClock({
               className="block space-y-2 leading-relaxed"
             >
               <p>
-                Clock changes apply to the whole group and keep its current output. The field shows
-                the actual clock speed.
+                The field shows the actual clock speed for the whole group. With output unlocked,
+                changing clock speed keeps the machine count and changes production. + and − change
+                the clock by one percentage point. Count buttons keep the clock unchanged and change
+                production.
               </p>
               <p>
-                − adds one machine and lowers the clock. + removes one machine and raises the clock,
-                up to 250%. Arrow keys do the same.
+                With output locked, − adds one machine and lowers the clock. + removes one machine
+                and raises the clock, up to 250%. Arrow keys do the same.
               </p>
               <p>
-                When you type a percentage, we use the fewest whole machines that can meet the
-                output at or below that speed, then adjust the clock to match exactly.
+                When output is locked and you type a percentage, we use the fewest whole machines
+                that can meet the output at or below that speed, then adjust the clock to match
+                exactly.
               </p>
               <p>
                 Example: 300 ore with miners rated at 120 needs 3 miners at 83⅓%, even if you enter
                 100%.
               </p>
               <p>
-                Rebalance at 100% does this without overclocking. None of these actions changes the
-                production lock.
+                Rebalance at 100% always preserves production and selects whole machines without
+                overclocking. None of these actions changes the production lock.
               </p>
             </TooltipContent>
           </Tooltip>

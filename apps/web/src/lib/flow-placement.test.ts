@@ -120,6 +120,7 @@ it("sizes shared suppliers from the sum of persistent consumer targets", () => {
   };
   const editor = createFactoryEditor(assets.catalog, { nodes: [], links: [] });
   const first = editor.placeNode({ ...recipe, recipeId: "consumer" }, { x: 600, y: 0 });
+  editor.setProductionTarget(first.id, "copper", 30);
   const smelt = editor.placeNode(
     recipe,
     { x: 300, y: 0 },
@@ -139,19 +140,17 @@ it("sizes shared suppliers from the sum of persistent consumer targets", () => {
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("90");
   expect(editor.getPortRate(miner.id, "output:copper")).toBe("90");
   editor.setMachineCount(smelt.id, 2);
-  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("90");
+  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("60");
   expect(editor.getNode(smelt.id)).toMatchObject({
-    machines: Array.from({ length: 2 }, () => expect.objectContaining({ clockPercent: 150 })),
+    machines: Array.from({ length: 2 }, () => expect.objectContaining({ clockPercent: 100 })),
   });
   editor.setProductionTarget(second.id, "copper", 90);
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("120");
   expect(editor.getNode(smelt.id)).toMatchObject({
-    machines: Array.from({ length: 3 }, () =>
-      expect.objectContaining({ clockPercent: expect.closeTo(400 / 3) }),
-    ),
+    machines: Array.from({ length: 4 }, () => expect.objectContaining({ clockPercent: 100 })),
   });
   editor.historyCommand("undo");
-  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("90");
+  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("60");
   editor.historyCommand("redo");
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("120");
 });
@@ -170,13 +169,14 @@ it("builds forward from an extraction target and trades count for clock without 
   );
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("120");
   editor.setMachineCount(miner.id, 3);
-  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("120");
+  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("360");
   editor.setProductionTarget(miner.id, "copper", 360);
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("360");
   editor.setMachineCount(smelt.id, 6);
   expect(editor.getNode(smelt.id)).toMatchObject({
-    machines: Array.from({ length: 6 }, () => expect.objectContaining({ clockPercent: 200 })),
+    machines: Array.from({ length: 6 }, () => expect.objectContaining({ clockPercent: 100 })),
   });
+  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("180");
   editor.setOperatingSetting(miner.id, "all", "purity", 2);
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("360");
   editor.setProductionTarget(miner.id, "copper", 720);

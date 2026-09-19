@@ -4,7 +4,7 @@ Single-node or single-link selection opens the inspector. Multiple selected canv
 nodes do not. Desktop uses a top-right card; mobile uses a swipe-dismissable
 bottom drawer matching catalog search. Machine groups retain the All/member tabs; settings under All show
 Mixed when appropriate and write to all members. All and the count buttons stay fixed while member numbers scroll without a scrollbar. Flow group count
-buttons preserve production by adjusting clock speed; the clock controls provide the same adjustment from the clock's perspective. Numeric drafts clamp on Enter or
+buttons change output at the current clock when unlocked, or adjust clock to preserve output when locked. Numeric drafts clamp on Enter or
 blur, integer settings round, and empty/non-numeric drafts restore the prior value.
 Stations, logistics buffers, depot uploaders and the Space Elevator are individual
 buildings with no grouping tabs or count controls.
@@ -23,18 +23,21 @@ alphabetically by display name, with natural numeric order; splitter rules and
 From connections remain pinned above the items.
 
 Flow production groups expose output rates and one Clock speed input showing the
-actual group clock. Its − button adds one machine and lowers the clock; + removes
-one and raises it. Arrow keys have the same behavior. These controls always apply
-to the whole group. Typing a percentage chooses whole machines at or below that
-speed, then adjusts the displayed clock to preserve current production. The info
-button opens an explanatory tooltip on hover, keyboard focus or click/tap.
-Rebalance at 100% sits next to the machine count and preserves production and lock state.
+actual group clock. With output unlocked, count edits retain member clocks and clock
+edits retain count; both change production. Clock +/− and arrow keys change the
+percentage by one point. Operating edits retain the edited group's settings for
+that recalculation without saving a lock; connected automatic groups follow its rate.
+With output locked, clock − adds one machine and lowers the clock; + removes one
+and raises it. Typed percentages choose whole machines at or below that speed,
+then adjust the clock to preserve output. These controls apply to the whole group.
+The info button explains both states on hover, keyboard focus or click/tap.
+Rebalance at 100% always preserves production and lock state.
 Rate fields show calculated values when unlocked. A single lock applies to the recipe
 and all its coproducts. Editing any rate updates the others by recipe ratio and locks
 production; unlocking removes the target so the connected plan can resize the group.
 Inputs keep the same width in both states, with no per-output Auto button.
-The clock step buttons preserve current production; they are disabled
-when the requested count would require a clock outside 1–250%. Counts are not persistent
+Locked count and clock step buttons are disabled when preserving output would
+require a clock outside 1–250%. Counts are not persistent
 limits. Later demand changes resize groups using the chosen clock. Output rates use strict positive numbers; empty or invalid drafts
 restore the previous value. Supply shortages and target shortfalls appear in a
 collapsed, neutral Supply details section below the material rates. Newly placed

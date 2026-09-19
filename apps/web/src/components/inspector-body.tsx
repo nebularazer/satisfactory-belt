@@ -2,6 +2,7 @@
 import {
   formatPlanningNumber,
   isFlowGroup,
+  isProductionLocked,
   commonMatrices,
   commonSetting,
   machineCapabilities,
@@ -127,10 +128,15 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Remove last machine"
-                  title={isFlowGroup(node) ? "Fewer machines, higher clock" : "Remove last machine"}
+                  title={
+                    isProductionLocked(node)
+                      ? "Fewer machines, higher clock"
+                      : "Remove last machine"
+                  }
                   disabled={
                     node.machines.length <= 1 ||
                     (isFlowGroup(node) &&
+                      isProductionLocked(node) &&
                       !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
                   }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
@@ -142,10 +148,11 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Add machine"
-                  title={isFlowGroup(node) ? "More machines, lower clock" : "Add machine"}
+                  title={isProductionLocked(node) ? "More machines, lower clock" : "Add machine"}
                   disabled={
                     node.machines.length >= MAX_MACHINE_COUNT ||
                     (isFlowGroup(node) &&
+                      isProductionLocked(node) &&
                       !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
                   }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}

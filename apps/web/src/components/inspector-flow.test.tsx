@@ -127,6 +127,46 @@ it("edits targets and clock, with count buttons preserving production and no mac
   expect(editor.history.getSnapshot().state).toBe(unchanged);
 });
 
+it("changes unlocked count and clock directly, then preserves output when locked", async () => {
+  const user = userEvent.setup();
+  const { assets, smelter } = minerFlowFixture();
+  assets.catalog.items.Desc_CrystalShard_C = {
+    ...assets.catalog.items.iron!,
+    id: "Desc_CrystalShard_C",
+  };
+  const editor = createFactoryEditor(assets.catalog, { nodes: [smelter], links: [] });
+  function Harness() {
+    const snapshot = useSyncExternalStore(editor.history.subscribe, editor.history.getSnapshot);
+    return <InspectorBody node={snapshot.state.nodes[0]!} editor={editor} assets={assets} />;
+  }
+  render(<Harness />);
+  await user.click(screen.getByRole("button", { name: "Add machine" }));
+  expect(field("Iron Ingot").value).toBe("60");
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("100");
+  const clock = screen.getByRole("textbox", { name: "Clock speed" });
+  await user.clear(clock);
+  await user.type(clock, "150");
+  await user.tab();
+  expect(field("Iron Ingot").value).toBe("90");
+  await user.click(screen.getByRole("button", { name: "Increase Clock speed by 1" }));
+  expect(field("Iron Ingot").value).toBe("90.6");
+  await user.click(screen.getByRole("button", { name: "Decrease Clock speed by 1" }));
+  expect(field("Iron Ingot").value).toBe("90");
+  expect(lock().getAttribute("aria-pressed")).toBe("false");
+  await user.click(lock());
+  await user.click(screen.getByRole("button", { name: "Add machine" }));
+  expect(field("Iron Ingot").value).toBe("90");
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("100");
+  await user.click(screen.getByRole("button", { name: "Raise clock: remove one machine" }));
+  expect(field("Iron Ingot").value).toBe("90");
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("150");
+  await user.click(lock());
+  await user.click(screen.getByRole("button", { name: "Remove last machine" }));
+  expect(field("Iron Ingot").value).toBe("45");
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("150");
+  expect(lock().getAttribute("aria-pressed")).toBe("false");
+});
+
 it("shows calculated coproducts and locks or unlocks the entire recipe without independent targets", async () => {
   const user = userEvent.setup();
   const { assets, document } = recyclingFlowFixture();

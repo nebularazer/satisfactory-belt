@@ -1,5 +1,9 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Controls belong to the selected group. */
-import { flowOutputRates, formatPlanningNumber } from "@satisfactory-belt/factory-core";
+import {
+  flowOutputRates,
+  formatPlanningNumber,
+  isProductionLocked,
+} from "@satisfactory-belt/factory-core";
 import type { FlowGroup } from "@satisfactory-belt/factory-core";
 import { LockIcon, LockOpenIcon } from "lucide-react";
 import { useState } from "react";
@@ -21,7 +25,7 @@ export function InspectorFlow({
   assets: GameAssets;
 }) {
   const rates = flowOutputRates(node, assets.catalog);
-  const locked = Object.keys(node.flow?.targets ?? {}).length > 0;
+  const locked = isProductionLocked(node);
   return (
     <section aria-label="Production rates" className="space-y-3">
       <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">

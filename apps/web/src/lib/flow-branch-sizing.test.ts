@@ -81,16 +81,20 @@ it.each([false, true])(
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 20);
     expect(editor.getPortRate("iron-miners", "output:Desc_OreIron_C")).toBe("480");
     editor.setMachineCount("cast-screws", 7);
-    expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("360");
+    expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("315");
+    expect(editor.getNode("cast-screws")).toMatchObject({
+      machines: Array.from({ length: 7 }, () => expect.objectContaining({ clockPercent: 90 })),
+    });
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 40);
     expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("720");
     expect(editor.getNode("cast-screws")).toMatchObject({
-      machines: Array.from({ length: 14 }, () =>
-        expect.objectContaining({ clockPercent: expect.closeTo((720 / 14 / 50) * 100) }),
+      machines: Array.from({ length: 15 }, () =>
+        expect.objectContaining({ clockPercent: expect.closeTo(96) }),
       ),
     });
     expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("720");
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 20);
+    editor.setProductionLocked("iron-miners", true);
     editor.setOperatingSetting("iron-miners", "all", "purity", 0.5);
     expect(editor.getNode("iron-miners")).toMatchObject({
       machines: Array.from({ length: 8 }, () =>

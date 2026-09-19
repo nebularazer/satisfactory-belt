@@ -129,15 +129,77 @@ it("respects individual maximum clocks by adding machines instead of exceeding c
   expect(editor.getNode(smelter.id)).toEqual(before);
 });
 
-it("rebalances an unlocked standalone group while preserving its production", () => {
+it("changes unlocked production directly while keeping the other operating settings", () => {
   const { assets, miner } = minerFlowFixture();
   const node = { ...miner, machines: createMachineMembers(2, { clockPercent: 125 }) };
   const editor = createFactoryEditor(assets.catalog, { nodes: [node], links: [] });
   editor.setFlowClock(node.id, 100);
   const after = editor.getNode(node.id);
   if (after?.kind !== "extractor") throw new Error("Expected miner");
-  expect(after.machines).toHaveLength(3);
+  expect(after.machines).toHaveLength(2);
   expect(after.flow?.targets).toBeUndefined();
-  expect(after.machines[0]!.clockPercent).toBeCloseTo(250 / 3);
+  expect(after.machines[0]!.clockPercent).toBe(100);
+  expect(editor.getPortRate(node.id, "output:copper")).toBe("240");
+  editor.setMachineCount(node.id, 3);
+  expect(editor.getPortRate(node.id, "output:copper")).toBe("360");
+  expect(editor.getNode(node.id)).toMatchObject({
+    machines: Array.from({ length: 3 }, () => expect.objectContaining({ clockPercent: 100 })),
+  });
+  editor.historyCommand("undo");
+  expect(editor.getPortRate(node.id, "output:copper")).toBe("240");
+  editor.historyCommand("undo");
   expect(editor.getPortRate(node.id, "output:copper")).toBe("300");
+});
+
+it("propagates unlocked source edits without resizing the edited group or creating a lock", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setFlowClock("miner", 100);
+  expect(editor.getPortRate("miner", "output:copper")).toBe("120");
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("120");
+  editor.setMachineCount("miner", 2);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("240");
+  editor.setOperatingSetting("miner", "all", "purity", 0.5);
+  expect(editor.getPortRate("miner", "output:copper")).toBe("120");
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("120");
+  const miner = editor.getNode("miner");
+  if (miner?.kind !== "extractor") throw new Error("Expected miner");
+  expect(miner.flow?.targets).toBeUndefined();
+  expect(miner.machines).toHaveLength(2);
+  expect(miner.machines.every((member) => member.clockPercent === 100)).toBe(true);
+  editor.setFlowClock("smelter", 50);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("60");
+  expect(editor.getNode("smelter")).toMatchObject({
+    machines: Array.from({ length: 4 }, () => expect.objectContaining({ clockPercent: 50 })),
+  });
+  expect(editor.getPortRate("miner", "output:copper")).toBe("60");
+});
+
+it("keeps heterogeneous miner settings and exact supply through unlocked count edits", () => {
+  const { assets, document, miner, smelter } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, {
+    ...document,
+    nodes: [
+      {
+        ...miner,
+        machines: [
+          { ...miner.machines[0]!, id: "pure", purity: 2 },
+          { ...miner.machines[0]!, id: "impure", purity: 0.5 },
+        ],
+      },
+      { ...smelter, machines: createMachineMembers(9) },
+    ],
+  });
+  editor.setOperatingSetting("miner", "pure", "clockPercent", 100);
+  expect(editor.getPortRate("miner", "output:copper")).toBe("294");
+  editor.setMachineCount("miner", 3);
+  expect(editor.getPortRate("miner", "output:copper")).toBe("348");
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("348");
+  expect(editor.getNode("miner")).toMatchObject({
+    machines: [
+      expect.objectContaining({ purity: 2, clockPercent: 100 }),
+      expect.objectContaining({ purity: 0.5, clockPercent: 90 }),
+      expect.objectContaining({ purity: 0.5, clockPercent: 90 }),
+    ],
+  });
 });

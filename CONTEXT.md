@@ -107,13 +107,15 @@ allocations remain inspectable in unfinished plans. Recipe outputs are configure
 potential, not predicted actual throughput under ingredient shortages. Configured
 counts stay fixed during allocation. Connected placement initially sizes a group
 to the anchor port’s remaining supply or demand, preferring uniform underclocking.
-Sizing is calculated simultaneously from persistent output targets and preferred
-clocks, independent of construction or edit order. Targets describe gross output;
+Sizing is calculated simultaneously from output targets and preferred clocks,
+independent of construction order. An unlocked operating edit holds that group's
+settings for the current solve without saving a target. Targets describe gross output;
 connected consumers use that output, and an unconnected target is the final product.
 Automatic suppliers meet combined demand, including extraction and recycling loops.
 Finite extractors expose available supply; automatic downstream groups use it.
-A machine-count edit preserves production by adjusting clock speed within 1–250%.
-It saves a preferred clock, never a count limit. Later demand changes resize the group
+Unlocked count edits keep clock speed; unlocked clock edits keep count. Both change
+output. Locked count edits preserve output by adjusting clock within 1–250% and
+save a preferred clock, never a count limit. Later demand changes resize the group
 using that clock, underclocking as needed to balance whole counts. Standalone recipes
 and extractors start unlocked. Terminal production provides demand for automatic
 suppliers when no locked supply feeds it; these requirements are derived, never saved
@@ -121,12 +123,13 @@ as hidden locks.
 Shortages remain visible instead of overriding constraints. Storage only collects
 surplus. The inspector has one production-rate lock for the entire recipe: editing
 one output locks it and updates coproducts by recipe ratio; unlocking removes the
-target and displays the calculated rates. There is no temporary-edit anchor or generic
-node lock. Link text has a constant canvas-space font size and scales with zoom.
+target and displays the calculated rates. Operating edits never create a production
+lock; their settings take precedence for the current solve only. Link text has a constant canvas-space font size and scales with zoom.
 
-Clock speed shows the actual group clock. Its − button adds a machine and lowers
-the clock; + removes a machine and raises it. Typed percentages are requests:
-whole counts and exact production take precedence, so the displayed clock may adjust.
+Clock speed shows the actual group clock. Unlocked +/− changes it by one percentage
+point. When locked, − adds a machine and lowers the clock; + removes a machine and
+raises it. Locked typed percentages are requests: whole counts and exact output
+take precedence, so the displayed clock may adjust.
 An info tooltip explains this with an example. Rebalance at 100% preserves output
 and lock state while selecting whole machines without overclocking. Clock/rate
 displays use common fractions or two decimals; editing uses full decimals without
