@@ -8,7 +8,6 @@ import {
   routeTopology,
   scopedMachines,
   DEPOT_SPEEDS,
-  configuredIncomingRates,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode } from "@satisfactory-belt/factory-core";
 import { ZapIcon } from "lucide-react";
@@ -86,13 +85,12 @@ export function InspectorStatistics({
     });
   }
   if (node.kind === "sink") {
-    const rates = configuredIncomingRates(
-      editor.history.getSnapshot().state,
-      assets.catalog,
-      node.id,
-    );
+    const rates =
+      editor.getFlowAnalysis().status === "feasible"
+        ? (editor.getFlowAnalysis().incoming.get(node.id) ?? [])
+        : null;
     for (const counter of ["sinkPoints", "dnaPoints"] as const) {
-      const relevant = rates.filter(
+      const relevant = (rates ?? []).filter(
         (rate) => (assets.catalog.items[rate.itemId]![counter] ?? 0) > 0,
       );
       if (relevant.length)

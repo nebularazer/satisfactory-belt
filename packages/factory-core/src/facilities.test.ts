@@ -5,7 +5,6 @@ import { expect, it } from "vitest";
 import {
   canReplaceNode,
   createConfigurationValidator,
-  configuredIncomingRates,
   createConnectionIndex,
   createFactoryNode,
   createMachineMembers,
@@ -333,30 +332,6 @@ it("passes a buffer's fluid through and rejects a second fluid before it can mix
       { nodeId: "buffer", portKey: "input:0" },
     ),
   ).toMatchObject({ compatible: false, reason: "mixed-material" });
-});
-
-it("calculates nominal sink supply only where branch allocation is unambiguous", () => {
-  const { catalog, extractor } = fixture();
-  const source = extractor("mine", "coal");
-  const sink = createFactoryNode(catalog, { kind: "sink", sinkId: "sink" }, "sink", { x: 0, y: 0 });
-  const document: FactoryDocument = {
-    nodes: [source, sink],
-    links: [link("one", "mine", "output:coal", "sink", "input:0")],
-  };
-  expect(configuredIncomingRates(document, catalog, "sink")).toEqual([
-    { itemId: "coal", perMinute: 60 },
-  ]);
-  const other = { ...sink, id: "other" };
-  expect(
-    configuredIncomingRates(
-      {
-        nodes: [...document.nodes, other],
-        links: [...document.links, link("two", "mine", "output:coal", "other", "input:0")],
-      },
-      catalog,
-      "sink",
-    ),
-  ).toEqual([{ itemId: "coal", perMinute: null }]);
 });
 
 it("does not propagate truck fuel into its outgoing cargo", () => {

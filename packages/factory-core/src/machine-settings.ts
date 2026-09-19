@@ -105,7 +105,7 @@ export function validateMachineMembers(node: MachineGroup, catalog: GameCatalog)
       throw new Error("Invalid matrix supply setting.");
     if (
       !Number.isFinite(member.clockPercent) ||
-      member.clockPercent < 1 ||
+      member.clockPercent < (node.kind === "manufacturing" || node.kind === "extractor" ? 0 : 1) ||
       member.clockPercent > 250 ||
       (!clock && member.clockPercent !== 100)
     )
@@ -127,6 +127,8 @@ export function setMachineSetting(
   setting: MachineSetting,
   value: number,
 ): MachineGroup {
+  if (setting === "clockPercent" && (value < 1 || value > 250 || !Number.isFinite(value)))
+    throw new Error("Clock speed must be from 1 to 250.");
   const members = scopedMachines(node, scope);
   if (members.every((member) => member[setting] === value)) return node;
   const next = {

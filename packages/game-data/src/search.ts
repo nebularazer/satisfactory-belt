@@ -164,9 +164,9 @@ export function searchCatalog(
       )
         continue;
     } else {
-      if (entry.kind === "resource") continue;
-      if (options.category === "recipes" && entry.kind !== "recipe") continue;
-      if (options.category === "buildings" && entry.kind === "recipe") continue;
+      const production = entry.kind === "recipe" || entry.kind === "resource";
+      if (options.category === "recipes" && !production) continue;
+      if (options.category === "buildings" && production) continue;
     }
     candidates.push(entry);
     if (!tokens.every((token) => entry.terms.includes(token))) continue;

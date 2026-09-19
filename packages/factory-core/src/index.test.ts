@@ -253,7 +253,7 @@ it("hides unsupported footer settings without moving a fixed producer's output",
 it.each(
   [
     [],
-    [{ id: "a", clockPercent: 0, sloopsUsed: 0 }],
+    [{ id: "a", clockPercent: -1, sloopsUsed: 0 }],
     [{ id: "a", clockPercent: 251, sloopsUsed: 0 }],
     [{ id: "a", clockPercent: 100, sloopsUsed: -1 }],
     [{ id: "a", clockPercent: 100, sloopsUsed: 3 }],

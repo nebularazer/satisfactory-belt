@@ -29,12 +29,18 @@ export type MachineMember = Readonly<{
   normalSatellites?: number;
   pureSatellites?: number;
 }>;
-type NodeBase = Readonly<{ id: string; x: number; y: number; machines: readonly MachineMember[] }>;
+type NodeBase = Readonly<{
+  id: string;
+  x: number;
+  y: number;
+  machines: readonly MachineMember[];
+}>;
 export type ManufacturingNode = NodeBase &
   Readonly<{
     kind: "manufacturing";
     machineId: string;
     recipeId: string;
+    flow?: import("./flow-sizing").FlowSettings;
   }>;
 export type FactoryNode =
   | ManufacturingNode
@@ -46,6 +52,7 @@ export type FactoryNode =
         kind: "extractor";
         extractorId: string;
         resourceId: string;
+        flow?: import("./flow-sizing").FlowSettings;
       }>)
   | (NodeBase &
       Readonly<{
@@ -379,10 +386,15 @@ export * from "./facilities";
 
 export * from "./configuration";
 
-export * from "./configured-flow";
-
 export * from "./clipboard";
 
 export * from "./transport";
 
 export { settingsKey } from "./settings";
+
+export * from "./flow-plan";
+export * from "./validation";
+
+export * from "./flow-placement";
+
+export * from "./flow-sizing";
