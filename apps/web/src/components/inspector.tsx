@@ -1,3 +1,4 @@
+import { isFlowGroup } from "@satisfactory-belt/factory-core";
 import { Trash2Icon } from "lucide-react";
 import { memo, useCallback, useId, useSyncExternalStore, useEffect, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
@@ -69,6 +70,8 @@ export const Inspector = memo(function Inspector({
   const node = target?.startsWith("node:") ? editor.getNode(target.slice(5)) : undefined;
   const link = target?.startsWith("link:") ? editor.getLink(target.slice(5)) : undefined;
   if (!summary) return null;
+  const subtitle =
+    node && isFlowGroup(node) ? summary.subtitle?.replace(/^\d+×\s*/, "") : summary.subtitle;
 
   const body = (
     <>
@@ -99,7 +102,7 @@ export const Inspector = memo(function Inspector({
         >
           <div className="shrink-0 space-y-1 p-4">
             <DrawerTitle>{summary.title}</DrawerTitle>
-            {summary.subtitle && <DrawerDescription>{summary.subtitle}</DrawerDescription>}
+            {subtitle && <DrawerDescription>{subtitle}</DrawerDescription>}
           </div>
           <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">{body}</div>
           <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -112,7 +115,7 @@ export const Inspector = memo(function Inspector({
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape bubbles from inspector controls; preserve the complementary landmark.
     <aside
       aria-labelledby={titleId}
-      aria-describedby={summary.subtitle ? descriptionId : undefined}
+      aria-describedby={subtitle ? descriptionId : undefined}
       className="pointer-events-auto sm:fixed sm:top-[max(1rem,env(safe-area-inset-top))] sm:right-[max(1rem,env(safe-area-inset-right))] sm:w-88"
       onKeyDown={handleKeyDown}
     >
@@ -121,9 +124,7 @@ export const Inspector = memo(function Inspector({
           <CardTitle>
             <h2 id={titleId}>{summary.title}</h2>
           </CardTitle>
-          {summary.subtitle && (
-            <CardDescription id={descriptionId}>{summary.subtitle}</CardDescription>
-          )}
+          {subtitle && <CardDescription id={descriptionId}>{subtitle}</CardDescription>}
         </CardHeader>
         <CardContent className="min-h-0 overflow-y-auto overscroll-contain pb-4">
           {body}

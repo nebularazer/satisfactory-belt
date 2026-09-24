@@ -210,6 +210,11 @@ export function resolveMachineNode(
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
     throw new Error(`Invalid position on ${node.id}.`);
   if (node.kind === "facility") return resolveFacility(node, catalog);
+  const utilization =
+    (node.kind === "manufacturing" || node.kind === "extractor") &&
+    node.flow?.clockMode === "manual"
+      ? (node.flow.utilization ?? 1)
+      : 1;
   const clock = commonSetting(node.machines, "clockPercent");
   const sloops = commonSetting(node.machines, "sloopsUsed");
   const clockLabel = clock === null ? "Mixed" : `${formatPlanningNumber(clock)}%`;
@@ -277,7 +282,8 @@ export function resolveMachineNode(
       megawatts: node.machines.reduce(
         (sum, member) =>
           sum +
-          extractor.powerMegawatts *
+          utilization *
+            extractor.powerMegawatts *
             (member.clockPercent / 100) ** extractor.powerConsumptionExponent,
         0,
       ),
@@ -328,7 +334,8 @@ export function resolveMachineNode(
             const factor = node.machines.reduce(
               (sum, member) =>
                 sum +
-                (member.clockPercent / 100) ** machine.powerConsumptionExponent *
+                utilization *
+                  (member.clockPercent / 100) ** machine.powerConsumptionExponent *
                   (machine.productionBoost.base +
                     member.sloopsUsed * machine.productionBoost.perSloop) **
                     machine.productionBoost.powerExponent,
@@ -347,6 +354,7 @@ export function resolveMachineNode(
             (sum, member) =>
               sum +
               (machine.power.kind === "fixed" ? machine.power.megawatts : 0) *
+                utilization *
                 (member.clockPercent / 100) ** machine.powerConsumptionExponent *
                 (machine.productionBoost.base +
                   member.sloopsUsed * machine.productionBoost.perSloop) **
@@ -401,3 +409,5 @@ export * from "./flow-placement";
 export * from "./flow-sizing";
 
 export { formatPlanningNumber } from "./number-format";
+
+export * from "./flow-controls";

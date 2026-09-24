@@ -16,6 +16,12 @@ export type FlowSettings = Readonly<{
   /** Authored whole-machine capacity. Null explicitly enables automatic sizing.
    * Extractors default to their existing machine count; manufacturing defaults to Auto. */
   machineLimit?: number | null;
+  /** Optional output ceiling; it never forces unused upstream production. */
+  outputLimit?: Readonly<{ itemId: string; perMinute: number }>;
+  /** Auto underclocks whole machines; manual keeps the authored clock and may idle. */
+  clockMode?: "auto" | "manual";
+  /** Solved duty cycle for manual clocks. Never an authored limit. */
+  utilization?: number;
   /** Gross output requirements. Connections consume these outputs; this is not an export. */
   targets?: Readonly<Record<string, number>>;
   /** Preferred clock used for automatic sizing. Defaults to 100%, with uniform underclocking. */
@@ -48,6 +54,7 @@ export function flowCapacityNode(node: FlowGroup): FlowGroup {
   if (!isFlowGroup(resized)) return node;
   return {
     ...resized,
+    flow: { ...resized.flow, utilization: 1 },
     machines: resized.machines.map((member) => ({
       ...member,
       clockPercent:
@@ -65,7 +72,11 @@ export function flowOutputRates(node: FlowGroup, catalog: GameCatalog) {
   const production = resolveProduction(node, catalog);
   if (!Object.keys(node.flow?.targets ?? {}).length) return production.outputs;
   const unit = resolveProduction(
-    { ...node, machines: node.machines.map((member) => ({ ...member, clockPercent: 100 })) },
+    {
+      ...node,
+      flow: { ...node.flow, utilization: 1 },
+      machines: node.machines.map((member) => ({ ...member, clockPercent: 100 })),
+    },
     catalog,
   );
   const factor = Math.max(
@@ -80,7 +91,15 @@ export function flowOutputRates(node: FlowGroup, catalog: GameCatalog) {
 }
 
 export function validateFlowSettings(node: FlowGroup, catalog: GameCatalog) {
-  const { clockPercent, targets, memberClocks, machineLimit } = node.flow ?? {};
+  const { clockPercent, targets, memberClocks, machineLimit, utilization, clockMode } =
+    node.flow ?? {};
+  if (clockMode !== undefined && clockMode !== "auto" && clockMode !== "manual")
+    throw new Error("Invalid clock mode.");
+  if (
+    utilization !== undefined &&
+    (!Number.isFinite(utilization) || utilization < 0 || utilization > 1)
+  )
+    throw new Error("Invalid machine utilization.");
   if (
     machineLimit != null &&
     (!Number.isInteger(machineLimit) || machineLimit < 1 || machineLimit > MAX_MACHINE_COUNT)
@@ -98,7 +117,10 @@ export function validateFlowSettings(node: FlowGroup, catalog: GameCatalog) {
   )
     throw new Error("Invalid member clock speed.");
   const items = new Set(resolveProduction(node, catalog).outputs.map((rate) => rate.itemId));
-  for (const [item, rate] of Object.entries(targets ?? {}))
+  const limits = node.flow?.outputLimit
+    ? { [node.flow.outputLimit.itemId]: node.flow.outputLimit.perMinute }
+    : {};
+  for (const [item, rate] of Object.entries({ ...targets, ...limits }))
     if (!items.has(item) || !Number.isFinite(rate) || rate <= 0 || rate > 1e9)
       throw new Error("Production targets require an output material and a positive finite rate.");
 }
@@ -176,7 +198,14 @@ export function rebalanceFlowGroupAtClock(
 
 /** Deliberate recipe/resource changes discard targets for outputs that no longer exist. */
 export function reconcileFlowTargets(node: FactoryNode, catalog: GameCatalog): FactoryNode {
-  if (!isFlowGroup(node) || !node.flow?.targets) return node;
+  if (!isFlowGroup(node)) return node;
+  const outputLimit = node.flow?.outputLimit;
+  if (
+    outputLimit &&
+    !resolveProduction(node, catalog).outputs.some((rate) => rate.itemId === outputLimit.itemId)
+  )
+    node = { ...node, flow: { ...node.flow, outputLimit: undefined } };
+  if (!node.flow?.targets) return node;
   const outputs = new Set(resolveProduction(node, catalog).outputs.map((rate) => rate.itemId));
   const entries = Object.entries(node.flow.targets);
   const retained = entries.filter(([item]) => outputs.has(item));
@@ -205,6 +234,7 @@ export function resizeFlowGroups(
           before &&
           before !== node &&
           isFlowGroup(before) &&
+          node.flow?.clockMode === undefined &&
           flowMachineLimit(node) === undefined &&
           !isProductionLocked(node) &&
           productionSettingsKey(before) !== productionSettingsKey(node)
@@ -235,7 +265,11 @@ export function resizeFlowGroups(
     if (
       nodes.length === 1 &&
       !document.links.some((link) => ids.has(link.output.nodeId)) &&
-      !nodes.some((entry) => isFlowGroup(entry) && Object.keys(entry.flow?.targets ?? {}).length)
+      !nodes.some(
+        (entry) =>
+          isFlowGroup(entry) &&
+          (entry.flow?.outputLimit || Object.keys(entry.flow?.targets ?? {}).length),
+      )
     )
       continue;
     const component = {
@@ -318,6 +352,7 @@ function solveComponent(
       .filter(
         (node) =>
           flowMachineLimit(node) !== undefined ||
+          Boolean(node.flow?.outputLimit) ||
           isProductionLocked(node) ||
           editedGroups.has(node.id),
       )
@@ -363,7 +398,10 @@ function solveComponent(
                 : (node.flow?.clockPercent ?? 100),
             }));
     const templateWork = template.reduce((sum, member) => sum + member.clockPercent / 100, 0);
-    const unit = resolveProduction({ ...node, machines: template }, catalog);
+    const unit = resolveProduction(
+      { ...node, flow: { ...node.flow, utilization: 1 }, machines: template },
+      catalog,
+    );
     const normalized = {
       ...unit,
       inputs: unit.inputs.map((r) => ({
@@ -435,6 +473,13 @@ function solveComponent(
         target / (normalized.outputs.find((rate) => rate.itemId === item)?.perMinute ?? Infinity),
     );
     if (requested.length) constraints[cap] = { max: Math.min(capacity, Math.max(...requested)) };
+    if (node.flow?.outputLimit) {
+      const limitRate = normalized.outputs.find(
+        (rate) => rate.itemId === node.flow!.outputLimit!.itemId,
+      )?.perMinute;
+      if (limitRate)
+        constraints[cap] = { max: Math.min(capacity, node.flow.outputLimit.perMinute / limitRate) };
+    }
     // An unlocked operating edit defines this solve's production without saving a lock.
     // Keep its settings when supply permits; connected shortages may lower utilization.
     if (editedGroups.has(node.id))
@@ -586,6 +631,10 @@ function solveComponent(
     );
     if (
       sameRates &&
+      (node.flow?.clockMode !== "manual" ||
+        node.machines.every(
+          (m) => Math.abs(m.clockPercent - (memberClocks?.[m.id] ?? clockPercent)) < 1e-8,
+        )) &&
       node.machines.length === count &&
       node.machines.every((m) => m.clockPercent <= (memberClocks?.[m.id] ?? clockPercent) + 1e-8)
     )
@@ -603,20 +652,26 @@ function solveComponent(
     const machines = resized.map((member) => ({
       ...member,
       clockPercent:
-        equivalent < 1e-7
-          ? 0
-          : memberClocks
-            ? ((memberClocks[member.id] ?? clockPercent) * equivalent) / maximumWork
-            : clock,
+        node.flow?.clockMode === "manual"
+          ? (memberClocks?.[member.id] ?? clockPercent)
+          : equivalent < 1e-7
+            ? 0
+            : memberClocks
+              ? ((memberClocks[member.id] ?? clockPercent) * equivalent) / maximumWork
+              : clock,
     }));
     const next = {
       ...node,
       machines,
-      ...(limit !== undefined
+      ...(limit !== undefined || node.flow?.clockMode !== undefined
         ? {
             flow: {
               ...node.flow,
-              machineLimit: limit,
+              machineLimit: limit ?? null,
+              utilization:
+                node.flow?.clockMode === "manual"
+                  ? Math.min(1, Math.max(0, equivalent / maximumWork))
+                  : 1,
               clockPercent,
               ...(memberClocks ? { memberClocks } : {}),
             },

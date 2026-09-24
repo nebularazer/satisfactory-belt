@@ -18,6 +18,9 @@ import {
   rebalanceFlowGroup,
   isFlowGroup,
   flowCapacityNode,
+  withProductionLimit,
+  productionLimit,
+  convertProductionLimit,
   isProductionLocked,
   validateFlowSettings,
   reconcileFlowTargets,
@@ -47,6 +50,7 @@ import {
   resolveSemanticPorts,
 } from "@satisfactory-belt/factory-core";
 import type {
+  ProductionLimit,
   ExternalFlow,
   TransportRoute,
   DepotResearch,
@@ -503,6 +507,35 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
         : node,
     );
   }
+  function setLimit(id: string, limit: ProductionLimit) {
+    editMachine(id, (node) =>
+      isFlowGroup(node) ? withProductionLimit(node, catalog, limit) : node,
+    );
+  }
+  function convertLimit(id: string, unit: string) {
+    editMachine(id, (node) =>
+      isFlowGroup(node) ? convertProductionLimit(node, catalog, unit) : node,
+    );
+  }
+  function setClock(id: string, clock: number | null) {
+    editMachine(id, (node) => {
+      if (!isFlowGroup(node)) return node;
+      node = withProductionLimit(node, catalog, productionLimit(node));
+      const next = {
+        ...node,
+        flow: {
+          ...node.flow,
+          clockMode: clock === null ? ("auto" as const) : ("manual" as const),
+          clockPercent: clock ?? 100,
+          memberClocks: undefined,
+          utilization: 1,
+        },
+        machines: node.machines.map((member) => ({ ...member, clockPercent: clock ?? 100 })),
+      };
+      validateFlowSettings(next, catalog);
+      return next;
+    });
+  }
   function setFlowClock(id: string, clock: number) {
     const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
     if (node && isFlowGroup(node) && !isProductionLocked(node)) {
@@ -793,6 +826,9 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     setOperatingSetting,
     setMachineCount,
     setAutomaticSizing,
+    setLimit,
+    convertLimit,
+    setClock,
     setFlowClock,
     rebalanceAt100: (id: string) =>
       editMachine(id, (node) =>

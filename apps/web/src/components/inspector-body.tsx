@@ -2,12 +2,10 @@
 import {
   formatPlanningNumber,
   isFlowGroup,
-  isProductionLocked,
   commonMatrices,
   commonSetting,
   machineCapabilities,
   MAX_MACHINE_COUNT,
-  rebalanceFlowGroup,
   resolveProduction,
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
@@ -19,8 +17,7 @@ import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
-import { InspectorFlow } from "@/components/inspector-flow";
-import { InspectorFlowClock } from "@/components/inspector-flow-clock";
+import { InspectorFlow, InspectorFlowResult } from "@/components/inspector-flow";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorStatistics } from "@/components/inspector-statistics";
 import { InspectorSupplyDetails } from "@/components/inspector-supply-details";
@@ -43,8 +40,11 @@ export function InspectorBody({
 }) {
   const matrixId = useId();
   const [selected, setSelected] = useState("all");
+  const [machinesOpen, setMachinesOpen] = useState(false);
   const scope =
-    node.kind !== "logistics" && node.machines.some((member) => member.id === selected)
+    node.kind !== "logistics" &&
+    (!isFlowGroup(node) || machinesOpen) &&
+    node.machines.some((member) => member.id === selected)
       ? selected
       : "all";
   const members = node.kind === "logistics" ? null : scopedMachines(node, scope);
@@ -92,78 +92,73 @@ export function InspectorBody({
         event.stopPropagation();
       }}
     >
-      {node.kind !== "logistics" && capabilities?.groupable && (
-        <div className="sticky top-0 z-10 bg-card py-1">
-          <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
-            <TabsList
-              aria-label="Machine settings scope"
-              className="min-w-0 flex-1 justify-start p-0 group-data-horizontal/tabs:h-auto"
-            >
-              <TabsTrigger
-                value="all"
-                className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
-              >
-                All
-              </TabsTrigger>
-              <div className="ml-1 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden border-l border-border pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {node.machines.map((member, index) => (
-                  <TabsTrigger
-                    key={member.id}
-                    value={member.id}
-                    aria-label={`Machine ${index + 1}`}
-                    className="h-11 min-w-11 flex-none px-3 focus-visible:ring-inset sm:h-8 sm:min-w-8"
-                  >
-                    {index + 1}
-                  </TabsTrigger>
-                ))}
-              </div>
-            </TabsList>
-            {capabilities?.groupable && (
-              <fieldset
-                aria-label="Machine count"
-                className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
-              >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-11 sm:size-8"
-                  aria-label="Remove last machine"
-                  title={
-                    isProductionLocked(node)
-                      ? "Fewer machines, higher clock"
-                      : "Remove last machine"
-                  }
-                  disabled={
-                    node.machines.length <= 1 ||
-                    (isFlowGroup(node) &&
-                      isProductionLocked(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
-                  }
-                  onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
-                >
-                  <MinusIcon />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-11 sm:size-8"
-                  aria-label="Add machine"
-                  title={isProductionLocked(node) ? "More machines, lower clock" : "Add machine"}
-                  disabled={
-                    node.machines.length >= MAX_MACHINE_COUNT ||
-                    (isFlowGroup(node) &&
-                      isProductionLocked(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
-                  }
-                  onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
-                >
-                  <PlusIcon />
-                </Button>
-              </fieldset>
+      {node.kind !== "logistics" &&
+        capabilities?.groupable &&
+        (!isFlowGroup(node) || node.machines.length > 1) && (
+          <details
+            open={isFlowGroup(node) ? machinesOpen : true}
+            onToggle={(event) => setMachinesOpen(event.currentTarget.open)}
+            className="bg-card"
+          >
+            {isFlowGroup(node) && (
+              <summary className="cursor-pointer text-xs text-muted-foreground">Machines…</summary>
             )}
-          </div>
-        </div>
-      )}
+            <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
+              <TabsList
+                aria-label="Machine settings scope"
+                className="min-w-0 flex-1 justify-start p-0 group-data-horizontal/tabs:h-auto"
+              >
+                <TabsTrigger
+                  value="all"
+                  className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
+                >
+                  All
+                </TabsTrigger>
+                <div className="ml-1 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden border-l border-border pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {node.machines.map((member, index) => (
+                    <TabsTrigger
+                      key={member.id}
+                      value={member.id}
+                      aria-label={`Machine ${index + 1}`}
+                      className="h-11 min-w-11 flex-none px-3 focus-visible:ring-inset sm:h-8 sm:min-w-8"
+                    >
+                      {index + 1}
+                    </TabsTrigger>
+                  ))}
+                </div>
+              </TabsList>
+              {capabilities?.groupable && !isFlowGroup(node) && (
+                <fieldset
+                  aria-label="Machine count"
+                  className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-11 sm:size-8"
+                    aria-label="Remove last machine"
+                    title="Remove last machine"
+                    disabled={node.machines.length <= 1}
+                    onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
+                  >
+                    <MinusIcon />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-11 sm:size-8"
+                    aria-label="Add machine"
+                    title="Add machine"
+                    disabled={node.machines.length >= MAX_MACHINE_COUNT}
+                    onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
+                  >
+                    <PlusIcon />
+                  </Button>
+                </fieldset>
+              )}
+            </div>
+          </details>
+        )}
       <TabsContent value={scope} className="space-y-4">
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
         {isFlowGroup(node) && <InspectorFlow node={node} editor={editor} assets={assets} />}
@@ -223,23 +218,20 @@ export function InspectorBody({
                   />
                 </div>
               )}
-              {capabilities.clock &&
-                (isFlowGroup(node) ? (
-                  <InspectorFlowClock node={node} editor={editor} assets={assets} />
-                ) : (
-                  <InspectorNumberField
-                    key={`${scope}:clock`}
-                    label="Clock speed"
-                    value={commonSetting(members, "clockPercent")}
-                    revision={node.machines}
-                    min={1}
-                    max={250}
-                    unit="%"
-                    onCommit={(value) =>
-                      editor.setOperatingSetting(node.id, scope, "clockPercent", value)
-                    }
-                  />
-                ))}
+              {capabilities.clock && !isFlowGroup(node) && (
+                <InspectorNumberField
+                  key={`${scope}:clock`}
+                  label="Clock speed"
+                  value={commonSetting(members, "clockPercent")}
+                  revision={node.machines}
+                  min={1}
+                  max={250}
+                  unit="%"
+                  onCommit={(value) =>
+                    editor.setOperatingSetting(node.id, scope, "clockPercent", value)
+                  }
+                />
+              )}
               {capabilities.sloopSlots > 0 && (
                 <InspectorNumberField
                   key={`${scope}:sloops`}
@@ -256,40 +248,46 @@ export function InspectorBody({
               )}
             </div>
           )}
-        <section
-          aria-label={networkRates ? "Planned material flow" : "Configured material rates"}
-          className="space-y-2 border-t pt-4"
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <RateColumn
-              title="Inputs"
-              rates={streams("input")}
-              assets={assets}
-              empty={
-                node.kind === "logistics" || node.kind === "sink"
-                  ? "No known materials"
-                  : "No inputs"
-              }
-            />
-            <RateColumn
-              title="Outputs"
-              rates={streams("output")}
-              assets={assets}
-              empty={node.kind === "logistics" ? "No known materials" : "No outputs"}
-            />
-          </div>
-          {networkRates ? (
-            <p className="text-xs text-muted-foreground">
-              Planned flow from configured production.
-            </p>
-          ) : (
-            production.unavailableReason && (
-              <p className="text-xs text-muted-foreground">{production.unavailableReason}</p>
-            )
-          )}
-        </section>
+        {isFlowGroup(node) ? (
+          <InspectorFlowResult node={node} assets={assets} />
+        ) : (
+          <section
+            aria-label={networkRates ? "Planned material flow" : "Configured material rates"}
+            className="space-y-2 border-t pt-4"
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <RateColumn
+                title="Inputs"
+                rates={streams("input")}
+                assets={assets}
+                empty={
+                  node.kind === "logistics" || node.kind === "sink"
+                    ? "No known materials"
+                    : "No inputs"
+                }
+              />
+              <RateColumn
+                title="Outputs"
+                rates={streams("output")}
+                assets={assets}
+                empty={node.kind === "logistics" ? "No known materials" : "No outputs"}
+              />
+            </div>
+            {networkRates ? (
+              <p className="text-xs text-muted-foreground">
+                Planned flow from configured production.
+              </p>
+            ) : (
+              production.unavailableReason && (
+                <p className="text-xs text-muted-foreground">{production.unavailableReason}</p>
+              )
+            )}
+          </section>
+        )}
         <InspectorSupplyDetails node={node} editor={editor} assets={assets} />
-        <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
+        {!isFlowGroup(node) && (
+          <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
+        )}
       </TabsContent>
     </Tabs>
   );

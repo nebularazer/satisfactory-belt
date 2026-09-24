@@ -1,3 +1,4 @@
+/* oxlint-disable oxc/no-map-spread -- Solved utilization must not mutate authored machine clocks. */
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
 import { facilityProduction } from "./facilities";
@@ -26,7 +27,16 @@ export function resolveProduction(
       outputs: [],
       unavailableReason: "Rates depend on connected material flow.",
     };
-  const members = scopedMachines(node, scope);
+  const scoped = scopedMachines(node, scope);
+  const utilization =
+    (node.kind === "manufacturing" || node.kind === "extractor") &&
+    node.flow?.clockMode === "manual"
+      ? (node.flow.utilization ?? 1)
+      : 1;
+  const members =
+    utilization === 1
+      ? scoped
+      : scoped.map((member) => ({ ...member, clockPercent: member.clockPercent * utilization }));
   if (node.kind === "facility") return facilityProduction({ ...node, machines: members }, catalog);
   if (node.kind === "extractor")
     return {
