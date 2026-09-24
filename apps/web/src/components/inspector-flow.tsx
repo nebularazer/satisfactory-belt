@@ -45,9 +45,9 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
   const outputId = limit?.kind === "output" ? limit.itemId : outputs[0]?.itemId;
   return (
     <section aria-label="Production controls" className="space-y-3">
-      <div className="flex items-center justify-between gap-2 text-sm">
+      <div className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-2">
         <span>Limit</span>
-        <div className="flex w-64 items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-64">
           <InspectorNumberInput
             type="number"
             revision={node}
@@ -115,9 +115,9 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
           </DropdownMenu>
         </div>
       )}
-      <div className="flex items-center justify-between gap-2 text-sm">
+      <div className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-2">
         <span>Clock %</span>
-        <div className="flex w-64 items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-64">
           <InspectorNumberInput
             type={manual ? "number" : "text"}
             formatValue={formatClock}

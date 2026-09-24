@@ -115,7 +115,7 @@ export function InspectorNumberInput({
         max={max}
         step={integer ? 1 : "any"}
         inputMode={integer ? "numeric" : "decimal"}
-        className="min-h-11 px-1 text-right text-xs tabular-nums [appearance:textfield] sm:min-h-8 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-full min-h-0 px-1 text-right text-base tabular-nums [appearance:textfield] sm:text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         value={
           draft ??
           (value === null ? "" : focused || type === "number" ? String(value) : formatValue(value))
@@ -149,7 +149,7 @@ export function InspectorNumberInput({
       <InputGroupAddon align="inline-start" className="py-0">
         <InputGroupButton
           size="icon-xs"
-          className="h-9 w-7 sm:size-6"
+          className="size-10 sm:size-6"
           aria-label={steps?.decrease.label ?? `Decrease ${label} by 1`}
           title={steps?.decrease.label}
           disabled={!canStep(-1)}
@@ -163,7 +163,7 @@ export function InspectorNumberInput({
         {unit && <InputGroupText className="text-xs">{unit}</InputGroupText>}
         <InputGroupButton
           size="icon-xs"
-          className="h-9 w-7 sm:size-6"
+          className="size-10 sm:size-6"
           aria-label={steps?.increase.label ?? `Increase ${label} by 1`}
           title={steps?.increase.label}
           disabled={!canStep(1)}
