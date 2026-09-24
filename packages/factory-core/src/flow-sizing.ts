@@ -564,8 +564,11 @@ function solveComponent(
   // Lexicographic solves avoid rate-dependent magic weights. Authored targets stay fixed.
   const objectives = [
     ...(hasTargets ? [targetCosts] : []),
-    missingCosts,
+    // Open inputs stand for external supply while constructing a plan. Preserve
+    // achievable production before minimizing those assumptions; connected inputs
+    // have no missing-input variable and remain constrained by actual supply.
     terminalCosts,
+    missingCosts,
     surplusCosts,
     sharingCosts,
     workCosts,
