@@ -1,5 +1,10 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-jsx-as-prop -- Controls belong to the selected group. */
-import { commonSetting, productionLimit, resolveProduction } from "@satisfactory-belt/factory-core";
+import {
+  commonSetting,
+  formatPlanningNumber,
+  productionLimit,
+  resolveProduction,
+} from "@satisfactory-belt/factory-core";
 import type { FlowGroup } from "@satisfactory-belt/factory-core";
 import {
   ArrowUpToLineIcon,
@@ -21,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
+
+const formatClock = (value: number) => formatPlanningNumber(value, "mixed");
 
 type Props = {
   node: FlowGroup;
@@ -111,14 +118,16 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
         <span>Clock %</span>
         <div className="flex w-64 items-center gap-2 sm:w-55">
           <InspectorNumberInput
-            type="number"
+            type={manual ? "number" : "text"}
+            formatValue={formatClock}
+            title={manual ? undefined : "Calculated automatically"}
             revision={node}
             className="w-auto min-w-0 flex-1 shrink"
             key={`${node.id}:${scope}:${manual}:${clock}`}
             label="Clock"
-            value={manual ? clock : null}
+            value={clock}
             disabled={!manual}
-            placeholder={manual ? "Mixed" : "Auto"}
+            placeholder="Mixed"
             min={1}
             max={250}
             onCommit={(value) => editor.setClock(node.id, value, scope)}

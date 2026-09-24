@@ -65,7 +65,7 @@ it("keeps inputs, outputs and statistics visible with stable manual clock contro
   expect(limit().value).toBe("75");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("75");
   await user.click(screen.getByRole("button", { name: "Use automatic clock" }));
-  expect(screen.getByRole<HTMLInputElement>("spinbutton", { name: "Clock" }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" }).disabled).toBe(true);
   expect(limit().value).toBe("75");
   act(() => editor.historyCommand("undo"));
   expect(screen.getByRole<HTMLInputElement>("spinbutton", { name: "Clock" }).value).toBe("101");
@@ -232,4 +232,20 @@ it("resets the selected clock to 100% and preserves the production limit", async
       expect.objectContaining({ clockPercent: 100 }),
     ],
   });
+});
+
+it("shows the calculated automatic clock as a fraction without changing the stored precision", () => {
+  const { assets, smelter } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, { nodes: [smelter], links: [] });
+  editor.setLimit(smelter.id, { kind: "output", itemId: "iron", value: 20 });
+  render(<Harness editor={editor} assets={assets} id={smelter.id} />);
+  const clock = screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" });
+  expect(clock.disabled).toBe(true);
+  expect(clock.value).toBe("66 2/3");
+  expect(clock.title).toBe("Calculated automatically");
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    machines: [expect.objectContaining({ clockPercent: expect.closeTo(200 / 3) })],
+  });
+  act(() => editor.setLimit(smelter.id, { kind: "output", itemId: "iron", value: 30 }));
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" }).value).toBe("100");
 });

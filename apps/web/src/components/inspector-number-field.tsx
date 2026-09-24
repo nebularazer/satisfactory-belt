@@ -27,6 +27,8 @@ export function InspectorNumberInput({
   disabled = false,
   placeholder = "Mixed",
   type = "text",
+  formatValue = formatPlanningNumber,
+  title,
   className,
   id: suppliedId,
 }: {
@@ -34,6 +36,8 @@ export function InspectorNumberInput({
   disabled?: boolean;
   placeholder?: string;
   type?: "text" | "number";
+  formatValue?: (value: number) => string;
+  title?: string;
   className?: string;
   id?: string;
   steps?: {
@@ -105,6 +109,7 @@ export function InspectorNumberInput({
         id={id}
         aria-label={label}
         type={type}
+        title={title}
         disabled={disabled}
         min={min}
         max={max}
@@ -113,11 +118,7 @@ export function InspectorNumberInput({
         className="min-h-11 px-1 text-right text-xs tabular-nums [appearance:textfield] sm:min-h-8 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         value={
           draft ??
-          (value === null
-            ? ""
-            : focused || type === "number"
-              ? String(value)
-              : formatPlanningNumber(value))
+          (value === null ? "" : focused || type === "number" ? String(value) : formatValue(value))
         }
         placeholder={value === null ? placeholder : undefined}
         onChange={(event) => {
