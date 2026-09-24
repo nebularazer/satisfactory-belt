@@ -65,3 +65,22 @@ it("leaves the canvas accessible while a mobile link inspector is open and its h
   expect(editor.getLink("ore")!.guides?.length).toBeGreaterThan(0);
   expect(editor.controller.getLinkSnapshot().selected).toBe("ore");
 });
+
+it("suppresses the mobile inspector while the catalog is open", () => {
+  const media = window.matchMedia("(max-width: 639px)");
+  vi.spyOn(window, "matchMedia").mockReturnValue(Object.assign(media, { matches: true }));
+  const { assets, smelter } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, { nodes: [smelter], links: [] });
+  editor.controller.setSelection(new Set([smelter.id]));
+  const focusCanvas = vi.fn();
+  const { rerender } = render(
+    <Inspector editor={editor} assets={assets} focusCanvas={focusCanvas} />,
+  );
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  rerender(<Inspector editor={editor} assets={assets} focusCanvas={focusCanvas} catalogOpen />);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  rerender(
+    <Inspector editor={editor} assets={assets} focusCanvas={focusCanvas} catalogOpen={false} />,
+  );
+  expect(screen.getByRole("dialog")).toBeTruthy();
+});

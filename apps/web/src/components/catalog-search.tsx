@@ -311,6 +311,7 @@ export function CatalogSearch({
       </div>
     </>
   );
+  if (narrow && !open) return null;
   return narrow ? (
     <Drawer open={open} onOpenChange={changeOpen} showSwipeHandle>
       <DrawerContent
@@ -319,7 +320,7 @@ export function CatalogSearch({
         onKeyDown={keyDown}
         initialFocus={() => (selected ? heading.current : input.current)}
         finalFocus={finalFocus}
-        className="h-[min(42rem,65dvh)]"
+        className="h-[60dvh]"
       >
         {content}
       </DrawerContent>

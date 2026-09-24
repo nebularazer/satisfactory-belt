@@ -5,11 +5,10 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-import { useDrawerResize } from "./use-drawer-resize";
+import { useDrawerViewport } from "./use-drawer-viewport";
 
 type DrawerContextProps = {
   hasSnapPoints: boolean;
-  close: () => void;
   modal: DrawerPrimitive.Root.Props["modal"];
   showSwipeHandle: boolean;
   swipeDirection: NonNullable<DrawerPrimitive.Root.Props["swipeDirection"]>;
@@ -28,7 +27,6 @@ function useDrawer() {
 }
 
 function Drawer({
-  actionsRef: externalActionsRef,
   modal = false,
   disablePointerDismissal = !modal,
   showSwipeHandle = false,
@@ -38,19 +36,15 @@ function Drawer({
 }: DrawerPrimitive.Root.Props & {
   showSwipeHandle?: boolean;
 }) {
-  const internalActionsRef = React.useRef<DrawerPrimitive.Root.Actions | null>(null);
-  const actionsRef = externalActionsRef ?? internalActionsRef;
-  const close = React.useCallback(() => actionsRef.current?.close(), [actionsRef]);
   const hasSnapPoints = snapPoints != null && snapPoints.length > 0;
   const contextValue = React.useMemo(
-    () => ({ close, hasSnapPoints, modal, showSwipeHandle, swipeDirection }),
-    [close, hasSnapPoints, modal, showSwipeHandle, swipeDirection],
+    () => ({ hasSnapPoints, modal, showSwipeHandle, swipeDirection }),
+    [hasSnapPoints, modal, showSwipeHandle, swipeDirection],
   );
 
   return (
     <DrawerContext.Provider value={contextValue}>
       <DrawerPrimitive.Root
-        actionsRef={actionsRef}
         data-slot="drawer"
         modal={modal}
         disablePointerDismissal={disablePointerDismissal}
@@ -93,7 +87,7 @@ function DrawerSwipeHandle({ className, ...props }: React.ComponentProps<"div">)
       data-slot="drawer-swipe-handle"
       aria-hidden="true"
       className={cn(
-        "relative z-10 flex shrink-0 cursor-grab transition-opacity duration-200 group-data-nested-drawer-open/drawer-popup:opacity-0 group-data-nested-drawer-swiping/drawer-popup:opacity-100 group-data-[swipe-axis=x]/drawer-popup:h-full group-data-[swipe-axis=x]/drawer-popup:w-3 group-data-[swipe-axis=x]/drawer-popup:items-center group-data-[swipe-axis=y]/drawer-popup:h-5 group-data-[swipe-axis=y]/drawer-popup:w-full group-data-[swipe-axis=y]/drawer-popup:justify-center group-data-[swipe-direction=down]/drawer-popup:items-end group-data-[swipe-direction=left]/drawer-popup:order-last group-data-[swipe-direction=left]/drawer-popup:justify-start group-data-[swipe-direction=right]/drawer-popup:justify-end group-data-[swipe-direction=up]/drawer-popup:order-last group-data-[swipe-direction=up]/drawer-popup:items-start after:block after:shrink-0 after:rounded-full after:bg-muted group-data-[swipe-axis=x]/drawer-popup:after:h-24 group-data-[swipe-axis=x]/drawer-popup:after:w-1 group-data-[swipe-axis=y]/drawer-popup:after:h-1 group-data-[swipe-axis=y]/drawer-popup:after:w-24 active:cursor-grabbing",
+        "relative z-10 flex shrink-0 cursor-grab transition-opacity duration-200 group-data-nested-drawer-open/drawer-popup:opacity-0 group-data-nested-drawer-swiping/drawer-popup:opacity-100 group-data-[swipe-axis=x]/drawer-popup:h-full group-data-[swipe-axis=x]/drawer-popup:w-3 group-data-[swipe-axis=x]/drawer-popup:items-center group-data-[swipe-axis=y]/drawer-popup:h-3 group-data-[swipe-axis=y]/drawer-popup:w-full group-data-[swipe-axis=y]/drawer-popup:justify-center group-data-[swipe-direction=down]/drawer-popup:items-end group-data-[swipe-direction=left]/drawer-popup:order-last group-data-[swipe-direction=left]/drawer-popup:justify-start group-data-[swipe-direction=right]/drawer-popup:justify-end group-data-[swipe-direction=up]/drawer-popup:order-last group-data-[swipe-direction=up]/drawer-popup:items-start after:block after:shrink-0 after:rounded-full after:bg-muted group-data-[swipe-axis=x]/drawer-popup:after:h-24 group-data-[swipe-axis=x]/drawer-popup:after:w-1 group-data-[swipe-axis=y]/drawer-popup:after:h-1 group-data-[swipe-axis=y]/drawer-popup:after:w-24 active:cursor-grabbing",
         className,
       )}
       {...props}
@@ -108,17 +102,14 @@ function DrawerContent({
   style,
   ...props
 }: DrawerPrimitive.Popup.Props & { swipeFromHandleOnly?: boolean }) {
-  const { close, hasSnapPoints, modal, showSwipeHandle, swipeDirection } = useDrawer();
-  const resize = useDrawerResize(
-    showSwipeHandle && swipeDirection === "down" && !hasSnapPoints,
-    close,
-  );
+  const { hasSnapPoints, modal, showSwipeHandle, swipeDirection } = useDrawer();
+  const viewportStyle = useDrawerViewport(swipeDirection === "down");
   const popupStyle = React.useMemo<DrawerPrimitive.Popup.Props["style"]>(
     () =>
       typeof style === "function"
-        ? (state) => ({ ...style(state), ...resize.style })
-        : { ...style, ...resize.style },
-    [style, resize.style],
+        ? (state) => ({ ...style(state), ...viewportStyle })
+        : { ...style, ...viewportStyle },
+    [style, viewportStyle],
   );
   const swipeAxis = swipeDirection === "down" || swipeDirection === "up" ? "y" : "x";
 
@@ -160,12 +151,11 @@ function DrawerContent({
             // Direction: right.
             "data-[swipe-direction=right]:right-0 data-[swipe-direction=right]:origin-right data-[swipe-direction=right]:[--closed-transform:translate3d(calc(100%+var(--drawer-inset,0px)+2px),0,0)] data-[swipe-direction=right]:[--translate-x:calc(var(--drawer-swipe-movement-x)-var(--stack-peek-offset)-(var(--stack-shrink)*100%))]",
             className,
-            resize.resizing && "transition-none",
           )}
           style={popupStyle}
           {...props}
         >
-          {showSwipeHandle && <DrawerSwipeHandle {...resize.handleProps} />}
+          {showSwipeHandle && <DrawerSwipeHandle />}
           <DrawerPrimitive.Content
             data-slot="drawer-content"
             data-base-ui-swipe-ignore={swipeFromHandleOnly ? "" : undefined}

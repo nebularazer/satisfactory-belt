@@ -57,6 +57,7 @@ import { catalogConfiguration, eligibleCatalogEntries } from "@/lib/catalog-plac
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
+import { inspectorTarget } from "@/lib/inspector";
 import { startPlanAutosave } from "@/lib/plan-autosave";
 import { createReferencePlans } from "@/lib/reference-plans";
 
@@ -183,12 +184,26 @@ function CanvasWorkspace({
   useEffect(
     () =>
       controller.subscribeCatalog((request) => {
+        if (window.matchMedia("(max-width: 639px)").matches) controller.setSelection(new Set());
         placedFromSearch.current = false;
         setInsertion(request);
         setSearchOpen(true);
       }),
     [controller],
   );
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    return controller.subscribe(() => {
+      const snapshot = controller.getSnapshot();
+      if (
+        window.matchMedia("(max-width: 639px)").matches &&
+        snapshot.interaction === "idle" &&
+        inspectorTarget(snapshot)
+      ) {
+        setSearchOpen(false);
+      }
+    });
+  }, [controller, searchOpen]);
   const focusCanvas = useCallback(() => view.current?.focus(), []);
   const openAdd = useCallback(() => controller.openCatalogAtCenter(), [controller]);
   const placeResult = useCallback(
@@ -561,7 +576,12 @@ function CanvasWorkspace({
             </Button>
           </ButtonGroup>
         </div>
-        <Inspector editor={editor} focusCanvas={focusCanvas} assets={assets} />
+        <Inspector
+          editor={editor}
+          focusCanvas={focusCanvas}
+          assets={assets}
+          catalogOpen={searchOpen}
+        />
       </div>
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">

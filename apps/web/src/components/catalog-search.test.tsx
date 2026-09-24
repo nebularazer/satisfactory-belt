@@ -110,3 +110,23 @@ it("leaves the first mobile catalog body gesture available for native scrolling"
     Reflect.deleteProperty(document, "elementFromPoint");
   }
 });
+
+it("removes the closed mobile catalog immediately so another sheet can open", () => {
+  const media = window.matchMedia("(max-width: 639px)");
+  vi.spyOn(window, "matchMedia").mockReturnValue(Object.assign(media, { matches: true }));
+  const assets = inspectorAssets();
+  const onOpenChange = vi.fn();
+  const { rerender } = render(
+    <CatalogSearch assets={assets} open onOpenChange={onOpenChange} finalFocus={finalFocus} />,
+  );
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  rerender(
+    <CatalogSearch
+      assets={assets}
+      open={false}
+      onOpenChange={onOpenChange}
+      finalFocus={finalFocus}
+    />,
+  );
+  expect(document.querySelector('[data-slot="drawer-popup"]')).toBeNull();
+});

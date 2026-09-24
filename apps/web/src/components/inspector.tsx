@@ -23,10 +23,12 @@ export const Inspector = memo(function Inspector({
   editor,
   focusCanvas,
   assets,
+  catalogOpen = false,
 }: {
   editor: ReturnType<typeof createFactoryEditor>;
   focusCanvas: () => void;
   assets: GameAssets;
+  catalogOpen?: boolean;
 }) {
   const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width: 639px)").matches);
   useEffect(() => {
@@ -76,7 +78,7 @@ export const Inspector = memo(function Inspector({
   const summary = inspectorSummary(editor, target);
   const node = target?.startsWith("node:") ? editor.getNode(target.slice(5)) : undefined;
   const link = target?.startsWith("link:") ? editor.getLink(target.slice(5)) : undefined;
-  if (!summary) return null;
+  if (!summary || (narrow && catalogOpen)) return null;
   const subtitle =
     node && isFlowGroup(node) ? summary.subtitle?.replace(/^\d+×\s*/, "") : summary.subtitle;
 
@@ -109,7 +111,7 @@ export const Inspector = memo(function Inspector({
           initialFocus={false}
           finalFocus={false}
           onKeyDown={handleKeyDown}
-          className="max-h-[min(50dvh,var(--drawer-available-height,100dvh))]"
+          className="h-[60dvh]"
         >
           <div className="shrink-0 space-y-0.5 px-4 py-2">
             <DrawerTitle className="text-sm leading-snug">{summary.title}</DrawerTitle>
@@ -117,7 +119,7 @@ export const Inspector = memo(function Inspector({
               <DrawerDescription className="text-xs leading-snug">{subtitle}</DrawerDescription>
             )}
           </div>
-          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{body}</div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{body}</div>
           <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {deleteButton}
           </div>
@@ -139,7 +141,9 @@ export const Inspector = memo(function Inspector({
           </CardTitle>
           {subtitle && <CardDescription id={descriptionId}>{subtitle}</CardDescription>}
         </CardHeader>
-        <CardContent className="flex min-h-0 min-w-0 flex-col overflow-hidden">{body}</CardContent>
+        <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {body}
+        </CardContent>
         <CardFooter className="shrink-0">{deleteButton}</CardFooter>
       </Card>
     </aside>
