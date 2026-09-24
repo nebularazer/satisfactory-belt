@@ -326,31 +326,23 @@ function analyze(
     for (const { entry, edge } of terminalEdges)
       if (entry.kind === "imported" || entry.kind === "exported")
         append(requiredPorts, portId(entry.port), itemId, edge.capacity - edge.remaining);
-    // Production wins first, explicit sinking rates second, surplus disposal last.
-    for (const explicit of [true, false]) {
-      for (const node of document.nodes) {
-        if (
-          node.kind !== "sink" &&
-          !(node.kind === "facility" && node.configuration.type === "space-elevator")
-        )
-          continue;
-        const rate = node.kind === "sink" ? node.sinkRate : undefined;
-        if (Boolean(rate) !== explicit || (rate && rate.itemId !== itemId)) continue;
-        for (const port of byNode.get(node.id) ?? [])
-          if (ids.has(portId(port)))
-            disposals.push({
-              nodeId: node.id,
-              edge: graph.add(
-                ids.get(portId(port))!,
-                1,
-                rate ? Math.min(total, rate.perMinute) : total,
-              ),
-            });
-      }
-      if (!graph.solve(0, 1)) {
-        issues.push({ code: "analysis-limit" });
-        return result("unverified");
-      }
+    // Sinks only consume surplus after production.
+    for (const node of document.nodes) {
+      if (
+        node.kind !== "sink" &&
+        !(node.kind === "facility" && node.configuration.type === "space-elevator")
+      )
+        continue;
+      for (const port of byNode.get(node.id) ?? [])
+        if (ids.has(portId(port)))
+          disposals.push({
+            nodeId: node.id,
+            edge: graph.add(ids.get(portId(port))!, 1, total),
+          });
+    }
+    if (!graph.solve(0, 1)) {
+      issues.push({ code: "analysis-limit" });
+      return result("unverified");
     }
     // Storage is an implicit surplus destination in a Flow plan. Add it only
     // after consumers and explicit disposal, so it never competes with demand.

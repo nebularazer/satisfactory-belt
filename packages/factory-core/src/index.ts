@@ -9,7 +9,7 @@ import { formatPlanningNumber } from "./number-format";
 import type { PortTransport } from "./ports";
 import { DEFAULT_SPLITTER_PROGRAM, SPLITTER_OUTPUTS, validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
-import { validateSinkRate } from "./validation";
+import { validateSink } from "./validation";
 
 export const NODE_SIZE = 8 * GRID_SIZE;
 export const LOGISTICS_NODE_SIZE = 4 * GRID_SIZE;
@@ -52,7 +52,6 @@ export type FactoryNode =
       Readonly<{
         kind: "sink";
         sinkId: string;
-        sinkRate?: Readonly<{ itemId: string; perMinute: number }>;
       }>)
   | (NodeBase &
       Readonly<{
@@ -250,7 +249,7 @@ export function resolveMachineNode(
     });
   }
   if (node.kind === "sink") {
-    validateSinkRate(node, catalog);
+    validateSink(node);
     const sink = catalog.sinks[node.sinkId];
     if (!sink) throw new Error(`Missing AWESOME Sink ${node.sinkId}.`);
     const power: PowerDisplay = {

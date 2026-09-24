@@ -63,15 +63,7 @@ function setup(finite = true) {
     editor
       .getPortFlows({ nodeId: id, portKey: key })
       .reduce((sum, r) => sum + (r.perMinute ?? 0), 0);
-  const setRate = (perMinute?: number) => {
-    const node = editor.getNode("sink");
-    if (node?.kind !== "sink") throw new Error("Expected sink");
-    editor.replaceNode({
-      ...node,
-      sinkRate: perMinute === undefined ? undefined : { itemId: "iron", perMinute },
-    });
-  };
-  return { editor, assets, rate, setRate };
+  return { editor, assets, rate };
 }
 
 it("uses spare finite supply for sinking after production and preserves connections", () => {
@@ -87,43 +79,22 @@ it("uses spare finite supply for sinking after production and preserves connecti
   expect(editor.history.getSnapshot().state.links).toEqual(links);
 });
 
-it("does not grow an unconstrained source for surplus, but an explicit sinking rate may request production", () => {
-  const { editor, rate, setRate } = setup(false);
-  expect(rate("sink", "input:0")).toBe(0);
-  expect(editor.getPortRate("smelter", "output:iron")).toBe("96");
-  setRate(10);
-  expect(rate("sink", "input:0")).toBeCloseTo(10);
-  expect(editor.getPortRate("smelter", "output:iron")).toBe("106");
-  setRate();
+it("does not grow an unconstrained source for surplus", () => {
+  const { editor, rate } = setup(false);
   expect(rate("sink", "input:0")).toBe(0);
   expect(editor.getPortRate("smelter", "output:iron")).toBe("96");
 });
 
-it("keeps the explicit rate through shortages, undo, reload and reversed graph order", () => {
-  const { editor, assets, rate, setRate } = setup();
-  setRate(60);
-  expect(rate("sink", "input:0")).toBeCloseTo(24);
-  expect(editor.getNode("sink")).toMatchObject({ sinkRate: { perMinute: 60 } });
-  editor.setOperatingSetting("miner", "all", "purity", 2);
-  expect(rate("sink", "input:0")).toBeCloseTo(60);
-  expect(editor.getPortRate("smelter", "output:iron")).toBe("156");
-  editor.historyCommand("undo");
-  expect(rate("sink", "input:0")).toBeCloseTo(24);
-  editor.historyCommand("redo");
+it("rejects saved plans containing removed sink rate settings", () => {
+  const { editor, assets } = setup(false);
   const saved = editor.history.getSnapshot().state;
-  const reopened = createFactoryEditor(
-    assets.catalog,
-    JSON.parse(
-      JSON.stringify({
-        ...saved,
-        nodes: saved.nodes.toReversed(),
-        links: saved.links.toReversed(),
-      }),
+  const unsupported = {
+    ...saved,
+    nodes: saved.nodes.map((node) =>
+      node.kind === "sink" ? { ...node, sinkRate: { itemId: "iron", perMinute: 10 } } : node,
     ),
-  );
-  expect(reopened.getPortRate("sink", "input:0")).toBe("60");
-  setRate(-1);
-  expect(editor.history.getSnapshot().state).toBe(saved);
+  };
+  expect(() => createFactoryEditor(assets.catalog, unsupported)).toThrow(/no longer supported/);
 });
 
 it("uses an authored machine limit as finite supply without treating automatic machine counts as limits", () => {
@@ -135,27 +106,51 @@ it("uses an authored machine limit as finite supply without treating automatic m
   expect(rate("sink", "input:0")).toBe(0);
 });
 
-it("serves an explicit sinking rate before a surplus sink regardless of node order", () => {
-  const { editor, assets, setRate } = setup();
-  setRate(10);
-  const saved = editor.history.getSnapshot().state;
-  const sink = saved.nodes.find((node) => node.kind === "sink")!;
-  if (sink.kind !== "sink") throw new Error("Expected sink");
-  const second = { ...sink, id: "surplus", sinkRate: undefined };
-  const secondLink = {
-    ...saved.links.find((link) => link.id === "sink")!,
-    id: "surplus",
-    input: { nodeId: "surplus", portKey: "input:0" },
+it("keeps the ingot-to-rod surplus predictable through limits, undo and reload", () => {
+  const { assets } = setup(false);
+  assets.catalog.items.wire = { ...assets.catalog.items.wire!, name: "Iron Rod" };
+  assets.catalog.recipes.wire = {
+    ...assets.catalog.recipes.wire!,
+    name: "Iron Rod",
+    durationSeconds: 4,
+    products: [{ itemId: "wire", amount: 1 }],
   };
-  for (const reverse of [false, true]) {
-    const nodes = [second, ...saved.nodes];
-    const links = [secondLink, ...saved.links];
-    const reopened = createFactoryEditor(assets.catalog, {
-      nodes: reverse ? nodes.toReversed() : nodes,
-      links: reverse ? links.toReversed() : links,
-    });
-    expect(reopened.getPortRate("sink", "input:0")).toBe("10");
-    expect(reopened.getPortRate("surplus", "input:0")).toBe("14");
-    expect(reopened.getPortRate("wire", "output:wire")).toBe("192");
-  }
+  const editor = createFactoryEditor(assets.catalog, { nodes: [], links: [] });
+  const smelter = editor.placeNode(
+    { kind: "manufacturing", machineId: "smelter", recipeId: "ingot" },
+    { x: 0, y: 0 },
+  );
+  const output = { nodeId: smelter.id, portKey: "output:iron" };
+  const rods = editor.placeNode(
+    { kind: "manufacturing", machineId: "smelter", recipeId: "wire" },
+    { x: 400, y: 0 },
+    output,
+  );
+  const sink = editor.placeNode({ kind: "sink", sinkId: "sink" }, { x: 400, y: 400 }, output);
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("30");
+  expect(editor.getPortRate(rods.id, "input:iron")).toBe("30");
+  expect(editor.getPortRate(sink.id, "input:0")).toBe("0");
+  editor.setLimit(rods.id, { kind: "output", itemId: "wire", value: 15 });
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("15");
+  expect(editor.getPortRate(sink.id, "input:0")).toBe("0");
+  editor.setLimit(smelter.id, { kind: "output", itemId: "iron", value: 30 });
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("30");
+  expect(editor.getPortRate(rods.id, "input:iron")).toBe("15");
+  expect(editor.getPortRate(sink.id, "input:0")).toBe("15");
+  editor.historyCommand("undo");
+  expect(editor.getPortRate(sink.id, "input:0")).toBe("0");
+  editor.historyCommand("redo");
+  expect(editor.getPortRate(sink.id, "input:0")).toBe("15");
+  const saved = editor.history.getSnapshot().state;
+  const reopened = createFactoryEditor(assets.catalog, {
+    ...saved,
+    nodes: saved.nodes.toReversed(),
+    links: saved.links.toReversed(),
+  });
+  expect(reopened.getPortRate(sink.id, "input:0")).toBe("15");
+  editor.setLimit(smelter.id, { kind: "machines", value: 1 });
+  expect(editor.getPortRate(sink.id, "input:0")).toBe("15");
+  editor.setLimit(smelter.id, null);
+  expect(editor.getPortRate(sink.id, "input:0")).toBe("0");
+  expect(editor.history.getSnapshot().state.links).toEqual(saved.links);
 });

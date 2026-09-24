@@ -325,11 +325,7 @@ function solveComponent(
   const workCosts: Record<string, number> = {};
   const terminalCosts: Record<string, number> = {};
   const surplusCosts: Record<string, number> = {};
-  const sinkRateCosts: Record<string, number> = {};
   const sinkSurplusCosts: Record<string, number> = {};
-  const rateSinks = new Set(
-    document.nodes.filter((node) => node.kind === "sink" && node.sinkRate).map((node) => node.id),
-  );
 
   const outgoing = new Map<string, string[]>();
   for (const link of document.links) {
@@ -345,7 +341,7 @@ function solveComponent(
       const next = queue[i]!;
       if (seen.has(next)) continue;
       seen.add(next);
-      if (groupIds.has(next) || rateSinks.has(next)) return true;
+      if (groupIds.has(next)) return true;
       queue.push(...(outgoing.get(next) ?? []));
     }
     return false;
@@ -386,8 +382,7 @@ function solveComponent(
       ),
     );
   }
-  const hasTargets =
-    [...requirements.values()].some((targets) => Object.keys(targets).length) || rateSinks.size > 0;
+  const hasTargets = [...requirements.values()].some((targets) => Object.keys(targets).length);
   if (!hasTargets && !supplied.size) return [];
 
   for (const node of groups) {
@@ -553,16 +548,8 @@ function solveComponent(
         } else if (port.direction === "input") {
           for (const item of plan.materials(port)) {
             const variable = `disposal:${portId(port)}:${item}`;
-            if (node.kind === "sink" && node.sinkRate) {
-              if (item !== node.sinkRate.itemId) continue;
-              const cap = `sink-rate:${node.id}`;
-              constraints[cap] = { max: node.sinkRate.perMinute };
-              add(variable, { [key(port, item)]: -1, [cap]: 1 });
-              sinkRateCosts[variable] = -1 / node.sinkRate.perMinute;
-            } else {
-              add(variable, { [key(port, item)]: -1 });
-              if (node.kind === "sink") sinkSurplusCosts[variable] = -1;
-            }
+            add(variable, { [key(port, item)]: -1 });
+            if (node.kind === "sink") sinkSurplusCosts[variable] = -1;
           }
         }
       }
@@ -590,7 +577,6 @@ function solveComponent(
     // achievable production before minimizing those assumptions; connected inputs
     // have no missing-input variable and remain constrained by actual supply.
     terminalCosts,
-    sinkRateCosts,
     missingCosts,
     ...(Object.keys(sinkSurplusCosts).length ? [baselineCosts, sinkSurplusCosts] : []),
     surplusCosts,

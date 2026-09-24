@@ -31,7 +31,7 @@ export function validateFactoryNode(node: FactoryNode, catalog: GameCatalog): vo
       if (!catalog.fixedProducers[node.producerId]) throw new Error("Missing producer.");
       break;
     case "sink":
-      validateSinkRate(node, catalog);
+      validateSink(node);
       if (!catalog.sinks[node.sinkId]) throw new Error("Missing Sink.");
       break;
     case "facility":
@@ -42,18 +42,7 @@ export function validateFactoryNode(node: FactoryNode, catalog: GameCatalog): vo
   }
 }
 
-export function validateSinkRate(
-  node: Extract<FactoryNode, { kind: "sink" }>,
-  catalog: GameCatalog,
-): void {
-  if (
-    node.sinkRate &&
-    (!catalog.items[node.sinkRate.itemId]?.sinkable ||
-      !Number.isFinite(node.sinkRate.perMinute) ||
-      node.sinkRate.perMinute <= 0 ||
-      node.sinkRate.perMinute > 1e9)
-  )
-    throw new Error(
-      "Sinking rate requires a sinkable item and a positive rate up to 1 billion/min.",
-    );
+/** Removed sink rate settings are unsupported, never silently reinterpreted. */
+export function validateSink(node: Extract<FactoryNode, { kind: "sink" }>): void {
+  if ("sinkRate" in node) throw new Error("Sink rate settings are no longer supported.");
 }

@@ -147,7 +147,7 @@ export function InspectorBody({
         className="min-h-0 min-w-0 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0"
       >
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
-        {node.kind === "sink" && <InspectorSink node={node} editor={editor} assets={assets} />}
+        {node.kind === "sink" && <InspectorSink />}
         {isFlowGroup(node) && (
           <InspectorFlow node={node} scope={scope} editor={editor} assets={assets} />
         )}
