@@ -12,7 +12,7 @@ import {
   GaugeIcon,
   WandSparklesIcon,
   InfinityIcon,
-  RotateCcwIcon,
+  PercentIcon,
 } from "lucide-react";
 
 import { InspectorNumberInput } from "@/components/inspector-number-field";
@@ -65,14 +65,14 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
           />
           <ButtonGroup aria-label="Production limit controls">
             <ModeButton
-              label="Limit output per minute"
+              label="Output /min"
               selected={limit?.kind === "output"}
               onClick={() => outputId && editor.convertLimit(node.id, outputId)}
             >
               <ArrowUpToLineIcon />
             </ModeButton>
             <ModeButton
-              label="Limit machines"
+              label="Machine count"
               selected={limit?.kind === "machines"}
               onClick={() => editor.convertLimit(node.id, "machines")}
             >
@@ -135,14 +135,15 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
           />
           <ButtonGroup aria-label="Clock controls">
             <ModeButton
-              label="Use manual clock"
+              label="Set clock"
               selected={manual}
               onClick={() => editor.setClock(node.id, node.flow?.clockPercent ?? 100, scope)}
             >
               <GaugeIcon />
             </ModeButton>
             <ModeButton
-              label="Use automatic clock"
+              label="Auto clock"
+              description="Adjust clock speed to the required flow using whole machines."
               selected={!manual}
               disabled={scope !== "all"}
               onClick={() => editor.setClock(node.id, null)}
@@ -153,11 +154,11 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
               variant="outline"
               size="icon"
               className="shrink-0"
-              aria-label="Reset clock to 100%"
-              title="Reset clock to 100%"
+              aria-label="Set 100%"
+              title="Set 100%"
               onClick={() => editor.setClock(node.id, 100, scope)}
             >
-              <RotateCcwIcon />
+              <PercentIcon />
             </Button>
           </ButtonGroup>
         </div>
@@ -168,12 +169,14 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
 
 function ModeButton({
   label,
+  description,
   selected,
   disabled,
   onClick,
   children,
 }: {
   label: string;
+  description?: string;
   selected: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -185,7 +188,7 @@ function ModeButton({
       size="icon"
       className="shrink-0 aria-pressed:bg-muted"
       aria-label={label}
-      title={label}
+      title={description ? `${label}: ${description}` : label}
       aria-pressed={selected}
       disabled={disabled}
       onClick={selected ? undefined : onClick}

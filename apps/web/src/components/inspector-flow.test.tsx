@@ -37,7 +37,7 @@ it("keeps inputs, outputs and statistics visible with stable manual clock contro
   render(<Harness editor={editor} assets={assets} id={smelter.id} />);
   expect(limit().disabled).toBe(true);
   expect(limit().placeholder).toBe("No Limit");
-  await user.click(screen.getByRole("button", { name: "Limit output per minute" }));
+  await user.click(screen.getByRole("button", { name: "Output /min" }));
   await user.clear(limit());
   await user.type(limit(), "75");
   await user.tab();
@@ -55,7 +55,7 @@ it("keeps inputs, outputs and statistics visible with stable manual clock contro
   expect(screen.getByText("Inputs")).toBeTruthy();
   expect(screen.getByText("Outputs")).toBeTruthy();
   expect(document.querySelector("details")).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Use manual clock" }));
+  await user.click(screen.getByRole("button", { name: "Set clock" }));
   const clock = screen.getByRole<HTMLInputElement>("spinbutton", { name: "Clock" });
   expect(clock.value).toBe("100");
   await user.clear(clock);
@@ -64,7 +64,7 @@ it("keeps inputs, outputs and statistics visible with stable manual clock contro
   expect(screen.getByRole<HTMLInputElement>("spinbutton", { name: "Clock" }).value).toBe("101");
   expect(limit().value).toBe("75");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("75");
-  await user.click(screen.getByRole("button", { name: "Use automatic clock" }));
+  await user.click(screen.getByRole("button", { name: "Auto clock" }));
   expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" }).disabled).toBe(true);
   expect(limit().value).toBe("75");
   act(() => editor.historyCommand("undo"));
@@ -81,7 +81,7 @@ it("keeps fractional limits precise and converts coproduct units without indepen
   const editor = createFactoryEditor(assets.catalog, document);
   const id = "recycling-residue";
   render(<Harness editor={editor} assets={assets} id={id} />);
-  await user.click(screen.getByRole("button", { name: "Limit output per minute" }));
+  await user.click(screen.getByRole("button", { name: "Output /min" }));
   await user.click(screen.getByRole("button", { name: "Output limit item" }));
   await user.click(await screen.findByRole("menuitem", { name: "Polymer Resin/min" }));
   act(() => editor.setLimit(id, { kind: "output", itemId: "Desc_PolymerResin_C", value: 500 / 3 }));
@@ -197,10 +197,10 @@ it("steps numeric controls and counts required Somersloops without supply detail
     screen.getByRole<HTMLButtonElement>("button", { name: "Increase Production limit by 1" })
       .disabled,
   ).toBe(true);
-  await user.click(screen.getByRole("button", { name: "Use manual clock" }));
+  await user.click(screen.getByRole("button", { name: "Set clock" }));
   await user.click(screen.getByRole("button", { name: "Increase Clock by 1" }));
   expect(screen.getByRole<HTMLInputElement>("spinbutton", { name: "Clock" }).value).toBe("101");
-  await user.click(screen.getByRole("button", { name: "Use automatic clock" }));
+  await user.click(screen.getByRole("button", { name: "Auto clock" }));
   expect(
     screen.getByRole<HTMLButtonElement>("button", { name: "Decrease Clock by 1" }).disabled,
   ).toBe(true);
@@ -214,7 +214,7 @@ it("resets the selected clock to 100% and preserves the production limit", async
   editor.setClock("smelter", 50);
   render(<Harness editor={editor} assets={assets} id="smelter" />);
   await user.click(screen.getByRole("tab", { name: "Machine 2" }));
-  await user.click(screen.getByRole("button", { name: "Reset clock to 100%" }));
+  await user.click(screen.getByRole("button", { name: "Set 100%" }));
   expect(editor.getNode("smelter")).toMatchObject({
     flow: { machineLimit: 2, clockMode: "manual" },
     machines: [
@@ -223,8 +223,8 @@ it("resets the selected clock to 100% and preserves the production limit", async
     ],
   });
   await user.click(screen.getByRole("tab", { name: "All" }));
-  await user.click(screen.getByRole("button", { name: "Use automatic clock" }));
-  await user.click(screen.getByRole("button", { name: "Reset clock to 100%" }));
+  await user.click(screen.getByRole("button", { name: "Auto clock" }));
+  await user.click(screen.getByRole("button", { name: "Set 100%" }));
   expect(editor.getNode("smelter")).toMatchObject({
     flow: { machineLimit: 2, clockMode: "manual" },
     machines: [
