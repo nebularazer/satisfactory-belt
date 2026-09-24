@@ -110,7 +110,7 @@ export function CatalogSearchDetails({
   );
   function quantities(title: string, entries: readonly Ingredient[], cyclesPerMinute: number) {
     return (
-      <section className="h-36 space-y-2 overflow-y-auto overscroll-contain">
+      <section className="space-y-2 sm:h-36 sm:overflow-y-auto sm:overscroll-contain">
         <h4 className="text-sm font-medium">{title}</h4>
         <ul className="space-y-1.5">
           {entries.map((quantity) => {

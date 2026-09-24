@@ -95,10 +95,7 @@ export function InspectorBody({
               aria-label="Machine settings scope"
               className="min-w-0 flex-1 justify-start p-0 group-data-horizontal/tabs:h-auto"
             >
-              <TabsTrigger
-                value="all"
-                className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
-              >
+              <TabsTrigger value="all" className="h-8 flex-none px-3 focus-visible:ring-inset">
                 All
               </TabsTrigger>
               <div className="ml-1 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden border-l border-border pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -107,7 +104,7 @@ export function InspectorBody({
                     key={member.id}
                     value={member.id}
                     aria-label={`Machine ${index + 1}`}
-                    className="h-11 min-w-11 flex-none px-3 focus-visible:ring-inset sm:h-8 sm:min-w-8"
+                    className="h-8 min-w-8 flex-none px-3 focus-visible:ring-inset"
                   >
                     {index + 1}
                   </TabsTrigger>
@@ -122,7 +119,6 @@ export function InspectorBody({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-11 sm:size-8"
                   aria-label="Remove last machine"
                   title="Remove last machine"
                   disabled={node.machines.length <= 1}
@@ -133,7 +129,6 @@ export function InspectorBody({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-11 sm:size-8"
                   aria-label="Add machine"
                   title="Add machine"
                   disabled={node.machines.length >= MAX_MACHINE_COUNT}
@@ -193,7 +188,7 @@ export function InspectorBody({
                 />
               )}
               {capabilities.matrices && (
-                <div className="flex min-h-11 items-center justify-between gap-2 sm:min-h-8">
+                <div className="flex min-h-8 items-center justify-between gap-2">
                   <label htmlFor={matrixId} className="text-xs sm:text-sm">
                     Alien Power Matrices
                     {commonMatrices(members) === null && (

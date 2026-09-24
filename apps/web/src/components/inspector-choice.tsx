@@ -72,7 +72,7 @@ export function InspectorChoice({
           className={
             inputAction
               ? "h-full min-w-0 flex-1 justify-between font-normal"
-              : "h-11 w-full min-w-0 justify-between font-normal sm:h-8"
+              : "w-full min-w-0 justify-between font-normal"
           }
         />
       }
@@ -121,7 +121,7 @@ export function InspectorChoice({
         {inputAction ? (
           <InputGroup
             ref={anchor}
-            className={`${width} h-11 sm:h-8 has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50 ${!disabled ? "has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30" : ""}`}
+            className={`${width} has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50 ${!disabled ? "has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30" : ""}`}
           >
             {trigger}
             <InputGroupAddon align="inline-end">{inputAction}</InputGroupAddon>

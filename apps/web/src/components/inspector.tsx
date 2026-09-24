@@ -87,7 +87,7 @@ export const Inspector = memo(function Inspector({
   const deleteButton = (
     <Button
       variant="destructive"
-      className="min-h-11 w-full sm:min-h-8"
+      className="w-full"
       aria-label={summary.deleteLabel}
       onPointerDown={handleDeletePointerDown}
       onClick={handleDelete}

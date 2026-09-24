@@ -101,7 +101,7 @@ export function InspectorNumberInput({
   return (
     <InputGroup
       className={cn(
-        "h-11 w-42 min-w-0 shrink-0 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30",
+        "w-42 min-w-0 shrink-0 has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
         className,
       )}
     >
@@ -149,7 +149,6 @@ export function InspectorNumberInput({
       <InputGroupAddon align="inline-start" className="py-0">
         <InputGroupButton
           size="icon-xs"
-          className="size-10 sm:size-6"
           aria-label={steps?.decrease.label ?? `Decrease ${label} by 1`}
           title={steps?.decrease.label}
           disabled={!canStep(-1)}
@@ -163,7 +162,6 @@ export function InspectorNumberInput({
         {unit && <InputGroupText className="text-xs">{unit}</InputGroupText>}
         <InputGroupButton
           size="icon-xs"
-          className="size-10 sm:size-6"
           aria-label={steps?.increase.label ?? `Increase ${label} by 1`}
           title={steps?.increase.label}
           disabled={!canStep(1)}

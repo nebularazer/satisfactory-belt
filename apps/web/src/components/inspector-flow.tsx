@@ -45,9 +45,9 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
   const outputId = limit?.kind === "output" ? limit.itemId : outputs[0]?.itemId;
   return (
     <section aria-label="Production controls" className="space-y-3">
-      <div className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-        <span>Limit</span>
-        <div className="flex w-full min-w-0 items-center gap-2 sm:w-64">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="w-14 shrink-0">Limit</span>
+        <div className="flex w-64 min-w-0 items-center gap-2">
           <InspectorNumberInput
             type="number"
             revision={node}
@@ -96,7 +96,7 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
                 <Button
                   variant="outline"
                   aria-label="Output limit item"
-                  className="h-11 w-55 justify-between font-normal sm:h-8"
+                  className="w-55 justify-between font-normal"
                 />
               }
             >
@@ -115,9 +115,9 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
           </DropdownMenu>
         </div>
       )}
-      <div className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-        <span>Clock %</span>
-        <div className="flex w-full min-w-0 items-center gap-2 sm:w-64">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="w-14 shrink-0">Clock %</span>
+        <div className="flex w-64 min-w-0 items-center gap-2">
           <InspectorNumberInput
             type={manual ? "number" : "text"}
             formatValue={formatClock}
@@ -152,7 +152,7 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
             <Button
               variant="outline"
               size="icon"
-              className="size-11 shrink-0 sm:size-8"
+              className="shrink-0"
               aria-label="Reset clock to 100%"
               title="Reset clock to 100%"
               onClick={() => editor.setClock(node.id, 100, scope)}
@@ -183,7 +183,7 @@ function ModeButton({
     <Button
       variant="outline"
       size="icon"
-      className="size-11 shrink-0 aria-pressed:bg-muted sm:size-8"
+      className="shrink-0 aria-pressed:bg-muted"
       aria-label={label}
       title={label}
       aria-pressed={selected}
