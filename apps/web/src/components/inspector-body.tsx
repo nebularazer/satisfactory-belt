@@ -89,7 +89,7 @@ export function InspectorBody({
       }}
     >
       {node.kind !== "logistics" && capabilities?.groupable && (
-        <div className="shrink-0 py-1">
+        <div className="shrink-0 px-4 py-1 sm:px-0">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
             <TabsList
               aria-label="Machine settings scope"
@@ -143,7 +143,7 @@ export function InspectorBody({
       )}
       <TabsContent
         value={scope}
-        className="min-h-0 min-w-0 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain pb-4"
+        className="min-h-0 min-w-0 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0"
       >
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
         {isFlowGroup(node) && (
