@@ -40,7 +40,20 @@ export function withProductionLimit(
     outputLimit:
       limit?.kind === "output" ? { itemId: limit.itemId, perMinute: limit.value } : undefined,
   };
-  const next = { ...node, flow };
+  // A solved count/underclock is not an authored limit. Start unconstrained
+  // groups from one configured machine; connected supply will size them again.
+  const cleared = limit === null && productionLimit(node) !== null;
+  const base = cleared && !flow.memberClocks ? resizeMachineGroup(node, 1, () => "limit") : node;
+  const next = {
+    ...node,
+    flow: cleared ? { ...flow, utilization: 1 } : flow,
+    machines: cleared
+      ? base.machines.map((member) => ({
+          ...member,
+          clockPercent: flow.memberClocks?.[member.id] ?? flow.clockPercent ?? 100,
+        }))
+      : node.machines,
+  };
   validateFlowSettings(next, catalog);
   // Ensure newly authored members inherit the previous member settings.
   return limit?.kind === "machines" ? flowCapacityNode(next) : next;

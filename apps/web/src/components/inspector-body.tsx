@@ -115,7 +115,7 @@ export function InspectorBody({
                 ))}
               </div>
             </TabsList>
-            {capabilities?.groupable && (
+            {capabilities?.groupable && !isFlowGroup(node) && (
               <fieldset
                 aria-label="Machine count"
                 className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
@@ -127,14 +127,7 @@ export function InspectorBody({
                   aria-label="Remove last machine"
                   title="Remove last machine"
                   disabled={node.machines.length <= 1}
-                  onClick={() =>
-                    isFlowGroup(node)
-                      ? editor.setLimit(node.id, {
-                          kind: "machines",
-                          value: node.machines.length - 1,
-                        })
-                      : editor.setMachineCount(node.id, node.machines.length - 1)
-                  }
+                  onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
                 >
                   <MinusIcon />
                 </Button>
@@ -145,14 +138,7 @@ export function InspectorBody({
                   aria-label="Add machine"
                   title="Add machine"
                   disabled={node.machines.length >= MAX_MACHINE_COUNT}
-                  onClick={() =>
-                    isFlowGroup(node)
-                      ? editor.setLimit(node.id, {
-                          kind: "machines",
-                          value: node.machines.length + 1,
-                        })
-                      : editor.setMachineCount(node.id, node.machines.length + 1)
-                  }
+                  onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
                 >
                   <PlusIcon />
                 </Button>

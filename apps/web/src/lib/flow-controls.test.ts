@@ -140,3 +140,30 @@ it("preserves three 100% clocks and one 50% clock through supply changes and rel
   expect(reopened.getNode("smelter")).toMatchObject({ machines: expected });
   expect(() => reopened.setClock("smelter", 50, "missing-member")).toThrow();
 });
+
+it("clears a standalone output limit without keeping its solved count or underclock", () => {
+  const { assets, smelter } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, { nodes: [smelter], links: [] });
+  editor.setLimit(smelter.id, { kind: "output", itemId: "iron", value: 136 });
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("136");
+  editor.setLimit(smelter.id, null);
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    flow: { machineLimit: null, outputLimit: undefined, utilization: 1 },
+    machines: [expect.objectContaining({ clockPercent: 100 })],
+  });
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("30");
+  editor.historyCommand("undo");
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("136");
+  editor.historyCommand("redo");
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("30");
+});
+
+it("recalculates from connected supply after clearing a 136/min limit", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setOperatingSetting("miner", "all", "purity", 2);
+  editor.setLimit("smelter", { kind: "output", itemId: "iron", value: 136 });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("136");
+  editor.setLimit("smelter", null);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("240");
+});
