@@ -5,6 +5,9 @@ import * as React from "react";
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
     <InputPrimitive
+      autoComplete="off"
+      autoCorrect="off"
+      spellCheck={false}
       type={type}
       data-slot="input"
       className={cn(

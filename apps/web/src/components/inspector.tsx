@@ -109,7 +109,7 @@ export const Inspector = memo(function Inspector({
           initialFocus={false}
           finalFocus={false}
           onKeyDown={handleKeyDown}
-          className="max-h-[50dvh]"
+          className="max-h-[min(50dvh,var(--drawer-available-height,100dvh))]"
         >
           <div className="shrink-0 space-y-0.5 px-4 py-2">
             <DrawerTitle className="text-sm leading-snug">{summary.title}</DrawerTitle>
