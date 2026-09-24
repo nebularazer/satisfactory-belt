@@ -30,7 +30,7 @@ function Harness({
 }
 const limit = () => screen.getByRole<HTMLInputElement>("textbox", { name: "Production limit" });
 
-it("shows one limit and one result, with manual clock steps that preserve the output limit", async () => {
+it("keeps inputs, outputs and statistics visible with stable manual clock controls", async () => {
   const user = userEvent.setup();
   const { assets, smelter } = minerFlowFixture();
   const editor = createFactoryEditor(assets.catalog, { nodes: [smelter], links: [] });
@@ -43,12 +43,18 @@ it("shows one limit and one result, with manual clock steps that preserve the ou
   await user.tab();
   expect(limit().value).toBe("75");
   expect(
-    within(screen.getByRole("region", { name: "Production result" })).getByText("75 /min"),
+    within(screen.getByRole("region", { name: "Configured material rates" })).getAllByText(
+      "75 items/min",
+    )[0],
   ).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Lock production" })).toBeNull();
   expect(screen.queryByText("Rebalance at 100%")).toBeNull();
   expect(screen.queryByText("Machine capacity")).toBeNull();
-  expect(screen.queryByText("Power Shards")).toBeNull();
+  expect(screen.getByText("Power Shards")).toBeTruthy();
+  expect(screen.getByText("Total power")).toBeTruthy();
+  expect(screen.getByText("Inputs")).toBeTruthy();
+  expect(screen.getByText("Outputs")).toBeTruthy();
+  expect(document.querySelector("details")).toBeNull();
   await user.click(screen.getByRole("button", { name: "Clock mode" }));
   await user.click(await screen.findByRole("menuitem", { name: "Manual" }));
   const clock = screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" });
@@ -97,24 +103,59 @@ it("keeps fractional limits precise and converts coproduct units without indepen
   expect(limit().value).toBe("333⅓");
 });
 
-it("keeps miner limits stable across purity changes and hides individual controls by default", async () => {
+it("keeps miner limits stable across purity changes with visible machine tabs", async () => {
   const user = userEvent.setup();
   const { assets, document } = minerFlowFixture();
   const editor = createFactoryEditor(assets.catalog, document);
   render(<Harness editor={editor} assets={assets} id="miner" />);
   expect(limit().value).toBe("1");
-  expect(screen.queryByText("Machines…")).toBeNull();
+  expect(screen.getByRole("tab", { name: "Machine 1" })).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Pure" }));
   expect(limit().value).toBe("1");
   expect(editor.getPortRate("miner", "output:copper")).toBe("240");
   await user.clear(limit());
   await user.type(limit(), "2");
   await user.tab();
-  const details = screen.getByText("Machines…").closest("details");
-  expect(details?.open).toBe(false);
-  await user.click(screen.getByText("Machines…"));
+  expect(screen.getByRole("tab", { name: "Machine 2" })).toBeTruthy();
   await user.click(screen.getByRole("tab", { name: "Machine 1" }));
   await user.click(screen.getByRole("button", { name: "Impure" }));
   expect(editor.getPortRate("miner", "output:copper")).toBe("300");
   expect(limit().value).toBe("2");
+});
+
+it("edits one machine's clock and shows Mixed for All without flattening other machines", async () => {
+  const user = userEvent.setup();
+  const { assets, document: plan } = minerFlowFixture();
+  assets.catalog.machines.smelter!.sloopSlots = 1;
+  const editor = createFactoryEditor(assets.catalog, plan);
+  editor.setLimit("smelter", { kind: "machines", value: 4 });
+  render(<Harness editor={editor} assets={assets} id="smelter" />);
+  expect(screen.getByText("Amplification")).toBeTruthy();
+  await user.click(screen.getByRole("tab", { name: "Machine 4" }));
+  const clock = screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" });
+  expect(clock.value).toBe("100");
+  await user.clear(clock);
+  await user.type(clock, "50");
+  await user.tab();
+  expect(editor.getNode("smelter")).toMatchObject({
+    machines: [
+      expect.objectContaining({ clockPercent: 100 }),
+      expect.objectContaining({ clockPercent: 100 }),
+      expect.objectContaining({ clockPercent: 100 }),
+      expect.objectContaining({ clockPercent: 50 }),
+    ],
+  });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("105");
+  await user.click(screen.getByRole("tab", { name: "All" }));
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" }).placeholder).toBe(
+    "Mixed",
+  );
+  expect(screen.getByText("Total power")).toBeTruthy();
+  await user.click(screen.getByRole("tab", { name: "Machine 1" }));
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock" }).value).toBe("100");
+  act(() => editor.historyCommand("undo"));
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("120");
+  act(() => editor.historyCommand("redo"));
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("105");
+  expect(document.querySelector("details")).toBeNull();
 });

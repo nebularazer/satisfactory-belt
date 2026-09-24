@@ -114,3 +114,29 @@ it("treats an output limit as a ceiling and does not force unused production", (
   editor.setLimit("smelter", null);
   expect(editor.getPortRate("smelter", "output:iron")).toBe("120");
 });
+
+it("preserves three 100% clocks and one 50% clock through supply changes and reload", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setLimit("smelter", { kind: "machines", value: 4 });
+  const smelter = editor.getNode("smelter")!;
+  if (!isFlowGroup(smelter)) throw new Error("Expected smelter");
+  editor.setClock("smelter", 50, smelter.machines[3]!.id);
+  const expected = [100, 100, 100, 50].map((clockPercent) =>
+    expect.objectContaining({ clockPercent }),
+  );
+  expect(editor.getNode("smelter")).toMatchObject({ machines: expected });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("105");
+  editor.setOperatingSetting("miner", "all", "purity", 0.5);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("60");
+  expect(editor.getNode("smelter")).toMatchObject({ machines: expected });
+  const reopened = createFactoryEditor(
+    assets.catalog,
+    structuredClone(editor.history.getSnapshot().state),
+  );
+  expect(reopened.getNode("smelter")).toMatchObject({ machines: expected });
+  reopened.setOperatingSetting("miner", "all", "purity", 1);
+  expect(reopened.getPortRate("smelter", "output:iron")).toBe("105");
+  expect(reopened.getNode("smelter")).toMatchObject({ machines: expected });
+  expect(() => reopened.setClock("smelter", 50, "missing-member")).toThrow();
+});

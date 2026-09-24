@@ -22,11 +22,11 @@ export function InspectorSupplyDetails({
     );
   if (!issues.length) return null;
   return (
-    <details className="border-t pt-3 text-xs text-muted-foreground">
-      <summary className="cursor-pointer">
+    <section aria-label="Supply details" className="border-t pt-3 text-xs text-muted-foreground">
+      <h3>
         Supply details · {issues.length}{" "}
         {issues.length === 1 ? "unmet requirement" : "unmet requirements"}
-      </summary>
+      </h3>
       <ul className="mt-2 space-y-2">
         {issues.map((issue) => (
           <li key={`${issue.code}:${issue.itemId}`}>
@@ -38,6 +38,6 @@ export function InspectorSupplyDetails({
           </li>
         ))}
       </ul>
-    </details>
+    </section>
   );
 }

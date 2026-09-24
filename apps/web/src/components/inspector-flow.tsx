@@ -3,14 +3,12 @@ import {
   commonSetting,
   formatPlanningNumber,
   productionLimit,
-  resolveFactoryNode,
   resolveProduction,
 } from "@satisfactory-belt/factory-core";
 import type { FlowGroup } from "@satisfactory-belt/factory-core";
 import { ChevronDownIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
-import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,13 +23,17 @@ import type { GameAssets } from "@/lib/game-assets";
 
 type Props = {
   node: FlowGroup;
+  scope?: string;
   editor: ReturnType<typeof createFactoryEditor>;
   assets: GameAssets;
 };
-export function InspectorFlow({ node, editor, assets }: Props) {
+export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
   const limit = productionLimit(node);
   const outputs = resolveProduction(node, assets.catalog).outputs;
-  const manual = node.flow?.clockMode === "manual";
+  const manual = node.flow?.clockMode === "manual" || scope !== "all";
+  const scopedMembers =
+    scope === "all" ? node.machines : node.machines.filter((member) => member.id === scope);
+  const clock = commonSetting(scopedMembers, "clockPercent");
   const unit =
     limit?.kind === "machines"
       ? "machines"
@@ -60,9 +62,8 @@ export function InspectorFlow({ node, editor, assets }: Props) {
               render={
                 <Button
                   variant="outline"
-                  size="sm"
                   aria-label="Limit unit"
-                  className="min-w-0 flex-1 justify-between font-normal"
+                  className="h-11 min-w-0 flex-1 justify-between font-normal sm:h-8"
                 />
               }
             >
@@ -89,7 +90,8 @@ export function InspectorFlow({ node, editor, assets }: Props) {
           {limit && (
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="size-11 sm:size-8"
               aria-label="Clear limit"
               onClick={() => editor.setLimit(node.id, null)}
             >
@@ -101,21 +103,24 @@ export function InspectorFlow({ node, editor, assets }: Props) {
       {manual ? (
         <InspectorNumberField
           label="Clock"
-          value={node.flow?.clockPercent ?? 100}
-          revision={node.flow?.clockPercent}
+          key={scope}
+          value={clock}
+          revision={node}
           min={1}
           max={250}
           unit="%"
-          onCommit={(value) => editor.setClock(node.id, value)}
+          onCommit={(value) => editor.setClock(node.id, value, scope)}
           labelHint={
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="Use automatic clock"
-              onClick={() => editor.setClock(node.id, null)}
-            >
-              Auto
-            </Button>
+            scope === "all" ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Use automatic clock"
+                onClick={() => editor.setClock(node.id, null)}
+              >
+                Auto
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -127,7 +132,7 @@ export function InspectorFlow({ node, editor, assets }: Props) {
                 <Button
                   variant="outline"
                   aria-label="Clock mode"
-                  className="w-55 justify-between font-normal"
+                  className="h-11 w-55 justify-between font-normal sm:h-8"
                 />
               }
             >
@@ -151,66 +156,6 @@ export function InspectorFlow({ node, editor, assets }: Props) {
   );
 }
 
-export function InspectorFlowResult({ node, assets }: Pick<Props, "node" | "assets">) {
-  const production = resolveProduction(node, assets.catalog);
-  const display = resolveFactoryNode(node, assets.catalog);
-  const clock = commonSetting(node.machines, "clockPercent");
-  const shards = node.machines.reduce(
-    (sum, member) => sum + Math.max(0, Math.ceil((member.clockPercent - 100) / 50)),
-    0,
-  );
-  return (
-    <section aria-label="Production result" className="space-y-3 border-t pt-4 text-sm">
-      {production.outputs.map((output) => (
-        <div key={output.itemId} className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-2">
-            <CatalogIcon
-              iconId={assets.catalog.items[output.itemId]!.iconId}
-              assets={assets}
-              size={24}
-            />
-            {assets.catalog.items[output.itemId]!.name}
-          </span>
-          <span className="shrink-0 tabular-nums">
-            {output.perMinute === null
-              ? "Unknown"
-              : `${formatPlanningNumber(output.perMinute)} ${assets.catalog.items[output.itemId]!.unit === "m3" ? "m³/" : "/"}min`}
-          </span>
-        </div>
-      ))}
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          {node.machines.length} {node.machines.length === 1 ? "machine" : "machines"} ·{" "}
-          {clock === null ? "Mixed clocks" : `${formatPlanningNumber(clock)}%`}
-        </span>
-        <span>{display.layout === "machine" ? display.powerLabel : ""}</span>
-      </div>
-      {shards > 0 && (
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Power Shards</span>
-          <span>{shards}</span>
-        </div>
-      )}
-      {production.inputs.length > 0 && (
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Inputs</summary>
-          <div className="mt-2 space-y-2">
-            {production.inputs.map((input) => (
-              <div key={input.itemId} className="flex justify-between gap-2">
-                <span>{assets.catalog.items[input.itemId]!.name}</span>
-                <span>
-                  {input.perMinute === null
-                    ? "Unknown"
-                    : `${formatPlanningNumber(input.perMinute)}/min`}
-                </span>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-    </section>
-  );
-}
 function LimitInput({
   value,
   integer,
@@ -240,7 +185,7 @@ function LimitInput({
     <Input
       aria-label="Production limit"
       inputMode={integer ? "numeric" : "decimal"}
-      className="w-20 shrink-0 text-right tabular-nums"
+      className="h-11 w-16 shrink-0 text-right tabular-nums sm:h-8"
       value={draft ?? (focused ? String(value) : formatPlanningNumber(value))}
       onChange={(event) => setDraft(event.target.value)}
       onFocus={() => setFocused(true)}

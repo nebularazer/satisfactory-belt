@@ -517,10 +517,39 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       isFlowGroup(node) ? convertProductionLimit(node, catalog, unit) : node,
     );
   }
-  function setClock(id: string, clock: number | null) {
+  function setClock(id: string, clock: number | null, scope: MachineScope = "all") {
     editMachine(id, (node) => {
       if (!isFlowGroup(node)) return node;
       node = withProductionLimit(node, catalog, productionLimit(node));
+      if (scope !== "all" && clock !== null) {
+        // Editing one member authors manual clocks for the group without flattening
+        // existing overrides or inheriting temporarily underclocked solver results.
+        const configured = flowCapacityNode(node);
+        const memberClocks = Object.fromEntries(
+          configured.machines.map((member) => [
+            member.id,
+            node.flow?.memberClocks?.[member.id] ??
+              node.flow?.clockPercent ??
+              (member.clockPercent || 100),
+          ]),
+        );
+        const manual = {
+          ...configured,
+          flow: { ...node.flow, clockMode: "manual" as const, utilization: 1, memberClocks },
+          machines: configured.machines.map((member) => ({
+            ...member,
+            clockPercent: memberClocks[member.id]!,
+          })),
+        };
+        const changed = setMachineSetting(manual, catalog, scope, "clockPercent", clock);
+        if (!isFlowGroup(changed)) return node;
+        const next = {
+          ...changed,
+          flow: { ...manual.flow, memberClocks: { ...memberClocks, [scope]: clock } },
+        };
+        validateFlowSettings(next, catalog);
+        return next;
+      }
       const next = {
         ...node,
         flow: {
