@@ -47,13 +47,14 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
     <section aria-label="Production controls" className="space-y-3">
       <div className="flex items-center justify-between gap-2 text-sm">
         <span>Limit</span>
-        <div className="flex w-64 items-center gap-2 sm:w-55">
+        <div className="flex w-64 items-center gap-2">
           <InspectorNumberInput
             type="number"
             revision={node}
             className="w-auto min-w-0 flex-1 shrink"
             key={`${node.id}:${limit?.kind}:${limit?.value}`}
             label="Production limit"
+            unit={limit?.kind === "output" ? "/min" : undefined}
             value={limit?.value ?? null}
             disabled={!limit}
             placeholder="No Limit"
@@ -116,7 +117,7 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
       )}
       <div className="flex items-center justify-between gap-2 text-sm">
         <span>Clock %</span>
-        <div className="flex w-64 items-center gap-2 sm:w-55">
+        <div className="flex w-64 items-center gap-2">
           <InspectorNumberInput
             type={manual ? "number" : "text"}
             formatValue={formatClock}
