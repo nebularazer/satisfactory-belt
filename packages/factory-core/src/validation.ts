@@ -31,6 +31,7 @@ export function validateFactoryNode(node: FactoryNode, catalog: GameCatalog): vo
       if (!catalog.fixedProducers[node.producerId]) throw new Error("Missing producer.");
       break;
     case "sink":
+      validateSinkRate(node, catalog);
       if (!catalog.sinks[node.sinkId]) throw new Error("Missing Sink.");
       break;
     case "facility":
@@ -39,4 +40,20 @@ export function validateFactoryNode(node: FactoryNode, catalog: GameCatalog): vo
     default:
       throw new Error("Unknown node kind.");
   }
+}
+
+export function validateSinkRate(
+  node: Extract<FactoryNode, { kind: "sink" }>,
+  catalog: GameCatalog,
+): void {
+  if (
+    node.sinkRate &&
+    (!catalog.items[node.sinkRate.itemId]?.sinkable ||
+      !Number.isFinite(node.sinkRate.perMinute) ||
+      node.sinkRate.perMinute <= 0 ||
+      node.sinkRate.perMinute > 1e9)
+  )
+    throw new Error(
+      "Sinking rate requires a sinkable item and a positive rate up to 1 billion/min.",
+    );
 }

@@ -906,7 +906,8 @@ function sameConfiguration(a: FactoryNode, b: FactoryNode): boolean {
     return false;
   if (a.kind === "facility" && b.kind === "facility")
     return a.buildingId === b.buildingId && a.configuration === b.configuration;
-  if (a.kind === "sink" && b.kind === "sink") return a.sinkId === b.sinkId;
+  if (a.kind === "sink" && b.kind === "sink")
+    return a.sinkId === b.sinkId && a.sinkRate === b.sinkRate;
   if (a.kind === "fixed-producer" && b.kind === "fixed-producer")
     return a.producerId === b.producerId;
   if (a.kind === "extractor" && b.kind === "extractor")

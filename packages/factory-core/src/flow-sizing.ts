@@ -325,6 +325,11 @@ function solveComponent(
   const workCosts: Record<string, number> = {};
   const terminalCosts: Record<string, number> = {};
   const surplusCosts: Record<string, number> = {};
+  const sinkRateCosts: Record<string, number> = {};
+  const sinkSurplusCosts: Record<string, number> = {};
+  const rateSinks = new Set(
+    document.nodes.filter((node) => node.kind === "sink" && node.sinkRate).map((node) => node.id),
+  );
 
   const outgoing = new Map<string, string[]>();
   for (const link of document.links) {
@@ -340,7 +345,7 @@ function solveComponent(
       const next = queue[i]!;
       if (seen.has(next)) continue;
       seen.add(next);
-      if (groupIds.has(next)) return true;
+      if (groupIds.has(next) || rateSinks.has(next)) return true;
       queue.push(...(outgoing.get(next) ?? []));
     }
     return false;
@@ -358,6 +363,7 @@ function solveComponent(
       )
       .map((node) => node.id),
   );
+  for (const node of document.nodes) if (node.kind === "fixed-producer") supplied.add(node.id);
   const supplyQueue = [...supplied];
   for (let i = 0; i < supplyQueue.length; i++)
     for (const id of outgoing.get(supplyQueue[i]!) ?? [])
@@ -380,7 +386,8 @@ function solveComponent(
       ),
     );
   }
-  const hasTargets = [...requirements.values()].some((targets) => Object.keys(targets).length);
+  const hasTargets =
+    [...requirements.values()].some((targets) => Object.keys(targets).length) || rateSinks.size > 0;
   if (!hasTargets && !supplied.size) return [];
 
   for (const node of groups) {
@@ -543,9 +550,21 @@ function solveComponent(
             if (port.direction === "output")
               add(`surplus:${portId(port)}`, { [key(port, port.itemId)]: -1 });
           }
-        } else if (port.direction === "input")
-          for (const item of plan.materials(port))
-            add(`disposal:${portId(port)}:${item}`, { [key(port, item)]: -1 });
+        } else if (port.direction === "input") {
+          for (const item of plan.materials(port)) {
+            const variable = `disposal:${portId(port)}:${item}`;
+            if (node.kind === "sink" && node.sinkRate) {
+              if (item !== node.sinkRate.itemId) continue;
+              const cap = `sink-rate:${node.id}`;
+              constraints[cap] = { max: node.sinkRate.perMinute };
+              add(variable, { [key(port, item)]: -1, [cap]: 1 });
+              sinkRateCosts[variable] = -1 / node.sinkRate.perMinute;
+            } else {
+              add(variable, { [key(port, item)]: -1 });
+              if (node.kind === "sink") sinkSurplusCosts[variable] = -1;
+            }
+          }
+        }
       }
     }
   }
@@ -562,19 +581,33 @@ function solveComponent(
   const sharingCosts: Record<string, number> = {};
   let result: Solution | undefined;
   // Lexicographic solves avoid rate-dependent magic weights. Authored targets stay fixed.
+  // Obtain a minimum-work baseline before surplus collection. Only groups fed by
+  // an authored finite source may grow beyond it merely to feed a surplus sink.
+  const baselineCosts = { ...workCosts };
   const objectives = [
     ...(hasTargets ? [targetCosts] : []),
     // Open inputs stand for external supply while constructing a plan. Preserve
     // achievable production before minimizing those assumptions; connected inputs
     // have no missing-input variable and remain constrained by actual supply.
     terminalCosts,
+    sinkRateCosts,
     missingCosts,
+    ...(Object.keys(sinkSurplusCosts).length ? [baselineCosts, sinkSurplusCosts] : []),
     surplusCosts,
     sharingCosts,
     workCosts,
   ];
   for (const [stage, costs] of objectives.entries()) {
     // Keep the earlier target/throughput solves small.
+    if (costs === sinkSurplusCosts && result) {
+      for (const node of groups) {
+        if (supplied.has(node.id)) continue;
+        const variable = `group:${node.id}`;
+        const cap = `surplus-baseline:${node.id}`;
+        constraints[cap] = { max: Math.max(0, Number(result[variable]) || 0) };
+        variables[variable]![cap] = 1;
+      }
+    }
     if (costs === sharingCosts)
       Object.assign(sharingCosts, addFlowSharing(model, siblings.values()));
     if (!Object.keys(costs).length) continue;
@@ -583,6 +616,7 @@ function solveComponent(
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     result = solver.Solve(model, 1e-9) as Solution;
     if (!result.feasible || !result.bounded || !Number.isFinite(result.result)) return [];
+    if (costs === baselineCosts) continue;
     const preserve = `objective:${stage}`;
     constraints[preserve] = { max: result.result };
     for (const [id, cost] of Object.entries(costs)) variables[id]![preserve] = cost;

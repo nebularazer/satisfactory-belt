@@ -112,3 +112,19 @@ Existing material-allocation, facility, canvas and configuration checks remain i
 - Visually distinguish unconnected inputs that assume external supply. No marker or
   link-color change is included yet; consider this alongside Flow status and Build
   belt-capacity colors.
+
+## AWESOME Sink
+
+Sinks default to Surplus. Production receives material first; sinking then uses spare
+finite supply. Automatic groups may grow to process that supply, but unconstrained
+upstream sources cannot grow solely to feed a surplus sink. Automatically calculated
+machine counts are not capacity limits. Authored machine/output limits and finite
+extractors establish available supply.
+
+Rate mode selects a sinkable item and an explicit items/min request. It may request
+additional upstream production, but still yields to production consumers when supply
+is short. The saved rate remains unchanged during shortages. Explicit sinking rates
+receive material before surplus sinks, and neither mode consumes more than is supplied.
+The inspector's Inputs section displays actual allocated per-material rates.
+
+Follow-up: display sink points/min, accounting separately for normal and DNA points.

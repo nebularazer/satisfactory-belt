@@ -19,6 +19,7 @@ import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
 import { InspectorFlow } from "@/components/inspector-flow";
 import { InspectorNumberField } from "@/components/inspector-number-field";
+import { InspectorSink } from "@/components/inspector-sink";
 import { InspectorStatistics } from "@/components/inspector-statistics";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -146,6 +147,7 @@ export function InspectorBody({
         className="min-h-0 min-w-0 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0"
       >
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
+        {node.kind === "sink" && <InspectorSink node={node} editor={editor} assets={assets} />}
         {isFlowGroup(node) && (
           <InspectorFlow node={node} scope={scope} editor={editor} assets={assets} />
         )}
