@@ -791,7 +791,9 @@ it("commits a port drag as one undoable connection without moving either node", 
   controller.pointerUp(point(input));
   const connected = history.getSnapshot().state;
   expect(connected.links).toHaveLength(1);
-  expect(connected.nodes).toBe(before.nodes);
+  expect(connected.nodes.map(({ id, x, y }) => ({ id, x, y }))).toEqual(
+    before.nodes.map(({ id, x, y }) => ({ id, x, y })),
+  );
   historyCommand("undo");
   expect(history.getSnapshot().state).toBe(before);
   historyCommand("redo");
@@ -1280,4 +1282,104 @@ it("preserves redo and document identity when unchanged settings are submitted",
   expect(editor.history.getSnapshot()).toBe(before);
   editor.historyCommand("redo");
   expect(editor.history.getSnapshot().state.routes![0]!.roundTripSeconds).toBe(300);
+});
+
+it("caches Flow analysis across geometry edits and invalidates it for external rates and machine settings", () => {
+  const editor = createTestEditor();
+  const first = editor.getFlowAnalysis();
+  editor.controller.setSelection(new Set(["machine-1"]));
+  editor.controller.command("move-right");
+  expect(editor.getFlowAnalysis()).toBe(first);
+  const port = { nodeId: "machine-1", portKey: "output:Desc_WAT1_C" };
+  editor.setExternalFlow(port, "Desc_WAT1_C", 28.125);
+  const exported = editor.getFlowAnalysis();
+  expect(exported).not.toBe(first);
+  expect(exported.issues.some((issue) => issue.nodeId === "machine-1")).toBe(false);
+  editor.setExternalFlow(port, "Desc_WAT1_C", 28.125);
+  expect(editor.getFlowAnalysis()).toBe(exported);
+  editor.setOperatingSetting("machine-1", "all", "clockPercent", 100);
+  expect(editor.getFlowAnalysis()).not.toBe(exported);
+  expect(editor.getFlowAnalysis().issues).toContainEqual(
+    expect.objectContaining({ code: "missing-export", nodeId: "machine-1" }),
+  );
+  editor.historyCommand("undo");
+  expect(editor.getFlowAnalysis().issues.some((issue) => issue.nodeId === "machine-1")).toBe(false);
+});
+
+it("copies, remaps, deletes and restores external declarations atomically with their groups", () => {
+  const editor = createTestEditor();
+  editor.setExternalFlow(
+    { nodeId: "machine-1", portKey: "output:Desc_WAT1_C" },
+    "Desc_WAT1_C",
+    28.125,
+  );
+  editor.controller.setSelection(new Set(["machine-1"]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  const pasted = editor.history.getSnapshot().state.nodes.at(-1)!;
+  expect(editor.history.getSnapshot().state.externalFlows).toContainEqual({
+    port: { nodeId: pasted.id, portKey: "output:Desc_WAT1_C" },
+    itemId: "Desc_WAT1_C",
+    perMinute: 28.125,
+  });
+  editor.deleteSelection();
+  expect(editor.history.getSnapshot().state.externalFlows).toHaveLength(1);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state.externalFlows).toHaveLength(2);
+  const before = editor.history.getSnapshot();
+  expect(() =>
+    editor.setExternalFlow({ nodeId: "machine-1", portKey: "missing" }, "Desc_WAT1_C", 10),
+  ).toThrow();
+  expect(() =>
+    editor.setExternalFlow(
+      { nodeId: "machine-1", portKey: "output:Desc_WAT1_C" },
+      "Desc_WAT1_C",
+      NaN,
+    ),
+  ).toThrow();
+  expect(editor.history.getSnapshot()).toBe(before);
+});
+
+it("does not solve again for route guides or informational tiers", () => {
+  const editor = createLinkedEditor();
+  editor.connect(editor.output, editor.input);
+  const link = editor.history.getSnapshot().state.links[0]!;
+  const analysis = editor.getFlowAnalysis();
+  editor.setRoute(link.id, [{ axis: "y", position: 96 }]);
+  expect(editor.getFlowAnalysis()).toBe(analysis);
+  editor.setLinkTier(link.id, 6);
+  expect(editor.getFlowAnalysis()).toBe(analysis);
+});
+
+it("persists only authored port references and reconciles a copied export with missing upstream material", () => {
+  const editor = createTestEditor();
+  const output = editor.getPorts("machine-1")[0]!;
+  editor.setExternalFlow(output, "Desc_WAT1_C", 28.125);
+  expect(editor.history.getSnapshot().state.externalFlows?.[0]?.port).toEqual({
+    nodeId: "machine-1",
+    portKey: "output:Desc_WAT1_C",
+  });
+  editor.catalog.logistics.splitter = {
+    id: "splitter",
+    name: "Splitter",
+    description: "",
+    descriptorId: "splitter",
+    iconId: "splitter",
+    kind: "splitter",
+  };
+  const splitter = editor.placeNode({ kind: "logistics", partId: "splitter" }, { x: 0, y: 0 });
+  editor.setExternalFlow(output, "Desc_WAT1_C", 0);
+  editor.connect(output, { nodeId: splitter.id, portKey: "input:0" });
+  editor.setExternalFlow({ nodeId: splitter.id, portKey: "output:0" }, "Desc_WAT1_C", 28.125);
+  editor.controller.setSelection(new Set([splitter.id]));
+  editor.clipboardCommand("copy");
+  editor.clipboardCommand("paste");
+  expect(editor.history.getSnapshot().state.externalFlows).toHaveLength(1);
+  expect(editor.getFlowAnalysis().status).not.toBe("invalid");
+  const connection = editor.history.getSnapshot().state.links[0]!;
+  editor.controller.selectLink(connection.id);
+  editor.deleteSelection();
+  expect(editor.history.getSnapshot().state.externalFlows).toHaveLength(0);
+  editor.historyCommand("undo");
+  expect(editor.history.getSnapshot().state.externalFlows).toHaveLength(1);
 });

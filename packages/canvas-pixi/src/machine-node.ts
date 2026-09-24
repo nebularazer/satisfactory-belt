@@ -32,6 +32,7 @@ export class MachineNodeView {
   private palette: CanvasPalette = CANVAS_PALETTES.light;
   private selected = false;
   private zoom = -1;
+  private rateKey = "";
   private fontFamily: string;
   private cache: IconCache;
 
@@ -43,20 +44,30 @@ export class MachineNodeView {
   }
 
   update(
+    nodeId: string,
     display: NodeDisplay,
     zoom: number,
     resolution: number,
     selected: boolean,
     palette: CanvasPalette,
+    getPortRate?: (nodeId: string, portKey: string) => string | null,
+    getPortIcons?: (nodeId: string, portKey: string) => readonly string[],
   ) {
-    const changed = this.display !== display || this.palette !== palette;
+    const rates = display.ports.map(
+      (port) =>
+        `${getPortRate?.(nodeId, port.key) ?? ""}\u0001${getPortIcons?.(nodeId, port.key).join("\u0001") ?? ""}`,
+    );
+    const rateKey = rates.join("\u0000");
+    const changed =
+      this.display !== display || this.palette !== palette || this.rateKey !== rateKey;
     this.palette = palette;
     if (changed) {
       this.content.removeChildren().forEach((child) => child.destroy({ children: true }));
       this.texts = [];
       this.icons = [];
-      this.build(display);
+      this.build(nodeId, display, getPortRate, getPortIcons);
       this.display = display;
+      this.rateKey = rateKey;
     }
     if (changed || this.zoom !== zoom || this.selected !== selected) {
       this.background
@@ -93,25 +104,16 @@ export class MachineNodeView {
     }
   }
 
-  private build(display: NodeDisplay) {
+  private build(
+    nodeId: string,
+    display: NodeDisplay,
+    getPortRate?: (nodeId: string, portKey: string) => string | null,
+    getPortIcons?: (nodeId: string, portKey: string) => readonly string[],
+  ) {
     const footerY =
       (display.layout === "machine" ? (display.height ?? display.size) : display.size) - 32;
     if (display.layout === "logistics") {
       this.icon(display.machineIconId, display.size / 2, display.size / 2, 40, 0.7);
-      for (const port of display.ports) {
-        const icons = port.configuredItemIconIds;
-        if (icons[0]) this.icon(icons[0], display.size - 28, port.y, 24);
-        if (icons.length > 1) {
-          const x = display.size - 30;
-          this.content.addChild(
-            new Graphics()
-              .roundRect(x, port.y + 6, 24, 12, 4)
-              .fill(this.palette.card)
-              .stroke({ color: this.palette.separator, width: 1 }),
-          );
-          this.label(`+${icons.length - 1}`, x + 2, port.y + 12, 20, 9, "600", this.palette.title);
-        }
-      }
     } else {
       // Stop at the inner edge of the one-unit node border.
       const lines = new Graphics()
@@ -152,8 +154,39 @@ export class MachineNodeView {
       }
     }
     for (const port of display.ports) {
-      if (port.iconId)
-        this.icon(port.iconId, port.direction === "input" ? 28 : display.size - 28, port.y, 24);
+      const inferredIcons = getPortIcons?.(nodeId, port.key) ?? [];
+      const icons = port.iconId
+        ? [port.iconId]
+        : inferredIcons.length
+          ? inferredIcons
+          : "configuredItemIconIds" in port
+            ? port.configuredItemIconIds
+            : [];
+      const iconX = port.direction === "input" ? 28 : display.size - 28;
+      if (icons[0]) this.icon(icons[0], iconX, port.y, 24);
+      if (icons.length > 1) {
+        this.content.addChild(
+          new Graphics()
+            .roundRect(iconX - 2, port.y + 6, 24, 12, 4)
+            .fill(this.palette.card)
+            .stroke({ color: this.palette.separator, width: 1 }),
+        );
+        this.label(`+${icons.length - 1}`, iconX, port.y + 12, 20, 9, "600", this.palette.title);
+      }
+      const rate = getPortRate?.(nodeId, port.key);
+      if (rate && display.layout !== "logistics") {
+        const input = port.direction === "input";
+        const label = this.label(
+          rate,
+          input ? 44 : display.size - 44,
+          port.y,
+          display.size / 2 - 52,
+          11,
+          "500",
+          this.palette.footer,
+        );
+        if (!input) label.anchor.set(1, 0.5);
+      }
     }
     if (display.layout === "logistics") return;
     const footer = display.footer;

@@ -9,6 +9,7 @@ import type { CanvasItem, CanvasPointer } from "@satisfactory-belt/canvas-core";
 import { PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
 import type { NodeDisplay } from "@satisfactory-belt/factory-core";
 import type { IconManifest } from "@satisfactory-belt/game-data";
+import type { Text } from "pixi.js";
 import { Application, Container, Graphics } from "pixi.js";
 
 import { createGrid } from "./grid";
@@ -32,12 +33,17 @@ export type CanvasView = {
   setShowPerformance: (visible: boolean) => void;
 };
 
+type RateProvider = (nodeId: string, portKey: string) => string | null;
+
 /** Owns browser resources; abort also cleans up an initialization still in flight. */
 export async function mountCanvas(
   host: HTMLElement,
   controller: CanvasController,
   options: {
     getDisplay: (id: string) => NodeDisplay | undefined;
+    getPortRate?: RateProvider;
+    getPortIcons?: (nodeId: string, portKey: string) => readonly string[];
+    getLinkRates?: (id: string) => readonly string[];
     iconManifest: IconManifest;
     assetBaseUrl: string;
     theme?: CanvasTheme;
@@ -91,6 +97,7 @@ export async function mountCanvas(
   const grid = createGrid(palette.grid);
   const linksLayer = new Graphics();
   const linkHandlesLayer = new Graphics();
+  const linkLabels = new Map<string, Text>();
   const itemsLayer = new Container();
   const overlay = new Graphics();
   app.stage.addChild(grid.view, linksLayer, linkHandlesLayer, itemsLayer, overlay);
@@ -119,7 +126,15 @@ export async function mountCanvas(
     const { camera, viewport, selection, dragOffset, items, marquee } = snapshot;
     if (grid.view.visible) grid.update(camera, viewport, resolution);
     overlay.clear();
-    drawMaterialLinks(linksLayer, linkHandlesLayer, snapshot, palette);
+    drawMaterialLinks(
+      linksLayer,
+      linkHandlesLayer,
+      snapshot,
+      palette,
+      linkLabels,
+      options.getLinkRates,
+      resolution,
+    );
     if (items !== previousItems) {
       const ids = new Set(items.map((item) => item.id));
       for (const [id, view] of views) {
@@ -168,7 +183,16 @@ export async function mountCanvas(
       view.container.position.set(position.x, position.y);
       const display = options.getDisplay(item.id);
       if (display) {
-        view.update(display, camera.zoom, resolution, selected, palette);
+        view.update(
+          item.id,
+          display,
+          camera.zoom,
+          resolution,
+          selected,
+          palette,
+          options.getPortRate,
+          options.getPortIcons,
+        );
         view.portHighlights.update(item.id, display, snapshot.ports, palette);
       } else view.container.visible = false;
     }
@@ -347,6 +371,7 @@ export async function mountCanvas(
       // Pixi releases the source canvases after text upload; the restored GPU textures
       // are empty until their managed text entries are regenerated.
       for (const view of views.values()) view.restoreText();
+      for (const label of linkLabels.values()) label.unload();
       invalidate();
     },
     { signal: events.signal },

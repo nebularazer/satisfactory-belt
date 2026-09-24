@@ -3,8 +3,8 @@
 Single-node or single-link selection opens the inspector. Multiple selected canvas
 nodes do not. Desktop uses a top-right card; mobile uses a swipe-dismissable
 bottom drawer matching catalog search. Machine groups retain the All/member tabs; settings under All show
-Mixed when appropriate and write to all members. All and the count buttons stay
-fixed while member numbers scroll without a scrollbar. Numeric drafts clamp on Enter or
+Mixed when appropriate and write to all members. All and the count buttons stay fixed while member numbers scroll without a scrollbar. Flow group count
+buttons change output at the current clock when unlocked, or adjust clock to preserve output when locked. Numeric drafts clamp on Enter or
 blur, integer settings round, and empty/non-numeric drafts restore the prior value.
 Stations, logistics buffers, depot uploaders and the Space Elevator are individual
 buildings with no grouping tabs or count controls.
@@ -22,7 +22,32 @@ button style and lists use its compact rows with 16px item icons. Choices are so
 alphabetically by display name, with natural numeric order; splitter rules and
 From connections remain pinned above the items.
 
-There is no enabled/standby setting. Editable input/output rate targets remain deferred.
+Flow production groups expose output rates and one Clock speed input showing the
+actual group clock. With output unlocked, count edits retain member clocks and clock
+edits retain count; both change production. Clock +/− and arrow keys change the
+percentage by one point. Operating edits retain the edited group's settings for
+that recalculation without saving a lock; connected automatic groups follow its rate.
+With output locked, clock − adds one machine and lowers the clock; + removes one
+and raises it. Typed percentages choose whole machines at or below that speed,
+then adjust the clock to preserve output. These controls apply to the whole group.
+The info button explains both states on hover, keyboard focus or click/tap.
+Rebalance at 100% always preserves production and lock state.
+Rate fields show calculated values when unlocked. A single lock applies to the recipe
+and all its coproducts. Editing any rate updates the others by recipe ratio and locks
+production; unlocking removes the target so the connected plan can resize the group.
+Inputs keep the same width in both states, with no per-output Auto button.
+Locked count and clock step buttons are disabled when preserving output would
+require a clock outside 1–250%. Counts are not persistent
+limits. Later demand changes resize groups using the chosen clock. Output rates use strict positive numbers; empty or invalid drafts
+restore the previous value. Supply shortages and target shortfalls appear in a
+collapsed, neutral Supply details section below the material rates. Newly placed
+production nodes start unlocked; an explicit rate edit or lock action creates a target.
+Clock and material rates use common fraction glyphs or at most two decimal places,
+without trailing zeros. Focused fields show full decimal values; leaving an unchanged
+field preserves precision and lock state.
+There is no authored enabled/standby setting. The inspector omits the separate Flow balance
+section and manual external supply/export controls. See
+[Flow planning](flow-planning.md).
 
 ## Supported bodies
 
@@ -46,7 +71,7 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   Any, Any undefined, and Overflow remain rules without dedicated canvas indicators;
   bottleneck warnings and conditional overflow simulation are deferred.
 - Sink: incoming materials, points per item, and estimated points/min across the group on
-  unambiguous paths. DNA points have their own counter. Coupon progression is not
+  the planned allocation. Missing ingredients can reduce actual output. DNA points have their own counter. Coupon progression is not
   modeled. Individual sink allocation is unknown.
 - Gift Tree: fixed configured production, count, and power.
 - Fuel generators: shared fuel, individual clocks, supplemental water and waste.
@@ -59,8 +84,13 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   satellites per well. All supports Mixed and bulk edits; new members inherit
   common counts. Production sums each member’s purity-weighted output and clock.
 - Solid and fluid storage: compatible variant, material streams and capacity.
+  Storage implicitly collects surplus after consumers have been supplied. It has
+  no production target or required-input control. Input rates show received material;
+  output rates show forwarded material, with the difference accumulating in storage.
   Industrial storage has two inputs and two outputs. Node footers show slots or
   m³ with storage/fluid icons instead of zero power.
+  Storage and logistics ports show inferred material icons, refreshed as connections
+  change; multi-material ports show the first icon and a remaining-item count.
 - Dimensional Depot: shared plan-wide speed/capacity research.
 - Truck/Fluid Truck Stations: the same fluid/freight load/unload icon buttons as trains,
   an aligned cargo selector, station fuel, and shared
@@ -89,9 +119,9 @@ There is no enabled/standby setting. Editable input/output rate targets remain d
   sink. A separate Required parts section above inputs/outputs shows item images and
   total quantities for the selected phase as reference only. There are no delivered/remaining counters. A node cannot be grouped;
   Only one can be placed in the plan, including through copy/paste.
-- Links: Conveyor Mk.1–6 or Pipeline Mk.1–2, materials, and nominal tier capacity.
-  Tier is stored and undoable, but does not constrain calculated flow yet.
-  Link inspectors omit endpoint subtitles; route links have no tiers.
+- Flow links: material names and planned allocation, including partial allocations
+  while the plan is unfinished. No tier control or transport capacity applies to abstract links.
+  Link inspectors omit endpoint subtitles; route links carry no material flow.
 
 Power Storage, power-grid controls, pipeline junctions/pumps/valves, portals, and
 throughput monitors remain out of scope. Transport calculations do not simulate

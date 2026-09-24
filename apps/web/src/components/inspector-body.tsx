@@ -1,11 +1,13 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop -- Only the selected entity's bounded inspector controls are rendered. */
 import {
-  configuredIncomingRates,
+  formatPlanningNumber,
+  isFlowGroup,
+  isProductionLocked,
   commonMatrices,
   commonSetting,
   machineCapabilities,
   MAX_MACHINE_COUNT,
-  resolveFactoryNode,
+  rebalanceFlowGroup,
   resolveProduction,
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
@@ -17,8 +19,11 @@ import { CatalogIcon } from "@/components/catalog-search-details";
 import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
+import { InspectorFlow } from "@/components/inspector-flow";
+import { InspectorFlowClock } from "@/components/inspector-flow-clock";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorStatistics } from "@/components/inspector-statistics";
+import { InspectorSupplyDetails } from "@/components/inspector-supply-details";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,7 +31,6 @@ import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Editor = ReturnType<typeof createFactoryEditor>;
-const rateFormat = new Intl.NumberFormat("en", { maximumSignificantDigits: 5 });
 
 export function InspectorBody({
   node,
@@ -45,43 +49,31 @@ export function InspectorBody({
       : "all";
   const members = node.kind === "logistics" ? null : scopedMachines(node, scope);
   const capabilities = node.kind === "logistics" ? null : machineCapabilities(node, assets.catalog);
-  const display = resolveFactoryNode(
-    node.kind !== "logistics" && members ? { ...node, machines: members } : node,
-    assets.catalog,
-  );
   const production = resolveProduction(node, assets.catalog, scope);
-  const sinkRates =
-    node.kind === "sink"
-      ? configuredIncomingRates(editor.history.getSnapshot().state, assets.catalog, node.id)
-      : null;
-  // Logistics and sinks have network-dependent streams, not a configured recipe rate.
+  // Production is configured potential; logistics rates come from the planned allocation.
+  const networkRates =
+    node.kind === "logistics" ||
+    node.kind === "sink" ||
+    (node.kind === "facility" &&
+      ["storage", "depot", "truck-station", "train-station", "drone-port"].includes(
+        node.configuration.type,
+      ));
   const streams = (direction: "input" | "output"): readonly MaterialRate[] => {
-    if (
-      node.kind !== "logistics" &&
-      node.kind !== "sink" &&
-      !(
-        node.kind === "facility" &&
-        ["storage", "depot", "truck-station", "train-station", "drone-port"].includes(
-          node.configuration.type,
-        )
-      )
-    )
-      return direction === "input" ? production.inputs : production.outputs;
-    const ids = new Set(
-      display.ports
-        .filter((port) => port.direction === direction)
-        .flatMap((port) =>
-          port.itemId
-            ? [port.itemId]
-            : Array.from(editor.getMaterials({ nodeId: node.id, portKey: port.key })),
-        ),
-    );
-    return [...ids].map((itemId) => ({
+    if (!networkRates) return direction === "input" ? production.inputs : production.outputs;
+    const totals = new Map<string, number | null>();
+    for (const port of editor.getPorts(node.id)) {
+      if (port.direction !== direction) continue;
+      for (const rate of editor.getPortFlows(port)) {
+        const previous = totals.get(rate.itemId);
+        totals.set(
+          rate.itemId,
+          rate.perMinute === null || previous === null ? null : (previous ?? 0) + rate.perMinute,
+        );
+      }
+    }
+    return [...totals].map(([itemId, perMinute]) => ({
       itemId,
-      perMinute:
-        node.kind === "sink" && scope === "all"
-          ? (sinkRates?.find((rate) => rate.itemId === itemId)?.perMinute ?? null)
-          : null,
+      perMinute: scope === "all" ? perMinute : null,
     }));
   };
   return (
@@ -136,8 +128,17 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Remove last machine"
-                  title="Remove last machine"
-                  disabled={node.machines.length <= 1}
+                  title={
+                    isProductionLocked(node)
+                      ? "Fewer machines, higher clock"
+                      : "Remove last machine"
+                  }
+                  disabled={
+                    node.machines.length <= 1 ||
+                    (isFlowGroup(node) &&
+                      isProductionLocked(node) &&
+                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
+                  }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
                 >
                   <MinusIcon />
@@ -147,8 +148,13 @@ export function InspectorBody({
                   size="icon"
                   className="size-11 sm:size-8"
                   aria-label="Add machine"
-                  title="Add machine"
-                  disabled={node.machines.length >= MAX_MACHINE_COUNT}
+                  title={isProductionLocked(node) ? "More machines, lower clock" : "Add machine"}
+                  disabled={
+                    node.machines.length >= MAX_MACHINE_COUNT ||
+                    (isFlowGroup(node) &&
+                      isProductionLocked(node) &&
+                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
+                  }
                   onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
                 >
                   <PlusIcon />
@@ -159,7 +165,8 @@ export function InspectorBody({
         </div>
       )}
       <TabsContent value={scope} className="space-y-4">
-        <InspectorConfiguration node={node} editor={editor} assets={assets} />
+        <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
+        {isFlowGroup(node) && <InspectorFlow node={node} editor={editor} assets={assets} />}
         {node.kind === "facility" && (
           <InspectorFacility node={node} scope={scope} editor={editor} assets={assets} />
         )}
@@ -173,7 +180,7 @@ export function InspectorBody({
             capabilities.load ||
             capabilities.matrices) && (
             <div className="space-y-3">
-              {capabilities.purity && (
+              {capabilities.purity && node.kind !== "extractor" && (
                 <InspectorButtonGroup
                   label="Purity"
                   value={
@@ -216,20 +223,23 @@ export function InspectorBody({
                   />
                 </div>
               )}
-              {capabilities.clock && (
-                <InspectorNumberField
-                  key={`${scope}:clock`}
-                  label="Clock speed"
-                  value={commonSetting(members, "clockPercent")}
-                  revision={node.machines}
-                  min={1}
-                  max={250}
-                  unit="%"
-                  onCommit={(value) =>
-                    editor.setOperatingSetting(node.id, scope, "clockPercent", value)
-                  }
-                />
-              )}
+              {capabilities.clock &&
+                (isFlowGroup(node) ? (
+                  <InspectorFlowClock node={node} editor={editor} assets={assets} />
+                ) : (
+                  <InspectorNumberField
+                    key={`${scope}:clock`}
+                    label="Clock speed"
+                    value={commonSetting(members, "clockPercent")}
+                    revision={node.machines}
+                    min={1}
+                    max={250}
+                    unit="%"
+                    onCommit={(value) =>
+                      editor.setOperatingSetting(node.id, scope, "clockPercent", value)
+                    }
+                  />
+                ))}
               {capabilities.sloopSlots > 0 && (
                 <InspectorNumberField
                   key={`${scope}:sloops`}
@@ -246,7 +256,10 @@ export function InspectorBody({
               )}
             </div>
           )}
-        <section aria-label="Configured material rates" className="space-y-2 border-t pt-4">
+        <section
+          aria-label={networkRates ? "Planned material flow" : "Configured material rates"}
+          className="space-y-2 border-t pt-4"
+        >
           <div className="grid grid-cols-2 gap-4">
             <RateColumn
               title="Inputs"
@@ -265,10 +278,17 @@ export function InspectorBody({
               empty={node.kind === "logistics" ? "No known materials" : "No outputs"}
             />
           </div>
-          {production.unavailableReason && (
-            <p className="text-xs text-muted-foreground">{production.unavailableReason}</p>
+          {networkRates ? (
+            <p className="text-xs text-muted-foreground">
+              Planned flow from configured production.
+            </p>
+          ) : (
+            production.unavailableReason && (
+              <p className="text-xs text-muted-foreground">{production.unavailableReason}</p>
+            )
           )}
         </section>
+        <InspectorSupplyDetails node={node} editor={editor} assets={assets} />
         <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
       </TabsContent>
     </Tabs>
@@ -301,7 +321,7 @@ function RateColumn({
                   <p className="text-muted-foreground tabular-nums">
                     {rate.perMinute === null
                       ? "Rate unavailable"
-                      : `${rateFormat.format(rate.perMinute)} ${item.unit === "m3" ? "m³" : "items"}/min`}
+                      : `${formatPlanningNumber(rate.perMinute)} ${item.unit === "m3" ? "m³" : "items"}/min`}
                   </p>
                 </div>
               </li>

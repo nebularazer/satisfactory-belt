@@ -5,6 +5,7 @@ import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 import { resolveFacility, trainStationHeight } from "./facilities";
 import type { FacilityNode, Purity } from "./facilities";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
+import { formatPlanningNumber } from "./number-format";
 import type { PortTransport } from "./ports";
 import { DEFAULT_SPLITTER_PROGRAM, SPLITTER_OUTPUTS, validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
@@ -29,12 +30,18 @@ export type MachineMember = Readonly<{
   normalSatellites?: number;
   pureSatellites?: number;
 }>;
-type NodeBase = Readonly<{ id: string; x: number; y: number; machines: readonly MachineMember[] }>;
+type NodeBase = Readonly<{
+  id: string;
+  x: number;
+  y: number;
+  machines: readonly MachineMember[];
+}>;
 export type ManufacturingNode = NodeBase &
   Readonly<{
     kind: "manufacturing";
     machineId: string;
     recipeId: string;
+    flow?: import("./flow-sizing").FlowSettings;
   }>;
 export type FactoryNode =
   | ManufacturingNode
@@ -46,6 +53,7 @@ export type FactoryNode =
         kind: "extractor";
         extractorId: string;
         resourceId: string;
+        flow?: import("./flow-sizing").FlowSettings;
       }>)
   | (NodeBase &
       Readonly<{
@@ -204,7 +212,7 @@ export function resolveMachineNode(
   if (node.kind === "facility") return resolveFacility(node, catalog);
   const clock = commonSetting(node.machines, "clockPercent");
   const sloops = commonSetting(node.machines, "sloopsUsed");
-  const clockLabel = clock === null ? "Mixed" : `${numberLabel.format(clock)}%`;
+  const clockLabel = clock === null ? "Mixed" : `${formatPlanningNumber(clock)}%`;
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
     throw new Error(`Invalid position on ${node.id}.`);
   function ports(
@@ -379,10 +387,17 @@ export * from "./facilities";
 
 export * from "./configuration";
 
-export * from "./configured-flow";
-
 export * from "./clipboard";
 
 export * from "./transport";
 
 export { settingsKey } from "./settings";
+
+export * from "./flow-plan";
+export * from "./validation";
+
+export * from "./flow-placement";
+
+export * from "./flow-sizing";
+
+export { formatPlanningNumber } from "./number-format";

@@ -80,3 +80,61 @@ A material input reserved for transport fuel, distinct from cargo inputs.
 **Project Assembly sink**:
 A Space Elevator accepting the parts for a selected phase without a delivery limit
 in the factory plan. A world has only one Space Elevator.
+
+**Flow plan**:
+A production plan whose nodes represent machine groups and whose material links
+share supply without requiring physical logistics or transport capacities.
+
+**External supply**:
+A declared continuous material input from outside the planned factory, assigned to
+a material input at a specified rate.
+
+**Export**:
+A declared continuous material output leaving the planned factory at a specified
+rate. Finite storage alone is not an export.
+
+**Configured-rate feasibility**:
+Whether the connected plan can sustain all configured production, declared supply
+and exports simultaneously. It does not establish startup feasibility.
+
+**Feasible allocation**:
+One distribution of material across links satisfying the configured rates and
+material conservation; it is not a prediction of machine starvation or timing.
+
+**Planned allocation**:
+A distribution of configured production across connected material ports. Partial
+allocations remain inspectable in unfinished plans. Recipe outputs are configured
+potential, not predicted actual throughput under ingredient shortages. Configured
+counts stay fixed during allocation. Connected placement initially sizes a group
+to the anchor port’s remaining supply or demand, preferring uniform underclocking.
+Sizing is calculated simultaneously from output targets and preferred clocks,
+independent of construction order. An unlocked operating edit holds that group's
+settings for the current solve without saving a target. The solver derives edited
+groups from the before/after document, covering count, clock, purity, tier, recipe,
+machine and Sloop changes through every editor command. Layout and lock toggles
+are excluded from this comparison. Targets describe gross output;
+connected consumers use that output, and an unconnected target is the final product.
+Automatic suppliers meet combined demand, including extraction and recycling loops.
+Finite extractors expose available supply; automatic downstream groups use it.
+Unlocked count edits keep clock speed; unlocked clock edits keep count. Both change
+output. Locked count edits preserve output by adjusting clock within 1–250% and
+save a preferred clock, never a count limit. Later demand changes resize the group
+using that clock, underclocking as needed to balance whole counts. Standalone recipes
+and extractors start unlocked. Terminal production provides demand for automatic
+suppliers when no locked supply feeds it; these requirements are derived, never saved
+as hidden locks.
+Shortages remain visible instead of overriding constraints. Storage only collects
+surplus. The inspector has one production-rate lock for the entire recipe: editing
+one output locks it and updates coproducts by recipe ratio; unlocking removes the
+target and displays the calculated rates. Operating edits never create a production
+lock; their settings take precedence for the current solve only. Link text has a constant canvas-space font size and scales with zoom.
+
+Clock speed shows the actual group clock. Unlocked +/− changes it by one percentage
+point. When locked, − adds a machine and lowers the clock; + removes a machine and
+raises it. Locked typed percentages are requests: whole counts and exact output
+take precedence, so the displayed clock may adjust.
+An info tooltip explains this with an example. Rebalance at 100% preserves output
+and lock state while selecting whole machines without overclocking. Clock/rate
+displays use common fractions or two decimals; editing uses full decimals without
+committing formatting on focus/blur. Supply details are collapsed and neutral.
+Link text render resolution follows zoom/display density to remain sharp.

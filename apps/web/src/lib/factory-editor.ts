@@ -1,5 +1,7 @@
+/* oxlint-disable oxc/no-map-spread -- Editor commands preserve immutable history and clipboard snapshots. */
 import {
   CanvasController,
+  portId,
   GRID_SIZE,
   snapToGrid,
   routeLink,
@@ -8,6 +10,18 @@ import {
 import type { CanvasLink, Point, PortReference, RouteGuide } from "@satisfactory-belt/canvas-core";
 import { EditHistory } from "@satisfactory-belt/edit-history";
 import {
+  formatPlanningNumber,
+  rebalanceFlowGroupAtClock,
+  prepareFlowPlan,
+  sizeFlowPlacement,
+  resizeFlowGroups,
+  rebalanceFlowGroup,
+  isFlowGroup,
+  isProductionLocked,
+  validateFlowSettings,
+  reconcileFlowTargets,
+  validateExternalFlows,
+  reconcileExternalFlows,
   remapCopiedFacilities,
   reconcileTransportConnections,
   isMaterialTransport,
@@ -26,11 +40,13 @@ import {
   PORT_RADIUS,
   nodeBounds,
   resolveFactoryNode,
+  resolveProduction,
   setMachineSetting,
   resizeMachineGroup,
   resolveSemanticPorts,
 } from "@satisfactory-belt/factory-core";
 import type {
+  ExternalFlow,
   TransportRoute,
   DepotResearch,
   FactoryNode,
@@ -42,18 +58,39 @@ import type {
   FactoryDocument,
   MaterialLink,
   SplitterProgram,
+  MaterialRate,
 } from "@satisfactory-belt/factory-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 /** The host owns document edits and the workspace-local clipboard. */
 export function createFactoryEditor(catalog: GameCatalog, initialDocument: FactoryDocument) {
-  const history = new EditHistory<FactoryDocument>(reconcileTransportConnections(initialDocument));
+  const history = new EditHistory<FactoryDocument>(
+    resizeFlowGroups(reconcileTransportConnections(initialDocument), catalog),
+  );
+  function updateDocument(transform: (state: FactoryDocument) => FactoryDocument, group?: object) {
+    history.update((before) => {
+      const next = transform(before);
+      if (next === before) return before;
+      const sameNodes =
+        next.nodes.length === before.nodes.length &&
+        next.nodes.every((node, i) => sameConfiguration(node, before.nodes[i]!));
+      const sameLinks =
+        next.links.length === before.links.length &&
+        next.links.every(
+          (link, i) =>
+            link.input === before.links[i]!.input && link.output === before.links[i]!.output,
+        );
+      if (sameNodes && sameLinks && next.externalFlows === before.externalFlows) return next;
+      return resizeFlowGroups(next, catalog, before);
+    }, group);
+  }
   let semanticPorts: SemanticPort[] = [];
   let publishedLinks: readonly MaterialLink[] | null = null;
   let routed = new Map<string, CanvasLink>();
   let displays = new Map<string, NodeDisplay>();
   let previousNodes = new Map<string, FactoryNode>();
-  let portIndex = createConnectionIndex([], []);
+  let portIndex = prepareFlowPlan({ nodes: [], links: [] }, catalog);
+  let publishedExternal: FactoryDocument["externalFlows"];
   let publishedIndex: typeof portIndex | null = null;
   function project(nodes: readonly FactoryNode[]) {
     let configurationChanged = nodes.length !== previousNodes.size;
@@ -74,7 +111,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
         resolveSemanticPorts(node, catalog, displays.get(node.id)),
       );
       semanticPorts = ports;
-      portIndex = createConnectionIndex(ports, history.getSnapshot().state.links);
+      portIndex = prepareFlowPlan(history.getSnapshot().state, catalog);
     }
     previousNodes = new Map(nodes.map((node) => [node.id, node]));
     return nodes.map(nodeBounds);
@@ -83,7 +120,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   function connect(a: PortReference, b: PortReference) {
     const result = portIndex.compatibility(a, b);
     if (result.compatible)
-      history.update((current) =>
+      updateDocument((current) =>
         reconcileTransportConnections({
           ...current,
           links: [
@@ -99,7 +136,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     return result;
   }
   function setRoute(id: string, guides?: readonly RouteGuide[]) {
-    history.update((current) => {
+    updateDocument((current) => {
       const link = current.links.find((entry) => entry.id === id);
       if (!link || JSON.stringify(link.guides) === JSON.stringify(guides)) return current;
       return {
@@ -114,7 +151,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     onRoute: setRoute,
     onMove(moves, context) {
       const positions = new Map(moves.map((move) => [move.id, move]));
-      history.update((current) => {
+      updateDocument((current) => {
         let changed = false;
         const next = current.nodes.map((item) => {
           const position = positions.get(item.id);
@@ -146,8 +183,9 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     },
   });
   function publishPorts() {
-    const links = history.getSnapshot().state.links;
+    const { links, externalFlows } = history.getSnapshot().state;
     if (
+      externalFlows !== publishedExternal ||
       !publishedLinks ||
       publishedLinks.length !== links.length ||
       links.some(
@@ -156,7 +194,8 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
           link.input !== publishedLinks![index]!.input,
       )
     )
-      portIndex = createConnectionIndex(semanticPorts, links);
+      portIndex = prepareFlowPlan(history.getSnapshot().state, catalog);
+    publishedExternal = externalFlows;
     publishedLinks = links;
     if (publishedIndex === portIndex) return;
     publishedIndex = portIndex;
@@ -242,7 +281,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   function deleteSelection() {
     const { selection, interaction, linkSelection } = controller.getSnapshot();
     if (interaction !== "idle" || (!selection.size && !linkSelection.selected)) return;
-    history.update((current) => {
+    updateDocument((current) => {
       const nodes = current.nodes.filter((item) => !selection.has(item.id));
       const links = current.links.filter(
         (link) =>
@@ -252,15 +291,21 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       );
       return nodes.length === current.nodes.length && links.length === current.links.length
         ? current
-        : reconcileTransportConnections({
-            ...current,
-            nodes,
-            links,
-            routes: current.routes?.map((route) => ({
-              ...route,
-              stops: route.stops.filter((stop) => !selection.has(stop.nodeId)),
-            })),
-          });
+        : reconcileExternalFlows(
+            reconcileTransportConnections({
+              ...current,
+              nodes,
+              externalFlows: current.externalFlows?.filter(
+                (entry) => !selection.has(entry.port.nodeId),
+              ),
+              links,
+              routes: current.routes?.map((route) => ({
+                ...route,
+                stops: route.stops.filter((stop) => !selection.has(stop.nodeId)),
+              })),
+            }),
+            catalog,
+          );
     });
   }
 
@@ -275,6 +320,9 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       // Document items are immutable, so later edits cannot change this snapshot.
       clipboard = {
         nodes: selected,
+        externalFlows: history
+          .getSnapshot()
+          .state.externalFlows?.filter((entry) => selection.has(entry.port.nodeId)),
         routes: copiedTransportRoutes(history.getSnapshot().state, selection),
         links: history
           .getSnapshot()
@@ -326,34 +374,50 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
         input: { ...link.input, nodeId: ids.get(link.input.nodeId)! },
         guides: translateGuides(link.guides, { x: dx, y: dy }),
       }));
-    history.update((current) =>
-      reconcileTransportConnections({
-        ...current,
-        nodes: [...current.nodes, ...pasted],
-        ...(remapped.routes.length
-          ? { routes: [...(current.routes ?? []), ...remapped.routes] }
-          : {}),
-        links: [...current.links, ...links],
-      }),
+    updateDocument((current) =>
+      reconcileExternalFlows(
+        reconcileTransportConnections({
+          ...current,
+          nodes: [...current.nodes, ...pasted],
+          externalFlows: [
+            ...(current.externalFlows ?? []),
+            ...(clipboard.externalFlows ?? [])
+              .filter((entry) => ids.has(entry.port.nodeId))
+              .map((entry) => ({
+                ...entry,
+                port: { ...entry.port, nodeId: ids.get(entry.port.nodeId)! },
+              })),
+          ],
+          ...(remapped.routes.length
+            ? { routes: [...(current.routes ?? []), ...remapped.routes] }
+            : {}),
+          links: [...current.links, ...links],
+        }),
+        catalog,
+      ),
     );
     pasteCount++;
     controller.setSelection(new Set(pasted.map((item) => item.id)));
   }
 
   function updateNodes(transform: (nodes: readonly FactoryNode[]) => readonly FactoryNode[]) {
-    history.update((current) => {
-      const nodes = transform(current.nodes);
-      if (nodes === current.nodes) return current;
+    updateDocument((current) => {
+      const edited = transform(current.nodes);
+      if (edited === current.nodes) return current;
+      const nodes = edited.map((node) => reconcileFlowTargets(node, catalog));
       const ports = nodes.flatMap((node) => resolveSemanticPorts(node, catalog));
       const links: MaterialLink[] = [];
       for (const link of current.links)
         if (createConnectionIndex(ports, links).compatibility(link.output, link.input).compatible)
           links.push(link);
-      return reconcileTransportConnections({
-        ...current,
-        nodes,
-        links,
-      });
+      return reconcileExternalFlows(
+        reconcileTransportConnections({
+          ...current,
+          nodes,
+          links,
+        }),
+        catalog,
+      );
     });
   }
   function editMachine(
@@ -361,7 +425,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     change: (node: Exclude<FactoryNode, { kind: "logistics" }>) => FactoryNode,
   ) {
     if (controller.getSnapshot().interaction !== "idle") return;
-    history.update((current) => {
+    updateDocument((current) => {
       const node = current.nodes.find((entry) => entry.id === id);
       if (!node || node.kind === "logistics") return current;
       const next = change(node);
@@ -377,10 +441,68 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     setting: MachineSetting,
     value: number,
   ) {
-    editMachine(id, (node) => setMachineSetting(node, catalog, scope, setting, value));
+    editMachine(id, (node) => {
+      const next = setMachineSetting(node, catalog, scope, setting, value);
+      if (!isFlowGroup(next)) return next;
+      return {
+        ...next,
+        flow: {
+          ...next.flow,
+          ...(setting === "clockPercent"
+            ? scope === "all"
+              ? { clockPercent: value, memberClocks: undefined }
+              : {
+                  memberClocks: Object.fromEntries(
+                    next.machines.map((member) => [
+                      member.id,
+                      member.clockPercent || next.flow?.clockPercent || 100,
+                    ]),
+                  ),
+                }
+            : {}),
+        },
+      };
+    });
   }
   function setMachineCount(id: string, count: number) {
-    editMachine(id, (node) => resizeMachineGroup(node, count, () => crypto.randomUUID()));
+    editMachine(id, (node) =>
+      isFlowGroup(node) && isProductionLocked(node)
+        ? (rebalanceFlowGroup(node, catalog, count) ?? node)
+        : resizeMachineGroup(node, count, () => crypto.randomUUID()),
+    );
+  }
+  function setFlowClock(id: string, clock: number) {
+    const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
+    if (node && isFlowGroup(node) && !isProductionLocked(node)) {
+      setOperatingSetting(id, "all", "clockPercent", clock);
+      return;
+    }
+    editMachine(id, (current) =>
+      isFlowGroup(current)
+        ? (rebalanceFlowGroupAtClock(current, catalog, clock) ?? current)
+        : current,
+    );
+  }
+  function setProductionTarget(id: string, itemId: string, rate: number | null) {
+    editMachine(id, (node) => {
+      if (!isFlowGroup(node)) return node;
+      // One recipe workload controls every coproduct. Editing a different output
+      // replaces the anchor instead of leaving conflicting independent targets.
+      const targets = rate === null ? {} : { [itemId]: rate };
+      const next = { ...node, flow: { ...node.flow, targets } };
+      validateFlowSettings(next, catalog);
+      return next;
+    });
+  }
+  function setProductionLocked(id: string, locked: boolean) {
+    const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
+    if (!node || !isFlowGroup(node)) return;
+    if (locked && Object.keys(node.flow?.targets ?? {}).length) return;
+    const output = resolveProduction(node, catalog).outputs.find(
+      (rate) => (rate.perMinute ?? 0) > 0,
+    );
+    if (locked && !output) return;
+    setProductionTarget(id, output?.itemId ?? "", locked ? output!.perMinute : null);
   }
   function setSplitterProgram(id: string, program: SplitterProgram) {
     const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
@@ -438,8 +560,10 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       : null;
     if (source && !connection)
       throw new Error("This choice no longer supports the connection. Choose another result.");
+    if (source && connection)
+      node = sizeFlowPlacement(history.getSnapshot().state, catalog, source, node, connection);
     controller.cancel();
-    history.update((current) =>
+    updateDocument((current) =>
       reconcileTransportConnections({
         ...current,
         nodes: [...current.nodes, node],
@@ -449,7 +573,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       }),
     );
     controller.setSelection(new Set([node.id]));
-    return node;
+    return history.getSnapshot().state.nodes.find((entry) => entry.id === node.id)!;
   }
   let configurationDocument: FactoryDocument | null = null;
   let configurationValidator: ReturnType<typeof createConfigurationValidator> | null = null;
@@ -462,15 +586,19 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     return configurationValidator!(candidate);
   }
   function replaceNode(candidate: FactoryNode) {
+    candidate = reconcileFlowTargets(candidate, catalog);
     if (controller.getSnapshot().interaction !== "idle") return;
-    history.update((current) => {
+    updateDocument((current) => {
       const previous = current.nodes.find((node) => node.id === candidate.id);
       if (!previous || settingsKey(previous) === settingsKey(candidate) || !canConfigure(candidate))
         return current;
-      return {
-        ...current,
-        nodes: current.nodes.map((node) => (node.id === candidate.id ? candidate : node)),
-      };
+      return reconcileExternalFlows(
+        {
+          ...current,
+          nodes: current.nodes.map((node) => (node.id === candidate.id ? candidate : node)),
+        },
+        catalog,
+      );
     });
   }
   function setLinkTier(id: string, tier: number) {
@@ -489,7 +617,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     )
       throw new Error("Invalid transport tier.");
     if ((link?.tier ?? 1) === tier) return;
-    history.update((current) => ({
+    updateDocument((current) => ({
       ...current,
       links: current.links.map((entry) => (entry.id === id ? { ...entry, tier } : entry)),
     }));
@@ -498,7 +626,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     const previous = history.getSnapshot().state.routes?.find((entry) => entry.id === route.id);
     if (previous && settingsKey(previous) === settingsKey(route)) return;
     validateTransportRoute(history.getSnapshot().state, route);
-    history.update((current) => {
+    updateDocument((current) => {
       const next = reconcileTransportConnections({
         ...current,
         routes: [
@@ -517,13 +645,112 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       )
     )
       throw new Error("Invalid depot research.");
-    history.update((current) =>
+    updateDocument((current) =>
       settingsKey(current.depotResearch ?? DEFAULT_DEPOT_RESEARCH) === settingsKey(research)
         ? current
         : { ...current, depotResearch: { ...research } },
     );
   }
+  function setExternalFlow(port: PortReference, itemId: string, perMinute: number) {
+    if (!Number.isFinite(perMinute) || perMinute < 0)
+      throw new Error("Use a nonnegative finite rate.");
+    if (controller.getSnapshot().interaction !== "idle") return;
+    updateDocument((current) => {
+      const previous = current.externalFlows ?? [];
+      const matches = (entry: ExternalFlow) =>
+        entry.port.nodeId === port.nodeId &&
+        entry.port.portKey === port.portKey &&
+        entry.itemId === itemId;
+      if ((previous.find(matches)?.perMinute ?? 0) === perMinute) return current;
+      const externalFlows = [
+        ...previous.filter((entry) => !matches(entry)),
+        ...(perMinute > 0
+          ? [{ port: { nodeId: port.nodeId, portKey: port.portKey }, itemId, perMinute }]
+          : []),
+      ];
+      validateExternalFlows(externalFlows, semanticPorts, portIndex.materials);
+      return { ...current, externalFlows };
+    });
+  }
+  let rateIndex: typeof portIndex | null = null;
+  const portLabels = new Map<string, string>();
+  const portIcons = new Map<string, readonly string[]>();
+  const linkLabels = new Map<string, readonly string[]>();
+  const allocatedPortRates = new Map<string, readonly MaterialRate[]>();
+  const noRates: readonly MaterialRate[] = [];
+  const noLabels: readonly string[] = [];
+  function prepareRateLabels() {
+    if (rateIndex === portIndex) return;
+    rateIndex = portIndex;
+    portLabels.clear();
+    portIcons.clear();
+    linkLabels.clear();
+    allocatedPortRates.clear();
+    const analysis = portIndex.analyze();
+    const available = analysis.status === "feasible" || analysis.status === "infeasible";
+    for (const node of history.getSnapshot().state.nodes) {
+      const production = resolveProduction(node, catalog);
+      for (const port of portIndex.ports(node.id)) {
+        if (!isMaterialTransport(port.transport)) continue;
+        const key = portId(port);
+        const allocated = analysis.allocatedPorts.get(key) ?? noRates;
+        const materials = port.itemId ? [port.itemId] : [...portIndex.materials(port)];
+        portIcons.set(
+          key,
+          materials.map((itemId) => catalog.items[itemId]!.iconId),
+        );
+        const rates = materials.map((itemId) => ({
+          itemId,
+          perMinute: available
+            ? (allocated.find((rate) => rate.itemId === itemId)?.perMinute ?? 0)
+            : null,
+        }));
+        allocatedPortRates.set(key, rates);
+        // Node ports describe configured production/demand. Do not replace a miner's
+        // 120/min capacity with the 30/min assigned to its connected smelter.
+        const configured = port.direction === "input" ? production.inputs : production.outputs;
+        const labels = materials.map((itemId) => {
+          const rate =
+            configured.find((entry) => entry.itemId === itemId) ??
+            rates.find((entry) => entry.itemId === itemId);
+          return rate?.perMinute == null ? "?" : formatPlanningNumber(rate.perMinute);
+        });
+        if (labels.length) portLabels.set(key, labels.join("\n"));
+      }
+    }
+    for (const link of history.getSnapshot().state.links) {
+      const rates = analysis.links.get(link.id) ?? noRates;
+      const materials = [...portIndex.materials(link.output)];
+      linkLabels.set(
+        link.id,
+        materials.map((itemId) =>
+          available
+            ? formatPlanningNumber(rates.find((rate) => rate.itemId === itemId)?.perMinute ?? 0)
+            : "?",
+        ),
+      );
+    }
+  }
+  function getPortRate(nodeId: string, portKey: string): string | null {
+    prepareRateLabels();
+    return portLabels.get(portId({ nodeId, portKey })) ?? null;
+  }
+  function getPortIcons(nodeId: string, portKey: string): readonly string[] {
+    prepareRateLabels();
+    return portIcons.get(portId({ nodeId, portKey })) ?? noLabels;
+  }
+  function getPortFlows(port: PortReference): readonly MaterialRate[] {
+    prepareRateLabels();
+    return allocatedPortRates.get(portId(port)) ?? noRates;
+  }
+  function getLinkRates(id: string): readonly string[] {
+    prepareRateLabels();
+    return linkLabels.get(id) ?? noLabels;
+  }
   return {
+    getFlowAnalysis: () => portIndex.analyze(),
+    getPorts: (nodeId: string) => portIndex.ports(nodeId),
+    setExternalFlow,
     replaceNode,
     canReplaceNode: canConfigure,
     setLinkTier,
@@ -533,6 +760,13 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,
     setMachineCount,
+    setFlowClock,
+    rebalanceAt100: (id: string) =>
+      editMachine(id, (node) =>
+        isFlowGroup(node) ? (rebalanceFlowGroupAtClock(node, catalog, 100) ?? node) : node,
+      ),
+    setProductionTarget,
+    setProductionLocked,
     getNode: (id: string) => history.getSnapshot().state.nodes.find((node) => node.id === id),
     canPlace,
     placeNode,
@@ -542,6 +776,10 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     updateNodes,
     getLink: (id: string) => history.getSnapshot().state.links.find((link) => link.id === id),
     getMaterials: (ref: PortReference) => portIndex.materials(ref),
+    getPortRate,
+    getPortIcons,
+    getPortFlows,
+    getLinkRates,
     controller,
     history,
     historyCommand,
@@ -559,7 +797,12 @@ function sameConfiguration(a: FactoryNode, b: FactoryNode): boolean {
       a.partId === b.partId &&
       a.program === b.program
     );
-  if (a.kind !== b.kind || a.machines !== b.machines) return false;
+  if (
+    a.kind !== b.kind ||
+    a.machines !== b.machines ||
+    (isFlowGroup(a) && isFlowGroup(b) && a.flow !== b.flow)
+  )
+    return false;
   if (a.kind === "facility" && b.kind === "facility")
     return a.buildingId === b.buildingId && a.configuration === b.configuration;
   if (a.kind === "sink" && b.kind === "sink") return a.sinkId === b.sinkId;

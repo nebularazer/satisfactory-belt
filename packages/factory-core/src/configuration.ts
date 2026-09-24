@@ -57,9 +57,7 @@ export function createConfigurationValidator(document: FactoryDocument, catalog:
   let invalidComponents = 0;
   for (const component of new Set(components.values())) {
     const index = createConnectionIndex(component.ports, component.links);
-    component.valid = component.links.every(
-      (link) => index.compatibility(link.output, link.input, true).compatible,
-    );
+    component.valid = index.invalidLinks().length === 0;
     if (!component.valid) invalidComponents++;
   }
   const results = new Map<string, boolean>();
@@ -76,9 +74,7 @@ export function createConfigurationValidator(document: FactoryDocument, catalog:
           ...resolveSemanticPorts(candidate, catalog),
         ];
         const index = createConnectionIndex(ports, component.links);
-        valid = component.links.every(
-          (link) => index.compatibility(link.output, link.input, true).compatible,
-        );
+        valid = index.invalidLinks().length === 0;
         if (valid && candidate.kind === "facility")
           validateFacilityReferences({
             ...document,
@@ -129,6 +125,18 @@ export function withRecipe(
     ...node,
     recipeId,
     machineId,
+    ...(node.flow
+      ? {
+          flow: {
+            ...node.flow,
+            targets: Object.fromEntries(
+              Object.entries(node.flow.targets ?? {}).filter(([item]) =>
+                recipe.products.some((product) => product.itemId === item),
+              ),
+            ),
+          },
+        }
+      : {}),
     machines: node.machines.map((member) => ({
       ...member,
       sloopsUsed: Math.min(member.sloopsUsed, machine.sloopSlots),

@@ -1,6 +1,8 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Handlers belong to this small controlled field. */
+import { formatPlanningNumber } from "@satisfactory-belt/factory-core";
 import { MinusIcon, PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   InputGroup,
@@ -20,8 +22,15 @@ export function InspectorNumberField({
   integer = false,
   unit,
   onCommit,
+  labelHint,
+  steps,
 }: {
   label: string;
+  labelHint?: ReactNode;
+  steps?: {
+    decrease: { label: string; disabled: boolean; run: () => void };
+    increase: { label: string; disabled: boolean; run: () => void };
+  };
   value: number | null;
   revision: unknown;
   min: number;
@@ -32,6 +41,7 @@ export function InspectorNumberField({
 }) {
   const id = useId();
   const [source, setSource] = useState(revision);
+  const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   // An external edit or undo wins over a draft, even when the displayed value stays Mixed.
   if (source !== revision) {
@@ -57,28 +67,44 @@ export function InspectorNumberField({
   }
   const stepValue = draft === null ? value : normalize(draft.trim() ? Number(draft) : NaN);
   function canStep(delta: number) {
+    if (steps) return !(delta < 0 ? steps.decrease : steps.increase).disabled;
     return stepValue !== null && normalize(stepValue + delta) !== stepValue;
   }
   function step(delta: number) {
+    if (steps) {
+      const action = delta < 0 ? steps.decrease : steps.increase;
+      setDraft(null);
+      if (!action.disabled) action.run();
+      return;
+    }
     if (stepValue !== null && canStep(delta)) apply(stepValue + delta);
   }
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="flex items-center gap-1.5 text-xs sm:text-sm">
-          {label}
-        </label>
+        <div className="flex items-center gap-1">
+          <label htmlFor={id} className="flex items-center gap-1.5 text-xs sm:text-sm">
+            {label}
+          </label>
+          {labelHint}
+        </div>
         <InputGroup className="h-11 w-42 min-w-0 shrink-0 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30">
           <InputGroupInput
             id={id}
             inputMode={integer ? "numeric" : "decimal"}
             className="min-h-11 px-1 text-right text-xs tabular-nums sm:min-h-8"
-            value={draft ?? (value === null ? "" : String(Number(value.toPrecision(12))))}
+            value={
+              draft ?? (value === null ? "" : focused ? String(value) : formatPlanningNumber(value))
+            }
             placeholder={value === null ? "Mixed" : undefined}
             onChange={(event) => {
               setDraft(event.target.value);
             }}
-            onBlur={commit}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              commit();
+              setFocused(false);
+            }}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing) return;
               if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -87,7 +113,7 @@ export function InspectorNumberField({
               }
               if (event.key === "Enter") {
                 event.preventDefault();
-                commit();
+                event.currentTarget.blur();
               }
               if (event.key === "Escape" && draft !== null) {
                 event.preventDefault();
@@ -100,7 +126,8 @@ export function InspectorNumberField({
             <InputGroupButton
               size="icon-xs"
               className="h-9 w-7 sm:size-6"
-              aria-label={`Decrease ${label} by 1`}
+              aria-label={steps?.decrease.label ?? `Decrease ${label} by 1`}
+              title={steps?.decrease.label}
               disabled={!canStep(-1)}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => step(-1)}
@@ -113,7 +140,8 @@ export function InspectorNumberField({
             <InputGroupButton
               size="icon-xs"
               className="h-9 w-7 sm:size-6"
-              aria-label={`Increase ${label} by 1`}
+              aria-label={steps?.increase.label ?? `Increase ${label} by 1`}
+              title={steps?.increase.label}
               disabled={!canStep(1)}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => step(1)}
