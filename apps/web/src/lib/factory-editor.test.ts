@@ -538,6 +538,37 @@ it("commits links on the second port tap and supports fan-in/fan-out and indepen
   expect(history.getSnapshot().state.links).toHaveLength(2);
 });
 
+it("clears the entire canvas in one undoable edit and resets the view", () => {
+  const { controller, history, historyCommand, clearCanvas, connect, output, input } =
+    createLinkedEditor();
+  connect(output, input);
+  const original = history.getSnapshot().state;
+  controller.selectLink(original.links[0]!.id);
+  controller.zoomTo(2, { x: 200, y: 150 });
+  controller.setGridSnapping(false);
+  clearCanvas();
+  expect(history.getSnapshot().state).toMatchObject({
+    nodes: [],
+    links: [],
+    externalFlows: [],
+    routes: [],
+  });
+  expect(controller.getSnapshot()).toMatchObject({
+    items: [],
+    links: [],
+    selection: new Set(),
+    camera: { x: 0, y: 0, zoom: 1 },
+    gridSnapping: false,
+    interaction: "idle",
+  });
+  expect(controller.getLinkSnapshot().selected).toBeNull();
+  clearCanvas();
+  historyCommand("undo");
+  expect(history.getSnapshot().state).toBe(original);
+  historyCommand("redo");
+  expect(controller.getSnapshot().items).toEqual([]);
+});
+
 it("deletes links with their nodes atomically and restores both with undo", () => {
   const { controller, history, historyCommand, deleteSelection, connect, output, input } =
     createLinkedEditor();

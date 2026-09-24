@@ -26,11 +26,13 @@ import {
   RotateCcwIcon,
   Undo2Icon,
   Redo2Icon,
+  Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 
 import { CatalogSearch } from "@/components/catalog-search";
+import { ClearCanvasDialog } from "@/components/clear-canvas-dialog";
 import { Inspector } from "@/components/inspector";
 import { PerformanceBar } from "@/components/performance-bar";
 import { Button } from "@/components/ui/button";
@@ -48,11 +50,14 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { createBrowserPlanStore } from "@/lib/browser-plan-store";
+import type { PlanStore } from "@/lib/browser-plan-store";
 import type { BrowserTheme } from "@/lib/browser-theme";
 import { catalogConfiguration, eligibleCatalogEntries } from "@/lib/catalog-placement";
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
+import { startPlanAutosave } from "@/lib/plan-autosave";
 import { createReferencePlans } from "@/lib/reference-plans";
 
 const searchMenuFocus = () =>
@@ -68,47 +73,82 @@ const menuButton = (
 );
 
 export function App({ preferences, theme }: { preferences: Preferences; theme: BrowserTheme }) {
-  const [assets, setAssets] = useState<GameAssets | null>(null);
+  const [workspace, setWorkspace] = useState<{
+    assets: GameAssets;
+    editor: ReturnType<typeof createFactoryEditor>;
+    store: PlanStore;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const abort = new AbortController();
-    loadGameAssets(abort.signal)
-      .then(setAssets)
-      .catch((reason: unknown) => {
-        if (!abort.signal.aborted)
-          setError(reason instanceof Error ? reason.message : "Game data could not load.");
-      });
-    return () => abort.abort();
+    let store: PlanStore | undefined;
+    async function loadWorkspace() {
+      const assets = await loadGameAssets(abort.signal);
+      if (abort.signal.aborted) return;
+      store = await createBrowserPlanStore();
+      if (abort.signal.aborted) {
+        store.close();
+        return;
+      }
+      const saved = await store.load();
+      if (abort.signal.aborted) return;
+      const editor = createFactoryEditor(assets.catalog, saved ?? createReferencePlans());
+      setWorkspace({ assets, editor, store });
+    }
+    void loadWorkspace().catch((reason: unknown) => {
+      store?.close();
+      if (!abort.signal.aborted)
+        setError(reason instanceof Error ? reason.message : "The saved plan could not load.");
+    });
+    return () => {
+      abort.abort();
+      store?.close();
+    };
   }, []);
-  if (!assets)
+  if (!workspace)
     return (
       <main className="flex h-dvh items-center justify-center bg-background p-8">
         <p
           role={error ? "alert" : "status"}
           className="max-w-lg text-center text-sm text-muted-foreground"
         >
-          {error ?? "Loading machines…"}
+          {error ?? "Loading plan…"}
         </p>
       </main>
     );
-  return <CanvasWorkspace preferences={preferences} assets={assets} theme={theme} />;
+  return (
+    <CanvasWorkspace
+      preferences={preferences}
+      assets={workspace.assets}
+      editor={workspace.editor}
+      store={workspace.store}
+      theme={theme}
+    />
+  );
 }
 
 function CanvasWorkspace({
   preferences,
   assets,
+  editor,
+  store,
   theme,
 }: {
   preferences: Preferences;
   assets: GameAssets;
+  editor: ReturnType<typeof createFactoryEditor>;
+  store: PlanStore;
   theme: BrowserTheme;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [clearCanvasOpen, setClearCanvasOpen] = useState(false);
+  const openClearCanvas = useCallback(() => setClearCanvasOpen(true), []);
   const [insertion, setInsertion] = useState<CatalogRequest | null>(null);
   const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
-  const [editor] = useState(() => createFactoryEditor(assets.catalog, createReferencePlans()));
+  const [saveError, setSaveError] = useState<string | null>(null);
+  useEffect(() => startPlanAutosave(editor.history, store, setSaveError), [editor, store]);
   const {
     controller,
     history,
@@ -260,7 +300,13 @@ function CanvasWorkspace({
       workspaceKeyDown: (event: KeyboardEvent<HTMLElement>) => {
         // Document shortcuts also support focused controls and portalled menus.
         // History may already have been handled by the renderer.
-        if (searchOpen || event.defaultPrevented || event.nativeEvent.isComposing) return;
+        if (
+          searchOpen ||
+          clearCanvasOpen ||
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing
+        )
+          return;
         const target = event.target;
         if (
           target instanceof HTMLElement &&
@@ -311,7 +357,15 @@ function CanvasWorkspace({
       actualSize: () => zoomControl("actual-size"),
       canvasFocus: () => host.current?.querySelector("canvas") ?? null,
     };
-  }, [controller, historyCommand, clipboardCommand, deleteSelection, searchOpen, openAdd]);
+  }, [
+    controller,
+    historyCommand,
+    clipboardCommand,
+    deleteSelection,
+    searchOpen,
+    clearCanvasOpen,
+    openAdd,
+  ]);
 
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Workspace shortcuts bubble from the canvas, controls, and portalled menus; preserve the main landmark.
@@ -328,6 +382,12 @@ function CanvasWorkspace({
         allowedEntryIds={allowedEntryIds}
       />
       <div ref={host} className="absolute inset-0" />
+      <ClearCanvasDialog
+        open={clearCanvasOpen}
+        onOpenChange={setClearCanvasOpen}
+        onConfirm={editor.clearCanvas}
+        finalFocus={canvasFocus}
+      />
       {!documentState.nodes.length && !searchOpen && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="space-y-3 text-center">
@@ -349,7 +409,7 @@ function CanvasWorkspace({
           <DropdownMenuContent
             className="w-50"
             sideOffset={8}
-            finalFocus={searchOpen ? false : canvasFocus}
+            finalFocus={searchOpen || clearCanvasOpen ? false : canvasFocus}
           >
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={openAdd} aria-keyshortcuts="n">
@@ -426,6 +486,11 @@ function CanvasWorkspace({
               <ActivityIcon className="text-muted-foreground" />
               Show performance
             </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={openClearCanvas}>
+              <Trash2Icon />
+              Clear canvas…
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -491,6 +556,14 @@ function CanvasWorkspace({
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">
           Unable to start the canvas: {error}
+        </p>
+      )}
+      {saveError && (
+        <p
+          role="alert"
+          className="absolute top-4 right-4 max-w-sm rounded-lg bg-background p-3 text-sm text-destructive shadow-sm"
+        >
+          {saveError}
         </p>
       )}
     </main>

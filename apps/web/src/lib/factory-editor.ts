@@ -278,6 +278,19 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     }
   }
 
+  function clearCanvas() {
+    controller.cancel();
+    updateDocument((current) =>
+      current.nodes.length ||
+      current.links.length ||
+      current.externalFlows?.length ||
+      current.routes?.length
+        ? { ...current, nodes: [], links: [], externalFlows: [], routes: [] }
+        : current,
+    );
+    controller.command("reset");
+  }
+
   function deleteSelection() {
     const { selection, interaction, linkSelection } = controller.getSnapshot();
     if (interaction !== "idle" || (!selection.size && !linkSelection.selected)) return;
@@ -785,6 +798,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     historyCommand,
     clipboardCommand,
     deleteSelection,
+    clearCanvas,
     getDisplay: (id: string) => displays.get(id),
   };
 }

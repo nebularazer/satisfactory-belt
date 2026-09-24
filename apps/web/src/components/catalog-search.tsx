@@ -254,7 +254,7 @@ export function CatalogSearch({
         )}
         {selected && <CatalogIcon iconId={selected.iconId} assets={assets} />}
         <div className="min-w-0 flex-1 space-y-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-h-5 flex-wrap items-center gap-2">
             {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
             {selected?.alternate && <Badge variant="secondary">Alternate</Badge>}
             {selected && selected.events.length > 0 && <Badge variant="outline">Event</Badge>}
@@ -459,6 +459,10 @@ function SearchResults({
             }
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing) return;
+              // Custom virtualized navigation owns these keys; prevent the combobox from
+              // also navigating or selecting its last pointer-highlighted item.
+              if (["ArrowDown", "ArrowUp", "Enter"].includes(event.key))
+                event.preventBaseUIHandler();
               if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
                 event.stopPropagation();

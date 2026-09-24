@@ -110,7 +110,7 @@ export function CatalogSearchDetails({
   );
   function quantities(title: string, entries: readonly Ingredient[], cyclesPerMinute: number) {
     return (
-      <section className="space-y-2">
+      <section className="h-36 space-y-2 overflow-y-auto overscroll-contain">
         <h4 className="text-sm font-medium">{title}</h4>
         <ul className="space-y-1.5">
           {entries.map((quantity) => {
@@ -191,7 +191,7 @@ export function CatalogSearchDetails({
           </div>
         </div>
         {onPlace && entry.kind !== "machine" && entry.kind !== "extractor" && (
-          <div className="shrink-0 border-t px-4 py-3">
+          <div className="shrink-0 px-4 py-3">
             <Button
               className="w-full"
               disabled={Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id))}
