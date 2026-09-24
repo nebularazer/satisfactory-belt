@@ -3,6 +3,7 @@ import { isFlowGroup, productionLimit, resolveFactoryNode } from "@satisfactory-
 import { expect, it } from "vitest";
 
 import { minerFlowFixture } from "../test/flow-fixture";
+import { recyclingFlowFixture } from "../test/recycling-flow-fixture";
 import { createFactoryEditor } from "./factory-editor";
 
 it("keeps an output limit stable across manual clocks and Auto rounding", () => {
@@ -230,4 +231,27 @@ it("shows fractional usage beside the authored machine count", () => {
     subtitleTooltip: "½ machine used · 3 machines configured",
   });
   expect(editor.getPortRate("smelter", "output:iron")).toBe("15");
+});
+
+it("marks only the selected coproduct port with its authored output limit", () => {
+  const { assets, document } = recyclingFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  const id = "recycling-residue";
+  const limitedPorts = () => editor.getDisplay(id)!.ports.filter((port) => port.outputLimitLabel);
+  editor.setLimit(id, { kind: "output", itemId: "Desc_PolymerResin_C", value: 150 });
+  expect(limitedPorts()).toMatchObject([
+    { direction: "output", itemId: "Desc_PolymerResin_C", outputLimitLabel: "150" },
+  ]);
+  editor.convertLimit(id, "Desc_HeavyOilResidue_C");
+  expect(limitedPorts()).toMatchObject([
+    { direction: "output", itemId: "Desc_HeavyOilResidue_C", outputLimitLabel: "300" },
+  ]);
+  expect(editor.getPortRate(id, "output:Desc_HeavyOilResidue_C")).not.toContain("/");
+  for (const link of document.links) {
+    expect(editor.getLinkRates(link.id).some((rate) => rate.includes("/"))).toBe(false);
+  }
+  editor.convertLimit(id, "machines");
+  expect(limitedPorts()).toEqual([]);
+  editor.setLimit(id, null);
+  expect(limitedPorts()).toEqual([]);
 });

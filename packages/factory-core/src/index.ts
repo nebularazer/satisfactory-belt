@@ -81,6 +81,8 @@ export type PortDisplay = Readonly<{
   direction: "input" | "output";
   transport: PortTransport;
   purpose?: "fuel";
+  /** Authored output limit; never inferred from machine capacity. */
+  outputLimitLabel?: string;
   disabled?: boolean;
   itemId: string | null;
   name: string;
@@ -255,6 +257,10 @@ export function resolveMachineNode(
         transport: item.form === "solid" ? "belt" : "pipe",
         itemId,
         name: item.name,
+        outputLimitLabel:
+          direction === "output" && limit?.kind === "output" && limit.itemId === itemId
+            ? formatPlanningNumber(limit.value)
+            : undefined,
         iconId: item.iconId,
         x: direction === "input" ? 0 : NODE_SIZE,
         y: rows[index]!,
