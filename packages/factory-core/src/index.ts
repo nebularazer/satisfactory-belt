@@ -370,7 +370,7 @@ export function resolveMachineNode(
   return {
     layout: "machine",
     size: NODE_SIZE,
-    title: recipe.name,
+    title: recipe.alternate ? recipe.name.replace(/^Alternate:\s*/i, "") : recipe.name,
     subtitle: `${formatPlanningNumber(usedMachines)}× ${machine.name}`,
     machineIconId: machine.iconId,
     ports: [...ports(recipe.ingredients, "input"), ...ports(recipe.products, "output")],
