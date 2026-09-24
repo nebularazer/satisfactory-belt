@@ -102,6 +102,9 @@ it("leaves the first mobile catalog body gesture available for native scrolling"
     fireEvent(row, move);
     expect(move.defaultPrevented).toBe(false);
     fireEvent.touchEnd(row, { touches: [], changedTouches: [end] });
+    expect(screen.getByRole("dialog").getAttribute("aria-modal")).not.toBe("true");
+    expect(document.querySelector('[data-slot="drawer-overlay"]')).toBeNull();
+    fireEvent.pointerDown(document.body);
     expect(screen.getByRole("dialog")).toBeTruthy();
   } finally {
     Reflect.deleteProperty(document, "elementFromPoint");

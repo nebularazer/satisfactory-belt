@@ -25,7 +25,8 @@ function useDrawer() {
 }
 
 function Drawer({
-  modal = true,
+  modal = false,
+  disablePointerDismissal = !modal,
   showSwipeHandle = false,
   snapPoints,
   swipeDirection = "down",
@@ -44,6 +45,7 @@ function Drawer({
       <DrawerPrimitive.Root
         data-slot="drawer"
         modal={modal}
+        disablePointerDismissal={disablePointerDismissal}
         snapPoints={snapPoints}
         swipeDirection={swipeDirection}
         {...props}

@@ -28,6 +28,10 @@ it("keeps the mobile sheet closed during and after a drag, then opens on a compl
   act(() => editor.controller.pointerDown(end));
   expect(screen.queryByRole("dialog")).toBeNull();
   act(() => editor.controller.pointerUp(end));
+  expect(screen.getByRole("dialog").getAttribute("aria-modal")).not.toBe("true");
+  expect(document.querySelector('[data-slot="drawer-overlay"]')).toBeNull();
+  fireEvent.pointerDown(document.body);
+  expect(editor.controller.getSnapshot().selection).toEqual(new Set([smelter.id]));
   expect(screen.getByRole("dialog")).toBeTruthy();
 });
 

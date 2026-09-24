@@ -49,7 +49,7 @@ export const Inspector = memo(function Inspector({
   const getTarget = useCallback(() => {
     const snapshot = editor.controller.getSnapshot();
     // A touch-down may become a drag or pinch. Wait for a completed tap before
-    // opening a modal sheet that would intercept the rest of the gesture.
+    // showing the inspector for a selection that may only be temporary.
     return narrow && !snapshot.linkSelection.selected && snapshot.interaction !== "idle"
       ? null
       : inspectorTarget(snapshot);
@@ -100,13 +100,7 @@ export const Inspector = memo(function Inspector({
   );
   if (narrow)
     return (
-      <Drawer
-        open
-        modal={!link}
-        disablePointerDismissal={Boolean(link)}
-        onOpenChange={closeDrawer}
-        showSwipeHandle
-      >
+      <Drawer open onOpenChange={closeDrawer} showSwipeHandle>
         <DrawerContent
           initialFocus={false}
           finalFocus={false}
