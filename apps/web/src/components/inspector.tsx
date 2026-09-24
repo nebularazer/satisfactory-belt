@@ -80,7 +80,7 @@ export const Inspector = memo(function Inspector({
   const link = target?.startsWith("link:") ? editor.getLink(target.slice(5)) : undefined;
   if (!summary || (narrow && catalogOpen)) return null;
   const subtitle =
-    node && isFlowGroup(node) ? summary.subtitle?.replace(/^\d+×\s*/, "") : summary.subtitle;
+    node && isFlowGroup(node) ? summary.subtitle?.replace(/^.*?×\s*/, "") : summary.subtitle;
 
   const body = (
     <>

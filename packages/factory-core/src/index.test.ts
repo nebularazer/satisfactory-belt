@@ -329,7 +329,7 @@ it("resolves extraction as a single resource output with machine power, clock an
   const display = resolveMachineNode(node, catalog);
   expect(display).toMatchObject({
     title: "Water",
-    subtitle: "2× Water Extractor",
+    subtitle: "2 / 2× Water Extractor",
     machineIconId: "water-pump-icon",
     powerLabel: "40 MW",
     clockLabel: "100%",

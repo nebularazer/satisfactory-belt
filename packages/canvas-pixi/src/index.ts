@@ -4,6 +4,7 @@ import {
   historyCommandForKey,
   intersects,
   worldToScreen,
+  screenToWorld,
 } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem, CanvasPointer } from "@satisfactory-belt/canvas-core";
 import { PIPE_PORT_RADIUS, PORT_RADIUS } from "@satisfactory-belt/factory-core";
@@ -250,6 +251,7 @@ export async function mountCanvas(
     (event) => {
       if (event.button !== 0) return;
       keyboardGroup = null;
+      canvas.removeAttribute("title");
       event.preventDefault();
       canvas.focus({ preventScroll: true });
       canvas.setPointerCapture(event.pointerId);
@@ -264,8 +266,23 @@ export async function mountCanvas(
     (event) => {
       if (captured.has(event.pointerId)) controller.pointerMove(normalize(event));
       else if (event.pointerType !== "touch") {
-        controller.hoverPort(normalize(event));
-        canvas.style.cursor = controller.getCursor(normalize(event));
+        const pointer = normalize(event);
+        controller.hoverPort(pointer);
+        canvas.style.cursor = controller.getCursor(pointer);
+        const item = controller.hitTest(pointer);
+        const point = screenToWorld(pointer, controller.getSnapshot().camera);
+        const display = item && options.getDisplay(item.id);
+        const tooltip =
+          item &&
+          display?.layout === "machine" &&
+          point.x >= item.x + 64 &&
+          point.y >= item.y + 32 &&
+          point.y < item.y + 60
+            ? display.subtitleTooltip
+            : undefined;
+        if (tooltip) {
+          if (canvas.title !== tooltip) canvas.title = tooltip;
+        } else canvas.removeAttribute("title");
       }
     },
     { signal: events.signal },
@@ -281,9 +298,16 @@ export async function mountCanvas(
     { signal: events.signal },
   );
 
-  canvas.addEventListener("pointerleave", () => controller.hoverPort(null), {
-    signal: events.signal,
-  });
+  canvas.addEventListener(
+    "pointerleave",
+    () => {
+      controller.hoverPort(null);
+      canvas.removeAttribute("title");
+    },
+    {
+      signal: events.signal,
+    },
+  );
   canvas.addEventListener("pointercancel", cancel, { signal: events.signal });
   canvas.addEventListener(
     "lostpointercapture",

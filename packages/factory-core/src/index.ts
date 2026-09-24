@@ -4,6 +4,7 @@ import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
 import { resolveFacility, trainStationHeight } from "./facilities";
 import type { FacilityNode, Purity } from "./facilities";
+import { productionLimit } from "./flow-controls";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
 import { formatPlanningNumber } from "./number-format";
 import type { PortTransport } from "./ports";
@@ -104,6 +105,7 @@ export type MachineDisplay = Readonly<{
   bodyRows?: readonly Readonly<{ y: number; label: string }>[];
   title: string;
   subtitle: string;
+  subtitleTooltip?: string;
   machineIconId: string;
   ports: readonly PortDisplay[];
   power: PowerDisplay;
@@ -223,6 +225,17 @@ export function resolveMachineNode(
   // machine-equivalents are producing. Auto clocks already express their load.
   const usedMachines =
     node.machines.filter((member) => member.clockPercent > 0).length * utilization;
+  const limit =
+    node.kind === "manufacturing" || node.kind === "extractor" ? productionLimit(node) : null;
+  const configuredCount = limit?.kind === "machines" ? limit.value : null;
+  const machineCountLabel =
+    configuredCount === null
+      ? formatPlanningNumber(usedMachines)
+      : `${formatPlanningNumber(usedMachines)} / ${configuredCount}`;
+  const subtitleTooltip =
+    configuredCount === null
+      ? undefined
+      : `${formatPlanningNumber(usedMachines)} ${usedMachines > 0 && usedMachines <= 1 + 1e-7 ? "machine" : "machines"} used · ${configuredCount} ${configuredCount === 1 ? "machine" : "machines"} configured`;
   const clock = commonSetting(node.machines, "clockPercent");
   const sloops = commonSetting(node.machines, "sloopsUsed");
   const clockLabel = clock === null ? "Mixed" : `${formatPlanningNumber(clock)}%`;
@@ -301,7 +314,8 @@ export function resolveMachineNode(
       layout: "machine",
       size: NODE_SIZE,
       title: output[0]!.name,
-      subtitle: `${formatPlanningNumber(usedMachines)}× ${extractor.name}`,
+      subtitle: `${machineCountLabel}× ${extractor.name}`,
+      subtitleTooltip,
       machineIconId: extractor.iconId,
       ports: output,
       power,
@@ -377,7 +391,8 @@ export function resolveMachineNode(
     layout: "machine",
     size: NODE_SIZE,
     title: recipe.alternate ? recipe.name.replace(/^Alternate:\s*/i, "") : recipe.name,
-    subtitle: `${formatPlanningNumber(usedMachines)}× ${machine.name}`,
+    subtitle: `${machineCountLabel}× ${machine.name}`,
+    subtitleTooltip,
     machineIconId: machine.iconId,
     ports: [...ports(recipe.ingredients, "input"), ...ports(recipe.products, "output")],
     power,
