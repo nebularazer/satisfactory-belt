@@ -215,6 +215,10 @@ export function resolveMachineNode(
     node.flow?.clockMode === "manual"
       ? (node.flow.utilization ?? 1)
       : 1;
+  // Manual clocks retain configured members; utilization expresses how many
+  // machine-equivalents are producing. Auto clocks already express their load.
+  const usedMachines =
+    node.machines.filter((member) => member.clockPercent > 0).length * utilization;
   const clock = commonSetting(node.machines, "clockPercent");
   const sloops = commonSetting(node.machines, "sloopsUsed");
   const clockLabel = clock === null ? "Mixed" : `${formatPlanningNumber(clock)}%`;
@@ -292,7 +296,7 @@ export function resolveMachineNode(
       layout: "machine",
       size: NODE_SIZE,
       title: output[0]!.name,
-      subtitle: `${node.machines.length}× ${extractor.name}`,
+      subtitle: `${formatPlanningNumber(usedMachines)}× ${extractor.name}`,
       machineIconId: extractor.iconId,
       ports: output,
       power,
@@ -368,7 +372,7 @@ export function resolveMachineNode(
     layout: "machine",
     size: NODE_SIZE,
     title: recipe.name,
-    subtitle: `${node.machines.length}× ${machine.name}`,
+    subtitle: `${formatPlanningNumber(usedMachines)}× ${machine.name}`,
     machineIconId: machine.iconId,
     ports: [...ports(recipe.ingredients, "input"), ...ports(recipe.products, "output")],
     power,

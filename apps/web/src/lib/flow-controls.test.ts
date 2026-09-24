@@ -186,3 +186,34 @@ it("rejects a saved mixed-purity miner before sizing can normalize its members",
     }),
   ).toThrow("one shared purity");
 });
+
+it("shows used machine counts on cards while keeping the configured limit", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setOperatingSetting("miner", "all", "purity", 0.5);
+  editor.setLimit("smelter", { kind: "machines", value: 4 });
+  editor.setClock("smelter", 100);
+  const display = () => resolveFactoryNode(editor.getNode("smelter")!, assets.catalog);
+  expect(display()).toMatchObject({
+    subtitle: "2× Smelter",
+    clockLabel: "100%",
+    powerLabel: "8 MW",
+  });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("60");
+  expect(editor.getNode("smelter")).toMatchObject({ flow: { machineLimit: 4 } });
+  const limited = editor.getNode("smelter")!;
+  if (!isFlowGroup(limited)) throw new Error("Expected smelter");
+  expect(productionLimit(limited)).toEqual({ kind: "machines", value: 4 });
+  editor.setClock("smelter", 50);
+  expect(display()).toMatchObject({ subtitle: "4× Smelter", clockLabel: "50%" });
+  editor.setClock("smelter", null);
+  expect(display()).toMatchObject({ subtitle: "4× Smelter", clockLabel: "50%" });
+  editor.setClock("smelter", 100);
+  editor.setLimit("smelter", { kind: "output", itemId: "iron", value: 45 });
+  expect(display()).toMatchObject({ subtitle: "1½× Smelter", powerLabel: "6 MW" });
+  const smelter = editor.getNode("smelter")!;
+  if (!isFlowGroup(smelter)) throw new Error("Expected smelter");
+  expect(
+    resolveFactoryNode({ ...smelter, flow: { ...smelter.flow, utilization: 0 } }, assets.catalog),
+  ).toMatchObject({ subtitle: "0× Smelter", powerLabel: "0 MW" });
+});
