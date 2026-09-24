@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "./drawer";
 import { Input } from "./input";
 import { useDrawerResize } from "./use-drawer-resize";
 
 function Sheet() {
-  const resize = useDrawerResize(true);
+  const resize = useDrawerResize(true, vi.fn());
   return (
     <div data-testid="sheet" data-slot="drawer-popup" style={resize.style}>
       <div {...resize.handleProps} />
@@ -56,4 +57,33 @@ it("disables autocomplete on shared planner inputs", () => {
   expect(input.getAttribute("autocomplete")).toBe("off");
   expect(input.getAttribute("autocorrect")).toBe("off");
   expect(input.getAttribute("spellcheck")).toBe("false");
+});
+
+it("closes the drawer when dragging below its minimum, but not at the minimum or on cancellation", () => {
+  const onOpenChange = vi.fn();
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 400, 400),
+  );
+  render(
+    <Drawer defaultOpen showSwipeHandle onOpenChange={onOpenChange}>
+      <DrawerContent initialFocus={false}>
+        <DrawerTitle>Inspector</DrawerTitle>
+        <DrawerDescription>Machine settings</DrawerDescription>
+      </DrawerContent>
+    </Drawer>,
+  );
+  const handle = screen.getByRole("separator");
+  Object.assign(handle, { setPointerCapture: vi.fn() });
+  fireEvent.pointerDown(handle, { pointerId: 1, button: 0, clientY: 400 });
+  fireEvent.pointerMove(handle, { pointerId: 1, clientY: 600 });
+  expect(onOpenChange).not.toHaveBeenCalled();
+  fireEvent.pointerCancel(handle, { pointerId: 1 });
+  fireEvent.pointerMove(handle, { pointerId: 1, clientY: 650 });
+  expect(onOpenChange).not.toHaveBeenCalled();
+  fireEvent.pointerDown(handle, { pointerId: 2, button: 0, clientY: 400 });
+  fireEvent.pointerMove(handle, { pointerId: 2, clientY: 601 });
+  expect(onOpenChange).toHaveBeenCalledOnce();
+  expect(onOpenChange.mock.calls[0]![0]).toBe(false);
+  fireEvent.pointerMove(handle, { pointerId: 2, clientY: 650 });
+  expect(onOpenChange).toHaveBeenCalledOnce();
 });

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 /** Resize the visible sheet itself so its footer stays above the keyboard. */
-export function useDrawerResize(enabled: boolean) {
+export function useDrawerResize(enabled: boolean, onClose: () => void) {
   const [height, setHeight] = React.useState<number>();
   const [viewport, setViewport] = React.useState({ height: window.innerHeight, bottom: 0 });
   const drag = React.useRef<{ pointerId: number; y: number; height: number } | null>(null);
@@ -42,6 +42,7 @@ export function useDrawerResize(enabled: boolean) {
       ? ({
           "--drawer-available-height": `${maximum}px`,
           bottom: viewport.bottom,
+          minHeight: minimum,
           ...(height === undefined ? {} : { height: clamp(height), maxHeight: maximum }),
         } as React.CSSProperties)
       : undefined,
@@ -71,7 +72,13 @@ export function useDrawerResize(enabled: boolean) {
           },
           onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
             if (drag.current?.pointerId !== event.pointerId) return;
-            setHeight(clamp(drag.current.height + drag.current.y - event.clientY));
+            const nextHeight = drag.current.height + drag.current.y - event.clientY;
+            if (nextHeight < minimum) {
+              finish();
+              onClose();
+              return;
+            }
+            setHeight(clamp(nextHeight));
           },
           onPointerUp: finish,
           onPointerCancel: finish,

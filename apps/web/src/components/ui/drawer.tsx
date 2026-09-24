@@ -9,6 +9,7 @@ import { useDrawerResize } from "./use-drawer-resize";
 
 type DrawerContextProps = {
   hasSnapPoints: boolean;
+  close: () => void;
   modal: DrawerPrimitive.Root.Props["modal"];
   showSwipeHandle: boolean;
   swipeDirection: NonNullable<DrawerPrimitive.Root.Props["swipeDirection"]>;
@@ -27,6 +28,7 @@ function useDrawer() {
 }
 
 function Drawer({
+  actionsRef: externalActionsRef,
   modal = false,
   disablePointerDismissal = !modal,
   showSwipeHandle = false,
@@ -36,15 +38,19 @@ function Drawer({
 }: DrawerPrimitive.Root.Props & {
   showSwipeHandle?: boolean;
 }) {
+  const internalActionsRef = React.useRef<DrawerPrimitive.Root.Actions | null>(null);
+  const actionsRef = externalActionsRef ?? internalActionsRef;
+  const close = React.useCallback(() => actionsRef.current?.close(), [actionsRef]);
   const hasSnapPoints = snapPoints != null && snapPoints.length > 0;
   const contextValue = React.useMemo(
-    () => ({ hasSnapPoints, modal, showSwipeHandle, swipeDirection }),
-    [hasSnapPoints, modal, showSwipeHandle, swipeDirection],
+    () => ({ close, hasSnapPoints, modal, showSwipeHandle, swipeDirection }),
+    [close, hasSnapPoints, modal, showSwipeHandle, swipeDirection],
   );
 
   return (
     <DrawerContext.Provider value={contextValue}>
       <DrawerPrimitive.Root
+        actionsRef={actionsRef}
         data-slot="drawer"
         modal={modal}
         disablePointerDismissal={disablePointerDismissal}
@@ -102,8 +108,11 @@ function DrawerContent({
   style,
   ...props
 }: DrawerPrimitive.Popup.Props & { swipeFromHandleOnly?: boolean }) {
-  const { hasSnapPoints, modal, showSwipeHandle, swipeDirection } = useDrawer();
-  const resize = useDrawerResize(showSwipeHandle && swipeDirection === "down" && !hasSnapPoints);
+  const { close, hasSnapPoints, modal, showSwipeHandle, swipeDirection } = useDrawer();
+  const resize = useDrawerResize(
+    showSwipeHandle && swipeDirection === "down" && !hasSnapPoints,
+    close,
+  );
   const popupStyle = React.useMemo<DrawerPrimitive.Popup.Props["style"]>(
     () =>
       typeof style === "function"
