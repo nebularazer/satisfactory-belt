@@ -19,6 +19,7 @@ import { drawMaterialLinks } from "./material-links";
 import { RenderPerformance } from "./performance";
 import { CANVAS_PALETTES } from "./theme";
 import type { CanvasTheme } from "./theme";
+import { suppressCanvasTouchClick } from "./touch-click";
 
 export type { CanvasTheme } from "./theme";
 
@@ -111,6 +112,7 @@ export async function mountCanvas(
   let keyboardGroup: { code: string; token: object } | null = null;
   let resolution = window.devicePixelRatio || 1;
   const events = new AbortController();
+  suppressCanvasTouchClick(canvas, events.signal);
   const captured = new Set<number>();
 
   function invalidate() {
