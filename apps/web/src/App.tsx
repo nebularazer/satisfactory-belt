@@ -195,6 +195,9 @@ function CanvasWorkspace({
     (entry: SearchEntry, scope?: SearchScope) => {
       if (!insertion) throw new Error("Open search from the canvas to place a node.");
       editor.placeNode(catalogConfiguration(entry, scope), insertion.position, insertion.source);
+      // Leave the canvas visible after mobile placement; tapping a node opens its inspector.
+      if (window.matchMedia("(max-width: 639px)").matches)
+        editor.controller.setSelection(new Set());
       placedFromSearch.current = true;
     },
     [editor, insertion],
