@@ -314,6 +314,7 @@ export function CatalogSearch({
   return narrow ? (
     <Drawer open={open} onOpenChange={changeOpen} showSwipeHandle>
       <DrawerContent
+        swipeFromHandleOnly
         onKeyDownCapture={backShortcut}
         onKeyDown={keyDown}
         initialFocus={() => (selected ? heading.current : input.current)}
