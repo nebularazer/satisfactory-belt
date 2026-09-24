@@ -205,3 +205,31 @@ it("steps numeric controls and counts required Somersloops without supply detail
     screen.getByRole<HTMLButtonElement>("button", { name: "Decrease Clock by 1" }).disabled,
   ).toBe(true);
 });
+
+it("resets the selected clock to 100% and preserves the production limit", async () => {
+  const user = userEvent.setup();
+  const { assets, document: plan } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, plan);
+  editor.setLimit("smelter", { kind: "machines", value: 2 });
+  editor.setClock("smelter", 50);
+  render(<Harness editor={editor} assets={assets} id="smelter" />);
+  await user.click(screen.getByRole("tab", { name: "Machine 2" }));
+  await user.click(screen.getByRole("button", { name: "Reset clock to 100%" }));
+  expect(editor.getNode("smelter")).toMatchObject({
+    flow: { machineLimit: 2, clockMode: "manual" },
+    machines: [
+      expect.objectContaining({ clockPercent: 50 }),
+      expect.objectContaining({ clockPercent: 100 }),
+    ],
+  });
+  await user.click(screen.getByRole("tab", { name: "All" }));
+  await user.click(screen.getByRole("button", { name: "Use automatic clock" }));
+  await user.click(screen.getByRole("button", { name: "Reset clock to 100%" }));
+  expect(editor.getNode("smelter")).toMatchObject({
+    flow: { machineLimit: 2, clockMode: "manual" },
+    machines: [
+      expect.objectContaining({ clockPercent: 100 }),
+      expect.objectContaining({ clockPercent: 100 }),
+    ],
+  });
+});

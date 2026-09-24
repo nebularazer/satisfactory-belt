@@ -1,7 +1,14 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-jsx-as-prop -- Controls belong to the selected group. */
 import { commonSetting, productionLimit, resolveProduction } from "@satisfactory-belt/factory-core";
 import type { FlowGroup } from "@satisfactory-belt/factory-core";
-import { ArrowUpToLineIcon, FactoryIcon, GaugeIcon, WandSparklesIcon, XIcon } from "lucide-react";
+import {
+  ArrowUpToLineIcon,
+  FactoryIcon,
+  GaugeIcon,
+  WandSparklesIcon,
+  InfinityIcon,
+  RotateCcwIcon,
+} from "lucide-react";
 
 import { InspectorNumberInput } from "@/components/inspector-number-field";
 import { Button } from "@/components/ui/button";
@@ -68,7 +75,7 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
               selected={!limit}
               onClick={() => editor.setLimit(node.id, null)}
             >
-              <XIcon />
+              <InfinityIcon />
             </ModeButton>
           </ButtonGroup>
         </div>
@@ -132,6 +139,16 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
             >
               <WandSparklesIcon />
             </ModeButton>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-11 shrink-0 sm:size-8"
+              aria-label="Reset clock to 100%"
+              title="Reset clock to 100%"
+              onClick={() => editor.setClock(node.id, 100, scope)}
+            >
+              <RotateCcwIcon />
+            </Button>
           </ButtonGroup>
         </div>
       </div>
