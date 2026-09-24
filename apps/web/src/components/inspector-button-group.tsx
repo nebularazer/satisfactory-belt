@@ -38,7 +38,7 @@ export function InspectorButtonGroup({
             <Button
               key={option.value}
               size="sm"
-              variant={value === option.value ? "secondary" : "outline"}
+              variant="outline"
               aria-label={iconOnly ? option.label : undefined}
               aria-pressed={value === option.value}
               disabled={disabled}
@@ -46,8 +46,8 @@ export function InspectorButtonGroup({
               onClick={() => onChange(option.value)}
               className={
                 iconOnly
-                  ? "min-h-11 min-w-0 flex-1 px-1 data-disabled:pointer-events-auto data-disabled:opacity-50 sm:min-h-8"
-                  : "min-h-11 min-w-0 flex-1 px-2 sm:min-h-8"
+                  ? "min-h-11 min-w-0 flex-1 px-1 aria-pressed:bg-muted data-disabled:pointer-events-auto data-disabled:opacity-50 sm:min-h-8"
+                  : "min-h-11 min-w-0 flex-1 px-2 aria-pressed:bg-muted sm:min-h-8"
               }
             >
               {iconOnly ? option.icon : option.label}
