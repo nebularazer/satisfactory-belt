@@ -1,6 +1,9 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Controls belong to the selected group. */
 import {
   flowOutputRates,
+  flowMachineLimit,
+  flowCapacityNode,
+  resolveProduction,
   formatPlanningNumber,
   isProductionLocked,
 } from "@satisfactory-belt/factory-core";
@@ -25,9 +28,33 @@ export function InspectorFlow({
   assets: GameAssets;
 }) {
   const rates = flowOutputRates(node, assets.catalog);
+  const actual = resolveProduction(node, assets.catalog).outputs;
+  const capacity =
+    flowMachineLimit(node) === undefined
+      ? null
+      : resolveProduction(flowCapacityNode(node), assets.catalog).outputs;
   const locked = isProductionLocked(node);
   return (
     <section aria-label="Production rates" className="space-y-3">
+      <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+        <span>Machine capacity</span>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Automatic machine sizing"
+          title={
+            flowMachineLimit(node) === undefined
+              ? "Limit capacity to the current machine count"
+              : "Use automatic machine sizing"
+          }
+          aria-pressed={flowMachineLimit(node) === undefined}
+          onClick={() => editor.setAutomaticSizing(node.id, flowMachineLimit(node) !== undefined)}
+        >
+          {flowMachineLimit(node) === undefined
+            ? "Auto"
+            : `${flowMachineLimit(node)} ${flowMachineLimit(node) === 1 ? "machine" : "machines"}`}
+        </Button>
+      </div>
       <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
         <span>Output rates</span>
         <Button
@@ -48,12 +75,24 @@ export function InspectorFlow({
         </Button>
       </div>
       {rates.map((output) => (
-        <RateField
-          key={`${node.id}:${output.itemId}:${output.perMinute}:${locked}`}
-          label={assets.catalog.items[output.itemId]!.name}
-          value={output.perMinute}
-          onCommit={(value) => editor.setProductionTarget(node.id, output.itemId, value)}
-        />
+        <div key={output.itemId} className="space-y-1">
+          <RateField
+            key={`${node.id}:${output.itemId}:${output.perMinute}:${locked}`}
+            label={assets.catalog.items[output.itemId]!.name}
+            value={output.perMinute}
+            onCommit={(value) => editor.setProductionTarget(node.id, output.itemId, value)}
+          />
+          {(capacity || locked) && (
+            <p className="text-right text-xs text-muted-foreground">
+              {formatPlanningNumber(
+                actual.find((rate) => rate.itemId === output.itemId)?.perMinute ?? 0,
+              )}
+              /min used
+              {capacity &&
+                ` · ${formatPlanningNumber(capacity.find((rate) => rate.itemId === output.itemId)?.perMinute ?? 0)}/min capacity`}
+            </p>
+          )}
+        </div>
       ))}
     </section>
   );

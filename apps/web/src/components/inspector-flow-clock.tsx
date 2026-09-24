@@ -84,9 +84,9 @@ export function InspectorFlowClock({
             >
               <p>
                 The field shows the actual clock speed for the whole group. With output unlocked,
-                changing clock speed keeps the machine count and changes production. + and − change
-                the clock by one percentage point. Count buttons keep the clock unchanged and change
-                production.
+                changing clock speed updates its ceiling. + and − change the clock by one percentage
+                point. Count buttons set a fixed machine capacity. Connected groups use only the
+                capacity their suppliers and consumers allow.
               </p>
               <p>
                 With output locked, − adds one machine and lowers the clock. + removes one machine
@@ -102,7 +102,7 @@ export function InspectorFlowClock({
                 100%.
               </p>
               <p>
-                Rebalance at 100% always preserves production and selects whole machines without
+                Rebalance at 100% preserves production and sets a whole-machine capacity without
                 overclocking. None of these actions changes the production lock.
               </p>
             </TooltipContent>

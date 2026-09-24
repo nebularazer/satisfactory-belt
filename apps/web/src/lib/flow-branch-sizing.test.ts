@@ -76,15 +76,17 @@ it.each([false, true])(
       ? { ...reference, nodes: reference.nodes.toReversed(), links: reference.links.toReversed() }
       : reference;
     const editor = createFactoryEditor(catalog, document);
+    editor.setAutomaticSizing("iron-miners", true);
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 10);
     expect(editor.getPortRate("iron-miners", "output:Desc_OreIron_C")).toBe("240");
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 20);
     expect(editor.getPortRate("iron-miners", "output:Desc_OreIron_C")).toBe("480");
     editor.setMachineCount("cast-screws", 7);
-    expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("315");
+    expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("350");
     expect(editor.getNode("cast-screws")).toMatchObject({
-      machines: Array.from({ length: 7 }, () => expect.objectContaining({ clockPercent: 90 })),
+      machines: Array.from({ length: 7 }, () => expect.objectContaining({ clockPercent: 100 })),
     });
+    editor.setAutomaticSizing("cast-screws", true);
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 40);
     expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("720");
     expect(editor.getNode("cast-screws")).toMatchObject({

@@ -15,7 +15,7 @@ const field = (name: string) =>
   screen.getByRole<HTMLInputElement>("textbox", { name: `${name} output rate` });
 const lock = () => screen.getByRole("button", { name: "Lock production" });
 
-it("edits targets and clock, with count buttons preserving production and no machine-limit control", async () => {
+it("edits targets and clock, and switches finite machine capacity back to Auto", async () => {
   const user = userEvent.setup();
   const { assets, smelter } = minerFlowFixture();
   assets.catalog.items.Desc_CrystalShard_C = {
@@ -87,6 +87,7 @@ it("edits targets and clock, with count buttons preserving production and no mac
   });
   act(() => editor.historyCommand("undo"));
   expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Clock speed" }).value).toBe("166⅔");
+  await user.click(screen.getByRole("button", { name: "Automatic machine sizing" }));
   await enter("Iron Ingot output rate", "300");
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("300");
   expect(editor.getNode(smelter.id)).toMatchObject({

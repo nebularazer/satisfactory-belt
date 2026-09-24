@@ -66,6 +66,7 @@ it.each(changes.flatMap((change) => [false, true].map((locked) => ({ change, loc
         },
       ],
     });
+    if (manufacturing) editor.setAutomaticSizing(miner.id, true);
     if (locked) editor.setProductionLocked(source.id, true);
     const before = editor.history.getSnapshot().state;
     const current = editor.getNode(source.id)!;
@@ -117,7 +118,7 @@ it.each(changes.flatMap((change) => [false, true].map((locked) => ({ change, loc
   },
 );
 
-it("preserves an unlocked source's surplus when rebalancing only changes its preferred clock", () => {
+it("preserves used output when rebalancing an underused finite source", () => {
   const { assets, document, miner, smelter } = minerFlowFixture();
   const editor = createFactoryEditor(assets.catalog, {
     ...document,
@@ -127,12 +128,12 @@ it("preserves an unlocked source's surplus when rebalancing only changes its pre
     ],
   });
   editor.setMachineCount(miner.id, 2);
-  expect(editor.getPortRate(miner.id, "output:copper")).toBe("240");
+  expect(editor.getPortRate(miner.id, "output:copper")).toBe("120");
   editor.rebalanceAt100(miner.id);
-  expect(editor.getPortRate(miner.id, "output:copper")).toBe("240");
+  expect(editor.getPortRate(miner.id, "output:copper")).toBe("120");
   expect(editor.getNode(miner.id)).toMatchObject({
     flow: { clockPercent: 100 },
-    machines: Array.from({ length: 2 }, () => expect.objectContaining({ clockPercent: 100 })),
+    machines: [expect.objectContaining({ clockPercent: 100 })],
   });
   expect(isProductionLocked(editor.getNode(miner.id)!)).toBe(false);
 });

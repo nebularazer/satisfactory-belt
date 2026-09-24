@@ -36,7 +36,7 @@ it("sizes downstream placement from remaining supply and keeps the edit atomic",
   expect(editor.getNode(node.id)).toEqual(node);
 });
 
-it("sizes upstream extraction from input demand with uniform underclocking", () => {
+it("places one finite miner upstream and sizes the consumer to its supply", () => {
   const { assets, smelter } = minerFlowFixture();
   const editor = createFactoryEditor(assets.catalog, {
     nodes: [{ ...smelter, machines: createMachineMembers(5) }],
@@ -47,10 +47,8 @@ it("sizes upstream extraction from input demand with uniform underclocking", () 
     { x: 0, y: 0 },
     { nodeId: "smelter", portKey: "input:copper" },
   );
-  expect(node.kind === "extractor" && node.machines.map((m) => m.clockPercent)).toEqual([
-    62.5, 62.5,
-  ]);
-  expect(resolveProduction(node, assets.catalog).outputs[0]?.perMinute).toBe(150);
+  expect(node.kind === "extractor" && node.machines.map((m) => m.clockPercent)).toEqual([100]);
+  expect(resolveProduction(node, assets.catalog).outputs[0]?.perMinute).toBe(120);
 });
 
 it("sizes a selected alternate recipe by its matching output", () => {
@@ -144,13 +142,14 @@ it("sizes shared suppliers from the sum of persistent consumer targets", () => {
   expect(editor.getNode(smelt.id)).toMatchObject({
     machines: Array.from({ length: 2 }, () => expect.objectContaining({ clockPercent: 100 })),
   });
+  editor.setAutomaticSizing(smelt.id, true);
   editor.setProductionTarget(second.id, "copper", 90);
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("120");
   expect(editor.getNode(smelt.id)).toMatchObject({
     machines: Array.from({ length: 4 }, () => expect.objectContaining({ clockPercent: 100 })),
   });
   editor.historyCommand("undo");
-  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("60");
+  expect(editor.getPortRate(smelt.id, "output:iron")).toBe("90");
   editor.historyCommand("redo");
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("120");
 });
@@ -177,6 +176,7 @@ it("builds forward from an extraction target and trades count for clock without 
     machines: Array.from({ length: 6 }, () => expect.objectContaining({ clockPercent: 100 })),
   });
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("180");
+  editor.setAutomaticSizing(smelt.id, true);
   editor.setOperatingSetting(miner.id, "all", "purity", 2);
   expect(editor.getPortRate(smelt.id, "output:iron")).toBe("360");
   editor.setProductionTarget(miner.id, "copper", 720);
@@ -236,7 +236,7 @@ it("sizes a downstream recipe from available material while exposing its unfinis
 });
 
 it.each([false, true])(
-  "new nodes start unlocked and suppliers follow demand regardless of placement order (%s)",
+  "Auto suppliers follow demand regardless of placement order (%s)",
   (consumerFirst) => {
     const { assets } = minerFlowFixture();
     const editor = createFactoryEditor(assets.catalog, { nodes: [], links: [] });
@@ -255,6 +255,7 @@ it.each([false, true])(
         throw new Error("Expected production group");
       expect(node.flow?.targets).toBeUndefined();
     }
+    editor.setAutomaticSizing(miner.id, true);
     editor.setProductionTarget(consumer.id, "iron", 240);
     editor.connect(
       { nodeId: miner.id, portKey: "output:copper" },

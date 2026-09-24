@@ -17,6 +17,7 @@ import {
   resizeFlowGroups,
   rebalanceFlowGroup,
   isFlowGroup,
+  flowCapacityNode,
   isProductionLocked,
   validateFlowSettings,
   reconcileFlowTargets,
@@ -455,6 +456,10 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     value: number,
   ) {
     editMachine(id, (node) => {
+      const authored = isFlowGroup(node) ? flowCapacityNode(node) : node;
+      const authoredClocks = new Map(
+        authored.machines.map((member) => [member.id, member.clockPercent]),
+      );
       const next = setMachineSetting(node, catalog, scope, setting, value);
       if (!isFlowGroup(next)) return next;
       return {
@@ -468,7 +473,11 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
                   memberClocks: Object.fromEntries(
                     next.machines.map((member) => [
                       member.id,
-                      member.clockPercent || next.flow?.clockPercent || 100,
+                      member.id === scope
+                        ? value
+                        : (next.flow?.memberClocks?.[member.id] ??
+                          next.flow?.clockPercent ??
+                          (authoredClocks.get(member.id) || 100)),
                     ]),
                   ),
                 }
@@ -478,10 +487,20 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     });
   }
   function setMachineCount(id: string, count: number) {
+    editMachine(id, (node) => {
+      if (isFlowGroup(node) && isProductionLocked(node))
+        return rebalanceFlowGroup(node, catalog, count) ?? node;
+      const resized = resizeMachineGroup(node, count, () => crypto.randomUUID());
+      return isFlowGroup(resized)
+        ? { ...resized, flow: { ...resized.flow, machineLimit: count } }
+        : resized;
+    });
+  }
+  function setAutomaticSizing(id: string, automatic: boolean) {
     editMachine(id, (node) =>
-      isFlowGroup(node) && isProductionLocked(node)
-        ? (rebalanceFlowGroup(node, catalog, count) ?? node)
-        : resizeMachineGroup(node, count, () => crypto.randomUUID()),
+      isFlowGroup(node)
+        ? { ...node, flow: { ...node.flow, machineLimit: automatic ? null : node.machines.length } }
+        : node,
     );
   }
   function setFlowClock(id: string, clock: number) {
@@ -773,6 +792,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,
     setMachineCount,
+    setAutomaticSizing,
     setFlowClock,
     rebalanceAt100: (id: string) =>
       editMachine(id, (node) =>

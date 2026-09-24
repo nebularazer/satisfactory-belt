@@ -65,6 +65,7 @@ it.each([false, true])(
       { kind: "manufacturing", recipeId: "ingot", machineId: "smelter" },
       { x: 600, y: 400 },
     );
+    editor.setAutomaticSizing("miner", true);
     editor.setProductionTarget("miner", "copper", null);
     editor.setProductionTarget(consumer.id, "iron", 240);
     editor.connect(
