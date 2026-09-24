@@ -100,6 +100,7 @@ export function InspectorConfiguration({
         {tiers.length > 1 && (
           <InspectorButtonGroup
             label="Miner tier"
+            disabled={scope !== "all"}
             value={node.extractorId}
             options={tiers.map((e) => ({
               value: e.id,
@@ -113,10 +114,11 @@ export function InspectorConfiguration({
         {extractor.hasPurity && (
           <InspectorButtonGroup
             label="Purity"
+            disabled={scope !== "all"}
             value={purity === null ? null : String(purity)}
             options={PURITY_OPTIONS}
             onChange={(value) =>
-              editor.setOperatingSetting(node.id, scope, "purity", Number(value))
+              editor.setOperatingSetting(node.id, "all", "purity", Number(value))
             }
           />
         )}

@@ -109,6 +109,12 @@ it("keeps miner limits stable across purity changes with visible machine tabs", 
   const user = userEvent.setup();
   const { assets, document } = minerFlowFixture();
   const editor = createFactoryEditor(assets.catalog, document);
+  assets.catalog.extractors.miner3 = {
+    ...assets.catalog.extractors.miner!,
+    id: "miner3",
+    name: "Miner Mk.3",
+    baseRate: 240,
+  };
   render(<Harness editor={editor} assets={assets} id="miner" />);
   expect(limit().value).toBe("1");
   expect(screen.getByRole("tab", { name: "Machine 1" })).toBeTruthy();
@@ -122,8 +128,15 @@ it("keeps miner limits stable across purity changes with visible machine tabs", 
   await user.tab();
   expect(screen.getByRole("tab", { name: "Machine 2" })).toBeTruthy();
   await user.click(screen.getByRole("tab", { name: "Machine 1" }));
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Impure" }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Mk.2" }).disabled).toBe(true);
+  const before = editor.history.getSnapshot().state;
+  expect(() => editor.setOperatingSetting("miner", "1", "purity", 0.5)).toThrow("entire group");
   await user.click(screen.getByRole("button", { name: "Impure" }));
-  expect(editor.getPortRate("miner", "output:copper")).toBe("300");
+  expect(editor.history.getSnapshot().state).toBe(before);
+  await user.click(screen.getByRole("tab", { name: "All" }));
+  await user.click(screen.getByRole("button", { name: "Impure" }));
+  expect(editor.getPortRate("miner", "output:copper")).toBe("120");
   expect(limit().value).toBe("2");
 });
 
@@ -134,7 +147,7 @@ it("edits one machine's clock and shows Mixed for All without flattening other m
   const editor = createFactoryEditor(assets.catalog, plan);
   editor.setLimit("smelter", { kind: "machines", value: 4 });
   render(<Harness editor={editor} assets={assets} id="smelter" />);
-  expect(screen.getByText("Amplification")).toBeTruthy();
+  expect(screen.getByText("Somersloops")).toBeTruthy();
   await user.click(screen.getByRole("tab", { name: "Machine 4" }));
   const clock = screen.getByRole<HTMLInputElement>("spinbutton", { name: "Clock" });
   expect(clock.value).toBe("100");
@@ -162,4 +175,33 @@ it("edits one machine's clock and shows Mixed for All without flattening other m
   act(() => editor.historyCommand("redo"));
   expect(editor.getPortRate("smelter", "output:iron")).toBe("105");
   expect(document.querySelector("details")).toBeNull();
+});
+
+it("steps numeric controls and counts required Somersloops without supply details", async () => {
+  const user = userEvent.setup();
+  const { assets, document: plan } = minerFlowFixture();
+  assets.catalog.machines.smelter!.sloopSlots = 1;
+  const editor = createFactoryEditor(assets.catalog, plan);
+  editor.setLimit("smelter", { kind: "machines", value: 4 });
+  editor.setOperatingSetting("smelter", "all", "sloopsUsed", 1);
+  render(<Harness editor={editor} assets={assets} id="smelter" />);
+  expect(screen.getByText("Somersloops").parentElement!.textContent).toBe("Somersloops4");
+  expect(screen.queryByText(/Supply details/)).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Increase Production limit by 1" }));
+  expect(limit().value).toBe("5");
+  expect(screen.getByText("Somersloops").parentElement!.textContent).toBe("Somersloops5");
+  await user.click(screen.getByRole("button", { name: "Decrease Production limit by 1" }));
+  expect(limit().value).toBe("4");
+  await user.click(screen.getByRole("button", { name: "No limit" }));
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Increase Production limit by 1" })
+      .disabled,
+  ).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Use manual clock" }));
+  await user.click(screen.getByRole("button", { name: "Increase Clock by 1" }));
+  expect(screen.getByRole<HTMLInputElement>("spinbutton", { name: "Clock" }).value).toBe("101");
+  await user.click(screen.getByRole("button", { name: "Use automatic clock" }));
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Decrease Clock by 1" }).disabled,
+  ).toBe(true);
 });

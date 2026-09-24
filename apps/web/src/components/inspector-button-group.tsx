@@ -13,11 +13,13 @@ export function InspectorButtonGroup({
   options,
   onChange,
   iconOnly = false,
+  disabled: groupDisabled = false,
 }: {
   label: string;
   value: string | null;
   options: readonly (InspectorOption & { icon?: ReactNode })[];
   iconOnly?: boolean;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   const id = useId();
@@ -30,7 +32,8 @@ export function InspectorButtonGroup({
       <ButtonGroup aria-labelledby={id} className={iconOnly ? "w-55 shrink-0" : "w-42 shrink-0"}>
         {options.map((option) => {
           const disabled =
-            typeof option.disabled === "function" ? option.disabled() : option.disabled;
+            groupDisabled ||
+            (typeof option.disabled === "function" ? option.disabled() : option.disabled);
           const button = (
             <Button
               key={option.value}

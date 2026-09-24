@@ -1,7 +1,15 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-jsx-as-prop -- Controls belong to the selected group. */
 import { commonSetting, productionLimit, resolveProduction } from "@satisfactory-belt/factory-core";
 import type { FlowGroup } from "@satisfactory-belt/factory-core";
-import { ArrowUpToLineIcon, FactoryIcon, GaugeIcon, WandSparklesIcon, XIcon } from "lucide-react";
+import {
+  ArrowUpToLineIcon,
+  FactoryIcon,
+  GaugeIcon,
+  MinusIcon,
+  PlusIcon,
+  WandSparklesIcon,
+  XIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +20,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupInput,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 
@@ -34,7 +47,7 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
     <section aria-label="Production controls" className="space-y-3">
       <div className="flex items-center justify-between gap-2 text-sm">
         <span>Limit</span>
-        <ButtonGroup className="w-55" aria-label="Production limit controls">
+        <div className="flex w-64 items-center gap-2 sm:w-55">
           <NumberInput
             key={`${node.id}:${limit?.kind}:${limit?.value}`}
             label="Production limit"
@@ -46,28 +59,30 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
             integer={limit?.kind === "machines"}
             onCommit={(value) => limit && editor.setLimit(node.id, { ...limit, value })}
           />
-          <ModeButton
-            label="Limit output per minute"
-            selected={limit?.kind === "output"}
-            onClick={() => outputId && editor.convertLimit(node.id, outputId)}
-          >
-            <ArrowUpToLineIcon />
-          </ModeButton>
-          <ModeButton
-            label="Limit machines"
-            selected={limit?.kind === "machines"}
-            onClick={() => editor.convertLimit(node.id, "machines")}
-          >
-            <FactoryIcon />
-          </ModeButton>
-          <ModeButton
-            label="No limit"
-            selected={!limit}
-            onClick={() => editor.setLimit(node.id, null)}
-          >
-            <XIcon />
-          </ModeButton>
-        </ButtonGroup>
+          <ButtonGroup aria-label="Production limit controls">
+            <ModeButton
+              label="Limit output per minute"
+              selected={limit?.kind === "output"}
+              onClick={() => outputId && editor.convertLimit(node.id, outputId)}
+            >
+              <ArrowUpToLineIcon />
+            </ModeButton>
+            <ModeButton
+              label="Limit machines"
+              selected={limit?.kind === "machines"}
+              onClick={() => editor.convertLimit(node.id, "machines")}
+            >
+              <FactoryIcon />
+            </ModeButton>
+            <ModeButton
+              label="No limit"
+              selected={!limit}
+              onClick={() => editor.setLimit(node.id, null)}
+            >
+              <XIcon />
+            </ModeButton>
+          </ButtonGroup>
+        </div>
       </div>
       {limit?.kind === "output" && outputs.length > 1 && (
         <div className="flex justify-end">
@@ -98,7 +113,7 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
       )}
       <div className="flex items-center justify-between gap-2 text-sm">
         <span>Clock %</span>
-        <ButtonGroup className="w-55" aria-label="Clock controls">
+        <div className="flex w-64 items-center gap-2 sm:w-55">
           <NumberInput
             key={`${node.id}:${scope}:${manual}:${clock}`}
             label="Clock"
@@ -109,22 +124,24 @@ export function InspectorFlow({ node, editor, assets, scope = "all" }: Props) {
             max={250}
             onCommit={(value) => editor.setClock(node.id, value, scope)}
           />
-          <ModeButton
-            label="Use manual clock"
-            selected={manual}
-            onClick={() => editor.setClock(node.id, node.flow?.clockPercent ?? 100, scope)}
-          >
-            <GaugeIcon />
-          </ModeButton>
-          <ModeButton
-            label="Use automatic clock"
-            selected={!manual}
-            disabled={scope !== "all"}
-            onClick={() => editor.setClock(node.id, null)}
-          >
-            <WandSparklesIcon />
-          </ModeButton>
-        </ButtonGroup>
+          <ButtonGroup aria-label="Clock controls">
+            <ModeButton
+              label="Use manual clock"
+              selected={manual}
+              onClick={() => editor.setClock(node.id, node.flow?.clockPercent ?? 100, scope)}
+            >
+              <GaugeIcon />
+            </ModeButton>
+            <ModeButton
+              label="Use automatic clock"
+              selected={!manual}
+              disabled={scope !== "all"}
+              onClick={() => editor.setClock(node.id, null)}
+            >
+              <WandSparklesIcon />
+            </ModeButton>
+          </ButtonGroup>
+        </div>
       </div>
     </section>
   );
@@ -193,30 +210,73 @@ function NumberInput({
       onCommit(next);
     setDraft(null);
   }
+  const stepValue = draft === null ? value : draft.trim() ? Number(draft) : null;
+  const canStep = (delta: number) =>
+    !disabled &&
+    stepValue !== null &&
+    Number.isFinite(stepValue) &&
+    stepValue + delta >= min &&
+    stepValue + delta <= max;
+  function step(delta: number) {
+    if (canStep(delta)) {
+      onCommit(stepValue! + delta);
+      setDraft(null);
+    }
+  }
   return (
-    <Input
-      type="number"
-      aria-label={label}
-      inputMode={integer ? "numeric" : "decimal"}
-      min={min}
-      max={max}
-      step={integer ? 1 : "any"}
-      disabled={disabled}
-      placeholder={placeholder}
-      className="h-11 min-w-0 text-right tabular-nums sm:h-8"
-      value={draft ?? value ?? ""}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          event.currentTarget.blur();
-        }
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          setDraft(null);
-        }
-      }}
-    />
+    <InputGroup className="h-11 min-w-0 flex-1 has-disabled:bg-transparent has-disabled:opacity-100 sm:h-8 dark:has-disabled:bg-input/30">
+      <InputGroupInput
+        type="number"
+        aria-label={label}
+        inputMode={integer ? "numeric" : "decimal"}
+        min={min}
+        max={max}
+        step={integer ? 1 : "any"}
+        disabled={disabled}
+        placeholder={placeholder}
+        className="h-11 min-w-0 px-0 text-right text-xs tabular-nums [appearance:textfield] sm:h-8 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        value={draft ?? value ?? ""}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            event.preventDefault();
+            step(event.key === "ArrowUp" ? 1 : -1);
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setDraft(null);
+          }
+        }}
+      />
+      <InputGroupAddon align="inline-start" className="px-0 py-0">
+        <InputGroupButton
+          size="icon-xs"
+          className="h-9 w-6 sm:h-6"
+          aria-label={`Decrease ${label} by 1`}
+          disabled={!canStep(-1)}
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() => step(-1)}
+        >
+          <MinusIcon />
+        </InputGroupButton>
+      </InputGroupAddon>
+      <InputGroupAddon align="inline-end" className="px-0 py-0">
+        <InputGroupButton
+          size="icon-xs"
+          className="h-9 w-6 sm:h-6"
+          aria-label={`Increase ${label} by 1`}
+          disabled={!canStep(1)}
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() => step(1)}
+        >
+          <PlusIcon />
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }

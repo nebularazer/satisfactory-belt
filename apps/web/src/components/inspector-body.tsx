@@ -20,7 +20,6 @@ import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facili
 import { InspectorFlow } from "@/components/inspector-flow";
 import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorStatistics } from "@/components/inspector-statistics";
-import { InspectorSupplyDetails } from "@/components/inspector-supply-details";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -270,7 +269,6 @@ export function InspectorBody({
             )
           )}
         </section>
-        <InspectorSupplyDetails node={node} editor={editor} assets={assets} />
         <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
       </TabsContent>
     </Tabs>

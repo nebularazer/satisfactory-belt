@@ -129,6 +129,8 @@ export function setMachineSetting(
 ): MachineGroup {
   if (setting === "clockPercent" && (value < 1 || value > 250 || !Number.isFinite(value)))
     throw new Error("Clock speed must be from 1 to 250.");
+  if (node.kind === "extractor" && setting === "purity" && scope !== "all")
+    throw new Error("Miner purity applies to the entire group.");
   const members = scopedMachines(node, scope);
   if (members.every((member) => member[setting] === value)) return node;
   const next = {
