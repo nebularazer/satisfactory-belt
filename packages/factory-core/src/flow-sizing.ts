@@ -384,7 +384,7 @@ function solveComponent(
   if (!hasTargets && !supplied.size) return [];
 
   for (const node of groups) {
-    // Averaging members at 100% preserves mixed purities/amplification when count is fixed.
+    // Averaging members at 100% preserves individual amplification when count is fixed.
     const capacityNode = flowCapacityNode(node);
     const template =
       editedGroups.has(node.id) && node.machines.some((member) => member.clockPercent > 0)

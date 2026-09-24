@@ -92,7 +92,14 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
       }
       const saved = await store.load();
       if (abort.signal.aborted) return;
-      const editor = createFactoryEditor(assets.catalog, saved ?? createReferencePlans());
+      let editor: ReturnType<typeof createFactoryEditor>;
+      try {
+        editor = createFactoryEditor(assets.catalog, saved ?? createReferencePlans());
+      } catch (reason) {
+        if (!saved) throw reason;
+        // Unsupported documents are skipped, never repaired or migrated.
+        editor = createFactoryEditor(assets.catalog, createReferencePlans());
+      }
       setWorkspace({ assets, editor, store });
     }
     void loadWorkspace().catch((reason: unknown) => {

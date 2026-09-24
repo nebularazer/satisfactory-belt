@@ -167,3 +167,22 @@ it("recalculates from connected supply after clearing a 136/min limit", () => {
   editor.setLimit("smelter", null);
   expect(editor.getPortRate("smelter", "output:iron")).toBe("240");
 });
+
+it("rejects a saved mixed-purity miner before sizing can normalize its members", () => {
+  const { assets, document, miner } = minerFlowFixture();
+  if (miner.kind !== "extractor") throw new Error("Expected miner");
+  const invalid = {
+    ...miner,
+    flow: { machineLimit: 1 },
+    machines: [
+      { ...miner.machines[0]!, id: "normal", purity: 1 as const },
+      { ...miner.machines[0]!, id: "pure", purity: 2 as const },
+    ],
+  };
+  expect(() =>
+    createFactoryEditor(assets.catalog, {
+      ...document,
+      nodes: document.nodes.map((node) => (node.id === miner.id ? invalid : node)),
+    }),
+  ).toThrow("one shared purity");
+});

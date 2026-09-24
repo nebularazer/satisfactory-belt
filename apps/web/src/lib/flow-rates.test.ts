@@ -177,7 +177,7 @@ it("propagates unlocked source edits without resizing the edited group or creati
   expect(editor.getPortRate("miner", "output:copper")).toBe("60");
 });
 
-it("keeps heterogeneous miner settings and exact supply through unlocked count edits", () => {
+it("keeps shared miner purity and exact supply through unlocked count edits", () => {
   const { assets, document, miner, smelter } = minerFlowFixture();
   const editor = createFactoryEditor(assets.catalog, {
     ...document,
@@ -186,22 +186,22 @@ it("keeps heterogeneous miner settings and exact supply through unlocked count e
         ...miner,
         machines: [
           { ...miner.machines[0]!, id: "pure", purity: 2 },
-          { ...miner.machines[0]!, id: "impure", purity: 0.5 },
+          { ...miner.machines[0]!, id: "second", purity: 2 },
         ],
       },
       { ...smelter, machines: createMachineMembers(9) },
     ],
   });
   editor.setOperatingSetting("miner", "pure", "clockPercent", 100);
-  expect(editor.getPortRate("miner", "output:copper")).toBe("300");
+  expect(editor.getPortRate("miner", "output:copper")).toBe("480");
   editor.setMachineCount("miner", 3);
-  expect(editor.getPortRate("miner", "output:copper")).toBe("360");
-  expect(editor.getPortRate("smelter", "output:iron")).toBe("360");
+  expect(editor.getPortRate("miner", "output:copper")).toBe("720");
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("720");
   expect(editor.getNode("miner")).toMatchObject({
     machines: [
       expect.objectContaining({ purity: 2, clockPercent: 100 }),
-      expect.objectContaining({ purity: 0.5, clockPercent: 100 }),
-      expect.objectContaining({ purity: 0.5, clockPercent: 100 }),
+      expect.objectContaining({ purity: 2, clockPercent: 100 }),
+      expect.objectContaining({ purity: 2, clockPercent: 100 }),
     ],
   });
 });

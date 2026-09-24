@@ -69,6 +69,8 @@ import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 /** The host owns document edits and the workspace-local clipboard. */
 export function createFactoryEditor(catalog: GameCatalog, initialDocument: FactoryDocument) {
+  // Reject unsupported authored data before sizing can normalize it.
+  for (const node of initialDocument.nodes) resolveFactoryNode(node, catalog);
   const history = new EditHistory<FactoryDocument>(
     resizeFlowGroups(reconcileTransportConnections(initialDocument), catalog),
   );

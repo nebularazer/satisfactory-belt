@@ -1,6 +1,6 @@
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
-import { facilityCanGroup, parsePurity } from "./facilities";
+import { facilityCanGroup } from "./facilities";
 import type { FactoryNode, MachineMember } from "./index";
 
 /** Bounds allocations for user-entered machine counts. */
@@ -68,6 +68,8 @@ export function scopedMachines(node: MachineGroup, scope: MachineScope): readonl
 export function validateMachineMembers(node: MachineGroup, catalog: GameCatalog) {
   if (!node.machines.length || node.machines.length > MAX_MACHINE_COUNT)
     throw new Error(`A group must contain 1 to ${MAX_MACHINE_COUNT} machines.`);
+  if (node.kind === "extractor" && commonSetting(node.machines, "purity") === null)
+    throw new Error("Miner groups must have one shared purity.");
   const ids = new Set<string>();
   const { clock, sloopSlots, purity, load, matrices, satellites } = machineCapabilities(
     node,
@@ -156,9 +158,7 @@ export function resizeMachineGroup(
   const inherited = {
     clockPercent: commonSetting(node.machines, "clockPercent") ?? last.clockPercent,
     sloopsUsed: commonSetting(node.machines, "sloopsUsed") ?? last.sloopsUsed,
-    ...(last.purity !== undefined
-      ? { purity: parsePurity(commonSetting(node.machines, "purity") ?? last.purity) }
-      : {}),
+    ...(last.purity !== undefined ? { purity: last.purity } : {}),
     ...(last.loadPercent !== undefined
       ? { loadPercent: commonSetting(node.machines, "loadPercent") ?? last.loadPercent }
       : {}),
