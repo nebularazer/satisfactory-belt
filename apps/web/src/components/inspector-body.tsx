@@ -78,7 +78,7 @@ export function InspectorBody({
       onValueChange={(value) => {
         if (typeof value === "string") setSelected(value);
       }}
-      className="gap-4"
+      className="min-h-0 gap-3 overflow-hidden"
       onKeyDown={(event) => {
         if (
           event.key === "Escape" ||
@@ -89,7 +89,7 @@ export function InspectorBody({
       }}
     >
       {node.kind !== "logistics" && capabilities?.groupable && (
-        <div className="sticky top-0 z-10 bg-card py-1">
+        <div className="shrink-0 py-1">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
             <TabsList
               aria-label="Machine settings scope"
@@ -141,7 +141,10 @@ export function InspectorBody({
           </div>
         </div>
       )}
-      <TabsContent value={scope} className="space-y-4">
+      <TabsContent
+        value={scope}
+        className="min-h-0 space-y-4 overflow-y-auto overscroll-contain pb-4"
+      >
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
         {isFlowGroup(node) && (
           <InspectorFlow node={node} scope={scope} editor={editor} assets={assets} />

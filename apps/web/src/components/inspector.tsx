@@ -83,7 +83,11 @@ export const Inspector = memo(function Inspector({
   const body = (
     <>
       {node && <InspectorBody key={node.id} node={node} editor={editor} assets={assets} />}
-      {link && <InspectorLink key={link.id} link={link} editor={editor} assets={assets} />}
+      {link && (
+        <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">
+          <InspectorLink key={link.id} link={link} editor={editor} assets={assets} />
+        </div>
+      )}
     </>
   );
   const deleteButton = (
@@ -107,11 +111,13 @@ export const Inspector = memo(function Inspector({
           onKeyDown={handleKeyDown}
           className="max-h-[50dvh]"
         >
-          <div className="shrink-0 space-y-1 p-4">
-            <DrawerTitle>{summary.title}</DrawerTitle>
-            {subtitle && <DrawerDescription>{subtitle}</DrawerDescription>}
+          <div className="shrink-0 space-y-0.5 px-4 py-2">
+            <DrawerTitle className="text-sm leading-snug">{summary.title}</DrawerTitle>
+            {subtitle && (
+              <DrawerDescription className="text-xs leading-snug">{subtitle}</DrawerDescription>
+            )}
           </div>
-          <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">{body}</div>
+          <div className="flex min-h-0 flex-col overflow-hidden px-4">{body}</div>
           <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {deleteButton}
           </div>
@@ -133,9 +139,7 @@ export const Inspector = memo(function Inspector({
           </CardTitle>
           {subtitle && <CardDescription id={descriptionId}>{subtitle}</CardDescription>}
         </CardHeader>
-        <CardContent className="min-h-0 overflow-y-auto overscroll-contain pb-4">
-          {body}
-        </CardContent>
+        <CardContent className="flex min-h-0 flex-col overflow-hidden">{body}</CardContent>
         <CardFooter className="shrink-0">{deleteButton}</CardFooter>
       </Card>
     </aside>
