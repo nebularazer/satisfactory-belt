@@ -319,7 +319,7 @@ export function CatalogSearch({
         onKeyDown={keyDown}
         initialFocus={() => (selected ? heading.current : input.current)}
         finalFocus={finalFocus}
-        className="h-[min(42rem,calc(100dvh-6rem))]"
+        className="h-[min(42rem,65dvh)]"
       >
         {content}
       </DrawerContent>

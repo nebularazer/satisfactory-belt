@@ -105,7 +105,7 @@ export const Inspector = memo(function Inspector({
           initialFocus={false}
           finalFocus={false}
           onKeyDown={handleKeyDown}
-          className="max-h-[calc(100dvh-6rem)]"
+          className="max-h-[50dvh]"
         >
           <div className="shrink-0 space-y-1 p-4">
             <DrawerTitle>{summary.title}</DrawerTitle>
