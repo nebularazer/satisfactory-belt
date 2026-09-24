@@ -1,4 +1,4 @@
-import { GRID_SIZE, SNAP_SIZE } from "@satisfactory-belt/canvas-core";
+import { GRID_SIZE } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog, Ingredient } from "@satisfactory-belt/game-data";
 
@@ -121,12 +121,11 @@ export type LogisticsDisplay = Readonly<{
 }>;
 export type NodeDisplay = MachineDisplay | LogisticsDisplay;
 
-/** Center independently on each side, keeping every anchor on the snap lattice. */
+/** Both columns start on the same row, with one grid cell between ports. */
 export function portRows(count: number): readonly number[] {
   if (!Number.isInteger(count) || count < 0 || count > 4)
     throw new Error(`Expected zero to four ports, received ${count}.`);
-  const center = (HEADER_HEIGHT + FOOTER_Y) / 2;
-  return Array.from({ length: count }, (_, index) => center + (2 * index - count + 1) * SNAP_SIZE);
+  return Array.from({ length: count }, (_, index) => HEADER_HEIGHT + (index + 1) * GRID_SIZE);
 }
 
 export function nodeBounds(node: FactoryNode): CanvasItem {

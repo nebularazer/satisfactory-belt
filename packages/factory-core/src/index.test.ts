@@ -147,11 +147,11 @@ function fixture() {
 describe("machine card geometry", () => {
   it.each([
     [0, []],
-    [1, [144]],
-    [2, [128, 160]],
-    [3, [112, 144, 176]],
+    [1, [96]],
+    [2, [96, 128]],
+    [3, [96, 128, 160]],
     [4, [96, 128, 160, 192]],
-  ] as const)("centers %i ports on the snap lattice", (count, rows) => {
+  ] as const)("top-aligns %i ports on the snap lattice", (count, rows) => {
     expect(portRows(count)).toEqual(rows);
     const { node, catalog } = fixture();
     const recipe = catalog.recipes.Recipe;
@@ -161,6 +161,10 @@ describe("machine card geometry", () => {
     }));
     const display = resolveMachineNode(node, catalog);
     expect(nodeBounds(node)).toMatchObject({ width: 256, height: 256 });
+    expect(
+      display.ports.filter((port) => port.direction === "input").map((port) => port.y),
+    ).toEqual(rows);
+    expect(display.ports.find((port) => port.direction === "output")?.y).toBe(96);
     for (const port of display.ports) {
       expect((node.x + port.x) % SNAP_SIZE).toBe(0);
       expect((node.y + port.y) % SNAP_SIZE).toBe(0);
@@ -245,7 +249,7 @@ it("hides unsupported footer settings without moving a fixed producer's output",
     sloops: null,
   });
   expect(display.ports).toHaveLength(1);
-  expect(display.ports[0]).toMatchObject({ x: 256, y: 144 });
+  expect(display.ports[0]).toMatchObject({ x: 256, y: 96 });
   catalog.machines.Assembler.sloopSlots = 0;
   expect(resolveMachineNode(fixture().node, catalog).sloops).toBeNull();
 });
@@ -336,7 +340,7 @@ it("resolves extraction as a single resource output with machine power, clock an
     key: "output:Water",
     transport: "pipe",
     x: 256,
-    y: 144,
+    y: 96,
   });
   expect(
     resolveMachineNode(
