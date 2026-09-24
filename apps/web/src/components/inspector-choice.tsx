@@ -99,11 +99,7 @@ export function InspectorChoice({
         id={`${id}-label`}
         htmlFor={id}
         className={
-          hideLabel
-            ? "sr-only"
-            : inline
-              ? "text-xs sm:text-sm"
-              : "text-xs font-medium text-muted-foreground"
+          hideLabel ? "sr-only" : inline ? "text-sm" : "text-sm font-medium text-muted-foreground"
         }
       >
         {label}

@@ -192,7 +192,7 @@ export function InspectorBody({
               )}
               {capabilities.matrices && (
                 <div className="flex min-h-8 items-center justify-between gap-2">
-                  <label htmlFor={matrixId} className="text-xs sm:text-sm">
+                  <label htmlFor={matrixId} className="text-sm">
                     Alien Power Matrices
                     {commonMatrices(members) === null && (
                       <span className="ml-1 text-xs text-muted-foreground">· Mixed</span>

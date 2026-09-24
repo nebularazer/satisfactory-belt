@@ -25,7 +25,7 @@ export function InspectorButtonGroup({
   const id = useId();
   return (
     <div className="flex items-center justify-between gap-2">
-      <span id={id} className="text-xs sm:text-sm">
+      <span id={id} className="text-sm">
         {label}
         {value === null && <span className="ml-1 text-xs text-muted-foreground">· Mixed</span>}
       </span>
