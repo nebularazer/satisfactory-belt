@@ -84,7 +84,7 @@ export const Inspector = memo(function Inspector({
     <>
       {node && <InspectorBody key={node.id} node={node} editor={editor} assets={assets} />}
       {link && (
-        <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">
+        <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-4">
           <InspectorLink key={link.id} link={link} editor={editor} assets={assets} />
         </div>
       )}
@@ -117,7 +117,7 @@ export const Inspector = memo(function Inspector({
               <DrawerDescription className="text-xs leading-snug">{subtitle}</DrawerDescription>
             )}
           </div>
-          <div className="flex min-h-0 flex-col overflow-hidden px-4">{body}</div>
+          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden px-4">{body}</div>
           <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {deleteButton}
           </div>
@@ -139,7 +139,7 @@ export const Inspector = memo(function Inspector({
           </CardTitle>
           {subtitle && <CardDescription id={descriptionId}>{subtitle}</CardDescription>}
         </CardHeader>
-        <CardContent className="flex min-h-0 flex-col overflow-hidden">{body}</CardContent>
+        <CardContent className="flex min-h-0 min-w-0 flex-col overflow-hidden">{body}</CardContent>
         <CardFooter className="shrink-0">{deleteButton}</CardFooter>
       </Card>
     </aside>

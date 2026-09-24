@@ -78,7 +78,7 @@ export function InspectorBody({
       onValueChange={(value) => {
         if (typeof value === "string") setSelected(value);
       }}
-      className="min-h-0 gap-3 overflow-hidden"
+      className="min-h-0 min-w-0 max-w-full gap-3 overflow-hidden"
       onKeyDown={(event) => {
         if (
           event.key === "Escape" ||
@@ -143,7 +143,7 @@ export function InspectorBody({
       )}
       <TabsContent
         value={scope}
-        className="min-h-0 space-y-4 overflow-y-auto overscroll-contain pb-4"
+        className="min-h-0 min-w-0 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain pb-4"
       >
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
         {isFlowGroup(node) && (
