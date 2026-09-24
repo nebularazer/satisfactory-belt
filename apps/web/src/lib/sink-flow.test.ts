@@ -106,7 +106,7 @@ it("uses an authored machine limit as finite supply without treating automatic m
   expect(rate("sink", "input:0")).toBe(0);
 });
 
-it("keeps the ingot-to-rod surplus predictable through limits, undo and reload", () => {
+it("keeps a whole smelter when manually clocked and supplies surplus through undo and reload", () => {
   const { assets } = setup(false);
   assets.catalog.items.wire = { ...assets.catalog.items.wire!, name: "Iron Rod" };
   assets.catalog.recipes.wire = {
@@ -133,7 +133,11 @@ it("keeps the ingot-to-rod surplus predictable through limits, undo and reload",
   editor.setLimit(rods.id, { kind: "output", itemId: "wire", value: 15 });
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("15");
   expect(editor.getPortRate(sink.id, "input:0")).toBe("0");
-  editor.setLimit(smelter.id, { kind: "output", itemId: "iron", value: 30 });
+  editor.setClock(smelter.id, 100);
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    flow: { machineLimit: 1, clockMode: "manual" },
+    machines: [expect.objectContaining({ clockPercent: 100 })],
+  });
   expect(editor.getPortRate(smelter.id, "output:iron")).toBe("30");
   expect(editor.getPortRate(rods.id, "input:iron")).toBe("15");
   expect(editor.getPortRate(sink.id, "input:0")).toBe("15");

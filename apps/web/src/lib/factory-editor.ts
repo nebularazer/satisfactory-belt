@@ -522,7 +522,15 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
   function setClock(id: string, clock: number | null, scope: MachineScope = "all") {
     editMachine(id, (node) => {
       if (!isFlowGroup(node)) return node;
-      node = withProductionLimit(node, catalog, productionLimit(node));
+      // A manual clock on an unconstrained group fixes its current whole-machine
+      // count. Otherwise the solver could replace one machine at 50% with half
+      // a machine at 100%, leaving no additional output for a surplus sink.
+      const limit = productionLimit(node);
+      node = withProductionLimit(
+        node,
+        catalog,
+        clock !== null && !limit ? { kind: "machines", value: node.machines.length } : limit,
+      );
       if (scope !== "all" && clock !== null) {
         // Editing one member authors manual clocks for the group without flattening
         // existing overrides or inheriting temporarily underclocked solver results.

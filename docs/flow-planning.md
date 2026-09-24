@@ -123,6 +123,9 @@ extractors establish available supply.
 
 The inspector explains that automatic suppliers reduce production as demand falls.
 An authored output or machine limit keeps finite supply available for surplus.
+Setting a manual clock on a group with No Limit also fixes its current whole-machine
+count as a machine limit. Existing output or machine limits remain unchanged. Auto
+clock continues to adjust clocks within the selected limit; No Limit releases the count.
 The Inputs section displays actual allocated per-material rates. Sinks have no rate
 or mode settings, and saved plans containing the removed sink rate setting are rejected.
 
