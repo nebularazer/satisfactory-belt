@@ -2,6 +2,7 @@ import type { PortReference } from "@satisfactory-belt/canvas-core";
 import { formatPlanningNumber } from "@satisfactory-belt/factory-core";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
+import { DistributionPreviewPrototype } from "@/components/distribution-preview-prototype";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
 import { portConnections } from "@/lib/inspector";
@@ -28,6 +29,7 @@ export function InspectorPort({
       : "Rate unavailable";
   return (
     <div className="space-y-4 text-sm">
+      <DistributionPreviewPrototype port={port} editor={editor} assets={assets} />
       <section aria-label="Port flow" className="space-y-2">
         <h3 className="text-xs text-muted-foreground">Actual flow</h3>
         {materials.map((id) => {

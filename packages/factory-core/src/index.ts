@@ -441,3 +441,5 @@ export * from "./flow-sizing";
 export { formatPlanningNumber } from "./number-format";
 
 export * from "./flow-controls";
+
+export * from "./distribution-prototype";
