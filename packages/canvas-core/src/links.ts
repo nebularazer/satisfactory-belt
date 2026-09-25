@@ -12,6 +12,8 @@ export type CanvasLink = Readonly<{
   /** Optional placement supplied by an automatic layout engine. */
   labelPosition?: Point;
   labelFontSize?: number;
+  color?: number;
+  dashed?: boolean;
   guides?: readonly RouteGuide[];
 }>;
 export type LinkHit = Readonly<{ id: string; segment: number }>;

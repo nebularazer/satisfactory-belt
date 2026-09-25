@@ -1,5 +1,5 @@
 /** Adapter for the throwaway distribution preview. Never edits the source document. */
-import { CanvasController, portId } from "@satisfactory-belt/canvas-core";
+import { CanvasController, GRID_SIZE, portId } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem, CanvasLink, PortReference } from "@satisfactory-belt/canvas-core";
 import {
   buildDistributionPrototype,
@@ -10,6 +10,11 @@ import type { NodeDisplay, DistributionPreview } from "@satisfactory-belt/factor
 
 import type { createFactoryEditor } from "./factory-editor";
 import type { GameAssets } from "./game-assets";
+
+export const PREVIEW_BELT_COLORS = [
+  0x2563eb, 0xd97706, 0x059669, 0x9333ea, 0xe11d48, 0x0891b2,
+] as const;
+const grid = (value: number) => Math.round(value / GRID_SIZE) * GRID_SIZE;
 
 type Endpoint = {
   id: string;
@@ -113,8 +118,8 @@ export function distributionScene(
     id: node.id,
     x: 0,
     y: 0,
-    width: endpoints.has(node.id) ? 256 : 96,
-    height: endpoints.has(node.id) ? 128 : 96,
+    width: endpoints.has(node.id) ? 256 : 128,
+    height: endpoints.has(node.id) ? 256 : 128,
   }));
   const refs = new Map<string, { output: PortReference; input: PortReference }>();
   const item = assets.catalog.items[snapshot.itemId];
@@ -122,35 +127,36 @@ export function distributionScene(
     const endpoint = endpoints.get(node.id);
     const incoming = graph.edges.filter((edge) => edge.to === node.id);
     const outgoing = graph.edges.filter((edge) => edge.from === node.id);
-    const size = endpoint ? 256 : 96;
-    const ports = [incoming, outgoing].flatMap((edges, side) =>
-      edges.map((edge, index) => {
-        const direction = side ? ("output" as const) : ("input" as const);
-        const key = `${direction}:${index}`;
+    const size = endpoint ? 256 : 128;
+    const ports = [incoming, outgoing].flatMap((edges, side) => {
+      const direction = side ? ("output" as const) : ("input" as const);
+      const count = endpoint ? edges.length : (node.kind === "splitter") === Boolean(side) ? 3 : 1;
+      const slots = edges.length === 2 && count === 3 ? [0, 2] : edges.map((_, index) => index);
+      edges.forEach((edge, index) => {
         const pair = refs.get(edge.id) ?? {
           output: { nodeId: "", portKey: "" },
           input: { nodeId: "", portKey: "" },
         };
-        pair[direction] = { nodeId: node.id, portKey: key };
+        pair[direction] = { nodeId: node.id, portKey: `${direction}:${slots[index]}` };
         refs.set(edge.id, pair);
-        return {
-          key,
-          direction,
-          transport: "belt" as const,
-          itemId: null,
-          iconId: null,
-          configuredItemIconIds: [],
-          name: item?.name ?? "",
-          x: side ? size : 0,
-          y: endpoint ? 80 : 48 + (index - (edges.length - 1) / 2) * 32,
-        };
-      }),
-    );
+      });
+      return Array.from({ length: count }, (_, index) => ({
+        key: `${direction}:${index}`,
+        direction,
+        transport: "belt" as const,
+        itemId: null,
+        iconId: null,
+        configuredItemIconIds: [],
+        name: item?.name ?? "",
+        x: side ? size : 0,
+        y: endpoint ? 96 : count === 3 ? 32 + index * 32 : 64,
+      }));
+    });
     if (endpoint)
       displays.set(node.id, {
         layout: "machine",
         size,
-        height: 128,
+        height: 256,
         title: endpoint.title,
         subtitle: endpoint.type,
         machineIconId: endpoint.icon,
@@ -173,51 +179,7 @@ export function distributionScene(
       });
   }
   const routed = new Map<string, CanvasLink>();
-  const links = (): CanvasLink[] =>
-    graph.edges.map((edge) => {
-      const route = routed.get(edge.id);
-      if (route) return route;
-      const pair = refs.get(edge.id)!;
-      const position = (ref: PortReference) => {
-        const bounds = items.find((entry) => entry.id === ref.nodeId)!;
-        const port = displays.get(ref.nodeId)!.ports.find((p) => p.key === ref.portKey)!;
-        return { x: bounds.x + port.x, y: bounds.y + port.y };
-      };
-      const a = position(pair.output),
-        b = position(pair.input);
-      const bottom = Math.max(...items.map((n) => n.y + n.height)) + 120;
-      return {
-        id: edge.id,
-        labelFontSize: 14,
-        ...pair,
-        points: edge.feedback
-          ? [
-              a,
-              { x: a.x + 48, y: a.y },
-              { x: a.x + 48, y: bottom },
-              { x: b.x - 48, y: bottom },
-              { x: b.x - 48, y: b.y },
-              b,
-            ]
-          : [a, { x: (a.x + b.x) / 2, y: a.y }, { x: (a.x + b.x) / 2, y: b.y }, b],
-      };
-    });
-  const controller = new CanvasController({
-    items,
-    onMove(moves) {
-      moves.forEach((move) => {
-        const index = items.findIndex((entry) => entry.id === move.id);
-        items[index] = { ...items[index]!, ...move };
-      });
-      for (const edge of graph.edges) {
-        if (moves.some((move) => move.id === edge.from || move.id === edge.to))
-          routed.delete(edge.id);
-      }
-      controller.setLinks(links());
-      controller.setItems([...items]);
-    },
-  });
-  controller.setLinks(links());
+  const controller = new CanvasController({ items, readOnly: true, onMove() {} });
   return {
     graph,
     controller,
@@ -231,12 +193,12 @@ export function distributionScene(
             "elk.direction": "RIGHT",
             "elk.edgeRouting": "ORTHOGONAL",
             "elk.padding": "[top=32,left=32,bottom=32,right=32]",
-            "elk.spacing.nodeNode": "32",
-            "elk.spacing.edgeNode": "24",
-            "elk.spacing.edgeEdge": "24",
-            "elk.layered.spacing.nodeNodeBetweenLayers": "88",
-            "elk.layered.spacing.edgeNodeBetweenLayers": "24",
-            "elk.layered.spacing.edgeEdgeBetweenLayers": "24",
+            "elk.spacing.nodeNode": "64",
+            "elk.spacing.edgeNode": "64",
+            "elk.spacing.edgeEdge": "64",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "128",
+            "elk.layered.spacing.edgeNodeBetweenLayers": "64",
+            "elk.layered.spacing.edgeEdgeBetweenLayers": "64",
             "elk.layered.feedbackEdges": "true",
             "elk.layered.mergeEdges": "false",
             "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
@@ -261,9 +223,9 @@ export function distributionScene(
             targets: [portId(refs.get(edge.id)!.input)],
             labels: [
               {
-                text: `${formatPlanningNumber(edge.rate)}/min`,
-                width: 90,
-                height: edge.feedback ? 54 : 36,
+                text: formatPlanningNumber(edge.rate),
+                width: 64,
+                height: 32,
                 layoutOptions: { "elk.edgeLabels.placement": "CENTER" },
               },
             ],
@@ -273,7 +235,7 @@ export function distributionScene(
       );
       for (const child of result.children ?? []) {
         const index = items.findIndex((entry) => entry.id === child.id);
-        items[index] = { ...items[index]!, x: child.x ?? 0, y: child.y ?? 0 };
+        items[index] = { ...items[index]!, x: grid(child.x ?? 0), y: grid(child.y ?? 0) };
       }
       for (const edge of result.edges ?? []) {
         const section = edge.sections?.[0];
@@ -282,7 +244,14 @@ export function distributionScene(
         routed.set(edge.id, {
           id: edge.id,
           ...refs.get(edge.id)!,
-          points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint],
+          points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]
+            .map((point) => ({ x: grid(point.x), y: grid(point.y) }))
+            .filter(
+              (point, index, points) =>
+                index === 0 || point.x !== points[index - 1]!.x || point.y !== points[index - 1]!.y,
+            ),
+          color: PREVIEW_BELT_COLORS[graph.edges.find((entry) => entry.id === edge.id)!.tier - 1],
+          dashed: graph.edges.find((entry) => entry.id === edge.id)!.feedback,
           labelPosition:
             label?.x === undefined || label.y === undefined
               ? undefined
@@ -290,16 +259,13 @@ export function distributionScene(
           labelFontSize: 14,
         });
       }
-      controller.setLinks(links());
+      controller.setLinks([...routed.values()]);
       controller.setItems([...items]);
     },
     getDisplay: (id: string) => displays.get(id),
     getLinkRates: (id: string) => {
       const edge = graph.edges.find((e) => e.id === id)!;
-      return [
-        `${formatPlanningNumber(edge.rate)}/min`,
-        `Mk.${edge.tier}${edge.feedback ? "\nReturn" : ""}`,
-      ];
+      return [formatPlanningNumber(edge.rate)];
     },
   };
 }

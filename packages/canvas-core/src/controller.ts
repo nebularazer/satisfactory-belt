@@ -107,12 +107,16 @@ export class CanvasController {
   private listeners = new Set<() => void>();
   private onMove: (moves: readonly ItemMove[], context?: MoveContext) => void;
 
+  private readonly readOnly: boolean;
+
   constructor(options: {
+    readOnly?: boolean;
     items: readonly CanvasItem[];
     onConnect?: (a: PortReference, b: PortReference) => PortCompatibility;
     onRoute?: (id: string, guides: readonly RouteGuide[]) => void;
     onMove: (moves: readonly ItemMove[], context?: MoveContext) => void;
   }) {
+    this.readOnly = options.readOnly ?? false;
     this.onConnect = options.onConnect;
     this.onRoute = options.onRoute;
     this.items = options.items;
@@ -157,6 +161,7 @@ export class CanvasController {
   }
 
   private requestCatalog(screen: Point, source?: PortReference) {
+    if (this.readOnly) return;
     const request = {
       position: screenToWorld(screen, this.camera),
       source: source ? { nodeId: source.nodeId, portKey: source.portKey } : undefined,
@@ -202,6 +207,7 @@ export class CanvasController {
       this.linkState = emptyLinkSelection();
   }
   selectLink = (id: string) => {
+    if (this.readOnly) return;
     if (!this.links.some((link) => link.id === id)) return;
     this.cancel(false);
     this.selection = new Set();
@@ -335,6 +341,7 @@ export class CanvasController {
   };
 
   selectPort = (ref: PortReference) => {
+    if (this.readOnly) return;
     const port = this.portGeometry.find((entry) => samePort(entry, ref));
     if (!port) return;
     this.linkState = emptyLinkSelection();
@@ -410,6 +417,7 @@ export class CanvasController {
 
   getCursor(pointer = this.hoverPoint): string {
     if (this.pinch || this.gesture?.kind === "pan") return "grabbing";
+    if (this.readOnly) return "grab";
     if (this.gesture?.kind === "drag") return "move";
     if (this.gesture?.kind === "marquee" || pointer?.marquee) return "crosshair";
     if (this.gesture?.kind === "segment") {
@@ -492,11 +500,13 @@ export class CanvasController {
     }
     if (this.gesture || this.pinch || this.pointers.size > 1) return;
     const previousSelection = this.selection;
-    const item = this.hitTest(pointer);
+    if (this.readOnly) pointer = { ...pointer, marquee: false, additive: false };
+    const item = this.readOnly ? undefined : this.hitTest(pointer);
     let kind: Gesture["kind"] = "pan";
-    const candidates = !pointer.marquee && !pointer.additive ? this.portHits(pointer) : [];
+    const candidates =
+      !this.readOnly && !pointer.marquee && !pointer.additive ? this.portHits(pointer) : [];
     const handles =
-      !pointer.marquee && !pointer.additive && !item
+      !this.readOnly && !pointer.marquee && !pointer.additive && !item
         ? hitTestLinks(
             pointer,
             !!pointer.touch,
@@ -508,7 +518,7 @@ export class CanvasController {
         : [];
     const linkHits = handles.length
       ? handles
-      : !item && !pointer.marquee && !pointer.additive
+      : !this.readOnly && !item && !pointer.marquee && !pointer.additive
         ? hitTestLinks(pointer, !!pointer.touch, this.camera, this.links, this.linkState.selected)
         : [];
     if (candidates.length) {
@@ -781,7 +791,8 @@ export class CanvasController {
       command === "move-up" ||
       command === "move-down"
     ) {
-      if (this.gesture || this.pinch || this.waitForRelease || this.pointers.size) return;
+      if (this.readOnly || this.gesture || this.pinch || this.waitForRelease || this.pointers.size)
+        return;
       const selected = this.items.filter((item) => this.selection.has(item.id));
       if (!selected.length) return;
       const horizontal = command === "move-left" || command === "move-right";

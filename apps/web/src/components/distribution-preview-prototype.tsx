@@ -1,19 +1,30 @@
 /* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Deliberately local, disposable prototype controls. */
+import { MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
 import type { PortReference } from "@satisfactory-belt/canvas-core";
 /** Experiment: can a separate construction canvas make a flow plan easier to build?
  * One agreed popup workflow, isolated on experiment/distribution-preview.
  */
 import { PREVIEW_BELTS, formatPlanningNumber } from "@satisfactory-belt/factory-core";
 import { MaximizeIcon, MinusIcon, PlusIcon, WorkflowIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { distributionScene, distributionSnapshot } from "@/lib/distribution-prototype";
+import {
+  PREVIEW_BELT_COLORS,
+  distributionScene,
+  distributionSnapshot,
+} from "@/lib/distribution-prototype";
 import type { DistributionSnapshot } from "@/lib/distribution-prototype";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
+
+const legend = PREVIEW_BELT_COLORS.map((color, index) => ({
+  tier: index + 1,
+  capacity: PREVIEW_BELTS[index],
+  style: { borderColor: `#${color.toString(16).padStart(6, "0")}` },
+}));
 
 export function DistributionPreviewPrototype({
   port,
@@ -57,6 +68,10 @@ function Preview({
     () => distributionScene(snapshot, assets, tier, mode),
     [snapshot, assets, tier, mode],
   );
+  const zoom = useSyncExternalStore(
+    scene.controller.subscribe,
+    () => scene.controller.getSnapshot().camera.zoom,
+  );
   const [readyScene, setReadyScene] = useState<typeof scene | null>(null);
   useEffect(() => {
     if (!host || scene.graph.error) return undefined;
@@ -82,7 +97,7 @@ function Preview({
           ?.querySelector("canvas")
           ?.setAttribute(
             "aria-label",
-            "Distribution preview. Drag to pan or rearrange, scroll to zoom. Changes are temporary.",
+            "Read-only distribution preview. Drag to pan, pinch or scroll to zoom.",
           );
         setReadyScene(scene);
         view.focus();
@@ -179,36 +194,69 @@ function Preview({
           {!scene.graph.error && !error && readyScene === scene && (
             <ButtonGroup
               aria-label="Preview zoom"
-              className="absolute bottom-3 left-3 bg-background shadow-sm"
+              className="absolute bottom-3 left-3 rounded-lg bg-background shadow-sm"
             >
               <Button
                 variant="outline"
-                size="icon-sm"
+                size="icon"
                 aria-label="Zoom preview out"
+                title="Zoom out (−)"
+                disabled={zoom <= MIN_ZOOM}
                 onClick={() => scene.controller.command("zoom-out")}
               >
                 <MinusIcon />
               </Button>
               <Button
                 variant="outline"
-                size="icon-sm"
-                aria-label="Fit preview"
-                onClick={() => scene.controller.command("fit")}
+                className="tabular-nums"
+                aria-label={`Preview zoom ${Math.round(zoom * 100)}%. Restore 100%`}
+                title="Restore 100%"
+                onClick={() => scene.controller.command("actual-size")}
               >
-                <MaximizeIcon />
+                {Math.round(zoom * 100)}%
               </Button>
               <Button
                 variant="outline"
-                size="icon-sm"
+                size="icon"
                 aria-label="Zoom preview in"
+                title="Zoom in (+)"
+                disabled={zoom >= MAX_ZOOM}
                 onClick={() => scene.controller.command("zoom-in")}
               >
                 <PlusIcon />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Fit preview"
+                title="Fit preview"
+                onClick={() => scene.controller.command("fit")}
+              >
+                <MaximizeIcon />
               </Button>
             </ButtonGroup>
           )}
         </div>
         <div className="shrink-0 space-y-1 border-t px-4 py-3 text-xs text-muted-foreground">
+          <div
+            aria-label="Belt color legend"
+            className="flex flex-wrap items-center gap-x-4 gap-y-2"
+          >
+            {legend.map(({ tier: beltTier, capacity, style }) => (
+              <span
+                key={beltTier}
+                className="inline-flex items-center gap-1.5"
+                title={`${capacity} items/min`}
+              >
+                <span className="w-5 border-t-2" style={style} />
+                Mk.{beltTier}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-5 border-t-2 border-dashed border-current" />
+              Feedback
+            </span>
+          </div>
           {!scene.graph.error && (
             <p>
               {splitters} splitters · {mergers} mergers · {scene.graph.edges.length} belts
