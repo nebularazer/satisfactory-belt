@@ -254,7 +254,7 @@ function Preview({
             ))}
             <span className="inline-flex items-center gap-1.5">
               <span className="w-5 border-t-2 border-dashed border-current" />
-              Feedback
+              Return flow
             </span>
           </div>
           {!scene.graph.error && (

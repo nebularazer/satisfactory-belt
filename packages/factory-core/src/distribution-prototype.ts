@@ -88,16 +88,29 @@ export function buildDistributionPrototype(
     }
     return pending[0]!;
   };
-  const received = new Map(destinations.map((d) => [d.id, [] as Stream[]]));
+  // Preserve one-to-one rate matches before pooling any supply. A 30/min source
+  // feeding a 30/min consumer needs one belt, not a merge-and-split network.
+  const remaining = destinations.map((destination) => ({ ...destination }));
+  const unmatchedSources: DistributionEndpoint[] = [];
+  for (const source of sources) {
+    const index = remaining.findIndex(
+      (destination) => Math.abs(destination.rate - source.rate) <= epsilon,
+    );
+    if (index === -1) unmatchedSources.push(source);
+    else {
+      const [destination] = remaining.splice(index, 1);
+      connect({ from: source.id, rate: source.rate }, destination!.id);
+    }
+  }
+  const received = new Map(remaining.map((destination) => [destination.id, [] as Stream[]]));
   // Pack sources into independent lanes; never introduce a trunk exceeding the belt tier.
   const lanes: Stream[][] = [];
-  for (const source of sources) {
+  for (const source of unmatchedSources) {
     const stream = { from: source.id, rate: source.rate };
     const lane = lanes.find((values) => sum(values) + stream.rate <= capacity + epsilon);
     if (lane) lane.push(stream);
     else lanes.push([stream]);
   }
-  const remaining = destinations.map((d) => ({ ...d }));
   for (const lane of lanes) {
     let stream = merge(lane);
     let left = stream.rate;
