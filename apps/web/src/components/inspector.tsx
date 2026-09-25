@@ -5,6 +5,7 @@ import type { KeyboardEvent, PointerEvent } from "react";
 
 import { InspectorBody } from "@/components/inspector-body";
 import { InspectorLink } from "@/components/inspector-link";
+import { InspectorPort } from "@/components/inspector-port";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,7 +18,7 @@ import {
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
-import { inspectorSummary, inspectorTarget } from "@/lib/inspector";
+import { inspectorPort, inspectorSummary, inspectorTarget } from "@/lib/inspector";
 
 export const Inspector = memo(function Inspector({
   editor,
@@ -40,7 +41,7 @@ export const Inspector = memo(function Inspector({
   const closeDrawer = useCallback(
     (open: boolean) => {
       if (!open) {
-        editor.controller.command("escape");
+        editor.controller.setSelection(new Set());
         focusCanvas();
       }
     },
@@ -62,7 +63,7 @@ export const Inspector = memo(function Inspector({
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
       event.preventDefault();
-      editor.controller.command("escape");
+      editor.controller.setSelection(new Set());
       focusCanvas();
     },
     [editor, focusCanvas],
@@ -75,6 +76,7 @@ export const Inspector = memo(function Inspector({
     editor.deleteSelection();
     focusCanvas();
   }, [editor, focusCanvas]);
+  const port = inspectorPort(target);
   const summary = inspectorSummary(editor, target);
   const node = target?.startsWith("node:") ? editor.getNode(target.slice(5)) : undefined;
   const link = target?.startsWith("link:") ? editor.getLink(target.slice(5)) : undefined;
@@ -85,6 +87,11 @@ export const Inspector = memo(function Inspector({
   const body = (
     <>
       {node && <InspectorBody key={node.id} node={node} editor={editor} assets={assets} />}
+      {port && (
+        <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0">
+          <InspectorPort port={port} editor={editor} assets={assets} />
+        </div>
+      )}
       {link && (
         <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0">
           <InspectorLink key={link.id} link={link} editor={editor} assets={assets} />
@@ -92,7 +99,7 @@ export const Inspector = memo(function Inspector({
       )}
     </>
   );
-  const deleteButton = (
+  const deleteButton = summary.deleteLabel && (
     <Button
       variant="destructive"
       className="w-full"
@@ -120,9 +127,11 @@ export const Inspector = memo(function Inspector({
             )}
           </div>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{body}</div>
-          <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            {deleteButton}
-          </div>
+          {deleteButton && (
+            <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {deleteButton}
+            </div>
+          )}
         </DrawerContent>
       </Drawer>
     );
@@ -144,7 +153,7 @@ export const Inspector = memo(function Inspector({
         <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {body}
         </CardContent>
-        <CardFooter className="shrink-0">{deleteButton}</CardFooter>
+        {deleteButton && <CardFooter className="shrink-0">{deleteButton}</CardFooter>}
       </Card>
     </aside>
   );
