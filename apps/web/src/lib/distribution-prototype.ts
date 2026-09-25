@@ -7,6 +7,7 @@ import {
   resolveProduction,
 } from "@satisfactory-belt/factory-core";
 import type { NodeDisplay, DistributionPreview } from "@satisfactory-belt/factory-core";
+import type { ElkNode } from "elkjs/lib/elk-api";
 
 import type { createFactoryEditor } from "./factory-editor";
 import type { GameAssets } from "./game-assets";
@@ -40,6 +41,7 @@ type Endpoint = {
   id: string;
   rate: number;
   title: string;
+  groupKey: string;
   type: string;
   icon: string;
   sink: boolean;
@@ -106,6 +108,10 @@ export function distributionSnapshot(
         id: `${key}:${index}`,
         rate: (entry.rate * weight) / total,
         title: display.title,
+        groupKey:
+          node.kind === "manufacturing"
+            ? `recipe:${node.recipeId}`
+            : `${node.kind}:${display.title}`,
         type: `${display.subtitle.replace(/^.*?×\s*/, "")} ${index + 1}`,
         icon: display.machineIconId,
         sink: node.kind === "sink",
@@ -205,6 +211,48 @@ export function distributionScene(
     controller,
     async layout(signal: AbortSignal) {
       const { layoutDistribution } = await import("./distribution-elk-prototype");
+      // An invisible layout block reserves a column for each recipe. Its ports
+      // are the real member ports, so ELK can route without moving nodes later.
+      const groups = new Map<string, typeof snapshot.destinations>();
+      for (const endpoint of snapshot.destinations) {
+        const id = `recipe-group:${endpoint.groupKey}`;
+        const members = groups.get(id) ?? [];
+        members.push(endpoint);
+        groups.set(id, members);
+      }
+      const destinationIds = new Set(snapshot.destinations.map((endpoint) => endpoint.id));
+      const ports = (id: string, offsetY = 0) =>
+        displays.get(id)!.ports.map((port) => ({
+          id: portId({ nodeId: id, portKey: port.key }),
+          x: port.x,
+          y: port.y + offsetY,
+          width: 0,
+          height: 0,
+          layoutOptions: { "elk.port.side": port.direction === "input" ? "WEST" : "EAST" },
+        }));
+      const children: ElkNode[] = items
+        .filter((bounds) => !destinationIds.has(bounds.id))
+        .map((bounds) => ({
+          id: bounds.id,
+          width: bounds.width,
+          height: bounds.height,
+          layoutOptions: {
+            "elk.portConstraints": "FIXED_POS",
+            "elk.layered.layering.layerConstraint":
+              graph.nodes.find((node) => node.id === bounds.id)!.kind === "source"
+                ? "FIRST"
+                : "NONE",
+          },
+          ports: ports(bounds.id),
+        }));
+      for (const [id, members] of groups)
+        children.push({
+          id,
+          width: 256,
+          height: members.length * 320 - 64,
+          layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+          ports: members.flatMap((member, index) => ports(member.id, index * 320)),
+        });
       const result = await layoutDistribution(
         {
           id: "distribution",
@@ -224,28 +272,7 @@ export function distributionScene(
             "elk.layered.mergeEdges": "false",
             "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
           },
-          children: items.map((bounds) => ({
-            id: bounds.id,
-            width: bounds.width,
-            height: bounds.height,
-            layoutOptions: {
-              "elk.portConstraints": "FIXED_POS",
-              "elk.layered.layering.layerConstraint":
-                graph.nodes.find((node) => node.id === bounds.id)!.kind === "source"
-                  ? "FIRST"
-                  : graph.nodes.find((node) => node.id === bounds.id)!.kind === "destination"
-                    ? "LAST"
-                    : "NONE",
-            },
-            ports: displays.get(bounds.id)!.ports.map((port) => ({
-              id: portId({ nodeId: bounds.id, portKey: port.key }),
-              x: port.x,
-              y: port.y,
-              width: 0,
-              height: 0,
-              layoutOptions: { "elk.port.side": port.direction === "input" ? "WEST" : "EAST" },
-            })),
-          })),
+          children,
           edges: graph.edges.map((edge) => ({
             id: edge.id,
             sources: [portId(refs.get(edge.id)!.output)],
@@ -266,8 +293,15 @@ export function distributionScene(
         signal,
       );
       for (const child of result.children ?? []) {
-        const index = items.findIndex((entry) => entry.id === child.id);
-        items[index] = { ...items[index]!, x: grid(child.x ?? 0), y: grid(child.y ?? 0) };
+        const members = groups.get(child.id);
+        for (const [offset, id] of (members?.map((member) => member.id) ?? [child.id]).entries()) {
+          const index = items.findIndex((entry) => entry.id === id);
+          items[index] = {
+            ...items[index]!,
+            x: grid(child.x ?? 0),
+            y: grid((child.y ?? 0) + offset * 320),
+          };
+        }
       }
       for (const edge of result.edges ?? []) {
         const section = edge.sections?.[0];
