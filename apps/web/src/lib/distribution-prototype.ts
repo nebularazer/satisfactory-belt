@@ -1,5 +1,5 @@
 /** Adapter for the throwaway distribution preview. Never edits the source document. */
-import { CanvasController } from "@satisfactory-belt/canvas-core";
+import { CanvasController, portId } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem, CanvasLink, PortReference } from "@satisfactory-belt/canvas-core";
 import {
   buildDistributionPrototype,
@@ -109,49 +109,13 @@ export function distributionScene(
       : buildDistributionPrototype(snapshot.sources, snapshot.destinations, tier, mode);
   const endpoints = new Map([...snapshot.sources, ...snapshot.destinations].map((e) => [e.id, e]));
   const displays = new Map<string, NodeDisplay>();
-  const levels = new Map(graph.nodes.map((node) => [node.id, 0]));
-  for (let i = 0; i < graph.nodes.length; i++) {
-    let changed = false;
-    for (const edge of graph.edges) {
-      if (edge.feedback) continue;
-      const next = levels.get(edge.from)! + 1;
-      if (levels.get(edge.to)! < next) {
-        levels.set(edge.to, next);
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  const maxLevel = Math.max(0, ...levels.values());
-  for (const node of graph.nodes) if (node.kind === "destination") levels.set(node.id, maxLevel);
-  const columns = new Map<number, string[]>();
-  graph.nodes.forEach((node) => {
-    const level = levels.get(node.id)!;
-    const column = columns.get(level) ?? [];
-    column.push(node.id);
-    columns.set(level, column);
-  });
-  const items: CanvasItem[] = [];
-  for (const [level, ids] of [...columns].toSorted(([a], [b]) => a - b)) {
-    // Parent order gives short crossings while keeping the prototype deterministic.
-    const center = (id: string) => {
-      const parents = graph.edges
-        .filter((edge) => edge.to === id && !edge.feedback)
-        .map((edge) => items.find((n) => n.id === edge.from)?.y ?? 0);
-      return parents.reduce((a, b) => a + b, 0) / (parents.length || 1);
-    };
-    ids.sort((a, b) => center(a) - center(b));
-    ids.forEach((id, index) => {
-      const endpoint = endpoints.get(id);
-      items.push({
-        id,
-        x: level * 380,
-        y: (index - (ids.length - 1) / 2) * 230,
-        width: endpoint ? 256 : 96,
-        height: endpoint ? 160 : 96,
-      });
-    });
-  }
+  const items: CanvasItem[] = graph.nodes.map((node) => ({
+    id: node.id,
+    x: 0,
+    y: 0,
+    width: endpoints.has(node.id) ? 256 : 96,
+    height: endpoints.has(node.id) ? 128 : 96,
+  }));
   const refs = new Map<string, { output: PortReference; input: PortReference }>();
   const item = assets.catalog.items[snapshot.itemId];
   for (const node of graph.nodes) {
@@ -178,7 +142,7 @@ export function distributionScene(
           configuredItemIconIds: [],
           name: item?.name ?? "",
           x: side ? size : 0,
-          y: endpoint ? 96 : 48 + (index - (edges.length - 1) / 2) * 32,
+          y: endpoint ? 80 : 48 + (index - (edges.length - 1) / 2) * 32,
         };
       }),
     );
@@ -186,7 +150,7 @@ export function distributionScene(
       displays.set(node.id, {
         layout: "machine",
         size,
-        height: 160,
+        height: 128,
         title: endpoint.title,
         subtitle: endpoint.type,
         machineIconId: endpoint.icon,
@@ -208,8 +172,11 @@ export function distributionScene(
         ports,
       });
   }
+  const routed = new Map<string, CanvasLink>();
   const links = (): CanvasLink[] =>
     graph.edges.map((edge) => {
+      const route = routed.get(edge.id);
+      if (route) return route;
       const pair = refs.get(edge.id)!;
       const position = (ref: PortReference) => {
         const bounds = items.find((entry) => entry.id === ref.nodeId)!;
@@ -221,6 +188,7 @@ export function distributionScene(
       const bottom = Math.max(...items.map((n) => n.y + n.height)) + 120;
       return {
         id: edge.id,
+        labelFontSize: 14,
         ...pair,
         points: edge.feedback
           ? [
@@ -241,6 +209,10 @@ export function distributionScene(
         const index = items.findIndex((entry) => entry.id === move.id);
         items[index] = { ...items[index]!, ...move };
       });
+      for (const edge of graph.edges) {
+        if (moves.some((move) => move.id === edge.from || move.id === edge.to))
+          routed.delete(edge.id);
+      }
       controller.setLinks(links());
       controller.setItems([...items]);
     },
@@ -249,11 +221,84 @@ export function distributionScene(
   return {
     graph,
     controller,
+    async layout(signal: AbortSignal) {
+      const { layoutDistribution } = await import("./distribution-elk-prototype");
+      const result = await layoutDistribution(
+        {
+          id: "distribution",
+          layoutOptions: {
+            "elk.algorithm": "layered",
+            "elk.direction": "RIGHT",
+            "elk.edgeRouting": "ORTHOGONAL",
+            "elk.padding": "[top=32,left=32,bottom=32,right=32]",
+            "elk.spacing.nodeNode": "32",
+            "elk.spacing.edgeNode": "24",
+            "elk.spacing.edgeEdge": "24",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "88",
+            "elk.layered.spacing.edgeNodeBetweenLayers": "24",
+            "elk.layered.spacing.edgeEdgeBetweenLayers": "24",
+            "elk.layered.feedbackEdges": "true",
+            "elk.layered.mergeEdges": "false",
+            "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+          },
+          children: items.map((bounds) => ({
+            id: bounds.id,
+            width: bounds.width,
+            height: bounds.height,
+            layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+            ports: displays.get(bounds.id)!.ports.map((port) => ({
+              id: portId({ nodeId: bounds.id, portKey: port.key }),
+              x: port.x,
+              y: port.y,
+              width: 0,
+              height: 0,
+              layoutOptions: { "elk.port.side": port.direction === "input" ? "WEST" : "EAST" },
+            })),
+          })),
+          edges: graph.edges.map((edge) => ({
+            id: edge.id,
+            sources: [portId(refs.get(edge.id)!.output)],
+            targets: [portId(refs.get(edge.id)!.input)],
+            labels: [
+              {
+                text: `${formatPlanningNumber(edge.rate)}/min`,
+                width: 90,
+                height: edge.feedback ? 54 : 36,
+                layoutOptions: { "elk.edgeLabels.placement": "CENTER" },
+              },
+            ],
+          })),
+        },
+        signal,
+      );
+      for (const child of result.children ?? []) {
+        const index = items.findIndex((entry) => entry.id === child.id);
+        items[index] = { ...items[index]!, x: child.x ?? 0, y: child.y ?? 0 };
+      }
+      for (const edge of result.edges ?? []) {
+        const section = edge.sections?.[0];
+        if (!section) throw new Error("ELK did not route a preview belt.");
+        const label = edge.labels?.[0];
+        routed.set(edge.id, {
+          id: edge.id,
+          ...refs.get(edge.id)!,
+          points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint],
+          labelPosition:
+            label?.x === undefined || label.y === undefined
+              ? undefined
+              : { x: label.x + (label.width ?? 0) / 2, y: label.y + (label.height ?? 0) / 2 },
+          labelFontSize: 14,
+        });
+      }
+      controller.setLinks(links());
+      controller.setItems([...items]);
+    },
     getDisplay: (id: string) => displays.get(id),
     getLinkRates: (id: string) => {
       const edge = graph.edges.find((e) => e.id === id)!;
       return [
-        `${formatPlanningNumber(edge.rate)}/min · Mk.${edge.tier}${edge.feedback ? " · Return" : ""}`,
+        `${formatPlanningNumber(edge.rate)}/min`,
+        `Mk.${edge.tier}${edge.feedback ? "\nReturn" : ""}`,
       ];
     },
   };

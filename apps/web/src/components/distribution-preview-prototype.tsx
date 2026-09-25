@@ -57,11 +57,12 @@ function Preview({
     () => distributionScene(snapshot, assets, tier, mode),
     [snapshot, assets, tier, mode],
   );
+  const [readyScene, setReadyScene] = useState<typeof scene | null>(null);
   useEffect(() => {
     if (!host || scene.graph.error) return undefined;
     const abort = new AbortController();
-    void import("@satisfactory-belt/canvas-pixi")
-      .then(({ mountCanvas }) =>
+    void Promise.all([import("@satisfactory-belt/canvas-pixi"), scene.layout(abort.signal)])
+      .then(([{ mountCanvas }]) =>
         mountCanvas(host, scene.controller, {
           getDisplay: scene.getDisplay,
           getLinkRates: scene.getLinkRates,
@@ -75,12 +76,15 @@ function Preview({
       .then((view) => {
         if (abort.signal.aborted) return;
         scene.controller.command("fit");
+        // Start readable; Fit remains available for the complete overview.
+        if (scene.controller.getSnapshot().camera.zoom < 0.75) scene.controller.zoomTo(0.75);
         host
           ?.querySelector("canvas")
           ?.setAttribute(
             "aria-label",
             "Distribution preview. Drag to pan or rearrange, scroll to zoom. Changes are temporary.",
           );
+        setReadyScene(scene);
         view.focus();
       })
       .catch((reason: unknown) => {
@@ -167,7 +171,12 @@ function Preview({
           ) : (
             <div ref={setHost} className="absolute inset-0" />
           )}
-          {!scene.graph.error && !error && (
+          {!scene.graph.error && !error && readyScene !== scene && (
+            <output className="absolute inset-0 flex items-center justify-center bg-background text-sm text-muted-foreground">
+              Arranging distribution…
+            </output>
+          )}
+          {!scene.graph.error && !error && readyScene === scene && (
             <ButtonGroup
               aria-label="Preview zoom"
               className="absolute bottom-3 left-3 bg-background shadow-sm"

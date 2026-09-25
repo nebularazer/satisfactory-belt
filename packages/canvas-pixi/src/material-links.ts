@@ -111,7 +111,11 @@ export function drawMaterialLinks(
           label.style.fill = palette.title;
           label.style.stroke = { color: palette.card, width: 5 };
         }
-        const midpoint = pathMidpoint(points);
+        label.style.fontSize = "labelFontSize" in link ? (link.labelFontSize ?? 11) : 11;
+        const midpoint =
+          "labelPosition" in link && link.labelPosition
+            ? worldToScreen(link.labelPosition, camera)
+            : pathMidpoint(points);
         label.position.set(midpoint.x, midpoint.y);
         // Link graphics live in screen space; labels retain their canvas-space size.
         label.scale.set(camera.zoom);
