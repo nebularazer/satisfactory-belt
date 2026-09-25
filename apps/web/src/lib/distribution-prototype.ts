@@ -1,6 +1,6 @@
 /** Adapter for the throwaway distribution preview. Never edits the source document. */
 import { CanvasController, GRID_SIZE, portId } from "@satisfactory-belt/canvas-core";
-import type { CanvasItem, CanvasLink, PortReference } from "@satisfactory-belt/canvas-core";
+import type { CanvasItem, CanvasLink, Point, PortReference } from "@satisfactory-belt/canvas-core";
 import {
   buildDistributionPrototype,
   formatPlanningNumber,
@@ -15,6 +15,26 @@ export const PREVIEW_BELT_COLORS = [
   0x2563eb, 0xd97706, 0x059669, 0x9333ea, 0xe11d48, 0x0891b2,
 ] as const;
 const grid = (value: number) => Math.round(value / GRID_SIZE) * GRID_SIZE;
+
+/** Keep ELK's reserved label location on the final snapped route. */
+function labelOnRoute(position: Point, points: readonly Point[]): Point {
+  let closest = points[0]!;
+  let distance = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!,
+      b = points[i]!;
+    const candidate = {
+      x: Math.max(Math.min(a.x, b.x), Math.min(Math.max(a.x, b.x), position.x)),
+      y: Math.max(Math.min(a.y, b.y), Math.min(Math.max(a.y, b.y), position.y)),
+    };
+    const nextDistance = Math.hypot(candidate.x - position.x, candidate.y - position.y);
+    if (nextDistance < distance) {
+      closest = candidate;
+      distance = nextDistance;
+    }
+  }
+  return closest;
+}
 
 type Endpoint = {
   id: string;
@@ -191,6 +211,7 @@ export function distributionScene(
           layoutOptions: {
             "elk.algorithm": "layered",
             "elk.direction": "RIGHT",
+            "elk.separateConnectedComponents": "false",
             "elk.edgeRouting": "ORTHOGONAL",
             "elk.padding": "[top=32,left=32,bottom=32,right=32]",
             "elk.spacing.nodeNode": "64",
@@ -207,7 +228,15 @@ export function distributionScene(
             id: bounds.id,
             width: bounds.width,
             height: bounds.height,
-            layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+            layoutOptions: {
+              "elk.portConstraints": "FIXED_POS",
+              "elk.layered.layering.layerConstraint":
+                graph.nodes.find((node) => node.id === bounds.id)!.kind === "source"
+                  ? "FIRST"
+                  : graph.nodes.find((node) => node.id === bounds.id)!.kind === "destination"
+                    ? "LAST"
+                    : "NONE",
+            },
             ports: displays.get(bounds.id)!.ports.map((port) => ({
               id: portId({ nodeId: bounds.id, portKey: port.key }),
               x: port.x,
@@ -226,7 +255,10 @@ export function distributionScene(
                 text: formatPlanningNumber(edge.rate),
                 width: 64,
                 height: 32,
-                layoutOptions: { "elk.edgeLabels.placement": "CENTER" },
+                layoutOptions: {
+                  "elk.edgeLabels.placement": "CENTER",
+                  "elk.edgeLabels.inline": "true",
+                },
               },
             ],
           })),
@@ -241,21 +273,25 @@ export function distributionScene(
         const section = edge.sections?.[0];
         if (!section) throw new Error("ELK did not route a preview belt.");
         const label = edge.labels?.[0];
+        const points = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]
+          .map((point) => ({ x: grid(point.x), y: grid(point.y) }))
+          .filter(
+            (point, index, route) =>
+              index === 0 || point.x !== route[index - 1]!.x || point.y !== route[index - 1]!.y,
+          );
         routed.set(edge.id, {
           id: edge.id,
           ...refs.get(edge.id)!,
-          points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]
-            .map((point) => ({ x: grid(point.x), y: grid(point.y) }))
-            .filter(
-              (point, index, points) =>
-                index === 0 || point.x !== points[index - 1]!.x || point.y !== points[index - 1]!.y,
-            ),
+          points,
           color: PREVIEW_BELT_COLORS[graph.edges.find((entry) => entry.id === edge.id)!.tier - 1],
           dashed: graph.edges.find((entry) => entry.id === edge.id)!.feedback,
           labelPosition:
             label?.x === undefined || label.y === undefined
               ? undefined
-              : { x: label.x + (label.width ?? 0) / 2, y: label.y + (label.height ?? 0) / 2 },
+              : labelOnRoute(
+                  { x: label.x + (label.width ?? 0) / 2, y: label.y + (label.height ?? 0) / 2 },
+                  points,
+                ),
           labelFontSize: 14,
         });
       }

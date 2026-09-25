@@ -103,16 +103,10 @@ export function buildDistributionPrototype(
     }
   }
   const received = new Map(remaining.map((destination) => [destination.id, [] as Stream[]]));
-  // Pack sources into independent lanes; never introduce a trunk exceeding the belt tier.
-  const lanes: Stream[][] = [];
+  // Split each supplier independently. Merge only where a consumer needs
+  // contributions from multiple suppliers (or where a return loop rejoins).
   for (const source of unmatchedSources) {
-    const stream = { from: source.id, rate: source.rate };
-    const lane = lanes.find((values) => sum(values) + stream.rate <= capacity + epsilon);
-    if (lane) lane.push(stream);
-    else lanes.push([stream]);
-  }
-  for (const lane of lanes) {
-    let stream = merge(lane);
+    let stream = { from: source.id, rate: source.rate };
     let left = stream.rate;
     const allocations: DistributionEndpoint[] = [];
     for (const target of remaining) {
