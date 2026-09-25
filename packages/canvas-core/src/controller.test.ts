@@ -456,3 +456,36 @@ it("maps undo/redo shortcuts for Control and Command without plain-key intercept
   expect(historyCommandForKey({ ...key, key: "y", metaKey: true })).toBeUndefined();
   expect(historyCommandForKey({ ...key, ctrlKey: true, altKey: true })).toBeUndefined();
 });
+
+it.each([{}, { touch: true }, { marquee: true }, { additive: true }])(
+  "read-only canvases pan over nodes without selecting or moving them (%j)",
+  (modifiers) => {
+    const onMove = vi.fn();
+    const onRoute = vi.fn();
+    const canvas = new CanvasController({ items, onMove, onRoute, readOnly: true });
+    canvas.resize({ width: 800, height: 600 });
+    canvas.setLinks([
+      {
+        id: "belt",
+        output: { nodeId: "a", portKey: "out" },
+        input: { nodeId: "b", portKey: "in" },
+        points: [
+          { x: 200, y: 140 },
+          { x: 250, y: 140 },
+        ],
+      },
+    ]);
+    canvas.selectLink("belt");
+    canvas.pointerDown(pointer(120, 120, modifiers));
+    canvas.pointerMove(pointer(160, 160, modifiers));
+    expect(canvas.getSnapshot().interaction).toBe("pan");
+    canvas.pointerUp(pointer(160, 160, modifiers));
+    canvas.command("move-right");
+    expect(canvas.getSnapshot().items).toEqual(items);
+    expect(canvas.getSnapshot().selection.size).toBe(0);
+    expect(canvas.getSnapshot().linkSelection.selected).toBeNull();
+    expect(canvas.getSnapshot().camera).toMatchObject({ x: 40, y: 40 });
+    expect(onMove).not.toHaveBeenCalled();
+    expect(onRoute).not.toHaveBeenCalled();
+  },
+);
