@@ -253,45 +253,94 @@ export function distributionScene(
           layoutOptions: { "elk.portConstraints": "FIXED_POS" },
           ports: members.flatMap((member, index) => ports(member.id, index * 320)),
         });
-      const result = await layoutDistribution(
-        {
-          id: "distribution",
-          layoutOptions: {
-            "elk.algorithm": "layered",
-            "elk.direction": "RIGHT",
-            "elk.separateConnectedComponents": "false",
-            "elk.edgeRouting": "ORTHOGONAL",
-            "elk.padding": "[top=32,left=32,bottom=32,right=32]",
-            "elk.spacing.nodeNode": "64",
-            "elk.spacing.edgeNode": "64",
-            "elk.spacing.edgeEdge": "64",
-            "elk.layered.spacing.nodeNodeBetweenLayers": "128",
-            "elk.layered.spacing.edgeNodeBetweenLayers": "64",
-            "elk.layered.spacing.edgeEdgeBetweenLayers": "64",
-            "elk.layered.feedbackEdges": "true",
-            "elk.layered.mergeEdges": "false",
-            "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
-          },
-          children,
-          edges: graph.edges.map((edge) => ({
-            id: edge.id,
-            sources: [portId(refs.get(edge.id)!.output)],
-            targets: [portId(refs.get(edge.id)!.input)],
-            labels: [
-              {
-                text: formatPlanningNumber(edge.rate),
-                width: 64,
-                height: 32,
-                layoutOptions: {
-                  "elk.edgeLabels.placement": "CENTER",
-                  "elk.edgeLabels.inline": "true",
-                },
-              },
-            ],
-          })),
+      const layoutGraph: ElkNode = {
+        id: "distribution",
+        layoutOptions: {
+          "elk.algorithm": "layered",
+          "elk.direction": "RIGHT",
+          "elk.separateConnectedComponents": "false",
+          "elk.edgeRouting": "ORTHOGONAL",
+          "elk.padding": "[top=32,left=32,bottom=32,right=32]",
+          "elk.spacing.nodeNode": "64",
+          "elk.spacing.edgeNode": "64",
+          "elk.spacing.edgeEdge": "64",
+          "elk.layered.spacing.nodeNodeBetweenLayers": "128",
+          "elk.layered.spacing.edgeNodeBetweenLayers": "64",
+          "elk.layered.spacing.edgeEdgeBetweenLayers": "64",
+          "elk.layered.feedbackEdges": "true",
+          "elk.layered.mergeEdges": "false",
+          "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
         },
-        signal,
+        children,
+        edges: graph.edges.map((edge) => ({
+          id: edge.id,
+          sources: [portId(refs.get(edge.id)!.output)],
+          targets: [portId(refs.get(edge.id)!.input)],
+          labels: [
+            {
+              text: formatPlanningNumber(edge.rate),
+              width: 64,
+              height: 32,
+              layoutOptions: {
+                "elk.edgeLabels.placement": "CENTER",
+                "elk.edgeLabels.inline": "true",
+              },
+            },
+          ],
+        })),
+      };
+      // Recipe blocks join related branches into one component. Lay independent
+      // components out separately so their suppliers and routes cannot interleave.
+      const owners = new Map(
+        children.flatMap((child) => child.ports!.map((port) => [port.id, child.id] as const)),
       );
+      const neighbors = new Map(children.map((child) => [child.id, new Set<string>()]));
+      for (const edge of layoutGraph.edges!) {
+        const source = owners.get(edge.sources[0]!)!;
+        const target = owners.get(edge.targets[0]!)!;
+        neighbors.get(source)!.add(target);
+        neighbors.get(target)!.add(source);
+      }
+      const remaining = new Set(children.map((child) => child.id));
+      const result: ElkNode = { id: "distribution", children: [], edges: [] };
+      let offsetY = 0;
+      while (remaining.size) {
+        const component = new Set<string>();
+        const pending = [remaining.values().next().value!];
+        while (pending.length) {
+          const id = pending.pop()!;
+          if (!remaining.delete(id)) continue;
+          component.add(id);
+          pending.push(...neighbors.get(id)!);
+        }
+        // Each layout owns an ELK worker; run sequentially to bound worker memory.
+        // eslint-disable-next-line no-await-in-loop
+        const section = await layoutDistribution(
+          {
+            ...layoutGraph,
+            children: children.filter((child) => component.has(child.id)),
+            edges: layoutGraph.edges!.filter((edge) =>
+              component.has(owners.get(edge.sources[0]!)!),
+            ),
+          },
+          signal,
+        );
+        for (const child of section.children ?? []) {
+          child.y = (child.y ?? 0) + offsetY;
+          result.children!.push(child);
+        }
+        const translate = (point: Point) => ({ x: point.x, y: point.y + offsetY });
+        for (const edge of section.edges ?? []) {
+          for (const route of edge.sections ?? []) {
+            route.startPoint = translate(route.startPoint);
+            route.endPoint = translate(route.endPoint);
+            route.bendPoints = route.bendPoints?.map(translate);
+          }
+          for (const label of edge.labels ?? []) label.y = (label.y ?? 0) + offsetY;
+          result.edges!.push(edge);
+        }
+        offsetY += Math.ceil((section.height ?? 0) / GRID_SIZE) * GRID_SIZE + 128;
+      }
       for (const child of result.children ?? []) {
         const members = groups.get(child.id);
         for (const [offset, id] of (members?.map((member) => member.id) ?? [child.id]).entries()) {
