@@ -19,3 +19,13 @@ it.each([
 ])("formats %s without unnecessary precision: %s", (value, expected) => {
   expect(formatPlanningNumber(value)).toBe(expected);
 });
+
+it.each([
+  [200 / 3, "66 2/3"],
+  [250 / 3, "83 1/3"],
+  [1 / 8, "1/8"],
+  [2000 / 13, "153.85"],
+  [100, "100"],
+])("formats %s as a mixed number when possible", (value, expected) => {
+  expect(formatPlanningNumber(value, "mixed")).toBe(expected);
+});

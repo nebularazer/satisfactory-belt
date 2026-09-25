@@ -103,6 +103,15 @@ describe("camera", () => {
     expect(fitCamera([], { width: 800, height: 600 })).toEqual({ x: 0, y: 0, zoom: 1 });
   });
 
+  it("centers a small scene without fitting above 100%", () => {
+    const camera = fitCamera([{ x: 100, y: -200, width: 256, height: 256 }], {
+      width: 1280,
+      height: 800,
+    });
+    expect(camera.zoom).toBe(1);
+    expect(worldToScreen({ x: 228, y: -72 }, camera)).toEqual({ x: 640, y: 400 });
+  });
+
   it("preserves the viewport center on resize and actual-size zoom", () => {
     const { canvas } = setup();
     canvas.command("fit");

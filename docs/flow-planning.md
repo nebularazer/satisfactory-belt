@@ -64,9 +64,14 @@ constraints using a continuous linear program. Recipe ratios and material conser
 are simultaneous equations, so recycling loops use the same rules as ordinary chains.
 Targets are bounded by technical document limits and their requested recipe workload. Multiple product
 targets on one recipe use the largest required workload; unavoidable coproduct surplus
-remains visible. Lexicographic objectives meet targets first, minimize missing input,
-use finite supply for automatic terminal production, then minimize machine workload.
-Missing input slack supports incomplete plans; it is never reported as real supply.
+remains visible. Lexicographic objectives meet targets first, maximize terminal
+production within authored limits, then minimize assumed external inputs, surplus
+and machine workload. Unconnected recipe inputs assume external supply while a
+plan is unfinished. Adding an upstream recipe moves the requirement upstream without
+collapsing downstream production to zero. Once an input is connected, only its actual
+suppliers can feed it; finite upstream capacity can reduce achievable production
+without changing the authored output limit. Missing-input slack represents a planning
+assumption, not material delivered by a link.
 The JavaScript LP solver is contained in this module; callers do not manage its variables.
 
 `prepareFlowPlan(document, catalog)` separately exposes ports, compatible connections,
@@ -101,3 +106,27 @@ order, equivalent purity/count changes, undo/redo, and surplus storage. The recy
 reference verifies both groups can become 20 at 100% while still collecting 600 plastic
 and 750 rubber. Inspector interaction tests exercise rate editing, the shared production lock, count and clock controls.
 Existing material-allocation, facility, canvas and configuration checks remain in place.
+
+## Deferred follow-up
+
+- Visually distinguish unconnected inputs that assume external supply. No marker or
+  link-color change is included yet; consider this alongside Flow status and Build
+  belt-capacity colors.
+
+## AWESOME Sink
+
+Sinks only consume surplus. Production receives material first; sinking then uses spare
+finite supply. Automatic groups may grow to process that supply, but unconstrained
+upstream sources cannot grow solely to feed a surplus sink. Automatically calculated
+machine counts are not capacity limits. Authored machine/output limits and finite
+extractors establish available supply.
+
+The inspector explains that automatic suppliers reduce production as demand falls.
+An authored output or machine limit keeps finite supply available for surplus.
+Setting a manual clock on a group with No Limit also fixes its current whole-machine
+count as a machine limit. Existing output or machine limits remain unchanged. Auto
+clock continues to adjust clocks within the selected limit; No Limit releases the count.
+The Inputs section displays actual allocated per-material rates. Sinks have no rate
+or mode settings, and saved plans containing the removed sink rate setting are rejected.
+
+Follow-up: display sink points/min, accounting separately for normal and DNA points.

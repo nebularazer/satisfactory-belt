@@ -110,7 +110,7 @@ export function CatalogSearchDetails({
   );
   function quantities(title: string, entries: readonly Ingredient[], cyclesPerMinute: number) {
     return (
-      <section className="h-36 space-y-2 overflow-y-auto overscroll-contain">
+      <section className="space-y-2 sm:h-36 sm:overflow-y-auto sm:overscroll-contain">
         <h4 className="text-sm font-medium">{title}</h4>
         <ul className="space-y-1.5">
           {entries.map((quantity) => {
@@ -156,7 +156,7 @@ export function CatalogSearchDetails({
     <TooltipProvider delay={700} closeDelay={0} timeout={0}>
       <div
         ref={panelRef}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain"
       >
         <div className="shrink-0">
           <div className="px-4 pb-4">

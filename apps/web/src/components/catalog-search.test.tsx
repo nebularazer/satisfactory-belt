@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -73,4 +73,60 @@ it("opens details with Alt+Enter after hovering without placing a building", asy
   await user.keyboard("{Alt>}{Enter}{/Alt}");
   expect(add).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Back to results" })).toBeTruthy();
+});
+
+it("leaves the first mobile catalog body gesture available for native scrolling", async () => {
+  const media = window.matchMedia("(max-width: 639px)");
+  vi.spyOn(window, "matchMedia").mockReturnValue(Object.assign(media, { matches: true }));
+  render(
+    <CatalogSearch
+      assets={inspectorAssets()}
+      open
+      onOpenChange={vi.fn()}
+      finalFocus={finalFocus}
+    />,
+  );
+  const row = await screen.findByRole("row", { name: /Alien Power Augmenter/ });
+  // jsdom has no hit testing or native scrolling; verify that the drawer does not
+  // cancel the first touchmove, which would prevent the browser from scrolling.
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => row });
+  try {
+    const start = { identifier: 1, clientX: 100, clientY: 300, target: row };
+    fireEvent.touchStart(row, { touches: [start], changedTouches: [start] });
+    const end = { ...start, clientY: 220 };
+    const move = createEvent.touchMove(row, {
+      touches: [end],
+      changedTouches: [end],
+      cancelable: true,
+    });
+    fireEvent(row, move);
+    expect(move.defaultPrevented).toBe(false);
+    fireEvent.touchEnd(row, { touches: [], changedTouches: [end] });
+    expect(screen.getByRole("dialog").getAttribute("aria-modal")).not.toBe("true");
+    expect(document.querySelector('[data-slot="drawer-overlay"]')).toBeNull();
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  } finally {
+    Reflect.deleteProperty(document, "elementFromPoint");
+  }
+});
+
+it("removes the closed mobile catalog immediately so another sheet can open", () => {
+  const media = window.matchMedia("(max-width: 639px)");
+  vi.spyOn(window, "matchMedia").mockReturnValue(Object.assign(media, { matches: true }));
+  const assets = inspectorAssets();
+  const onOpenChange = vi.fn();
+  const { rerender } = render(
+    <CatalogSearch assets={assets} open onOpenChange={onOpenChange} finalFocus={finalFocus} />,
+  );
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  rerender(
+    <CatalogSearch
+      assets={assets}
+      open={false}
+      onOpenChange={onOpenChange}
+      finalFocus={finalFocus}
+    />,
+  );
+  expect(document.querySelector('[data-slot="drawer-popup"]')).toBeNull();
 });

@@ -17,6 +17,10 @@ import {
   resizeFlowGroups,
   rebalanceFlowGroup,
   isFlowGroup,
+  flowCapacityNode,
+  withProductionLimit,
+  productionLimit,
+  convertProductionLimit,
   isProductionLocked,
   validateFlowSettings,
   reconcileFlowTargets,
@@ -46,6 +50,7 @@ import {
   resolveSemanticPorts,
 } from "@satisfactory-belt/factory-core";
 import type {
+  ProductionLimit,
   ExternalFlow,
   TransportRoute,
   DepotResearch,
@@ -64,6 +69,8 @@ import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 /** The host owns document edits and the workspace-local clipboard. */
 export function createFactoryEditor(catalog: GameCatalog, initialDocument: FactoryDocument) {
+  // Reject unsupported authored data before sizing can normalize it.
+  for (const node of initialDocument.nodes) resolveFactoryNode(node, catalog);
   const history = new EditHistory<FactoryDocument>(
     resizeFlowGroups(reconcileTransportConnections(initialDocument), catalog),
   );
@@ -455,6 +462,10 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     value: number,
   ) {
     editMachine(id, (node) => {
+      const authored = isFlowGroup(node) ? flowCapacityNode(node) : node;
+      const authoredClocks = new Map(
+        authored.machines.map((member) => [member.id, member.clockPercent]),
+      );
       const next = setMachineSetting(node, catalog, scope, setting, value);
       if (!isFlowGroup(next)) return next;
       return {
@@ -468,7 +479,11 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
                   memberClocks: Object.fromEntries(
                     next.machines.map((member) => [
                       member.id,
-                      member.clockPercent || next.flow?.clockPercent || 100,
+                      member.id === scope
+                        ? value
+                        : (next.flow?.memberClocks?.[member.id] ??
+                          next.flow?.clockPercent ??
+                          (authoredClocks.get(member.id) || 100)),
                     ]),
                   ),
                 }
@@ -478,11 +493,87 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     });
   }
   function setMachineCount(id: string, count: number) {
+    editMachine(id, (node) => {
+      if (isFlowGroup(node) && isProductionLocked(node))
+        return rebalanceFlowGroup(node, catalog, count) ?? node;
+      const resized = resizeMachineGroup(node, count, () => crypto.randomUUID());
+      return isFlowGroup(resized)
+        ? { ...resized, flow: { ...resized.flow, machineLimit: count } }
+        : resized;
+    });
+  }
+  function setAutomaticSizing(id: string, automatic: boolean) {
     editMachine(id, (node) =>
-      isFlowGroup(node) && isProductionLocked(node)
-        ? (rebalanceFlowGroup(node, catalog, count) ?? node)
-        : resizeMachineGroup(node, count, () => crypto.randomUUID()),
+      isFlowGroup(node)
+        ? { ...node, flow: { ...node.flow, machineLimit: automatic ? null : node.machines.length } }
+        : node,
     );
+  }
+  function setLimit(id: string, limit: ProductionLimit) {
+    editMachine(id, (node) =>
+      isFlowGroup(node) ? withProductionLimit(node, catalog, limit) : node,
+    );
+  }
+  function convertLimit(id: string, unit: string) {
+    editMachine(id, (node) =>
+      isFlowGroup(node) ? convertProductionLimit(node, catalog, unit) : node,
+    );
+  }
+  function setClock(id: string, clock: number | null, scope: MachineScope = "all") {
+    editMachine(id, (node) => {
+      if (!isFlowGroup(node)) return node;
+      // A manual clock on an unconstrained group fixes its current whole-machine
+      // count. Otherwise the solver could replace one machine at 50% with half
+      // a machine at 100%, leaving no additional output for a surplus sink.
+      const limit = productionLimit(node);
+      node = withProductionLimit(
+        node,
+        catalog,
+        clock !== null && !limit ? { kind: "machines", value: node.machines.length } : limit,
+      );
+      if (scope !== "all" && clock !== null) {
+        // Editing one member authors manual clocks for the group without flattening
+        // existing overrides or inheriting temporarily underclocked solver results.
+        const configured = flowCapacityNode(node);
+        const memberClocks = Object.fromEntries(
+          configured.machines.map((member) => [
+            member.id,
+            node.flow?.memberClocks?.[member.id] ??
+              node.flow?.clockPercent ??
+              (member.clockPercent || 100),
+          ]),
+        );
+        const manual = {
+          ...configured,
+          flow: { ...node.flow, clockMode: "manual" as const, utilization: 1, memberClocks },
+          machines: configured.machines.map((member) => ({
+            ...member,
+            clockPercent: memberClocks[member.id]!,
+          })),
+        };
+        const changed = setMachineSetting(manual, catalog, scope, "clockPercent", clock);
+        if (!isFlowGroup(changed)) return node;
+        const next = {
+          ...changed,
+          flow: { ...manual.flow, memberClocks: { ...memberClocks, [scope]: clock } },
+        };
+        validateFlowSettings(next, catalog);
+        return next;
+      }
+      const next = {
+        ...node,
+        flow: {
+          ...node.flow,
+          clockMode: clock === null ? ("auto" as const) : ("manual" as const),
+          clockPercent: clock ?? 100,
+          memberClocks: undefined,
+          utilization: 1,
+        },
+        machines: node.machines.map((member) => ({ ...member, clockPercent: clock ?? 100 })),
+      };
+      validateFlowSettings(next, catalog);
+      return next;
+    });
   }
   function setFlowClock(id: string, clock: number) {
     const node = history.getSnapshot().state.nodes.find((entry) => entry.id === id);
@@ -773,6 +864,10 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       editMachine(id, (node) => setMatrixSupply(node, catalog, scope, supplied)),
     setOperatingSetting,
     setMachineCount,
+    setAutomaticSizing,
+    setLimit,
+    convertLimit,
+    setClock,
     setFlowClock,
     rebalanceAt100: (id: string) =>
       editMachine(id, (node) =>

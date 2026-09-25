@@ -1,0 +1,257 @@
+/* oxlint-disable oxc/no-map-spread -- Immutable fixtures. */
+import { isFlowGroup, productionLimit, resolveFactoryNode } from "@satisfactory-belt/factory-core";
+import { expect, it } from "vitest";
+
+import { minerFlowFixture } from "../test/flow-fixture";
+import { recyclingFlowFixture } from "../test/recycling-flow-fixture";
+import { createFactoryEditor } from "./factory-editor";
+
+it("keeps an output limit stable across manual clocks and Auto rounding", () => {
+  const { assets, smelter } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, { nodes: [smelter], links: [] });
+  editor.setLimit(smelter.id, { kind: "output", itemId: "iron", value: 75 });
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    machines: Array.from({ length: 3 }, () =>
+      expect.objectContaining({ clockPercent: expect.closeTo(250 / 3) }),
+    ),
+  });
+  editor.setClock(smelter.id, 100);
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    flow: {
+      outputLimit: { itemId: "iron", perMinute: 75 },
+      machineLimit: null,
+      clockMode: "manual",
+      utilization: expect.closeTo(5 / 6),
+    },
+    machines: Array.from({ length: 3 }, () => expect.objectContaining({ clockPercent: 100 })),
+  });
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("75");
+  expect(resolveFactoryNode(editor.getNode(smelter.id)!, assets.catalog)).toMatchObject({
+    powerLabel: "10 MW",
+  });
+  editor.setClock(smelter.id, 50);
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    flow: { outputLimit: { itemId: "iron", perMinute: 75 }, utilization: 1 },
+    machines: Array.from({ length: 5 }, () => expect.objectContaining({ clockPercent: 50 })),
+  });
+  editor.setClock(smelter.id, null);
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    flow: { outputLimit: { itemId: "iron", perMinute: 75 }, clockMode: "auto" },
+    machines: Array.from({ length: 3 }, () =>
+      expect.objectContaining({ clockPercent: expect.closeTo(250 / 3) }),
+    ),
+  });
+});
+
+it("converts the authored machine limit rather than temporarily used throughput", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setLimit("miner", { kind: "machines", value: 1 });
+  editor.setLimit("smelter", { kind: "output", itemId: "iron", value: 30 });
+  expect(editor.getPortRate("miner", "output:copper")).toBe("30");
+  editor.convertLimit("miner", "copper");
+  expect(editor.getNode("miner")).toMatchObject({
+    flow: { machineLimit: null, outputLimit: { itemId: "copper", perMinute: 120 } },
+  });
+  editor.setOperatingSetting("miner", "all", "purity", 2);
+  expect(editor.getNode("miner")).toMatchObject({
+    flow: { outputLimit: { itemId: "copper", perMinute: 120 } },
+  });
+  editor.convertLimit("miner", "machines");
+  expect(editor.getNode("miner")).toMatchObject({ flow: { machineLimit: 1, targets: {} } });
+});
+
+it("keeps machine limits through clock edits, shortages, undo and serialized reload", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setLimit("miner", { kind: "machines", value: 1 });
+  editor.setLimit("smelter", { kind: "output", itemId: "iron", value: 90 });
+  editor.setClock("miner", 100);
+  expect(editor.getNode("miner")).toMatchObject({
+    flow: { machineLimit: 1, utilization: 0.75 },
+    machines: [expect.objectContaining({ clockPercent: 100 })],
+  });
+  editor.setClock("miner", 50);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("60");
+  expect(editor.getNode("smelter")).toMatchObject({
+    flow: { outputLimit: { itemId: "iron", perMinute: 90 } },
+  });
+  const saved = editor.history.getSnapshot().state;
+  const restored = createFactoryEditor(assets.catalog, structuredClone(saved));
+  expect(restored.getPortRate("smelter", "output:iron")).toBe("60");
+  editor.historyCommand("undo");
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("90");
+  editor.historyCommand("redo");
+  expect(editor.history.getSnapshot().state).toBe(saved);
+  editor.setLimit("miner", null);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("90");
+  const miner = editor.getNode("miner")!;
+  expect(isFlowGroup(miner) && productionLimit(miner)).toBeNull();
+});
+
+it("rejects invalid limits atomically", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  const before = editor.history.getSnapshot().state;
+  expect(() => editor.setLimit("miner", { kind: "machines", value: 1.5 })).toThrow();
+  expect(() => editor.setLimit("miner", { kind: "output", itemId: "iron", value: 60 })).toThrow();
+  expect(() => editor.setClock("miner", 300)).toThrow();
+  expect(editor.history.getSnapshot().state).toBe(before);
+});
+
+it("treats an output limit as a ceiling and does not force unused production", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setLimit("miner", { kind: "output", itemId: "copper", value: 120 });
+  editor.setLimit("smelter", { kind: "output", itemId: "iron", value: 45 });
+  expect(editor.getPortRate("miner", "output:copper")).toBe("45");
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("45");
+  editor.setClock("miner", 200);
+  expect(editor.getPortRate("miner", "output:copper")).toBe("45");
+  expect(editor.getNode("miner")).toMatchObject({
+    flow: { outputLimit: { itemId: "copper", perMinute: 120 } },
+    machines: [expect.objectContaining({ clockPercent: 200 })],
+  });
+  editor.setLimit("smelter", null);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("120");
+});
+
+it("preserves three 100% clocks and one 50% clock through supply changes and reload", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setLimit("smelter", { kind: "machines", value: 4 });
+  const smelter = editor.getNode("smelter")!;
+  if (!isFlowGroup(smelter)) throw new Error("Expected smelter");
+  editor.setClock("smelter", 50, smelter.machines[3]!.id);
+  const expected = [100, 100, 100, 50].map((clockPercent) =>
+    expect.objectContaining({ clockPercent }),
+  );
+  expect(editor.getNode("smelter")).toMatchObject({ machines: expected });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("105");
+  editor.setOperatingSetting("miner", "all", "purity", 0.5);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("60");
+  expect(editor.getNode("smelter")).toMatchObject({ machines: expected });
+  const reopened = createFactoryEditor(
+    assets.catalog,
+    structuredClone(editor.history.getSnapshot().state),
+  );
+  expect(reopened.getNode("smelter")).toMatchObject({ machines: expected });
+  reopened.setOperatingSetting("miner", "all", "purity", 1);
+  expect(reopened.getPortRate("smelter", "output:iron")).toBe("105");
+  expect(reopened.getNode("smelter")).toMatchObject({ machines: expected });
+  expect(() => reopened.setClock("smelter", 50, "missing-member")).toThrow();
+});
+
+it("clears a standalone output limit without keeping its solved count or underclock", () => {
+  const { assets, smelter } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, { nodes: [smelter], links: [] });
+  editor.setLimit(smelter.id, { kind: "output", itemId: "iron", value: 136 });
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("136");
+  editor.setLimit(smelter.id, null);
+  expect(editor.getNode(smelter.id)).toMatchObject({
+    flow: { machineLimit: null, outputLimit: undefined, utilization: 1 },
+    machines: [expect.objectContaining({ clockPercent: 100 })],
+  });
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("30");
+  editor.historyCommand("undo");
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("136");
+  editor.historyCommand("redo");
+  expect(editor.getPortRate(smelter.id, "output:iron")).toBe("30");
+});
+
+it("recalculates from connected supply after clearing a 136/min limit", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setOperatingSetting("miner", "all", "purity", 2);
+  editor.setLimit("smelter", { kind: "output", itemId: "iron", value: 136 });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("136");
+  editor.setLimit("smelter", null);
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("240");
+});
+
+it("rejects a saved mixed-purity miner before sizing can normalize its members", () => {
+  const { assets, document, miner } = minerFlowFixture();
+  if (miner.kind !== "extractor") throw new Error("Expected miner");
+  const invalid = {
+    ...miner,
+    flow: { machineLimit: 1 },
+    machines: [
+      { ...miner.machines[0]!, id: "normal", purity: 1 as const },
+      { ...miner.machines[0]!, id: "pure", purity: 2 as const },
+    ],
+  };
+  expect(() =>
+    createFactoryEditor(assets.catalog, {
+      ...document,
+      nodes: document.nodes.map((node) => (node.id === miner.id ? invalid : node)),
+    }),
+  ).toThrow("one shared purity");
+});
+
+it("shows used machine counts on cards while keeping the configured limit", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setOperatingSetting("miner", "all", "purity", 0.5);
+  editor.setLimit("smelter", { kind: "machines", value: 4 });
+  editor.setClock("smelter", 100);
+  const display = () => resolveFactoryNode(editor.getNode("smelter")!, assets.catalog);
+  expect(display()).toMatchObject({
+    subtitle: "2 / 4× Smelter",
+    subtitleTooltip: "2 machines used · 4 machines configured",
+    clockLabel: "100%",
+    powerLabel: "8 MW",
+  });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("60");
+  expect(editor.getNode("smelter")).toMatchObject({ flow: { machineLimit: 4 } });
+  const limited = editor.getNode("smelter")!;
+  if (!isFlowGroup(limited)) throw new Error("Expected smelter");
+  expect(productionLimit(limited)).toEqual({ kind: "machines", value: 4 });
+  editor.setClock("smelter", 50);
+  expect(display()).toMatchObject({ subtitle: "4 / 4× Smelter", clockLabel: "50%" });
+  editor.setClock("smelter", null);
+  expect(display()).toMatchObject({ subtitle: "4 / 4× Smelter", clockLabel: "50%" });
+  editor.setClock("smelter", 100);
+  editor.setLimit("smelter", { kind: "output", itemId: "iron", value: 45 });
+  expect(display()).toMatchObject({ subtitle: "1½× Smelter", powerLabel: "6 MW" });
+  const smelter = editor.getNode("smelter")!;
+  if (!isFlowGroup(smelter)) throw new Error("Expected smelter");
+  expect(
+    resolveFactoryNode({ ...smelter, flow: { ...smelter.flow, utilization: 0 } }, assets.catalog),
+  ).toMatchObject({ subtitle: "0× Smelter", powerLabel: "0 MW" });
+});
+
+it("shows fractional usage beside the authored machine count", () => {
+  const { assets, document } = minerFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  editor.setLimit("miner", { kind: "output", itemId: "copper", value: 15 });
+  editor.setLimit("smelter", { kind: "machines", value: 3 });
+  editor.setClock("smelter", 100);
+  expect(editor.getDisplay("smelter")).toMatchObject({
+    subtitle: "½ / 3× Smelter",
+    subtitleTooltip: "½ machine used · 3 machines configured",
+  });
+  expect(editor.getPortRate("smelter", "output:iron")).toBe("15");
+});
+
+it("marks only the selected coproduct port with its authored output limit", () => {
+  const { assets, document } = recyclingFlowFixture();
+  const editor = createFactoryEditor(assets.catalog, document);
+  const id = "recycling-residue";
+  const limitedPorts = () => editor.getDisplay(id)!.ports.filter((port) => port.outputLimitLabel);
+  editor.setLimit(id, { kind: "output", itemId: "Desc_PolymerResin_C", value: 150 });
+  expect(limitedPorts()).toMatchObject([
+    { direction: "output", itemId: "Desc_PolymerResin_C", outputLimitLabel: "150" },
+  ]);
+  editor.convertLimit(id, "Desc_HeavyOilResidue_C");
+  expect(limitedPorts()).toMatchObject([
+    { direction: "output", itemId: "Desc_HeavyOilResidue_C", outputLimitLabel: "300" },
+  ]);
+  expect(editor.getPortRate(id, "output:Desc_HeavyOilResidue_C")).not.toContain("/");
+  for (const link of document.links) {
+    expect(editor.getLinkRates(link.id).some((rate) => rate.includes("/"))).toBe(false);
+  }
+  editor.convertLimit(id, "machines");
+  expect(limitedPorts()).toEqual([]);
+  editor.setLimit(id, null);
+  expect(limitedPorts()).toEqual([]);
+});

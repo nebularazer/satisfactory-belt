@@ -4,8 +4,6 @@
 import {
   DEFAULT_SPLITTER_PROGRAM,
   SPLITTER_OUTPUTS,
-  commonSetting,
-  scopedMachines,
   withRecipe,
 } from "@satisfactory-belt/factory-core";
 import type {
@@ -80,7 +78,7 @@ export function InspectorConfiguration({
       entry.resourceIds.includes(node.resourceId),
     );
     if (extractor.resourceIds.length <= 1 && tiers.length <= 1 && !extractor.hasPurity) return null;
-    const purity = commonSetting(scopedMachines(node, scope), "purity");
+    const purity = node.machines[0]!.purity ?? 1;
     return (
       <div className="space-y-3">
         {extractor.resourceIds.length > 1 && (
@@ -100,6 +98,7 @@ export function InspectorConfiguration({
         {tiers.length > 1 && (
           <InspectorButtonGroup
             label="Miner tier"
+            disabled={scope !== "all"}
             value={node.extractorId}
             options={tiers.map((e) => ({
               value: e.id,
@@ -113,10 +112,11 @@ export function InspectorConfiguration({
         {extractor.hasPurity && (
           <InspectorButtonGroup
             label="Purity"
-            value={purity === null ? null : String(purity)}
+            disabled={scope !== "all"}
+            value={String(purity)}
             options={PURITY_OPTIONS}
             onChange={(value) =>
-              editor.setOperatingSetting(node.id, scope, "purity", Number(value))
+              editor.setOperatingSetting(node.id, "all", "purity", Number(value))
             }
           />
         )}

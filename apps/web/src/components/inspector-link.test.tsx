@@ -10,6 +10,6 @@ it("keeps link allocation visible in an unfinished plan", () => {
   const { assets, document } = minerFlowFixture();
   const editor = createFactoryEditor(assets.catalog, document);
   render(<InspectorLink link={document.links[0]!} editor={editor} assets={assets} />);
-  expect(screen.getByText("30 items/min")).toBeTruthy();
+  expect(screen.getByText("120 items/min")).toBeTruthy();
   expect(screen.queryByText("Allocation unavailable until production is balanced")).toBeNull();
 });

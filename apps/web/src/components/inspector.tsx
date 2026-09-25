@@ -1,9 +1,11 @@
+import { isFlowGroup } from "@satisfactory-belt/factory-core";
 import { Trash2Icon } from "lucide-react";
 import { memo, useCallback, useId, useSyncExternalStore, useEffect, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 
 import { InspectorBody } from "@/components/inspector-body";
 import { InspectorLink } from "@/components/inspector-link";
+import { InspectorPort } from "@/components/inspector-port";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,16 +18,18 @@ import {
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import type { createFactoryEditor } from "@/lib/factory-editor";
 import type { GameAssets } from "@/lib/game-assets";
-import { inspectorSummary, inspectorTarget } from "@/lib/inspector";
+import { inspectorPort, inspectorSummary, inspectorTarget } from "@/lib/inspector";
 
 export const Inspector = memo(function Inspector({
   editor,
   focusCanvas,
   assets,
+  catalogOpen = false,
 }: {
   editor: ReturnType<typeof createFactoryEditor>;
   focusCanvas: () => void;
   assets: GameAssets;
+  catalogOpen?: boolean;
 }) {
   const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width: 639px)").matches);
   useEffect(() => {
@@ -37,7 +41,7 @@ export const Inspector = memo(function Inspector({
   const closeDrawer = useCallback(
     (open: boolean) => {
       if (!open) {
-        editor.controller.command("escape");
+        editor.controller.setSelection(new Set());
         focusCanvas();
       }
     },
@@ -45,14 +49,21 @@ export const Inspector = memo(function Inspector({
   );
   const titleId = useId();
   const descriptionId = useId();
-  const getTarget = useCallback(() => inspectorTarget(editor.controller.getSnapshot()), [editor]);
+  const getTarget = useCallback(() => {
+    const snapshot = editor.controller.getSnapshot();
+    // A touch-down may become a drag or pinch. Wait for a completed tap before
+    // showing the inspector for a selection that may only be temporary.
+    return narrow && !snapshot.linkSelection.selected && snapshot.interaction !== "idle"
+      ? null
+      : inspectorTarget(snapshot);
+  }, [editor, narrow]);
   const target = useSyncExternalStore(editor.controller.subscribe, getTarget);
   useSyncExternalStore(editor.history.subscribe, editor.history.getSnapshot);
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
       event.preventDefault();
-      editor.controller.command("escape");
+      editor.controller.setSelection(new Set());
       focusCanvas();
     },
     [editor, focusCanvas],
@@ -65,21 +76,33 @@ export const Inspector = memo(function Inspector({
     editor.deleteSelection();
     focusCanvas();
   }, [editor, focusCanvas]);
+  const port = inspectorPort(target);
   const summary = inspectorSummary(editor, target);
   const node = target?.startsWith("node:") ? editor.getNode(target.slice(5)) : undefined;
   const link = target?.startsWith("link:") ? editor.getLink(target.slice(5)) : undefined;
-  if (!summary) return null;
+  if (!summary || (narrow && catalogOpen)) return null;
+  const subtitle =
+    node && isFlowGroup(node) ? summary.subtitle?.replace(/^.*?×\s*/, "") : summary.subtitle;
 
   const body = (
     <>
       {node && <InspectorBody key={node.id} node={node} editor={editor} assets={assets} />}
-      {link && <InspectorLink key={link.id} link={link} editor={editor} assets={assets} />}
+      {port && (
+        <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0">
+          <InspectorPort port={port} editor={editor} assets={assets} />
+        </div>
+      )}
+      {link && (
+        <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0">
+          <InspectorLink key={link.id} link={link} editor={editor} assets={assets} />
+        </div>
+      )}
     </>
   );
-  const deleteButton = (
+  const deleteButton = summary.deleteLabel && (
     <Button
       variant="destructive"
-      className="min-h-11 w-full sm:min-h-8"
+      className="w-full"
       aria-label={summary.deleteLabel}
       onPointerDown={handleDeletePointerDown}
       onClick={handleDelete}
@@ -95,16 +118,20 @@ export const Inspector = memo(function Inspector({
           initialFocus={false}
           finalFocus={false}
           onKeyDown={handleKeyDown}
-          className="max-h-[calc(100dvh-6rem)]"
+          className="h-[60dvh]"
         >
-          <div className="shrink-0 space-y-1 p-4">
-            <DrawerTitle>{summary.title}</DrawerTitle>
-            {summary.subtitle && <DrawerDescription>{summary.subtitle}</DrawerDescription>}
+          <div className="shrink-0 space-y-0.5 px-4 py-2">
+            <DrawerTitle className="text-sm leading-snug">{summary.title}</DrawerTitle>
+            {subtitle && (
+              <DrawerDescription className="text-xs leading-snug">{subtitle}</DrawerDescription>
+            )}
           </div>
-          <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">{body}</div>
-          <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            {deleteButton}
-          </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{body}</div>
+          {deleteButton && (
+            <div className="shrink-0 border-t bg-muted/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {deleteButton}
+            </div>
+          )}
         </DrawerContent>
       </Drawer>
     );
@@ -112,7 +139,7 @@ export const Inspector = memo(function Inspector({
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape bubbles from inspector controls; preserve the complementary landmark.
     <aside
       aria-labelledby={titleId}
-      aria-describedby={summary.subtitle ? descriptionId : undefined}
+      aria-describedby={subtitle ? descriptionId : undefined}
       className="pointer-events-auto sm:fixed sm:top-[max(1rem,env(safe-area-inset-top))] sm:right-[max(1rem,env(safe-area-inset-right))] sm:w-88"
       onKeyDown={handleKeyDown}
     >
@@ -121,14 +148,12 @@ export const Inspector = memo(function Inspector({
           <CardTitle>
             <h2 id={titleId}>{summary.title}</h2>
           </CardTitle>
-          {summary.subtitle && (
-            <CardDescription id={descriptionId}>{summary.subtitle}</CardDescription>
-          )}
+          {subtitle && <CardDescription id={descriptionId}>{subtitle}</CardDescription>}
         </CardHeader>
-        <CardContent className="min-h-0 overflow-y-auto overscroll-contain pb-4">
+        <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {body}
         </CardContent>
-        <CardFooter className="shrink-0">{deleteButton}</CardFooter>
+        {deleteButton && <CardFooter className="shrink-0">{deleteButton}</CardFooter>}
       </Card>
     </aside>
   );

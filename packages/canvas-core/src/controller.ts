@@ -738,6 +738,8 @@ export class CanvasController {
     this.gesture = null;
     this.dragOffset = ZERO;
     this.marquee = null;
+    // Touch dragging moves the item without turning the gesture into a selection tap.
+    if (pointer.touch && moves.length) this.selection = gesture.selection;
     // The host applies the committed geometry with setItems, once per gesture.
     if (moves.length) this.onMove(moves);
     this.emit();

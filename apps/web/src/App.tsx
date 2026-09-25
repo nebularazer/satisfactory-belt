@@ -57,6 +57,7 @@ import { catalogConfiguration, eligibleCatalogEntries } from "@/lib/catalog-plac
 import { createFactoryEditor } from "@/lib/factory-editor";
 import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
+import { inspectorTarget } from "@/lib/inspector";
 import { startPlanAutosave } from "@/lib/plan-autosave";
 import { createReferencePlans } from "@/lib/reference-plans";
 
@@ -92,7 +93,14 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
       }
       const saved = await store.load();
       if (abort.signal.aborted) return;
-      const editor = createFactoryEditor(assets.catalog, saved ?? createReferencePlans());
+      let editor: ReturnType<typeof createFactoryEditor>;
+      try {
+        editor = createFactoryEditor(assets.catalog, saved ?? createReferencePlans());
+      } catch (reason) {
+        if (!saved) throw reason;
+        // Unsupported documents are skipped, never repaired or migrated.
+        editor = createFactoryEditor(assets.catalog, createReferencePlans());
+      }
       setWorkspace({ assets, editor, store });
     }
     void loadWorkspace().catch((reason: unknown) => {
@@ -176,18 +184,35 @@ function CanvasWorkspace({
   useEffect(
     () =>
       controller.subscribeCatalog((request) => {
+        if (window.matchMedia("(max-width: 639px)").matches) controller.setSelection(new Set());
         placedFromSearch.current = false;
         setInsertion(request);
         setSearchOpen(true);
       }),
     [controller],
   );
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    return controller.subscribe(() => {
+      const snapshot = controller.getSnapshot();
+      if (
+        window.matchMedia("(max-width: 639px)").matches &&
+        snapshot.interaction === "idle" &&
+        inspectorTarget(snapshot)
+      ) {
+        setSearchOpen(false);
+      }
+    });
+  }, [controller, searchOpen]);
   const focusCanvas = useCallback(() => view.current?.focus(), []);
   const openAdd = useCallback(() => controller.openCatalogAtCenter(), [controller]);
   const placeResult = useCallback(
     (entry: SearchEntry, scope?: SearchScope) => {
       if (!insertion) throw new Error("Open search from the canvas to place a node.");
       editor.placeNode(catalogConfiguration(entry, scope), insertion.position, insertion.source);
+      // Leave the canvas visible after mobile placement; tapping a node opens its inspector.
+      if (window.matchMedia("(max-width: 639px)").matches)
+        editor.controller.setSelection(new Set());
       placedFromSearch.current = true;
     },
     [editor, insertion],
@@ -551,7 +576,12 @@ function CanvasWorkspace({
             </Button>
           </ButtonGroup>
         </div>
-        <Inspector editor={editor} focusCanvas={focusCanvas} assets={assets} />
+        <Inspector
+          editor={editor}
+          focusCanvas={focusCanvas}
+          assets={assets}
+          catalogOpen={searchOpen}
+        />
       </div>
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">

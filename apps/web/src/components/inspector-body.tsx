@@ -2,12 +2,10 @@
 import {
   formatPlanningNumber,
   isFlowGroup,
-  isProductionLocked,
   commonMatrices,
   commonSetting,
   machineCapabilities,
   MAX_MACHINE_COUNT,
-  rebalanceFlowGroup,
   resolveProduction,
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
@@ -20,10 +18,9 @@ import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
 import { InspectorFlow } from "@/components/inspector-flow";
-import { InspectorFlowClock } from "@/components/inspector-flow-clock";
 import { InspectorNumberField } from "@/components/inspector-number-field";
+import { InspectorSink } from "@/components/inspector-sink";
 import { InspectorStatistics } from "@/components/inspector-statistics";
-import { InspectorSupplyDetails } from "@/components/inspector-supply-details";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -82,7 +79,7 @@ export function InspectorBody({
       onValueChange={(value) => {
         if (typeof value === "string") setSelected(value);
       }}
-      className="gap-4"
+      className="min-h-0 min-w-0 max-w-full gap-3 overflow-hidden"
       onKeyDown={(event) => {
         if (
           event.key === "Escape" ||
@@ -93,16 +90,13 @@ export function InspectorBody({
       }}
     >
       {node.kind !== "logistics" && capabilities?.groupable && (
-        <div className="sticky top-0 z-10 bg-card py-1">
+        <div className="shrink-0 px-4 py-1 sm:px-0">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
             <TabsList
               aria-label="Machine settings scope"
               className="min-w-0 flex-1 justify-start p-0 group-data-horizontal/tabs:h-auto"
             >
-              <TabsTrigger
-                value="all"
-                className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
-              >
+              <TabsTrigger value="all" className="h-8 flex-none px-3 focus-visible:ring-inset">
                 All
               </TabsTrigger>
               <div className="ml-1 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden border-l border-border pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -111,14 +105,14 @@ export function InspectorBody({
                     key={member.id}
                     value={member.id}
                     aria-label={`Machine ${index + 1}`}
-                    className="h-11 min-w-11 flex-none px-3 focus-visible:ring-inset sm:h-8 sm:min-w-8"
+                    className="h-8 min-w-8 flex-none px-3 focus-visible:ring-inset"
                   >
                     {index + 1}
                   </TabsTrigger>
                 ))}
               </div>
             </TabsList>
-            {capabilities?.groupable && (
+            {capabilities?.groupable && !isFlowGroup(node) && (
               <fieldset
                 aria-label="Machine count"
                 className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
@@ -126,19 +120,9 @@ export function InspectorBody({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-11 sm:size-8"
                   aria-label="Remove last machine"
-                  title={
-                    isProductionLocked(node)
-                      ? "Fewer machines, higher clock"
-                      : "Remove last machine"
-                  }
-                  disabled={
-                    node.machines.length <= 1 ||
-                    (isFlowGroup(node) &&
-                      isProductionLocked(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
-                  }
+                  title="Remove last machine"
+                  disabled={node.machines.length <= 1}
                   onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
                 >
                   <MinusIcon />
@@ -146,15 +130,9 @@ export function InspectorBody({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-11 sm:size-8"
                   aria-label="Add machine"
-                  title={isProductionLocked(node) ? "More machines, lower clock" : "Add machine"}
-                  disabled={
-                    node.machines.length >= MAX_MACHINE_COUNT ||
-                    (isFlowGroup(node) &&
-                      isProductionLocked(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
-                  }
+                  title="Add machine"
+                  disabled={node.machines.length >= MAX_MACHINE_COUNT}
                   onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
                 >
                   <PlusIcon />
@@ -164,9 +142,15 @@ export function InspectorBody({
           </div>
         </div>
       )}
-      <TabsContent value={scope} className="space-y-4">
+      <TabsContent
+        value={scope}
+        className="min-h-0 min-w-0 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0"
+      >
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
-        {isFlowGroup(node) && <InspectorFlow node={node} editor={editor} assets={assets} />}
+        {node.kind === "sink" && <InspectorSink />}
+        {isFlowGroup(node) && (
+          <InspectorFlow node={node} scope={scope} editor={editor} assets={assets} />
+        )}
         {node.kind === "facility" && (
           <InspectorFacility node={node} scope={scope} editor={editor} assets={assets} />
         )}
@@ -209,8 +193,8 @@ export function InspectorBody({
                 />
               )}
               {capabilities.matrices && (
-                <div className="flex min-h-11 items-center justify-between gap-2 sm:min-h-8">
-                  <label htmlFor={matrixId} className="text-xs sm:text-sm">
+                <div className="flex min-h-8 items-center justify-between gap-2">
+                  <label htmlFor={matrixId} className="text-sm">
                     Alien Power Matrices
                     {commonMatrices(members) === null && (
                       <span className="ml-1 text-xs text-muted-foreground">· Mixed</span>
@@ -223,23 +207,20 @@ export function InspectorBody({
                   />
                 </div>
               )}
-              {capabilities.clock &&
-                (isFlowGroup(node) ? (
-                  <InspectorFlowClock node={node} editor={editor} assets={assets} />
-                ) : (
-                  <InspectorNumberField
-                    key={`${scope}:clock`}
-                    label="Clock speed"
-                    value={commonSetting(members, "clockPercent")}
-                    revision={node.machines}
-                    min={1}
-                    max={250}
-                    unit="%"
-                    onCommit={(value) =>
-                      editor.setOperatingSetting(node.id, scope, "clockPercent", value)
-                    }
-                  />
-                ))}
+              {capabilities.clock && !isFlowGroup(node) && (
+                <InspectorNumberField
+                  key={`${scope}:clock`}
+                  label="Clock speed"
+                  value={commonSetting(members, "clockPercent")}
+                  revision={node.machines}
+                  min={1}
+                  max={250}
+                  unit="%"
+                  onCommit={(value) =>
+                    editor.setOperatingSetting(node.id, scope, "clockPercent", value)
+                  }
+                />
+              )}
               {capabilities.sloopSlots > 0 && (
                 <InspectorNumberField
                   key={`${scope}:sloops`}
@@ -288,7 +269,6 @@ export function InspectorBody({
             )
           )}
         </section>
-        <InspectorSupplyDetails node={node} editor={editor} assets={assets} />
         <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
       </TabsContent>
     </Tabs>

@@ -73,17 +73,13 @@ export function InspectorStatistics({
     });
   const display = resolveFactoryNode({ ...node, machines: members }, assets.catalog);
   if (node.kind === "manufacturing" && capabilities.sloopSlots > 0) {
-    const boost = assets.catalog.machines[node.machineId]!.productionBoost;
-    const factors = members.map((m) => boost.base + m.sloopsUsed * boost.perSloop);
     rows.push({
-      label: "Amplification",
+      label: "Somersloops",
       icon: itemIcon("Desc_WAT1_C"),
-      value:
-        Math.min(...factors) === Math.max(...factors)
-          ? `${number.format(factors[0]!)}×`
-          : `${number.format(Math.min(...factors))}–${number.format(Math.max(...factors))}×`,
+      value: String(members.reduce((sum, member) => sum + member.sloopsUsed, 0)),
     });
   }
+
   if (node.kind === "sink") {
     const rates =
       editor.getFlowAnalysis().status === "feasible"

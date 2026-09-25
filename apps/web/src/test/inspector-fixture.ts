@@ -39,6 +39,8 @@ export function inspectorAssets(): GameAssets {
     ["iron", "Iron Plate"],
     ["copper", "Copper Sheet"],
     ["Desc_AlienPowerFuel_C", "Alien Power Matrix"],
+    ["Desc_CrystalShard_C", "Power Shard"],
+    ["Desc_WAT1_C", "Somersloop"],
   ] as const) {
     assets.catalog.items[id] = {
       id: id,

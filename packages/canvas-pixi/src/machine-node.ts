@@ -177,7 +177,7 @@ export class MachineNodeView {
       if (rate && display.layout !== "logistics") {
         const input = port.direction === "input";
         const label = this.label(
-          rate,
+          port.outputLimitLabel ? `${rate} / ${port.outputLimitLabel}` : rate,
           input ? 44 : display.size - 44,
           port.y,
           display.size / 2 - 52,
