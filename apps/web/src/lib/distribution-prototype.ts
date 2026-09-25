@@ -2,6 +2,7 @@
 import { CanvasController, GRID_SIZE, portId } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem, CanvasLink, Point, PortReference } from "@satisfactory-belt/canvas-core";
 import {
+  PREVIEW_BELTS,
   buildDistributionPrototype,
   formatPlanningNumber,
   resolveProduction,
@@ -52,6 +53,43 @@ export type DistributionSnapshot = {
   destinations: Endpoint[];
   error?: string;
 };
+
+/** Substitute incoming belts only in the preview; the source plan stays untouched. */
+export function distributionBeltSupply(
+  snapshot: DistributionSnapshot,
+  rates: readonly number[],
+  tier: number,
+  icon: string,
+): DistributionSnapshot {
+  const demand = snapshot.destinations.reduce((sum, entry) => sum + entry.rate, 0);
+  const supply = rates.reduce((sum, rate) => sum + rate, 0);
+  const capacity = PREVIEW_BELTS[tier - 1] ?? 0;
+  let error = snapshot.error;
+  if (!error) {
+    if (!rates.length || rates.some((rate) => !Number.isFinite(rate) || rate <= 0))
+      error = "Enter a positive rate for every incoming belt.";
+    else if (rates.some((rate) => rate > capacity + 0.00001))
+      error = `Each incoming belt must fit Mk.${tier} (${capacity}/min).`;
+    else if (Math.abs(supply - demand) > 0.00001)
+      error =
+        supply < demand
+          ? `${formatPlanningNumber(demand - supply)}/min more supply needed.`
+          : `${formatPlanningNumber(supply - demand)}/min excess supply. Reduce incoming belt rates.`;
+  }
+  return {
+    ...snapshot,
+    error,
+    sources: rates.map((rate, index) => ({
+      id: `incoming-belt:${index}`,
+      rate,
+      title: `Incoming belt ${index + 1}`,
+      groupKey: "incoming-belts",
+      type: "Belt supply",
+      icon,
+      sink: false,
+    })),
+  };
+}
 
 export function distributionSnapshot(
   editor: ReturnType<typeof createFactoryEditor>,

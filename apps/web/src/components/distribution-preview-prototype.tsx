@@ -5,14 +5,21 @@ import type { PortReference } from "@satisfactory-belt/canvas-core";
  * One agreed popup workflow, isolated on experiment/distribution-preview.
  */
 import { PREVIEW_BELTS, formatPlanningNumber } from "@satisfactory-belt/factory-core";
-import { MaximizeIcon, MinusIcon, PlusIcon, WorkflowIcon } from "lucide-react";
+import { MaximizeIcon, MinusIcon, PlusIcon, Trash2Icon, WorkflowIcon } from "lucide-react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
+  InputGroup,
+  InputGroupInput,
+  InputGroupAddon,
+  InputGroupText,
+} from "@/components/ui/input-group";
+import {
   PREVIEW_BELT_COLORS,
+  distributionBeltSupply,
   distributionScene,
   distributionSnapshot,
 } from "@/lib/distribution-prototype";
@@ -61,12 +68,34 @@ function Preview({
   close: () => void;
 }) {
   const [tier, setTier] = useState(6);
+  const [supplyMode, setSupplyMode] = useState<"machines" | "belts">("machines");
+  const demand = snapshot.destinations.reduce((sum, entry) => sum + entry.rate, 0);
+  const [beltRates, setBeltRates] = useState(() => {
+    const capacity = PREVIEW_BELTS[5];
+    return Array.from({ length: Math.max(1, Math.ceil(demand / capacity)) }, (_, index) => ({
+      id: index,
+      value: String(Math.min(capacity, demand - index * capacity)),
+    }));
+  });
+  const [nextBeltId, setNextBeltId] = useState(beltRates.length);
+  const previewSnapshot = useMemo(
+    () =>
+      supplyMode === "machines"
+        ? snapshot
+        : distributionBeltSupply(
+            snapshot,
+            beltRates.map((belt) => Number(belt.value)),
+            tier,
+            assets.catalog.items[snapshot.itemId]?.iconId ?? "",
+          ),
+    [snapshot, supplyMode, beltRates, tier, assets],
+  );
   const [mode, setMode] = useState<"balanced" | "manifold">("balanced");
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const scene = useMemo(
-    () => distributionScene(snapshot, assets, tier, mode),
-    [snapshot, assets, tier, mode],
+    () => distributionScene(previewSnapshot, assets, tier, mode),
+    [previewSnapshot, assets, tier, mode],
   );
   const zoom = useSyncExternalStore(
     scene.controller.subscribe,
@@ -100,7 +129,7 @@ function Preview({
             "Read-only distribution preview. Drag to pan, pinch or scroll to zoom.",
           );
         setReadyScene(scene);
-        view.focus();
+        if (document.activeElement?.tagName !== "INPUT") view.focus();
       })
       .catch((reason: unknown) => {
         if (!abort.signal.aborted)
@@ -110,7 +139,7 @@ function Preview({
   }, [scene, assets, host]);
   const splitters = scene.graph.nodes.filter((n) => n.kind === "splitter").length;
   const mergers = scene.graph.nodes.filter((n) => n.kind === "merger").length;
-  const total = snapshot.sources.reduce((sum, entry) => sum + entry.rate, 0);
+  const total = demand;
   return (
     <Dialog
       open
@@ -133,11 +162,38 @@ function Preview({
             {assets.catalog.items[snapshot.itemId]?.name ?? "Port"} distribution
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Experiment · {formatPlanningNumber(total)}/min · {snapshot.sources.length} suppliers →{" "}
-            {snapshot.destinations.length} consumers. Your plan stays unchanged.
+            Experiment · {formatPlanningNumber(total)}/min · {previewSnapshot.sources.length}{" "}
+            {supplyMode === "belts"
+              ? previewSnapshot.sources.length === 1
+                ? "incoming belt"
+                : "incoming belts"
+              : previewSnapshot.sources.length === 1
+                ? "supplier"
+                : "suppliers"}{" "}
+            → {snapshot.destinations.length} consumers. Your plan stays unchanged.
           </DialogDescription>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 border-y px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Supply</span>
+            <ButtonGroup aria-label="Supply source">
+              {(["machines", "belts"] as const).map((value) => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant="outline"
+                  aria-pressed={supplyMode === value}
+                  className={supplyMode === value ? "bg-muted" : ""}
+                  onClick={() => {
+                    setError(null);
+                    setSupplyMode(value);
+                  }}
+                >
+                  {value === "machines" ? "Machines" : "Belts"}
+                </Button>
+              ))}
+            </ButtonGroup>
+          </div>
           <ButtonGroup aria-label="Distribution layout">
             {(["balanced", "manifold"] as const).map((value) => (
               <Button
@@ -178,6 +234,66 @@ function Preview({
             </ButtonGroup>
           </div>
         </div>
+        {supplyMode === "belts" && (
+          <div className="max-h-48 shrink-0 overflow-y-auto border-b px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {beltRates.map((belt, index) => (
+                <div key={belt.id} className="flex items-center gap-1">
+                  <InputGroup className="w-40">
+                    <InputGroupInput
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="any"
+                      aria-label={`Incoming belt ${index + 1} rate`}
+                      value={belt.value}
+                      onChange={(event) => {
+                        setError(null);
+                        setBeltRates(
+                          beltRates.map((entry) =>
+                            entry.id === belt.id ? { ...entry, value: event.target.value } : entry,
+                          ),
+                        );
+                      }}
+                    />
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupText>/min</InputGroupText>
+                    </InputGroupAddon>
+                  </InputGroup>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={`Remove incoming belt ${index + 1}`}
+                    onClick={() => {
+                      setError(null);
+                      setBeltRates(beltRates.filter((entry) => entry.id !== belt.id));
+                    }}
+                  >
+                    <Trash2Icon />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setError(null);
+                  setBeltRates([...beltRates, { id: nextBeltId, value: "0" }]);
+                  setNextBeltId(nextBeltId + 1);
+                }}
+              >
+                <PlusIcon />
+                Add belt
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+              {formatPlanningNumber(
+                beltRates.reduce((sum, belt) => sum + (Number(belt.value) || 0), 0),
+              )}
+              /min supplied · {formatPlanningNumber(demand)}/min required
+            </p>
+          </div>
+        )}
         <div className="relative min-h-0 flex-1">
           {scene.graph.error || error ? (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
