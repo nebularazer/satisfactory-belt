@@ -10,7 +10,7 @@ import {
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode, MaterialRate } from "@satisfactory-belt/factory-core";
-import { MinusIcon, PlusIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowDownIcon, MinusIcon, PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
@@ -245,6 +245,10 @@ export function InspectorBody({
             <RateColumn
               title="Inputs"
               rates={streams("input")}
+              node={node}
+              editor={editor}
+              direction="input"
+              reorder={!networkRates}
               assets={assets}
               empty={
                 node.kind === "logistics" || node.kind === "sink"
@@ -255,6 +259,10 @@ export function InspectorBody({
             <RateColumn
               title="Outputs"
               rates={streams("output")}
+              node={node}
+              editor={editor}
+              direction="output"
+              reorder={!networkRates}
               assets={assets}
               empty={node.kind === "logistics" ? "No known materials" : "No outputs"}
             />
@@ -280,23 +288,44 @@ function RateColumn({
   rates,
   assets,
   empty,
+  node,
+  editor,
+  direction,
+  reorder,
 }: {
   title: string;
   rates: readonly MaterialRate[];
   assets: GameAssets;
   empty: string;
+  node: FactoryNode;
+  editor: Editor;
+  direction: "input" | "output";
+  reorder: boolean;
 }) {
+  const ports =
+    editor.getDisplay(node.id)?.ports.filter((port) => port.direction === direction) ?? [];
+  const orderedRates = rates.toSorted(
+    (a, b) =>
+      ports.findIndex((port) => port.itemId === a.itemId) -
+      ports.findIndex((port) => port.itemId === b.itemId),
+  );
+  const canReorder =
+    reorder &&
+    ports.length > 1 &&
+    ports.length === rates.length &&
+    rates.every((rate) => ports.filter((port) => port.itemId === rate.itemId).length === 1);
+
   return (
     <div className="min-w-0 space-y-2">
       <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
       {rates.length ? (
         <ul className="space-y-3">
-          {rates.map((rate) => {
+          {orderedRates.map((rate, index) => {
             const item = assets.catalog.items[rate.itemId]!;
             return (
               <li key={rate.itemId} className="flex items-start gap-2">
                 <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
-                <div className="min-w-0 break-words text-xs">
+                <div className="min-w-0 flex-1 break-words text-xs">
                   <p>{item.name}</p>
                   <p className="text-muted-foreground tabular-nums">
                     {rate.perMinute === null
@@ -304,6 +333,28 @@ function RateColumn({
                       : `${formatPlanningNumber(rate.perMinute)} ${item.unit === "m3" ? "m³" : "items"}/min`}
                   </p>
                 </div>
+                {canReorder && (
+                  <div className="flex shrink-0 flex-col">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Move ${item.name} ${direction} up`}
+                      disabled={index === 0}
+                      onClick={() => editor.movePort(node.id, ports[index]!.key, -1)}
+                    >
+                      <ArrowUpIcon />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Move ${item.name} ${direction} down`}
+                      disabled={index === orderedRates.length - 1}
+                      onClick={() => editor.movePort(node.id, ports[index]!.key, 1)}
+                    >
+                      <ArrowDownIcon />
+                    </Button>
+                  </div>
+                )}
               </li>
             );
           })}

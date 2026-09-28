@@ -705,6 +705,31 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
       );
     });
   }
+  function movePort(nodeId: string, portKey: string, offset: -1 | 1) {
+    if (controller.getSnapshot().interaction !== "idle") return;
+    history.update((current) => {
+      const node = current.nodes.find((entry) => entry.id === nodeId);
+      if (!node || node.kind === "logistics") return current;
+      const ports = displays.get(nodeId)!.ports;
+      const port = ports.find((entry) => entry.key === portKey);
+      if (!port) return current;
+      const order = ports
+        .filter((entry) => entry.direction === port.direction)
+        .map((entry) => entry.key);
+      const index = order.indexOf(portKey);
+      const target = index + offset;
+      if (target < 0 || target >= order.length) return current;
+      [order[index], order[target]] = [order[target]!, order[index]!];
+      return {
+        ...current,
+        nodes: current.nodes.map((entry) =>
+          entry.id === nodeId
+            ? { ...node, portOrder: { ...node.portOrder, [port.direction]: order } }
+            : entry,
+        ),
+      };
+    });
+  }
   function setLinkTier(id: string, tier: number) {
     const link = history.getSnapshot().state.links.find((entry) => entry.id === id);
     const port =
@@ -856,6 +881,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     getPorts: (nodeId: string) => portIndex.ports(nodeId),
     setExternalFlow,
     replaceNode,
+    movePort,
     canReplaceNode: canConfigure,
     setLinkTier,
     setRouteSettings,
@@ -909,6 +935,7 @@ function sameConfiguration(a: FactoryNode, b: FactoryNode): boolean {
   if (
     a.kind !== b.kind ||
     a.machines !== b.machines ||
+    a.portOrder !== b.portOrder ||
     (isFlowGroup(a) && isFlowGroup(b) && a.flow !== b.flow)
   )
     return false;

@@ -7,7 +7,7 @@ import type { FacilityNode, Purity } from "./facilities";
 import { productionLimit } from "./flow-controls";
 import { commonSetting, validateMachineMembers } from "./machine-settings";
 import { formatPlanningNumber } from "./number-format";
-import type { PortTransport } from "./ports";
+import type { PortOrder, PortTransport } from "./ports";
 import { DEFAULT_SPLITTER_PROGRAM, SPLITTER_OUTPUTS, validateSplitterProgram } from "./splitters";
 import type { SplitterProgram } from "./splitters";
 import { validateSink } from "./validation";
@@ -37,6 +37,7 @@ type NodeBase = Readonly<{
   x: number;
   y: number;
   machines: readonly MachineMember[];
+  portOrder?: PortOrder;
 }>;
 export type ManufacturingNode = NodeBase &
   Readonly<{
@@ -211,6 +212,36 @@ export function formatPower(power: PowerDisplay): string {
 }
 
 export function resolveMachineNode(
+  node: Exclude<FactoryNode, LogisticsNode>,
+  catalog: GameCatalog,
+): MachineDisplay {
+  const display = resolveUnorderedMachineNode(node, catalog);
+  if (!node.portOrder) return display;
+  const ports = (["input", "output"] as const).flatMap((direction) => {
+    const side = display.ports.filter((port) => port.direction === direction);
+    const order = node.portOrder?.[direction];
+    if (!order) return side;
+    if (
+      !Array.isArray(order) ||
+      new Set(order).size !== order.length ||
+      order.some((key) => typeof key !== "string" || !key.startsWith(`${direction}:`))
+    )
+      throw new Error("Invalid port order.");
+    const sorted = side.toSorted((a, b) => {
+      const rank = (key: string) => {
+        const index = order.indexOf(key);
+        return index < 0 ? order.length : index;
+      };
+      return rank(a.key) - rank(b.key);
+    });
+    return sorted.map((port, index) =>
+      Object.assign({}, port, { x: side[index]!.x, y: side[index]!.y }),
+    );
+  });
+  return { ...display, ports };
+}
+
+function resolveUnorderedMachineNode(
   node: Exclude<FactoryNode, LogisticsNode>,
   catalog: GameCatalog,
 ): MachineDisplay {
