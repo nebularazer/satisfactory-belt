@@ -47,3 +47,73 @@ it("reorders each side while preserving connections, rates, undo history and sav
   editor.historyCommand("redo");
   expect(editor.history.getSnapshot().state).toBe(saved);
 });
+
+it.each(["splitter", "merger", "smart-splitter", "programmable-splitter"] as const)(
+  "reorders %s ports without changing their links or filtering rules",
+  (kind) => {
+    const { assets, miner, smelter } = minerFlowFixture();
+    assets.catalog.logistics.part = {
+      id: "part",
+      kind,
+      name: kind,
+      description: "",
+      descriptorId: "part",
+      iconId: "copper",
+    };
+    const program =
+      kind === "smart-splitter" || kind === "programmable-splitter"
+        ? {
+            "output:0": [{ kind: "item" as const, itemId: "copper" }],
+            "output:1": [{ kind: "none" as const }],
+            "output:2": [{ kind: "overflow" as const }],
+          }
+        : undefined;
+    const node = {
+      id: "junction",
+      kind: "logistics" as const,
+      partId: "part",
+      x: 256,
+      y: 0,
+      program,
+    };
+    const editor = createFactoryEditor(assets.catalog, {
+      nodes: [miner, node, smelter],
+      links: [
+        {
+          id: "in",
+          output: { nodeId: miner.id, portKey: "output:copper" },
+          input: { nodeId: node.id, portKey: "input:0" },
+        },
+        {
+          id: "out",
+          output: { nodeId: node.id, portKey: "output:0" },
+          input: { nodeId: smelter.id, portKey: "input:copper" },
+        },
+      ],
+    });
+    const before = editor.history.getSnapshot().state;
+    const direction = kind === "merger" ? "input" : "output";
+    const portKey = `${direction}:0`;
+    const y = () => editor.getDisplay(node.id)!.ports.find((port) => port.key === portKey)!.y;
+    const originalY = y();
+    const rates = editor.getLinkRates("out");
+    editor.movePort(node.id, portKey, 1);
+    expect(y()).toBe(originalY + 32);
+    const after = editor.history.getSnapshot().state;
+    expect(after.links).toBe(before.links);
+    expect(editor.getNode(node.id)).toMatchObject({ program });
+    expect(editor.getLinkRates("out")).toEqual(rates);
+    const route = editor.controller
+      .getSnapshot()
+      .links.find((link) => link.id === (kind === "merger" ? "in" : "out"))!;
+    expect((kind === "merger" ? route.points.at(-1)! : route.points[0]!).y).toBe(
+      node.y + originalY + 32,
+    );
+    const restored = createFactoryEditor(assets.catalog, JSON.parse(JSON.stringify(after)));
+    expect(restored.getDisplay(node.id)!.ports).toEqual(editor.getDisplay(node.id)!.ports);
+    editor.historyCommand("undo");
+    expect(y()).toBe(originalY);
+    editor.historyCommand("redo");
+    expect(editor.history.getSnapshot().state).toBe(after);
+  },
+);

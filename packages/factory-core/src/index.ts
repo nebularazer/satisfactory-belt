@@ -75,6 +75,7 @@ export type LogisticsNode = Readonly<{
   y: number;
   partId: string;
   program?: SplitterProgram;
+  portOrder?: PortOrder;
 }>;
 
 export type PortDisplay = Readonly<{
@@ -188,13 +189,16 @@ export function resolveFactoryNode(node: FactoryNode, catalog: GameCatalog): Nod
       });
     }
   }
-  return {
-    layout: "logistics",
-    size: LOGISTICS_NODE_SIZE,
-    title: part.name,
-    machineIconId: part.iconId,
-    ports,
-  };
+  return orderDisplayPorts(
+    {
+      layout: "logistics",
+      size: LOGISTICS_NODE_SIZE,
+      title: part.name,
+      machineIconId: part.iconId,
+      ports,
+    },
+    node.portOrder,
+  );
 }
 
 const numberLabel = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
@@ -215,11 +219,14 @@ export function resolveMachineNode(
   node: Exclude<FactoryNode, LogisticsNode>,
   catalog: GameCatalog,
 ): MachineDisplay {
-  const display = resolveUnorderedMachineNode(node, catalog);
-  if (!node.portOrder) return display;
+  return orderDisplayPorts(resolveUnorderedMachineNode(node, catalog), node.portOrder);
+}
+
+function orderDisplayPorts<T extends NodeDisplay>(display: T, portOrder?: PortOrder): T {
+  if (!portOrder) return display;
   const ports = (["input", "output"] as const).flatMap((direction) => {
     const side = display.ports.filter((port) => port.direction === direction);
-    const order = node.portOrder?.[direction];
+    const order = portOrder[direction];
     if (!order) return side;
     if (
       !Array.isArray(order) ||

@@ -709,7 +709,7 @@ export function createFactoryEditor(catalog: GameCatalog, initialDocument: Facto
     if (controller.getSnapshot().interaction !== "idle") return;
     history.update((current) => {
       const node = current.nodes.find((entry) => entry.id === nodeId);
-      if (!node || node.kind === "logistics") return current;
+      if (!node) return current;
       const ports = displays.get(nodeId)!.ports;
       const port = ports.find((entry) => entry.key === portKey);
       if (!port) return current;
@@ -930,7 +930,8 @@ function sameConfiguration(a: FactoryNode, b: FactoryNode): boolean {
       a.kind === "logistics" &&
       b.kind === "logistics" &&
       a.partId === b.partId &&
-      a.program === b.program
+      a.program === b.program &&
+      a.portOrder === b.portOrder
     );
   if (
     a.kind !== b.kind ||

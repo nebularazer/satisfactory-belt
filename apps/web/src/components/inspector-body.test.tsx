@@ -84,3 +84,39 @@ it("moves material ports with arrows, disables boundaries and hides single-port 
     screen.getByRole<HTMLButtonElement>("button", { name: "Move Iron Ingot input up" }).disabled,
   ).toBe(true);
 });
+
+it.each(["splitter", "merger"] as const)(
+  "shows every %s port, including empty ports, in reorderable rows",
+  async (kind) => {
+    const user = userEvent.setup();
+    const assets = inspectorAssets();
+    assets.catalog.logistics.part = {
+      id: "part",
+      kind,
+      name: kind,
+      description: "",
+      descriptorId: "part",
+      iconId: "iron",
+    };
+    const node = { id: "junction", kind: "logistics" as const, partId: "part", x: 0, y: 0 };
+    const editor = createFactoryEditor(assets.catalog, { nodes: [node], links: [] });
+    function Harness() {
+      const snapshot = useSyncExternalStore(editor.history.subscribe, editor.history.getSnapshot);
+      return <InspectorBody node={snapshot.state.nodes[0]!} editor={editor} assets={assets} />;
+    }
+    render(<Harness />);
+    expect(screen.getAllByText("No known materials")).toHaveLength(4);
+    const name = kind === "merger" ? "Input 1" : "Left output";
+    const direction = kind === "merger" ? "input" : "output";
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: `Move ${name} up` }).disabled,
+    ).toBe(true);
+    await user.click(screen.getByRole("button", { name: `Move ${name} down` }));
+    expect(
+      editor
+        .getDisplay(node.id)!
+        .ports.filter((port) => port.direction === direction)
+        .map((port) => port.key),
+    ).toEqual([`${direction}:1`, `${direction}:0`, `${direction}:2`]);
+  },
+);

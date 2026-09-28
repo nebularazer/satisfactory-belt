@@ -10,7 +10,7 @@ import {
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
 import type { FactoryNode, MaterialRate } from "@satisfactory-belt/factory-core";
-import { ArrowUpIcon, ArrowDownIcon, MinusIcon, PlusIcon } from "lucide-react";
+import { MinusIcon, PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 
 import { CatalogIcon } from "@/components/catalog-search-details";
@@ -19,10 +19,10 @@ import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
 import { InspectorFlow } from "@/components/inspector-flow";
 import { InspectorNumberField } from "@/components/inspector-number-field";
+import { InspectorPortOrder } from "@/components/inspector-port-order";
 import { InspectorSink } from "@/components/inspector-sink";
 import { InspectorStatistics } from "@/components/inspector-statistics";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { createFactoryEditor } from "@/lib/factory-editor";
@@ -305,6 +305,50 @@ function RateColumn({
 }) {
   const ports =
     editor.getDisplay(node.id)?.ports.filter((port) => port.direction === direction) ?? [];
+  if (node.kind === "logistics")
+    return (
+      <div className="min-w-0 space-y-2">
+        <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
+        <ul className="space-y-1">
+          {ports.map((port, index) => {
+            const flows = editor.getPortFlows({ nodeId: node.id, portKey: port.key });
+            return (
+              <li key={port.key} className="flex min-h-10 items-center gap-3 py-1">
+                <div className="min-w-0 flex-1 space-y-1 text-xs">
+                  <p>{port.name}</p>
+                  {flows.length ? (
+                    flows.map((flow) => {
+                      const item = assets.catalog.items[flow.itemId]!;
+                      return (
+                        <div key={flow.itemId} className="flex items-center gap-2">
+                          <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
+                          <span className="min-w-0 flex-1 break-words">{item.name}</span>
+                          <span className="shrink-0 text-muted-foreground tabular-nums">
+                            {flow.perMinute === null
+                              ? "—"
+                              : `${formatPlanningNumber(flow.perMinute)}/min`}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-muted-foreground">No known materials</p>
+                  )}
+                </div>
+                <InspectorPortOrder
+                  editor={editor}
+                  nodeId={node.id}
+                  portKey={port.key}
+                  label={port.name}
+                  index={index}
+                  count={ports.length}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
   const orderedRates = rates.toSorted(
     (a, b) =>
       ports.findIndex((port) => port.itemId === a.itemId) -
@@ -335,26 +379,14 @@ function RateColumn({
                   </p>
                 </div>
                 {canReorder && (
-                  <ButtonGroup aria-label={`${item.name} ${direction} order`} className="shrink-0">
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      aria-label={`Move ${item.name} ${direction} up`}
-                      disabled={index === 0}
-                      onClick={() => editor.movePort(node.id, ports[index]!.key, -1)}
-                    >
-                      <ArrowUpIcon />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      aria-label={`Move ${item.name} ${direction} down`}
-                      disabled={index === orderedRates.length - 1}
-                      onClick={() => editor.movePort(node.id, ports[index]!.key, 1)}
-                    >
-                      <ArrowDownIcon />
-                    </Button>
-                  </ButtonGroup>
+                  <InspectorPortOrder
+                    editor={editor}
+                    nodeId={node.id}
+                    portKey={ports[index]!.key}
+                    label={`${item.name} ${direction}`}
+                    index={index}
+                    count={orderedRates.length}
+                  />
                 )}
               </li>
             );
