@@ -140,7 +140,7 @@ export const Inspector = memo(function Inspector({
     <aside
       aria-labelledby={titleId}
       aria-describedby={subtitle ? descriptionId : undefined}
-      className="pointer-events-auto sm:fixed sm:top-[max(1rem,env(safe-area-inset-top))] sm:right-[max(1rem,env(safe-area-inset-right))] sm:w-88"
+      className="pointer-events-auto sm:fixed sm:top-[max(1rem,env(safe-area-inset-top))] sm:right-[max(1rem,env(safe-area-inset-right))] sm:w-96"
       onKeyDown={handleKeyDown}
     >
       <Card className="max-h-[60dvh] gap-0 overflow-hidden shadow-sm sm:max-h-[calc(100dvh-2rem)]">

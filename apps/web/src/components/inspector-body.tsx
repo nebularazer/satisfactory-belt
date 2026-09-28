@@ -22,6 +22,7 @@ import { InspectorNumberField } from "@/components/inspector-number-field";
 import { InspectorSink } from "@/components/inspector-sink";
 import { InspectorStatistics } from "@/components/inspector-statistics";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { createFactoryEditor } from "@/lib/factory-editor";
@@ -241,7 +242,7 @@ export function InspectorBody({
           aria-label={networkRates ? "Planned material flow" : "Configured material rates"}
           className="space-y-2 border-t pt-4"
         >
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
             <RateColumn
               title="Inputs"
               rates={streams("input")}
@@ -319,11 +320,11 @@ function RateColumn({
     <div className="min-w-0 space-y-2">
       <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
       {rates.length ? (
-        <ul className="space-y-3">
+        <ul className="space-y-1">
           {orderedRates.map((rate, index) => {
             const item = assets.catalog.items[rate.itemId]!;
             return (
-              <li key={rate.itemId} className="flex items-start gap-2">
+              <li key={rate.itemId} className="flex min-h-10 items-center gap-3 py-1">
                 <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
                 <div className="min-w-0 flex-1 break-words text-xs">
                   <p>{item.name}</p>
@@ -334,9 +335,9 @@ function RateColumn({
                   </p>
                 </div>
                 {canReorder && (
-                  <div className="flex shrink-0 flex-col">
+                  <ButtonGroup aria-label={`${item.name} ${direction} order`} className="shrink-0">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon-sm"
                       aria-label={`Move ${item.name} ${direction} up`}
                       disabled={index === 0}
@@ -345,7 +346,7 @@ function RateColumn({
                       <ArrowUpIcon />
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon-sm"
                       aria-label={`Move ${item.name} ${direction} down`}
                       disabled={index === orderedRates.length - 1}
@@ -353,7 +354,7 @@ function RateColumn({
                     >
                       <ArrowDownIcon />
                     </Button>
-                  </div>
+                  </ButtonGroup>
                 )}
               </li>
             );
