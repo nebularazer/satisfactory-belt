@@ -2,14 +2,7 @@ import { SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { describe, expect, it } from "vitest";
 
-import {
-  withRecipe,
-  formatPower,
-  nodeBounds,
-  portRows,
-  resolveMachineNode,
-  resolveFactoryNode,
-} from "./index";
+import { formatPower, nodeBounds, portRows, resolveMachineNode, resolveFactoryNode } from "./index";
 import type { LogisticsNode, ManufacturingNode } from "./index";
 import { createConnectionIndex } from "./links";
 import {
@@ -626,24 +619,4 @@ it("scales variable recipe power ranges with each member's clock and amplificati
   expect(display.power.minMegawatts).toBeCloseTo(5000, 1);
   expect(display.power.maxMegawatts).toBeCloseTo(15000, 1);
   expect(display.power.averageMegawatts).toBeCloseTo(10000, 1);
-});
-
-it("switches producer for an alternative recipe while retaining members and supported settings", () => {
-  const { catalog, node } = fixture();
-  catalog.machines.Other = { ...catalog.machines.Assembler, id: "Other", sloopSlots: 1 };
-  catalog.recipes.Alternative = {
-    ...catalog.recipes.Recipe,
-    id: "Alternative",
-    machineIds: ["Other"],
-  };
-  const original = {
-    ...node,
-    machines: createMachineMembers(2, { clockPercent: 150, sloopsUsed: 2 }),
-  };
-  const changed = withRecipe(original, "Alternative", catalog);
-  expect(changed).toMatchObject({ machineId: "Other", recipeId: "Alternative" });
-  expect(changed.machines).toEqual(
-    original.machines.map((member) => ({ ...member, sloopsUsed: 1 })),
-  );
-  expect(withRecipe(original, original.recipeId, catalog)).toBe(original);
 });

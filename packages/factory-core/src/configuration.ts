@@ -1,7 +1,7 @@
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 import type { TransportRoute } from "./facilities";
-import type { FactoryNode, ManufacturingNode } from "./index";
+import type { FactoryNode } from "./index";
 import { createConnectionIndex } from "./links";
 import type { FactoryDocument } from "./links";
 import { resolveSemanticPorts } from "./semantic-ports";
@@ -106,43 +106,6 @@ export function validateFacilityReferences(document: FactoryDocument) {
         throw new Error("Platform positions must match the train's freight cars.");
     }
   }
-}
-
-/** Keep the current producer when supported; alternatives may select another producer. */
-export function withRecipe(
-  node: ManufacturingNode,
-  recipeId: string,
-  catalog: GameCatalog,
-): ManufacturingNode {
-  if (recipeId === node.recipeId) return node;
-  const recipe = catalog.recipes[recipeId];
-  if (!recipe) throw new Error("Missing recipe.");
-  const machineId = recipe.machineIds.includes(node.machineId)
-    ? node.machineId
-    : recipe.machineIds[0]!;
-  const machine = catalog.machines[machineId]!;
-  return {
-    ...node,
-    recipeId,
-    machineId,
-    ...(node.flow
-      ? {
-          flow: {
-            ...node.flow,
-            targets: Object.fromEntries(
-              Object.entries(node.flow.targets ?? {}).filter(([item]) =>
-                recipe.products.some((product) => product.itemId === item),
-              ),
-            ),
-          },
-        }
-      : {}),
-    machines: node.machines.map((member) => ({
-      ...member,
-      sloopsUsed: Math.min(member.sloopsUsed, machine.sloopSlots),
-      clockPercent: machine.canOverclock ? member.clockPercent : 100,
-    })),
-  };
 }
 
 export function validateTransportRoute(document: FactoryDocument, route: TransportRoute) {

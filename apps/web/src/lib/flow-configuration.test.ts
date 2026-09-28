@@ -1,16 +1,12 @@
 /* oxlint-disable oxc/no-map-spread -- Fixtures and editor commands preserve immutable snapshots. */
-import {
-  createMachineMembers,
-  isProductionLocked,
-  withRecipe,
-} from "@satisfactory-belt/factory-core";
+import { createMachineMembers, isProductionLocked } from "@satisfactory-belt/factory-core";
 import type { FlowGroup } from "@satisfactory-belt/factory-core";
 import { expect, it } from "vitest";
 
 import { minerFlowFixture } from "../test/flow-fixture";
 import { createFactoryEditor } from "./factory-editor";
 
-const changes = ["tier", "purity", "count", "clock", "recipe", "machine", "sloops"] as const;
+const changes = ["tier", "purity", "count", "clock", "machine", "sloops"] as const;
 it.each(changes.flatMap((change) => [false, true].map((locked) => ({ change, locked }))))(
   "propagates $change edits with production locked=$locked",
   ({ change, locked }) => {
@@ -25,18 +21,13 @@ it.each(changes.flatMap((change) => [false, true].map((locked) => ({ change, loc
     };
     catalog.machines.fast = { ...catalog.machines.smelter, id: "fast", manufacturingSpeed: 2 };
     catalog.recipes.ingot = { ...catalog.recipes.ingot!, machineIds: ["smelter", "fast"] };
-    catalog.recipes.double = {
-      ...catalog.recipes.ingot,
-      id: "double",
-      products: [{ itemId: "iron", amount: 2 }],
-    };
     catalog.recipes.consumer = {
       ...catalog.recipes.ingot,
       id: "consumer",
       ingredients: [{ itemId: "iron", amount: 1 }],
       products: [{ itemId: "copper", amount: 1 }],
     };
-    const manufacturing = ["recipe", "machine", "sloops"].includes(change);
+    const manufacturing = ["machine", "sloops"].includes(change);
     const source: FlowGroup = manufacturing
       ? { ...smelter, machines: createMachineMembers(4) }
       : miner;
@@ -83,10 +74,6 @@ it.each(changes.flatMap((change) => [false, true].map((locked) => ({ change, loc
         break;
       case "clock":
         editor.setFlowClock(source.id, 200);
-        break;
-      case "recipe":
-        if (current.kind !== "manufacturing") throw new Error("Expected smelter");
-        editor.replaceNode(withRecipe(current, "double", catalog));
         break;
       case "machine":
         if (current.kind !== "manufacturing") throw new Error("Expected smelter");
