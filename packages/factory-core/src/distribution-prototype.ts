@@ -1,5 +1,5 @@
-/* oxlint-disable unicorn/consistent-function-scoping -- Keep this disposable generator self-contained. */
-/** Throwaway distribution experiment. No factory state or persistence.
+/* oxlint-disable unicorn/consistent-function-scoping -- Keep distribution generation self-contained. */
+/** Read-only distribution generation. No factory state or persistence.
  * Equal 2/3-way splits; spare leaves return upstream through a merger.
  * https://satisfactory.wiki.gg/wiki/Balancer
  */
@@ -45,7 +45,7 @@ export function buildDistributionPrototype(
   )
     return fail("Connect machines with a positive flow to preview their distribution.");
   if (sources.length + destinations.length > 100)
-    return fail("This experiment supports up to 100 machines at a time.");
+    return fail("This preview supports up to 100 machines at a time.");
   if (Math.abs(sum(sources) - sum(destinations)) > epsilon)
     return fail("Supply and destination rates do not match.");
   if ([...sources, ...destinations].some((entry) => entry.rate > capacity + epsilon))
@@ -141,7 +141,7 @@ export function buildDistributionPrototype(
     }
     if (!units)
       return fail(
-        "This rate ratio needs a larger balancer than the experiment supports. Try Manifold.",
+        "This rate ratio needs a larger balancer than the preview supports. Try Manifold.",
       );
     const count = units.reduce((a, b) => a + b, 0);
     let slots = count;

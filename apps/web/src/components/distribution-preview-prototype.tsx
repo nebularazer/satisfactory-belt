@@ -1,9 +1,7 @@
-/* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Deliberately local, disposable prototype controls. */
+/* oxlint-disable react-perf/jsx-no-new-function-as-prop -- Local distribution-preview controls. */
 import { MAX_ZOOM, MIN_ZOOM } from "@satisfactory-belt/canvas-core";
 import type { PortReference } from "@satisfactory-belt/canvas-core";
-/** Experiment: can a separate construction canvas make a flow plan easier to build?
- * One agreed popup workflow, isolated on experiment/distribution-preview.
- */
+/** Read-only construction preview for a flow plan. */
 import { PREVIEW_BELTS, formatPlanningNumber } from "@satisfactory-belt/factory-core";
 import { MaximizeIcon, MinusIcon, PlusIcon, WorkflowIcon } from "lucide-react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -133,7 +131,7 @@ function Preview({
             {assets.catalog.items[snapshot.itemId]?.name ?? "Port"} distribution
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Experiment · {formatPlanningNumber(total)}/min · {snapshot.sources.length} suppliers →{" "}
+            {formatPlanningNumber(total)}/min · {snapshot.sources.length} suppliers →{" "}
             {snapshot.destinations.length} consumers. Your plan stays unchanged.
           </DialogDescription>
         </div>

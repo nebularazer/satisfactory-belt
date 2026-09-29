@@ -1,4 +1,4 @@
-/** Worker-backed layout for the isolated distribution experiment. */
+/** Worker-backed layout for the distribution preview. */
 import ELK from "elkjs/lib/elk-api";
 import type { ElkNode } from "elkjs/lib/elk-api";
 

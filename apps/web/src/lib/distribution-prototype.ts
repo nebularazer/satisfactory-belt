@@ -1,4 +1,4 @@
-/** Adapter for the throwaway distribution preview. Never edits the source document. */
+/** Adapter for the read-only distribution preview. Never edits the source document. */
 import { CanvasController, GRID_SIZE, portId } from "@satisfactory-belt/canvas-core";
 import type { CanvasItem, CanvasLink, Point, PortReference } from "@satisfactory-belt/canvas-core";
 import {
@@ -62,7 +62,7 @@ export function distributionSnapshot(
   const result: DistributionSnapshot = { itemId, sources: [], destinations: [] };
   const materials = [...editor.getMaterials(ref)];
   if (materials.length !== 1 || assets.catalog.items[itemId]?.form !== "solid")
-    return { ...result, error: "This experiment supports one solid item per port." };
+    return { ...result, error: "This preview supports one solid item per port." };
   const allocations = new Map<string, { ref: PortReference; rate: number; source: boolean }>();
   const analysis = editor.getFlowAnalysis();
   for (const link of editor.history.getSnapshot().state.links) {
@@ -90,7 +90,7 @@ export function distributionSnapshot(
       return {
         ...result,
         error:
-          "Select direct machine connections for this experiment. Existing logistics networks are not expanded yet.",
+          "Select direct machine connections for this preview. Existing logistics networks are not expanded yet.",
       };
     const weights = node.machines.map((member) => {
       const production = resolveProduction({ ...node, machines: [member] }, assets.catalog);
