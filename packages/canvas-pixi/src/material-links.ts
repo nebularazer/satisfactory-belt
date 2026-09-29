@@ -15,6 +15,27 @@ function toward(a: Point, b: Point, amount: number): Point {
     ? { x: a.x + ((b.x - a.x) * amount) / length, y: a.y + ((b.y - a.y) * amount) / length }
     : a;
 }
+/** Continuous dash phase across orthogonal feedback segments. */
+function dashedPath(lines: Graphics, points: readonly Point[], zoom: number) {
+  const dash = 8 * zoom,
+    gap = 5 * zoom;
+  let phase = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!,
+      b = points[i]!;
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    let distance = 0;
+    while (distance < length) {
+      const drawing = phase < dash;
+      const step = Math.min((drawing ? dash : dash + gap) - phase, length - distance);
+      const start = toward(a, b, distance),
+        end = toward(a, b, distance + step);
+      if (drawing) lines.moveTo(start.x, start.y).lineTo(end.x, end.y);
+      distance += step;
+      phase = (phase + step) % (dash + gap);
+    }
+  }
+}
 function pathMidpoint(points: readonly Point[]): Point {
   const lengths = points
     .slice(1)
@@ -69,23 +90,31 @@ export function drawMaterialLinks(
       continue;
     const points = link.points.map((point) => worldToScreen(point, camera));
     const selected = link.id !== null && linkSelection.selected === link.id;
-    const color = selected || link.id === null ? palette.selection : palette.footer;
-    lines.moveTo(points[0]!.x, points[0]!.y);
-    for (let i = 1; i < points.length - 1; i++) {
-      const a = points[i - 1]!,
-        b = points[i]!,
-        c = points[i + 1]!;
-      const radius = Math.min(
-        8 * camera.zoom,
-        Math.hypot(b.x - a.x, b.y - a.y) / 2,
-        Math.hypot(c.x - b.x, c.y - b.y) / 2,
-      );
-      const before = toward(b, a, radius),
-        after = toward(b, c, radius);
-      lines.lineTo(before.x, before.y).quadraticCurveTo(b.x, b.y, after.x, after.y);
+    const color =
+      selected || link.id === null
+        ? palette.selection
+        : (("color" in link ? link.color : undefined) ?? palette.footer);
+    if ("dashed" in link && link.dashed) {
+      dashedPath(lines, points, camera.zoom);
+      lines.stroke({ color, width: 2 });
+    } else {
+      lines.moveTo(points[0]!.x, points[0]!.y);
+      for (let i = 1; i < points.length - 1; i++) {
+        const a = points[i - 1]!,
+          b = points[i]!,
+          c = points[i + 1]!;
+        const radius = Math.min(
+          8 * camera.zoom,
+          Math.hypot(b.x - a.x, b.y - a.y) / 2,
+          Math.hypot(c.x - b.x, c.y - b.y) / 2,
+        );
+        const before = toward(b, a, radius),
+          after = toward(b, c, radius);
+        lines.lineTo(before.x, before.y).quadraticCurveTo(b.x, b.y, after.x, after.y);
+      }
+      const end = points.at(-1)!;
+      lines.lineTo(end.x, end.y).stroke({ color, width: selected ? 3 : 2 });
     }
-    const end = points.at(-1)!;
-    lines.lineTo(end.x, end.y).stroke({ color, width: selected ? 3 : 2 });
     if (link.id !== null && getLinkRates) {
       const rates = getLinkRates(link.id);
       if (rates.length) {
@@ -111,7 +140,11 @@ export function drawMaterialLinks(
           label.style.fill = palette.title;
           label.style.stroke = { color: palette.card, width: 5 };
         }
-        const midpoint = pathMidpoint(points);
+        label.style.fontSize = "labelFontSize" in link ? (link.labelFontSize ?? 11) : 11;
+        const midpoint =
+          "labelPosition" in link && link.labelPosition
+            ? worldToScreen(link.labelPosition, camera)
+            : pathMidpoint(points);
         label.position.set(midpoint.x, midpoint.y);
         // Link graphics live in screen space; labels retain their canvas-space size.
         label.scale.set(camera.zoom);

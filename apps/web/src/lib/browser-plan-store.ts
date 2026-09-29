@@ -3,6 +3,7 @@ import type { FactoryDocument } from "@satisfactory-belt/factory-core";
 const DATABASE = "satisfactory-belt";
 const STORE = "plans";
 const CURRENT = "current";
+const PLAN_VERSION = 2;
 
 export interface PlanStore {
   load(): Promise<FactoryDocument | undefined>;
@@ -46,11 +47,19 @@ export async function createBrowserPlanStore(
     async load() {
       const saved: unknown = await transaction("readonly", (store) => store.get(CURRENT));
       if (saved === undefined) return undefined;
+      // Pre-release formats are intentionally not migrated.
+      if (
+        saved &&
+        typeof saved === "object" &&
+        "version" in saved &&
+        saved.version !== PLAN_VERSION
+      )
+        return undefined;
       if (
         !saved ||
         typeof saved !== "object" ||
         !("version" in saved) ||
-        saved.version !== 1 ||
+        saved.version !== PLAN_VERSION ||
         !("document" in saved) ||
         !saved.document ||
         typeof saved.document !== "object" ||
@@ -64,7 +73,9 @@ export async function createBrowserPlanStore(
       return saved.document as FactoryDocument;
     },
     async save(document) {
-      await transaction("readwrite", (store) => store.put({ version: 1, document }, CURRENT));
+      await transaction("readwrite", (store) =>
+        store.put({ version: PLAN_VERSION, document }, CURRENT),
+      );
     },
     close: () => database.close(),
   };

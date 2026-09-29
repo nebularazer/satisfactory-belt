@@ -1,20 +1,13 @@
 /* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- Rule-group hover/focus identifies its matching canvas port. */
 /* oxlint-disable oxc/no-map-spread -- Candidate rules are immutable document values. */
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-function-as-prop, react-perf/jsx-no-new-array-as-prop -- Only the selected inspector constructs these choices. */
-import {
-  DEFAULT_SPLITTER_PROGRAM,
-  SPLITTER_OUTPUTS,
-  commonSetting,
-  scopedMachines,
-  withRecipe,
-} from "@satisfactory-belt/factory-core";
+import { DEFAULT_SPLITTER_PROGRAM, SPLITTER_OUTPUTS } from "@satisfactory-belt/factory-core";
 import type {
   FactoryNode,
   LogisticsNode,
   SplitterRule,
   SplitterOutput,
 } from "@satisfactory-belt/factory-core";
-import { recipeAlternatives } from "@satisfactory-belt/game-data/search";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -49,38 +42,13 @@ export function InspectorConfiguration({
 }) {
   const c = assets.catalog;
   useEffect(() => () => editor.controller.highlightPort(null), [editor]);
-  const alternatives =
-    node.kind === "manufacturing"
-      ? new Set(recipeAlternatives(c, node.recipeId))
-      : new Set<string>();
-  if (node.kind === "manufacturing")
-    return (
-      <InspectorChoice
-        label="Recipe"
-        value={node.recipeId}
-        assets={assets}
-        options={Object.values(c.recipes)
-          .filter((r) => r.machineIds.includes(node.machineId) || alternatives.has(r.id))
-          .map((r) => ({
-            value: r.id,
-            label: r.name.replace(/^Alternate:\s*/i, ""),
-            badge: r.alternate ? "Alternate" : undefined,
-            description: r.machineIds.includes(node.machineId)
-              ? undefined
-              : c.machines[r.machineIds[0]!]!.name,
-            iconId: c.items[r.products[0]!.itemId]!.iconId,
-            disabled: () => !editor.canReplaceNode(withRecipe(node, r.id, c)),
-          }))}
-        onChange={(recipeId) => editor.replaceNode(withRecipe(node, recipeId, c))}
-      />
-    );
   if (node.kind === "extractor") {
     const extractor = c.extractors[node.extractorId]!;
     const tiers = Object.values(c.extractors).filter((entry) =>
       entry.resourceIds.includes(node.resourceId),
     );
     if (extractor.resourceIds.length <= 1 && tiers.length <= 1 && !extractor.hasPurity) return null;
-    const purity = commonSetting(scopedMachines(node, scope), "purity");
+    const purity = node.machines[0]!.purity ?? 1;
     return (
       <div className="space-y-3">
         {extractor.resourceIds.length > 1 && (
@@ -100,6 +68,7 @@ export function InspectorConfiguration({
         {tiers.length > 1 && (
           <InspectorButtonGroup
             label="Miner tier"
+            disabled={scope !== "all"}
             value={node.extractorId}
             options={tiers.map((e) => ({
               value: e.id,
@@ -113,10 +82,11 @@ export function InspectorConfiguration({
         {extractor.hasPurity && (
           <InspectorButtonGroup
             label="Purity"
-            value={purity === null ? null : String(purity)}
+            disabled={scope !== "all"}
+            value={String(purity)}
             options={PURITY_OPTIONS}
             onChange={(value) =>
-              editor.setOperatingSetting(node.id, scope, "purity", Number(value))
+              editor.setOperatingSetting(node.id, "all", "purity", Number(value))
             }
           />
         )}

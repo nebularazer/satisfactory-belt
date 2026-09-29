@@ -9,6 +9,11 @@ export type CanvasLink = Readonly<{
   output: PortReference;
   input: PortReference;
   points: readonly Point[];
+  /** Optional placement supplied by an automatic layout engine. */
+  labelPosition?: Point;
+  labelFontSize?: number;
+  color?: number;
+  dashed?: boolean;
   guides?: readonly RouteGuide[];
 }>;
 export type LinkHit = Readonly<{ id: string; segment: number }>;

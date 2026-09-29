@@ -59,6 +59,7 @@ export function fitCamera(items: readonly Bounds[], viewport: Size, padding = 64
   }
   const zoom = clampZoom(
     Math.min(
+      1,
       Math.max(1, viewport.width - padding * 2) / Math.max(1, right - left),
       Math.max(1, viewport.height - padding * 2) / Math.max(1, bottom - top),
     ),

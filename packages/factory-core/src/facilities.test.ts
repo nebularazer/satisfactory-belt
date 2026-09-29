@@ -220,15 +220,14 @@ it("applies one pressurizer clock to satellite purities and counts pressurizer p
   ).toEqual([{ itemId: "gas", perMinute: 0 }]);
 });
 
-it("keeps mixed per-extractor purity, overwrites All and inherits the resulting purity", () => {
+it("rejects individual extractor purity edits and inherits group purity", () => {
   const { catalog, extractor } = fixture();
   const original = extractor("mine", "coal");
   if (original.kind !== "extractor") throw new Error();
   const group = { ...original, machines: createMachineMembers(2) };
-  const mixed = setMachineSetting(group, catalog, "1", "purity", 0.5);
-  expect(commonSetting(mixed.machines, "purity")).toBeNull();
-  expect(resolveProduction(mixed, catalog).outputs[0].perMinute).toBe(90);
-  const uniform = setMachineSetting(mixed, catalog, "all", "purity", 2);
+  expect(() => setMachineSetting(group, catalog, "1", "purity", 0.5)).toThrow("entire group");
+  const uniform = setMachineSetting(group, catalog, "all", "purity", 2);
+  expect(commonSetting(uniform.machines, "purity")).toBe(2);
   const resized = resizeMachineGroup(uniform, 3, () => "3");
   expect(resized.machines.map((m) => m.purity)).toEqual([2, 2, 2]);
   expect(resolveProduction(resized, catalog).outputs[0].perMinute).toBe(360);

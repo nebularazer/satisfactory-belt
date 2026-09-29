@@ -326,15 +326,20 @@ function analyze(
     for (const { entry, edge } of terminalEdges)
       if (entry.kind === "imported" || entry.kind === "exported")
         append(requiredPorts, portId(entry.port), itemId, edge.capacity - edge.remaining);
-    // Configured recipe demand and declared exports take precedence over disposal.
-    for (const node of document.nodes)
+    // Sinks only consume surplus after production.
+    for (const node of document.nodes) {
       if (
-        node.kind === "sink" ||
-        (node.kind === "facility" && node.configuration.type === "space-elevator")
+        node.kind !== "sink" &&
+        !(node.kind === "facility" && node.configuration.type === "space-elevator")
       )
-        for (const port of byNode.get(node.id) ?? [])
-          if (ids.has(portId(port)))
-            disposals.push({ nodeId: node.id, edge: graph.add(ids.get(portId(port))!, 1, total) });
+        continue;
+      for (const port of byNode.get(node.id) ?? [])
+        if (ids.has(portId(port)))
+          disposals.push({
+            nodeId: node.id,
+            edge: graph.add(ids.get(portId(port))!, 1, total),
+          });
+    }
     if (!graph.solve(0, 1)) {
       issues.push({ code: "analysis-limit" });
       return result("unverified");

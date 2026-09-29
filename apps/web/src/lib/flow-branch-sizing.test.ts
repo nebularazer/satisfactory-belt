@@ -1,3 +1,4 @@
+import { isFlowGroup, resolveProduction } from "@satisfactory-belt/factory-core";
 import { expect, it } from "vitest";
 
 import { minerFlowFixture } from "../test/flow-fixture";
@@ -76,15 +77,17 @@ it.each([false, true])(
       ? { ...reference, nodes: reference.nodes.toReversed(), links: reference.links.toReversed() }
       : reference;
     const editor = createFactoryEditor(catalog, document);
+    editor.setAutomaticSizing("iron-miners", true);
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 10);
     expect(editor.getPortRate("iron-miners", "output:Desc_OreIron_C")).toBe("240");
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 20);
     expect(editor.getPortRate("iron-miners", "output:Desc_OreIron_C")).toBe("480");
     editor.setMachineCount("cast-screws", 7);
-    expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("315");
+    expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("350");
     expect(editor.getNode("cast-screws")).toMatchObject({
-      machines: Array.from({ length: 7 }, () => expect.objectContaining({ clockPercent: 90 })),
+      machines: Array.from({ length: 7 }, () => expect.objectContaining({ clockPercent: 100 })),
     });
+    editor.setAutomaticSizing("cast-screws", true);
     editor.setProductionTarget("modular-frames", "Desc_ModularFrame_C", 40);
     expect(editor.getPortRate("cast-screws", "output:Desc_IronScrew_C")).toBe("720");
     expect(editor.getNode("cast-screws")).toMatchObject({
@@ -104,3 +107,58 @@ it.each([false, true])(
     expect(editor.getPortRate("iron-miners", "output:Desc_OreIron_C")).toBe("480");
   },
 );
+
+it("keeps unfinished upstream recipes productive and respects connected finite supply", () => {
+  const catalog = referenceCatalog();
+  catalog.extractors.Build_MinerMk2_C!.baseRate = 60;
+  const editor = createFactoryEditor(catalog, { nodes: [], links: [] });
+  const place = (recipeId: string, consumer?: string, ingredient?: string) =>
+    editor.placeNode(
+      { kind: "manufacturing", machineId: catalog.recipes[recipeId]!.machineIds[0]!, recipeId },
+      { x: 0, y: 0 },
+      consumer ? { nodeId: consumer, portKey: `input:Desc_${ingredient}_C` } : undefined,
+    ).id;
+  const rate = (id: string, direction: "inputs" | "outputs", item: string) => {
+    const node = editor.getNode(id)!;
+    if (!isFlowGroup(node)) throw new Error("Expected machine group");
+    return resolveProduction(node, catalog)[direction].find((r) => r.itemId === `Desc_${item}_C`)!
+      .perMinute;
+  };
+  const frames = place("Recipe_ModularFrame_C");
+  editor.setLimit(frames, { kind: "output", itemId: "Desc_ModularFrame_C", value: 10 });
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(10);
+  const reinforced = place("Recipe_IronPlateReinforced_C", frames, "IronPlateReinforced");
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(10);
+  expect(rate(reinforced, "inputs", "IronPlate")).toBeCloseTo(90);
+  expect(rate(reinforced, "inputs", "IronScrew")).toBeCloseTo(180);
+  const plates = place("Recipe_IronPlate_C", reinforced, "IronPlate");
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(10);
+  expect(rate(plates, "inputs", "IronIngot")).toBeCloseTo(135);
+  const ingots = place("Recipe_IngotIron_C", plates, "IronIngot");
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(10);
+  const miner = editor.placeNode(
+    { kind: "extractor", extractorId: "Build_MinerMk2_C", resourceId: "Desc_OreIron_C" },
+    { x: 0, y: 0 },
+    { nodeId: ingots, portKey: "input:Desc_OreIron_C" },
+  ).id;
+  expect(rate(ingots, "outputs", "IronIngot")).toBeCloseTo(60);
+  expect(rate(plates, "outputs", "IronPlate")).toBeCloseTo(40);
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(40 / 9);
+  expect(rate(reinforced, "inputs", "IronScrew")).toBeCloseTo(80);
+  expect(editor.getNode(frames)).toMatchObject({
+    flow: { outputLimit: { itemId: "Desc_ModularFrame_C", perMinute: 10 } },
+  });
+  editor.historyCommand("undo");
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(10);
+  editor.historyCommand("redo");
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(40 / 9);
+  editor.setOperatingSetting(miner, "all", "purity", 2);
+  expect(rate(frames, "outputs", "ModularFrame")).toBeCloseTo(80 / 9);
+  const saved = editor.history.getSnapshot().state;
+  const reopened = createFactoryEditor(catalog, {
+    ...saved,
+    nodes: saved.nodes.toReversed(),
+    links: saved.links.toReversed(),
+  });
+  expect(reopened.getNode(frames)).toEqual(editor.getNode(frames));
+});

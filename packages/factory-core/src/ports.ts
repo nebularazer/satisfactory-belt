@@ -78,3 +78,6 @@ export function createPortIndex(ports: readonly SemanticPort[]) {
     },
   };
 }
+
+/** Stable port keys determine visual order, never connection identity. */
+export type PortOrder = Readonly<Partial<Record<"input" | "output", readonly string[]>>>;

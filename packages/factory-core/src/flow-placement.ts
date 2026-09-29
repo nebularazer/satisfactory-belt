@@ -3,6 +3,7 @@ import { portId } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 
 import { prepareFlowPlan } from "./flow-plan";
+import { flowMachineLimit } from "./flow-sizing";
 import type { FactoryNode } from "./index";
 import type { FactoryDocument, MaterialLink } from "./links";
 import { createMachineMembers, MAX_MACHINE_COUNT } from "./machine-settings";
@@ -45,6 +46,7 @@ export function sizeProductionGroup(
   target: number,
   direction: "input" | "output" = "output",
 ): typeof node {
+  if (flowMachineLimit(node) !== undefined) return node;
   if (!Number.isFinite(target) || target <= 1e-8) return node;
   const settings = { ...node.machines[0]!, clockPercent: 100 };
   const unit = { ...node, machines: [settings] };

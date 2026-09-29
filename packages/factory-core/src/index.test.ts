@@ -2,14 +2,7 @@ import { SNAP_SIZE } from "@satisfactory-belt/canvas-core";
 import type { GameCatalog } from "@satisfactory-belt/game-data";
 import { describe, expect, it } from "vitest";
 
-import {
-  withRecipe,
-  formatPower,
-  nodeBounds,
-  portRows,
-  resolveMachineNode,
-  resolveFactoryNode,
-} from "./index";
+import { formatPower, nodeBounds, portRows, resolveMachineNode, resolveFactoryNode } from "./index";
 import type { LogisticsNode, ManufacturingNode } from "./index";
 import { createConnectionIndex } from "./links";
 import {
@@ -147,11 +140,11 @@ function fixture() {
 describe("machine card geometry", () => {
   it.each([
     [0, []],
-    [1, [144]],
-    [2, [128, 160]],
-    [3, [112, 144, 176]],
+    [1, [96]],
+    [2, [96, 128]],
+    [3, [96, 128, 160]],
     [4, [96, 128, 160, 192]],
-  ] as const)("centers %i ports on the snap lattice", (count, rows) => {
+  ] as const)("top-aligns %i ports on the snap lattice", (count, rows) => {
     expect(portRows(count)).toEqual(rows);
     const { node, catalog } = fixture();
     const recipe = catalog.recipes.Recipe;
@@ -161,6 +154,10 @@ describe("machine card geometry", () => {
     }));
     const display = resolveMachineNode(node, catalog);
     expect(nodeBounds(node)).toMatchObject({ width: 256, height: 256 });
+    expect(
+      display.ports.filter((port) => port.direction === "input").map((port) => port.y),
+    ).toEqual(rows);
+    expect(display.ports.find((port) => port.direction === "output")?.y).toBe(96);
     for (const port of display.ports) {
       expect((node.x + port.x) % SNAP_SIZE).toBe(0);
       expect((node.y + port.y) % SNAP_SIZE).toBe(0);
@@ -245,7 +242,7 @@ it("hides unsupported footer settings without moving a fixed producer's output",
     sloops: null,
   });
   expect(display.ports).toHaveLength(1);
-  expect(display.ports[0]).toMatchObject({ x: 256, y: 144 });
+  expect(display.ports[0]).toMatchObject({ x: 256, y: 96 });
   catalog.machines.Assembler.sloopSlots = 0;
   expect(resolveMachineNode(fixture().node, catalog).sloops).toBeNull();
 });
@@ -325,7 +322,7 @@ it("resolves extraction as a single resource output with machine power, clock an
   const display = resolveMachineNode(node, catalog);
   expect(display).toMatchObject({
     title: "Water",
-    subtitle: "2× Water Extractor",
+    subtitle: "2 / 2× Water Extractor",
     machineIconId: "water-pump-icon",
     powerLabel: "40 MW",
     clockLabel: "100%",
@@ -336,7 +333,7 @@ it("resolves extraction as a single resource output with machine power, clock an
     key: "output:Water",
     transport: "pipe",
     x: 256,
-    y: 144,
+    y: 96,
   });
   expect(
     resolveMachineNode(
@@ -622,24 +619,4 @@ it("scales variable recipe power ranges with each member's clock and amplificati
   expect(display.power.minMegawatts).toBeCloseTo(5000, 1);
   expect(display.power.maxMegawatts).toBeCloseTo(15000, 1);
   expect(display.power.averageMegawatts).toBeCloseTo(10000, 1);
-});
-
-it("switches producer for an alternative recipe while retaining members and supported settings", () => {
-  const { catalog, node } = fixture();
-  catalog.machines.Other = { ...catalog.machines.Assembler, id: "Other", sloopSlots: 1 };
-  catalog.recipes.Alternative = {
-    ...catalog.recipes.Recipe,
-    id: "Alternative",
-    machineIds: ["Other"],
-  };
-  const original = {
-    ...node,
-    machines: createMachineMembers(2, { clockPercent: 150, sloopsUsed: 2 }),
-  };
-  const changed = withRecipe(original, "Alternative", catalog);
-  expect(changed).toMatchObject({ machineId: "Other", recipeId: "Alternative" });
-  expect(changed.machines).toEqual(
-    original.machines.map((member) => ({ ...member, sloopsUsed: 1 })),
-  );
-  expect(withRecipe(original, original.recipeId, catalog)).toBe(original);
 });

@@ -5,7 +5,7 @@ import { PROJECT_PHASES } from "@satisfactory-belt/game-data";
 import { NODE_SIZE, HEADER_HEIGHT, portRows, formatPower } from "./index";
 import type { MachineMember, MachineDisplay, PortDisplay, PowerDisplay } from "./index";
 import { formatPlanningNumber } from "./number-format";
-import type { PortTransport } from "./ports";
+import type { PortOrder, PortTransport } from "./ports";
 import type { Production } from "./production";
 
 export type Purity = 0.5 | 1 | 2;
@@ -62,6 +62,7 @@ export type FacilityNode = Readonly<{
   buildingId: string;
   configuration: FacilityConfiguration;
   machines: readonly MachineMember[];
+  portOrder?: PortOrder;
 }>;
 export type TransportStop = Readonly<{
   id: string;

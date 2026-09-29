@@ -91,20 +91,20 @@ it("reports storage access errors instead of treating them as an empty database"
   await expect(createBrowserPlanStore(factory)).rejects.toThrow("Storage unavailable");
 });
 
-it("rejects unreadable records without replacing them with the example plan", async () => {
+it.each([1, 99])("skips unsupported plan version %s without migrating it", async (version) => {
   const factory = new IDBFactory();
   const store = await createBrowserPlanStore(factory);
   const database = await new Promise<IDBDatabase>((resolve) => {
     const request = factory.open("satisfactory-belt", 1);
     request.addEventListener("success", () => resolve(request.result));
   });
-  const record = { version: 99, document: { nodes: [], links: [] } };
+  const record = { version, document: { nodes: [], links: [] } };
   await new Promise<void>((resolve) => {
     const tx = database.transaction("plans", "readwrite");
     tx.objectStore("plans").put(record, "current");
     tx.addEventListener("complete", () => resolve());
   });
-  await expect(store.load()).rejects.toThrow("has not been overwritten");
+  expect(await store.load()).toBeUndefined();
   const saved = await new Promise<unknown>((resolve) => {
     const request = database.transaction("plans").objectStore("plans").get("current");
     request.addEventListener("success", () => resolve(request.result));

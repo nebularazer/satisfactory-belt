@@ -1,103 +1,113 @@
 # Flow planning
 
-Flow nodes represent machine groups. Material links can share compatible inputs and
+Flow nodes represent machine groups. Compatible material links can share inputs and
 outputs without physical belt/pipe capacity or splitter requirements. Build mode and
-conversion remain deferred. The app opens the editable modular-frame and recycling
-references; refreshing restores them.
+conversion remain deferred. Plans autosave to IndexedDB; an empty store starts from
+the example plan. Unsupported saved formats are not migrated.
 
-## Targets, clock and automatic sizing
+## Production limits and clock
 
-A production group's inspector displays current output rates in equal-width fields,
-with one shared production lock and a single Clock speed field showing the actual
-calculated clock. − adds a machine and lowers the clock; + removes one and raises it.
-Typing a percentage requests the fewest whole machines able to meet output at or
-below that speed; the displayed clock then adjusts to preserve output exactly.
-The adjacent info tooltip explains the controls and rounding with a worked example. Unlocked fields follow the connected
-plan. Locking captures the current production; editing any output rate locks the recipe
-at that rate and updates all coproducts in their fixed recipe ratio. Unlocking clears the
-recipe's target. Merely focusing or blurring an unchanged field never locks it.
-Targets are gross production rates, not additional exports: connected consumers use
-that production. An unconnected target output is the final product of the plan.
+The inspector has one production limit: an output rate, a machine count, or No Limit.
+Output limits use items/min (or m³/min for fluids). For recipes with multiple products,
+users choose the product that defines the limit; converting between products preserves
+the recipe ratio. Converting to machine count rounds up to a whole count. Limits are
+saved constraints, distinct from the actual flow achievable with connected supply.
+Clearing the limit releases the constraint rather than retaining the previous rate.
 
-Targets and preferred clocks persist through later edits, clipboard, and undo/redo.
-There are no temporary anchors, machine limits or construction-direction flags.
-Changing the modular-frame target from 10 to 20 resizes its suppliers, including
-extraction. Changing count preserves current production by redistributing it across
-the requested number of machines at a corresponding clock. Count buttons are disabled
-when this would require a clock outside 1–250%. The count is not a persistent constraint:
-later demand changes can resize the group again using the chosen clock.
+Auto clock calculates the required clock using whole machines. A machine-count limit
+can keep, for example, four machines running at a lower clock. Set clock uses an
+explicit percentage; Set 100% is a shortcut. Selecting a manual clock with No Limit
+captures the current whole-machine count as a machine limit. A per-machine selection
+allows individual clocks, including three machines at 100% and one at 50%. Miner tier
+and purity belong to the whole group and cannot be changed for an individual member.
 
-Automatic groups calculate whole counts at or below the chosen clock (100% by
-default), sharing the workload by underclocking. For example, a target of 1,200 recycled
-plastic can use 12 refineries at 166⅔%, 13 at 153.846…%, or 20 at 100%. Setting the
-maximum clock to 100% calculates 20 machines. Rebalance at 100% preserves current
-output and the production lock state while selecting the fewest whole machines that
-need no overclocking. Calculated zero clock denotes an idle group;
-authored clocks remain between 1% and 250%. Flow calculations can express small
-fractional utilization; physical minimum clocks are a Build-mode concern.
+Automatic suppliers follow downstream requirements. Finite suppliers bound achievable
+production, so a requested output may exceed actual output. Unconstrained terminal
+production establishes demand when there is no finite supply driving the component.
+Explicit limits choose the intended mix when several branches share supply. Placement
+from an input sizes its supplier to demand; placement from an output sizes a consumer
+from available supply. Other unfinished ingredients assume external supply.
 
-Clock and rate displays use common fractions when accurate within 1e-7 (166⅔, 83⅓),
-otherwise at most two decimal places (153.85), without trailing zeros. Inputs show
-the full decimal value on focus. Focusing and leaving an unchanged field never
-commits a rounded value; calculations retain full precision.
+Node subtitles show used machine equivalents rather than an authored machine limit.
+Ports expose actual flow and configured limits/capacity where applicable. The port
+inspector lists connected machines, recipes and allocated rates. Common fractional
+clock values use mixed fractions; displayed rounding never changes calculation
+precision. Unchanged input focus/blur does not commit a rounded value.
 
-Standalone recipes and extractors start unlocked at their default configuration.
-Only an explicit output edit or lock action saves a production target. Without a
-locked supply feeding a terminal production group, that group’s current output
-provides demand for automatic suppliers. This is derived from graph topology each
-time, never saved as a hidden lock. Locked supplies drive their automatic downstream
-groups; set a consumer output explicitly when reserving a particular rate.
-Connected placements are sized from the source port’s available supply or demand. Automatic extractors in a demand-led plan resize with demand. Individual
-member edits retain member clock preferences; bulk clock edits replace those preferences.
-
-Dragging from an input sizes the supplier for the required material. Dragging from
-an output extends production from available supply. A downstream recipe can be sized
-from its connected ingredient while other unfinished ingredients remain visible as
-missing inputs. Multiple targets sum through shared suppliers. Unconstrained branches
-use a deterministic feasible allocation, not historic branch proportions or connection
-order. Specify targets to choose a branch mix.
+The inspector retains Inputs, Outputs, power-shard and Somersloop counts, and power
+usage. Recipes cannot be changed after placement. Up/down buttons reorder material
+ports, splitter outputs and merger inputs. Stable port keys keep links and splitter
+rules attached; only positions change. Order is saved per node and supports undo/redo.
+Mobile catalog and inspector sheets use 60% height, remain scrollable and allow canvas
+interaction. Opening the catalog closes the inspector presentation.
 
 ## Calculation seam
 
-`resizeFlowGroups(document, catalog)` calculates connected components from saved
-constraints using a continuous linear program. Recipe ratios and material conservation
-are simultaneous equations, so recycling loops use the same rules as ordinary chains.
-Targets are bounded by technical document limits and their requested recipe workload. Multiple product
-targets on one recipe use the largest required workload; unavoidable coproduct surplus
-remains visible. Lexicographic objectives meet targets first, minimize missing input,
-use finite supply for automatic terminal production, then minimize machine workload.
-Missing input slack supports incomplete plans; it is never reported as real supply.
-The JavaScript LP solver is contained in this module; callers do not manage its variables.
+`resizeFlowGroups(document, catalog)` solves connected production components with a
+continuous linear program. Recipe ratios and material conservation are simultaneous
+equations, including recycling loops. It meets feasible targets within authored
+constraints, then minimizes unnecessary external input, surplus and machine workload.
+Unconnected ingredients assume external supply; once connected, only their actual
+suppliers can feed them. This assumption is not material delivered by a link.
 
-`prepareFlowPlan(document, catalog)` separately exposes ports, compatible connections,
-inferred materials and cached configured-rate allocation. Per-material max flow serves
-recipe inputs and exports first, explicit disposal second, and storage last. Link/port
-labels are plain numbers. Link labels use a constant canvas-space font size and scale
-with zoom; they have no screen-space size compensation. Their render resolution
-tracks zoom and display density, matching node text. Recipe output numbers are configured potential, not actual
-starvation-limited throughput. Unmet requirements remain available in a collapsed, neutral Supply details section.
+`prepareFlowPlan(document, catalog)` exposes semantic ports, compatible connections,
+inferred materials and cached material allocation. Production consumers receive
+material before surplus disposal and storage. Link labels show actual allocated rates
+as plain numbers. Physical belt capacity does not constrain Flow-mode allocation.
 
-Storage implicitly collects surplus and forwards connected flow. It has no production
-target and contributes no demand to sizing. Collection is an accumulation rate, not a
-simulation of inventory or time to fill. It never supplies material from an implicit
-initial inventory. Optional splitters forward/filter materials without physical ratios.
+Storage collects surplus and forwards connected flow. It has no production target,
+contributes no demand to sizing and cannot supply implicit initial inventory. Splitters
+forward/filter material without physical equal-split ratios in the main flow plan.
 
-External supply/export declarations remain available in the document model. The node
-inspector does not expose external-flow controls or a global balance panel. Transport
-and finite-delivery facilities retain their configuration UI but their continuous rates
-remain unverified. Unknown rates are not interpreted as zero.
+Production edits and their sizing consequences form one undoable transaction. Port
+reordering changes layout without resizing production. Camera, movement and route edits
+do not request a new production solution. A steady-state recycling solution does not
+establish the inventory needed to start the loop.
 
-Calculations run on semantic edits, not geometry/camera/route changes. References and
-unchanged node objects are retained when the calculated configuration is equivalent.
-Prepared allocation results and canvas rate/icon labels are cached. Sizing and edits
-are one undoable transaction. A steady-state solution does not establish startup
-inventory for a recycling loop.
+## AWESOME Sink
 
-## Validation
+Sinks consume surplus after production consumers. They do not cause unconstrained
+upstream production to grow just to feed them. Automatic suppliers can reduce output
+as demand falls; author an output or machine limit to keep finite supply available for
+sinking. Automatically calculated machine counts are not capacity limits.
 
-Editor regressions cover persistent targets, production-preserving count edits, shortages,
-shared suppliers, forward/backward placement, unfinished ingredients, reversed graph
-order, equivalent purity/count changes, undo/redo, and surplus storage. The recycling
-reference verifies both groups can become 20 at 100% while still collecting 600 plastic
-and 750 rubber. Inspector interaction tests exercise rate editing, the shared production lock, count and clock controls.
-Existing material-allocation, facility, canvas and configuration checks remain in place.
+Sinks have no rate or mode setting. Their input lists show actual allocated rates.
+Saved plans containing the removed sink rate setting are rejected.
+
+## Distribution preview
+
+Selecting a port offers a separate, read-only distribution canvas. It expands directly
+connected machine groups into individual suppliers and consumers without modifying
+the saved plan. Pan, zoom and Fit remain available. Belts use tier colors and numeric
+rate labels; dedicated feedback-return belts are dashed. Machines and logistics nodes
+are square and grid aligned. Splitters and mergers retain three ports, using the outer
+two when only two are connected.
+
+Balanced layouts use equal two/three-way splits, mergers and feedback where needed.
+Feedback capacity includes recirculating material. Manifolds show steady-state rates
+after consumer buffers fill; manifolds with sinks are excluded because sinks do not
+back up at a target rate. Equal-rate pairs connect directly. Other suppliers split
+independently, merging only when needed by consumers or return loops.
+
+ELK lays out and routes the network in a worker. Consumers are grouped into columns by
+recipe; independent recipe branches occupy separate sections with suppliers on the
+left. The preview supports one solid item, direct machine connections, up to 100
+endpoints and bounded rate ratios. Unsupported configurations show an explanation.
+It does not guarantee a globally minimal balancer and does not expand existing
+logistics networks or fluids.
+
+## Validation and deferred work
+
+Regressions cover finite supply, branch sizing, clock and limit conversions, unfinished
+ingredients, surplus sinks, recycling, undo/redo, port ordering and inspector interaction.
+Distribution checks cover direct pairs, independent splitting, feedback capacity,
+material conservation and equal splits.
+
+Deferred:
+
+- Visual indicators for unconnected inputs that assume external supply, alongside
+  Flow status and Build-mode belt-capacity colors.
+- A main-canvas external-supply node with configurable material and rate. External
+  declarations exist in the document model but have no inspector controls.
+- Sink points/min, accounting separately for normal and DNA points.
+- Verification of continuous rates for transport and finite-delivery facilities.

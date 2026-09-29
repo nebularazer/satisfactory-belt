@@ -2,12 +2,10 @@
 import {
   formatPlanningNumber,
   isFlowGroup,
-  isProductionLocked,
   commonMatrices,
   commonSetting,
   machineCapabilities,
   MAX_MACHINE_COUNT,
-  rebalanceFlowGroup,
   resolveProduction,
   scopedMachines,
 } from "@satisfactory-belt/factory-core";
@@ -20,10 +18,10 @@ import { InspectorButtonGroup } from "@/components/inspector-button-group";
 import { InspectorConfiguration } from "@/components/inspector-configuration";
 import { InspectorFacility, PURITY_OPTIONS } from "@/components/inspector-facility";
 import { InspectorFlow } from "@/components/inspector-flow";
-import { InspectorFlowClock } from "@/components/inspector-flow-clock";
 import { InspectorNumberField } from "@/components/inspector-number-field";
+import { InspectorPortOrder } from "@/components/inspector-port-order";
+import { InspectorSink } from "@/components/inspector-sink";
 import { InspectorStatistics } from "@/components/inspector-statistics";
-import { InspectorSupplyDetails } from "@/components/inspector-supply-details";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -82,7 +80,7 @@ export function InspectorBody({
       onValueChange={(value) => {
         if (typeof value === "string") setSelected(value);
       }}
-      className="gap-4"
+      className="min-h-0 min-w-0 max-w-full gap-3 overflow-hidden"
       onKeyDown={(event) => {
         if (
           event.key === "Escape" ||
@@ -93,16 +91,13 @@ export function InspectorBody({
       }}
     >
       {node.kind !== "logistics" && capabilities?.groupable && (
-        <div className="sticky top-0 z-10 bg-card py-1">
+        <div className="shrink-0 px-4 py-1 sm:px-0">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
             <TabsList
               aria-label="Machine settings scope"
               className="min-w-0 flex-1 justify-start p-0 group-data-horizontal/tabs:h-auto"
             >
-              <TabsTrigger
-                value="all"
-                className="h-11 flex-none px-3 focus-visible:ring-inset sm:h-8"
-              >
+              <TabsTrigger value="all" className="h-8 flex-none px-3 focus-visible:ring-inset">
                 All
               </TabsTrigger>
               <div className="ml-1 flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden border-l border-border pl-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -111,14 +106,14 @@ export function InspectorBody({
                     key={member.id}
                     value={member.id}
                     aria-label={`Machine ${index + 1}`}
-                    className="h-11 min-w-11 flex-none px-3 focus-visible:ring-inset sm:h-8 sm:min-w-8"
+                    className="h-8 min-w-8 flex-none px-3 focus-visible:ring-inset"
                   >
                     {index + 1}
                   </TabsTrigger>
                 ))}
               </div>
             </TabsList>
-            {capabilities?.groupable && (
+            {capabilities?.groupable && !isFlowGroup(node) && (
               <fieldset
                 aria-label="Machine count"
                 className="flex min-w-0 shrink-0 items-center border-l border-border pl-1"
@@ -126,19 +121,9 @@ export function InspectorBody({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-11 sm:size-8"
                   aria-label="Remove last machine"
-                  title={
-                    isProductionLocked(node)
-                      ? "Fewer machines, higher clock"
-                      : "Remove last machine"
-                  }
-                  disabled={
-                    node.machines.length <= 1 ||
-                    (isFlowGroup(node) &&
-                      isProductionLocked(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length - 1))
-                  }
+                  title="Remove last machine"
+                  disabled={node.machines.length <= 1}
                   onClick={() => editor.setMachineCount(node.id, node.machines.length - 1)}
                 >
                   <MinusIcon />
@@ -146,15 +131,9 @@ export function InspectorBody({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-11 sm:size-8"
                   aria-label="Add machine"
-                  title={isProductionLocked(node) ? "More machines, lower clock" : "Add machine"}
-                  disabled={
-                    node.machines.length >= MAX_MACHINE_COUNT ||
-                    (isFlowGroup(node) &&
-                      isProductionLocked(node) &&
-                      !rebalanceFlowGroup(node, assets.catalog, node.machines.length + 1))
-                  }
+                  title="Add machine"
+                  disabled={node.machines.length >= MAX_MACHINE_COUNT}
                   onClick={() => editor.setMachineCount(node.id, node.machines.length + 1)}
                 >
                   <PlusIcon />
@@ -164,9 +143,15 @@ export function InspectorBody({
           </div>
         </div>
       )}
-      <TabsContent value={scope} className="space-y-4">
+      <TabsContent
+        value={scope}
+        className="min-h-0 min-w-0 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-0"
+      >
         <InspectorConfiguration node={node} scope={scope} editor={editor} assets={assets} />
-        {isFlowGroup(node) && <InspectorFlow node={node} editor={editor} assets={assets} />}
+        {node.kind === "sink" && <InspectorSink />}
+        {isFlowGroup(node) && (
+          <InspectorFlow node={node} scope={scope} editor={editor} assets={assets} />
+        )}
         {node.kind === "facility" && (
           <InspectorFacility node={node} scope={scope} editor={editor} assets={assets} />
         )}
@@ -209,8 +194,8 @@ export function InspectorBody({
                 />
               )}
               {capabilities.matrices && (
-                <div className="flex min-h-11 items-center justify-between gap-2 sm:min-h-8">
-                  <label htmlFor={matrixId} className="text-xs sm:text-sm">
+                <div className="flex min-h-8 items-center justify-between gap-2">
+                  <label htmlFor={matrixId} className="text-sm">
                     Alien Power Matrices
                     {commonMatrices(members) === null && (
                       <span className="ml-1 text-xs text-muted-foreground">· Mixed</span>
@@ -223,23 +208,20 @@ export function InspectorBody({
                   />
                 </div>
               )}
-              {capabilities.clock &&
-                (isFlowGroup(node) ? (
-                  <InspectorFlowClock node={node} editor={editor} assets={assets} />
-                ) : (
-                  <InspectorNumberField
-                    key={`${scope}:clock`}
-                    label="Clock speed"
-                    value={commonSetting(members, "clockPercent")}
-                    revision={node.machines}
-                    min={1}
-                    max={250}
-                    unit="%"
-                    onCommit={(value) =>
-                      editor.setOperatingSetting(node.id, scope, "clockPercent", value)
-                    }
-                  />
-                ))}
+              {capabilities.clock && !isFlowGroup(node) && (
+                <InspectorNumberField
+                  key={`${scope}:clock`}
+                  label="Clock speed"
+                  value={commonSetting(members, "clockPercent")}
+                  revision={node.machines}
+                  min={1}
+                  max={250}
+                  unit="%"
+                  onCommit={(value) =>
+                    editor.setOperatingSetting(node.id, scope, "clockPercent", value)
+                  }
+                />
+              )}
               {capabilities.sloopSlots > 0 && (
                 <InspectorNumberField
                   key={`${scope}:sloops`}
@@ -260,10 +242,14 @@ export function InspectorBody({
           aria-label={networkRates ? "Planned material flow" : "Configured material rates"}
           className="space-y-2 border-t pt-4"
         >
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
             <RateColumn
               title="Inputs"
               rates={streams("input")}
+              node={node}
+              editor={editor}
+              direction="input"
+              reorder={!networkRates}
               assets={assets}
               empty={
                 node.kind === "logistics" || node.kind === "sink"
@@ -274,6 +260,10 @@ export function InspectorBody({
             <RateColumn
               title="Outputs"
               rates={streams("output")}
+              node={node}
+              editor={editor}
+              direction="output"
+              reorder={!networkRates}
               assets={assets}
               empty={node.kind === "logistics" ? "No known materials" : "No outputs"}
             />
@@ -288,7 +278,6 @@ export function InspectorBody({
             )
           )}
         </section>
-        <InspectorSupplyDetails node={node} editor={editor} assets={assets} />
         <InspectorStatistics node={node} scope={scope} editor={editor} assets={assets} />
       </TabsContent>
     </Tabs>
@@ -300,23 +289,88 @@ function RateColumn({
   rates,
   assets,
   empty,
+  node,
+  editor,
+  direction,
+  reorder,
 }: {
   title: string;
   rates: readonly MaterialRate[];
   assets: GameAssets;
   empty: string;
+  node: FactoryNode;
+  editor: Editor;
+  direction: "input" | "output";
+  reorder: boolean;
 }) {
+  const ports =
+    editor.getDisplay(node.id)?.ports.filter((port) => port.direction === direction) ?? [];
+  if (node.kind === "logistics")
+    return (
+      <div className="min-w-0 space-y-2">
+        <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
+        <ul className="space-y-1">
+          {ports.map((port, index) => {
+            const flows = editor.getPortFlows({ nodeId: node.id, portKey: port.key });
+            return (
+              <li key={port.key} className="flex min-h-10 items-center gap-3 py-1">
+                <div className="min-w-0 flex-1 space-y-1 text-xs">
+                  <p>{port.name}</p>
+                  {flows.length ? (
+                    flows.map((flow) => {
+                      const item = assets.catalog.items[flow.itemId]!;
+                      return (
+                        <div key={flow.itemId} className="flex items-center gap-2">
+                          <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
+                          <span className="min-w-0 flex-1 break-words">{item.name}</span>
+                          <span className="shrink-0 text-muted-foreground tabular-nums">
+                            {flow.perMinute === null
+                              ? "—"
+                              : `${formatPlanningNumber(flow.perMinute)}/min`}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-muted-foreground">No known materials</p>
+                  )}
+                </div>
+                <InspectorPortOrder
+                  editor={editor}
+                  nodeId={node.id}
+                  portKey={port.key}
+                  label={port.name}
+                  index={index}
+                  count={ports.length}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  const orderedRates = rates.toSorted(
+    (a, b) =>
+      ports.findIndex((port) => port.itemId === a.itemId) -
+      ports.findIndex((port) => port.itemId === b.itemId),
+  );
+  const canReorder =
+    reorder &&
+    ports.length > 1 &&
+    ports.length === rates.length &&
+    rates.every((rate) => ports.filter((port) => port.itemId === rate.itemId).length === 1);
+
   return (
     <div className="min-w-0 space-y-2">
       <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
       {rates.length ? (
-        <ul className="space-y-3">
-          {rates.map((rate) => {
+        <ul className="space-y-1">
+          {orderedRates.map((rate, index) => {
             const item = assets.catalog.items[rate.itemId]!;
             return (
-              <li key={rate.itemId} className="flex items-start gap-2">
+              <li key={rate.itemId} className="flex min-h-10 items-center gap-3 py-1">
                 <CatalogIcon iconId={item.iconId} assets={assets} size={24} />
-                <div className="min-w-0 break-words text-xs">
+                <div className="min-w-0 flex-1 break-words text-xs">
                   <p>{item.name}</p>
                   <p className="text-muted-foreground tabular-nums">
                     {rate.perMinute === null
@@ -324,6 +378,16 @@ function RateColumn({
                       : `${formatPlanningNumber(rate.perMinute)} ${item.unit === "m3" ? "m³" : "items"}/min`}
                   </p>
                 </div>
+                {canReorder && (
+                  <InspectorPortOrder
+                    editor={editor}
+                    nodeId={node.id}
+                    portKey={ports[index]!.key}
+                    label={`${item.name} ${direction}`}
+                    index={index}
+                    count={orderedRates.length}
+                  />
+                )}
               </li>
             );
           })}
