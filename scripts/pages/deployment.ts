@@ -1,6 +1,13 @@
 export interface OpenPullRequest {
   number: number;
+  labels: { name: string }[];
   head: { sha: string; ref: string; repo: { full_name: string } | null };
+}
+
+export const previewLabel = "preview";
+
+export function hasPreviewLabel(pr: { labels: { name: string }[] }): boolean {
+  return pr.labels.some(({ name }) => name === previewLabel);
 }
 
 export interface PagesBuild {
@@ -11,7 +18,7 @@ export interface PagesBuild {
   pull_requests: { number: number }[];
 }
 
-/** A late or rerun build must not replace newer code or resurrect a closed preview. */
+/** A late or rerun build must not replace newer code or restore an ineligible preview. */
 export function deploymentTarget(
   build: PagesBuild | undefined,
   defaultBranch: string,
@@ -25,6 +32,7 @@ export function deploymentTarget(
   if (build.event !== "pull_request") return "";
   const matches = openPullRequests.filter(
     (pr) =>
+      hasPreviewLabel(pr) &&
       pr.head.sha === build.head_sha &&
       pr.head.ref === build.head_branch &&
       pr.head.repo?.full_name === build.head_repository.full_name &&

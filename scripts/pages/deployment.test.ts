@@ -5,6 +5,7 @@ import type { OpenPullRequest, PagesBuild } from "./deployment.ts";
 
 const pullRequest: OpenPullRequest = {
   number: 42,
+  labels: [{ name: "preview" }],
   head: { sha: "current", ref: "feat/example", repo: { full_name: "owner/repo" } },
 };
 const build: PagesBuild = {
@@ -22,6 +23,20 @@ it("publishes the current PR build but ignores older commits and closed or merge
   );
   expect(deploymentTarget(build, "main", "main-sha", [])).toBe("");
   expect(deploymentTarget(undefined, "main", "main-sha", [pullRequest])).toBe("");
+});
+
+it("requires the preview label even when the open PR and build commit match", () => {
+  expect(deploymentTarget(build, "main", "main-sha", [{ ...pullRequest, labels: [] }])).toBe("");
+  expect(
+    deploymentTarget(build, "main", "main-sha", [
+      { ...pullRequest, labels: [{ name: "enhancement" }] },
+    ]),
+  ).toBe("");
+  expect(
+    deploymentTarget(build, "main", "main-sha", [
+      { ...pullRequest, labels: [{ name: "enhancement" }, { name: "preview" }] },
+    ]),
+  ).toBe("42");
 });
 
 it("identifies fork builds even when GitHub omits the run's pull_requests association", () => {

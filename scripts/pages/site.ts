@@ -19,10 +19,10 @@ async function validateBuild(directory: string, root = true): Promise<void> {
 
 export async function updateSite(
   directory: string,
-  openPullRequests: number[],
+  previewPullRequests: number[],
   build?: { directory: string; target: string },
 ): Promise<void> {
-  const open = new Set(openPullRequests.map(String));
+  const eligible = new Set(previewPullRequests.map(String));
   if (build) {
     if (build.target !== "main" && !/^[1-9]\d*$/.test(build.target)) {
       throw new Error(`Invalid preview number: ${build.target}`);
@@ -46,7 +46,7 @@ export async function updateSite(
         cp(join(build.directory, entry), join(directory, entry), { recursive: true }),
       ),
     );
-  } else if (build && open.has(build.target)) {
+  } else if (build && eligible.has(build.target)) {
     const destination = join(previews, build.target);
     await rm(destination, { recursive: true, force: true });
     await cp(build.directory, destination, { recursive: true });
@@ -55,7 +55,7 @@ export async function updateSite(
   // Reconcile every publish, including builds that became stale while waiting in the queue.
   await Promise.all(
     (await readdir(previews))
-      .filter((entry) => !open.has(entry))
+      .filter((entry) => !eligible.has(entry))
       .map((entry) => rm(join(previews, entry), { recursive: true, force: true })),
   );
   await writeFile(join(directory, ".nojekyll"), "");

@@ -6,7 +6,7 @@ on:
     types: [completed]
   pull_request_target:
     branches: [main]
-    types: [closed]
+    types: [closed, unlabeled]
   workflow_dispatch:
 
 permissions:
@@ -20,7 +20,11 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'pull_request_target' &&
+       (github.event.action == 'closed' || github.event.label.name == 'preview'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -40,7 +44,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-      - name: Resolve the current deployment and open previews
+      - name: Resolve the current deployment and eligible previews
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
@@ -52,12 +56,12 @@ jobs:
           path: ${{ runner.temp }}/pages-build
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
-      - name: Update the site and remove closed PR previews
+      - name: Update the site and remove ineligible PR previews
         env:
           PAGES_SITE_DIRECTORY: ${{ runner.temp }}/pages-site
           PAGES_BUILD_DIRECTORY: ${{ runner.temp }}/pages-build
           PAGES_TARGET: ${{ steps.resolve.outputs.target }}
-          PAGES_OPEN_PULL_REQUESTS: ${{ steps.resolve.outputs.open_pull_requests }}
+          PAGES_PREVIEW_PULL_REQUESTS: ${{ steps.resolve.outputs.preview_pull_requests }}
         run: node scripts/pages/publish.ts
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

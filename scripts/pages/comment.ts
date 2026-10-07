@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { hasPreviewLabel } from "./deployment.ts";
 import { github } from "./github.ts";
 
 const marker = "<!-- satisfactory-belt-pages-preview -->";
@@ -18,9 +19,11 @@ export async function commentOnPreview(
   if (!target || target === "main") return;
   if (!/^[1-9]\d*$/.test(target)) throw new Error(`Invalid preview number: ${target}`);
 
-  // A PR can close or receive a newer commit while the Pages deployment is running.
-  const pr = await github<{ state: string; head: { sha: string } }>(`pulls/${target}`);
-  if (pr.state !== "open" || pr.head.sha !== sha) return;
+  // A PR can close, lose its label, or receive a newer commit during deployment.
+  const pr = await github<{ state: string; head: { sha: string }; labels: { name: string }[] }>(
+    `pulls/${target}`,
+  );
+  if (pr.state !== "open" || pr.head.sha !== sha || !hasPreviewLabel(pr)) return;
   const previewUrl = new URL(`pr/${target}/`, `${siteUrl.replace(/\/+$/, "")}/`).href;
   const body = `${marker}\nPreview deployed: [Open preview](${previewUrl})`;
 

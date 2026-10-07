@@ -27,7 +27,7 @@ it("bootstraps gh-pages and publishes updates and merge cleanup without changing
     await mkdir(build);
     let attempt = 0;
 
-    async function publish(target: string, openPullRequests: number[], html?: string) {
+    async function publish(target: string, previewPullRequests: number[], html?: string) {
       attempt += 1;
       const checkout = join(root, `checkout-${attempt}`);
       const site = join(root, `site-${attempt}`);
@@ -41,7 +41,7 @@ it("bootstraps gh-pages and publishes updates and merge cleanup without changing
           PAGES_SITE_DIRECTORY: site,
           PAGES_BUILD_DIRECTORY: build,
           PAGES_TARGET: target,
-          PAGES_OPEN_PULL_REQUESTS: JSON.stringify(openPullRequests),
+          PAGES_PREVIEW_PULL_REQUESTS: JSON.stringify(previewPullRequests),
         },
       });
       expect(await readFile(join(site, ".nojekyll"), "utf8")).toBe("");

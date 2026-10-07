@@ -6,6 +6,7 @@ const marker = "<!-- satisfactory-belt-pages-preview -->";
 const siteUrl = "https://owner.github.io/repo/";
 const body = `${marker}\nPreview deployed: [Open preview](https://owner.github.io/repo/pr/42/)`;
 const fetchMock = vi.fn<typeof fetch>();
+const pullRequest = { state: "open", head: { sha: "current" }, labels: [{ name: "preview" }] };
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
@@ -25,7 +26,7 @@ function response(value: unknown, status = 200) {
 
 it("creates a preview comment after a current, open PR deployment without modifying user comments", async () => {
   fetchMock
-    .mockResolvedValueOnce(response({ state: "open", head: { sha: "current" } }))
+    .mockResolvedValueOnce(response(pullRequest))
     .mockResolvedValueOnce(response([{ id: 1, body: marker, user: { login: "contributor" } }]))
     .mockResolvedValueOnce(response({ id: 2 }));
   await commentOnPreview("42", siteUrl, "current");
@@ -37,7 +38,7 @@ it("creates a preview comment after a current, open PR deployment without modify
 
 it("updates the same bot comment on later deployments, including beyond the first page", async () => {
   fetchMock
-    .mockResolvedValueOnce(response({ state: "open", head: { sha: "current" } }))
+    .mockResolvedValueOnce(response(pullRequest))
     .mockResolvedValueOnce(
       response(Array.from({ length: 100 }, (_, id) => ({ id, body: "review" }))),
     )
@@ -57,22 +58,24 @@ it("updates the same bot comment on later deployments, including beyond the firs
   );
 });
 
-it("does not comment for main, cleanup, closed or merged PRs, or a newer PR commit", async () => {
+it("does not comment for main, cleanup, closed, merged or unlabelled PRs, or newer commits", async () => {
   await commentOnPreview("main", siteUrl, "current");
   await commentOnPreview("", siteUrl, "current");
   expect(fetchMock).not.toHaveBeenCalled();
   fetchMock
-    .mockResolvedValueOnce(response({ state: "closed", head: { sha: "current" } }))
-    .mockResolvedValueOnce(response({ state: "open", head: { sha: "newer" } }));
+    .mockResolvedValueOnce(response({ ...pullRequest, state: "closed" }))
+    .mockResolvedValueOnce(response({ ...pullRequest, head: { sha: "newer" } }))
+    .mockResolvedValueOnce(response({ ...pullRequest, labels: [] }));
   await commentOnPreview("42", siteUrl, "current");
   await commentOnPreview("42", siteUrl, "current");
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  await commentOnPreview("42", siteUrl, "current");
+  expect(fetchMock).toHaveBeenCalledTimes(3);
   expect(fetchMock.mock.calls.every(([, options]) => !options?.method)).toBe(true);
 });
 
 it("fails visibly if GitHub refuses to create the comment", async () => {
   fetchMock
-    .mockResolvedValueOnce(response({ state: "open", head: { sha: "current" } }))
+    .mockResolvedValueOnce(response(pullRequest))
     .mockResolvedValueOnce(response([]))
     .mockResolvedValueOnce(response({ message: "Forbidden" }, 403));
   await expect(commentOnPreview("42", siteUrl, "current")).rejects.toThrow(

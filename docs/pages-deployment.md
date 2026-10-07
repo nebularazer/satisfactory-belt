@@ -18,28 +18,33 @@ Pages was enabled. No additional token or secret is needed.
 - Main: `https://nebularazer.github.io/satisfactory-belt/`
 - PR 42: `https://nebularazer.github.io/satisfactory-belt/pr/42/`
 
-Pushes to `main` build the main app. Opening, updating, or reopening a PR targeting
-`main` builds its head commit with the corresponding Vite base path. Fork PRs use
-the same build path, subject to GitHub's workflow approval rules.
+Pushes to `main` build the main app. PR previews require the **`preview` label**.
+Adding it to a PR targeting `main` builds its head commit with the corresponding
+Vite base path. Opening, updating, or reopening a labelled PR also builds its
+preview. Other PRs skip the build. Fork PRs use the same label and build path,
+subject to GitHub's workflow approval rules.
 
 **Publish Pages** consumes the build artifact without executing its code. It only
 checks out default-branch scripts, checks that the build still matches the current
 commit, and writes static files to `gh-pages`. The combined site is then deployed
 with the official Pages actions. After a successful PR deployment, the publisher
 adds a comment linking to the preview and updates the same bot comment on later
-deployments. It checks that the PR is still open and its head commit still matches
-before commenting. Main deployments and closed-PR cleanup do not add comments.
+deployments. It checks that the PR is still open, still has the `preview` label,
+and its head commit still matches before commenting. Main deployments and preview
+cleanup do not add comments.
 The published preview link also appears in the publisher's job summary.
 
-Closing a PR, including merging it, queues a publish that removes its directory.
-Every publish also removes directories whose PRs are no longer open. A late build
-or rerun of a merged PR cannot restore its preview. Main deployments preserve open
-previews, and PR deployments preserve the main site and other previews. Publishing
+Removing the `preview` label or closing a PR, including merging it, queues a
+publish that removes its directory. Every publish also removes directories whose
+PRs are no longer open or labelled. The publisher rechecks current labels before
+deploying, so a late build or rerun cannot restore an ineligible preview.
+Main deployments preserve eligible previews, and PR deployments preserve the
+main site and other eligible previews. Publishing
 is queued with `queue: max` so pending updates and cleanups do not cancel each other.
 
 The generated `gh-pages` branch holds deployment state only; do not merge it into
 `main`. **Publish Pages** can also be run manually on `main` to retry deployment
-of that state or reconcile closed previews. It does not rebuild the app.
+of that state or reconcile ineligible previews. It does not rebuild the app.
 
 Previews share the main site's origin, including its browser storage. Use exported
 plan files when testing a change that affects saved-plan formats.

@@ -20,10 +20,10 @@ if (remote.trim()) {
 }
 
 const target = process.env.PAGES_TARGET;
-const openPullRequests: number[] = JSON.parse(process.env.PAGES_OPEN_PULL_REQUESTS!);
+const previewPullRequests: number[] = JSON.parse(process.env.PAGES_PREVIEW_PULL_REQUESTS!);
 await updateSite(
   directory,
-  openPullRequests,
+  previewPullRequests,
   target ? { directory: process.env.PAGES_BUILD_DIRECTORY!, target } : undefined,
 );
 git("-C", directory, "config", "user.name", "github-actions[bot]");

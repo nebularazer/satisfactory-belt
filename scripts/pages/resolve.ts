@@ -1,6 +1,6 @@
 import { appendFile, readFile } from "node:fs/promises";
 
-import { deploymentTarget } from "./deployment.ts";
+import { deploymentTarget, hasPreviewLabel } from "./deployment.ts";
 import type { OpenPullRequest, PagesBuild } from "./deployment.ts";
 import { github } from "./github.ts";
 
@@ -21,7 +21,8 @@ for (let page = 1; ; page += 1) {
 }
 const main = await github<{ sha: string }>(`commits/${encodeURIComponent(defaultBranch)}`);
 const target = deploymentTarget(event.workflow_run, defaultBranch, main.sha, openPullRequests);
+const previewPullRequests = openPullRequests.filter(hasPreviewLabel);
 await appendFile(
   process.env.GITHUB_OUTPUT!,
-  `target=${target}\nopen_pull_requests=${JSON.stringify(openPullRequests.map((pr) => pr.number))}\n`,
+  `target=${target}\npreview_pull_requests=${JSON.stringify(previewPullRequests.map((pr) => pr.number))}\n`,
 );
