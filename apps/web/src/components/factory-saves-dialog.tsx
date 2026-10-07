@@ -1,3 +1,4 @@
+import { findFactoryByName } from "@satisfactory-belt/factory-saves";
 import type { FactorySave, FactoryStore } from "@satisfactory-belt/factory-saves";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
@@ -39,13 +40,17 @@ export function FactorySavesDialog({
   const [selectedId, setSelectedId] = useState<string | null>(
     kind === "open" ? (activeSave?.id ?? null) : null,
   );
-  const [name, setName] = useState(activeSave ? `${activeSave.name} copy` : "Factory 1");
+  const [name, setName] = useState(activeSave?.name ?? "Factory 1");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const cancelConfirm = useRef<HTMLButtonElement>(null);
-  const selected = saves.find((save) => save.id === selectedId);
+  const selected =
+    kind === "save"
+      ? findFactoryByName(saves, name)
+      : saves.find((saved) => saved.id === selectedId);
+  const overwriteId = kind === "save" ? selected?.id : undefined;
 
   useEffect(() => {
     let active = true;
@@ -102,8 +107,14 @@ export function FactorySavesDialog({
     [],
   );
   const selectSave = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setSelectedId(event.target.value || null),
-    [],
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const id = event.target.value;
+      if (kind === "save") {
+        const saved = saves.find((entry) => entry.id === id);
+        if (saved) setName(saved.name);
+      } else setSelectedId(id);
+    },
+    [kind, saves],
   );
   const load = useCallback(() => {
     if (selectedId)
@@ -115,25 +126,27 @@ export function FactorySavesDialog({
   const save = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (busy) return;
-      if (selectedId) {
-        setError(null);
-        setMode("overwrite");
-      } else if (name.trim())
-        void run(async () => {
-          await onSaveAs(name.trim());
-          close();
-        });
-    },
-    [busy, selectedId, name, run, onSaveAs, close],
-  );
-  const overwrite = useCallback(() => {
-    if (selectedId)
+      if (busy || loading || !name.trim()) return;
       void run(async () => {
-        await onOverwrite(selectedId);
+        const current = await store.list();
+        setSaves(current);
+        if (findFactoryByName(current, name)) {
+          setMode("overwrite");
+          return;
+        }
+        await onSaveAs(name.trim());
         close();
       });
-  }, [selectedId, run, onOverwrite, close]);
+    },
+    [busy, loading, name, run, store, onSaveAs, close],
+  );
+  const overwrite = useCallback(() => {
+    if (overwriteId)
+      void run(async () => {
+        await onOverwrite(overwriteId);
+        close();
+      });
+  }, [overwriteId, run, onOverwrite, close]);
   const remove = useCallback(() => {
     if (!selectedId) return;
     void run(async () => {
@@ -164,7 +177,7 @@ export function FactorySavesDialog({
           </DialogTitle>
           <DialogDescription>
             {mode === "save"
-              ? "Save a new factory or choose an existing save to overwrite."
+              ? "Enter a new name or choose an existing factory to overwrite."
               : mode === "overwrite"
                 ? `Replace “${selected?.name ?? "this factory"}” with the current canvas? This cannot be undone.`
                 : mode === "delete"
@@ -175,34 +188,18 @@ export function FactorySavesDialog({
         {(mode === "open" || mode === "save") && (
           <form onSubmit={mode === "save" ? save : undefined} className="space-y-4">
             {mode === "save" && (
-              <div className="space-y-3">
-                <label className="flex cursor-pointer items-center gap-3">
-                  <input
-                    type="radio"
-                    name="factory-save"
-                    value=""
-                    checked={selectedId === null}
-                    onChange={selectSave}
-                    disabled={busy}
-                    className="accent-primary"
-                  />
-                  New factory
+              <div className="space-y-2">
+                <label htmlFor="factory-name" className="text-sm font-medium">
+                  Factory name
                 </label>
-                {selectedId === null && (
-                  <div className="space-y-2">
-                    <label htmlFor="factory-name" className="text-sm font-medium">
-                      Factory name
-                    </label>
-                    <Input
-                      ref={nameInput}
-                      id="factory-name"
-                      value={name}
-                      onChange={changeName}
-                      disabled={busy}
-                      required
-                    />
-                  </div>
-                )}
+                <Input
+                  ref={nameInput}
+                  id="factory-name"
+                  value={name}
+                  onChange={changeName}
+                  disabled={busy}
+                  required
+                />
               </div>
             )}
             <div
@@ -226,7 +223,7 @@ export function FactorySavesDialog({
                       type="radio"
                       name="factory-save"
                       value={saved.id}
-                      checked={selectedId === saved.id}
+                      checked={selected?.id === saved.id}
                       onChange={selectSave}
                       disabled={busy}
                       className="shrink-0 accent-primary"
@@ -257,8 +254,8 @@ export function FactorySavesDialog({
                   <Button type="button" variant="outline" disabled={busy} onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={busy || (selectedId ? !selected : !name.trim())}>
-                    {busy ? "Saving…" : selectedId ? "Overwrite…" : "Save"}
+                  <Button type="submit" disabled={busy || loading || !name.trim()}>
+                    {busy ? "Saving…" : "Save"}
                   </Button>
                 </>
               ) : (

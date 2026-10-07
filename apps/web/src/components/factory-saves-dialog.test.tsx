@@ -88,16 +88,18 @@ it("selects an existing save and confirms before overwriting it", async () => {
   const user = userEvent.setup();
   const props = setup(true);
   await user.click(await screen.findByRole("radio", { name: /Copper factory/ }));
-  expect(screen.queryByRole("textbox", { name: "Factory name" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Overwrite…" }));
-  expect(screen.getByText(/Replace “Copper factory”/)).toBeTruthy();
+  expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Factory name" }).value).toBe(
+    "Copper factory",
+  );
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByText(/Replace “Copper factory”/)).toBeTruthy();
   await waitFor(() =>
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" })),
   );
   await user.keyboard("{Enter}");
   expect(props.onOverwrite).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Overwrite…" }));
-  await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await user.click(await screen.findByRole("button", { name: "Overwrite factory" }));
   await waitFor(() => expect(props.onOverwrite).toHaveBeenCalledWith("copper"));
   expect(props.onSaveAs).not.toHaveBeenCalled();
   expect(props.onOpenChange).toHaveBeenCalledWith(false);
@@ -108,10 +110,62 @@ it("retains overwrite selection on failure and lets the user retry", async () =>
   const props = setup(true);
   props.onOverwrite.mockRejectedValueOnce(new Error("Storage full"));
   await user.click(await screen.findByRole("radio", { name: /Copper factory/ }));
-  await user.click(screen.getByRole("button", { name: "Overwrite…" }));
-  await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await user.click(await screen.findByRole("button", { name: "Overwrite factory" }));
   expect((await screen.findByRole("alert")).textContent).toBe("Storage full");
   expect(props.onOpenChange).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
   await waitFor(() => expect(props.onOpenChange).toHaveBeenCalledWith(false));
+});
+
+it("uses the typed name to select an existing factory and requires overwrite confirmation", async () => {
+  const user = userEvent.setup();
+  const props = setup(true);
+  expect(screen.queryByRole("radio", { name: "New factory" })).toBeNull();
+  const input = screen.getByRole("textbox", { name: "Factory name" });
+  await screen.findByRole("radio", { name: /Copper factory/ });
+  await user.clear(input);
+  await user.type(input, "  Copper factory  ");
+  expect(screen.getByRole<HTMLInputElement>("radio", { name: /Copper factory/ }).checked).toBe(
+    true,
+  );
+  await user.keyboard("{Enter}");
+  await screen.findByRole("button", { name: "Overwrite factory" });
+  expect(props.onSaveAs).not.toHaveBeenCalled();
+  expect(props.onOverwrite).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
+  await waitFor(() => expect(props.onOverwrite).toHaveBeenCalledWith("copper"));
+});
+
+it("creates a new factory when the selected factory's name is edited to an unused name", async () => {
+  const user = userEvent.setup();
+  const props = setup(true);
+  await user.click(await screen.findByRole("radio", { name: /Copper factory/ }));
+  const input = screen.getByRole("textbox", { name: "Factory name" });
+  await user.clear(input);
+  await user.type(input, "Steel factory");
+  expect(screen.getByRole<HTMLInputElement>("radio", { name: /Copper factory/ }).checked).toBe(
+    false,
+  );
+  await user.keyboard("{Enter}");
+  await waitFor(() => expect(props.onSaveAs).toHaveBeenCalledWith("Steel factory"));
+  expect(props.onOverwrite).not.toHaveBeenCalled();
+});
+
+it("checks current saves before creating so a name saved in another tab prompts overwrite", async () => {
+  const user = userEvent.setup();
+  const props = setup(true);
+  await screen.findByRole("radio", { name: /Copper factory/ });
+  props.store.list.mockResolvedValue([
+    ...saves,
+    { id: "steel", name: "Steel factory", updatedAt: 1 },
+  ]);
+  const input = screen.getByRole("textbox", { name: "Factory name" });
+  await user.clear(input);
+  await user.type(input, "Steel factory");
+  await user.keyboard("{Enter}");
+  await screen.findByText(/Replace “Steel factory”/);
+  expect(props.onSaveAs).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
+  await waitFor(() => expect(props.onOverwrite).toHaveBeenCalledWith("steel"));
 });

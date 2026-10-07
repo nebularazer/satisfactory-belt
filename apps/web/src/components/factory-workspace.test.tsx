@@ -45,7 +45,6 @@ it("saves, overwrites, autosaves, opens with fresh history, and retains a delete
   try {
     await screen.findByRole("button", { name: "Canvas menu" });
     expect(screen.queryByRole("button", { name: "Iron factory" })).toBeNull();
-    const original = (await store.load(source.id))?.document;
     await menu(user, "Save as…");
     const name = screen.getByRole("textbox", { name: "Factory name" });
     await user.clear(name);
@@ -53,6 +52,7 @@ it("saves, overwrites, autosaves, opens with fresh history, and retains a delete
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const copy = (await store.loadActive())!;
+    const original = copy.document;
     expect(copy.name).toBe("Steel factory");
     await menu(user, "Clear canvas…");
     await user.click(screen.getByRole("button", { name: "Clear canvas" }));
@@ -61,8 +61,8 @@ it("saves, overwrites, autosaves, opens with fresh history, and retains a delete
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Undo" }).disabled).toBe(false);
     await menu(user, "Save as…");
     await user.click(await screen.findByRole("radio", { name: /Iron factory/ }));
-    await user.click(screen.getByRole("button", { name: "Overwrite…" }));
-    await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(await screen.findByRole("button", { name: "Overwrite factory" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect((await store.loadActive())?.id).toBe(source.id);
     expect((await store.load(source.id))?.document.nodes).toHaveLength(0);

@@ -28,6 +28,14 @@ export interface FactoryStore {
   close(): void;
 }
 
+export function findFactoryByName(
+  saves: readonly FactorySave[],
+  name: string,
+): FactorySave | undefined {
+  const trimmed = name.trim();
+  return saves.find((saved) => saved.name === trimmed);
+}
+
 function readDetails(value: unknown): FactorySave {
   if (
     !value ||
@@ -210,13 +218,16 @@ export async function createFactoryStore(
       const saved = { id: `factory:${crypto.randomUUID()}`, name: trimmed, updatedAt: Date.now() };
       await transaction(
         "readwrite",
-        (objectStore, details) => {
+        (_objectStore, details) => details.getAll(),
+        (values: unknown[], objectStore, details) => {
+          if (findFactoryByName(values.map(readDetails), trimmed))
+            throw new Error(
+              `A factory named “${trimmed}” already exists. Save to that name to overwrite it.`,
+            );
           details.add(saved, saved.id);
-          const request = objectStore.add({ ...saved, version: PLAN_VERSION, document }, saved.id);
+          objectStore.add({ ...saved, version: PLAN_VERSION, document }, saved.id);
           objectStore.put(saved.id, ACTIVE);
-          return request;
         },
-        () => undefined,
       );
       return saved;
     },

@@ -294,3 +294,34 @@ it("rolls back document, details and active selection when overwriting fails", a
   await expect(store.overwrite(target.id, empty)).rejects.toThrow("no longer saved");
   store.close();
 });
+
+it("rejects duplicate names after trimming without changing documents or active selection", async () => {
+  const factory = new IDBFactory();
+  const store = await createBrowserPlanStore(factory);
+  const original = createReferencePlans();
+  const saved = await store.create("Iron factory", original);
+  const active = await store.create("Other factory", empty);
+  await expect(store.create(" Iron factory ", empty)).rejects.toThrow("already exists");
+  expect((await store.load(saved.id))?.document).toEqual(original);
+  expect((await store.loadActive())?.id).toBe(active.id);
+  expect(await store.list()).toHaveLength(2);
+  store.close();
+  const reopened = await createBrowserPlanStore(factory);
+  await expect(reopened.create("Iron factory", empty)).rejects.toThrow("already exists");
+  reopened.close();
+});
+
+it("serializes same-name creation across connections so only one factory is created", async () => {
+  const factory = new IDBFactory();
+  const first = await createBrowserPlanStore(factory);
+  const second = await createBrowserPlanStore(factory);
+  const results = await Promise.allSettled([
+    first.create("Factory", empty),
+    second.create(" Factory ", createReferencePlans()),
+  ]);
+  expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"]);
+  expect(await first.list()).toHaveLength(1);
+  expect((await first.loadActive())?.document).toEqual(empty);
+  first.close();
+  second.close();
+});
