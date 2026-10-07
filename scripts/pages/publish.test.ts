@@ -27,11 +27,17 @@ it("bootstraps gh-pages and publishes updates and merge cleanup without changing
     await mkdir(build);
     let attempt = 0;
 
-    async function publish(target: string, previewPullRequests: number[], html?: string) {
+    async function publish(
+      target: string,
+      previewPullRequests: number[],
+      html?: string,
+      persist = true,
+    ) {
       attempt += 1;
       const checkout = join(root, `checkout-${attempt}`);
       const site = join(root, `site-${attempt}`);
-      git("clone", remote, checkout);
+      const output = join(root, `output-${attempt}`);
+      git("clone", "--single-branch", "--branch", "main", remote, checkout);
       if (html) await writeFile(join(build, "index.html"), html);
       execFileSync(process.execPath, [script], {
         cwd: checkout,
@@ -42,17 +48,34 @@ it("bootstraps gh-pages and publishes updates and merge cleanup without changing
           PAGES_BUILD_DIRECTORY: build,
           PAGES_TARGET: target,
           PAGES_PREVIEW_PULL_REQUESTS: JSON.stringify(previewPullRequests),
+          GITHUB_OUTPUT: output,
         },
       });
       expect(await readFile(join(site, ".nojekyll"), "utf8")).toBe("");
       await expect(readFile(join(site, ".git"))).rejects.toThrow();
-      return site;
+      const outputs = Object.fromEntries(
+        (await readFile(output, "utf8"))
+          .trim()
+          .split("\n")
+          .map((line) => line.split("=")),
+      );
+      if (attempt > 1) {
+        expect(git("-C", checkout, "rev-list", "FETCH_HEAD").trim().split("\n")).toHaveLength(1);
+      }
+      // The workflow only persists this commit after a successful Pages deployment.
+      if (persist && outputs.changed === "true") {
+        git("-C", checkout, "push", "origin", `${outputs.commit_sha}:refs/heads/gh-pages`);
+      }
+      return outputs;
     }
 
-    await publish("main", [], "main build");
+    expect((await publish("main", [], "main build")).changed).toBe("true");
     await publish("42", [42, 43], "PR 42");
     await publish("43", [42, 43], "PR 43");
-    await publish("", [43]);
+    expect((await publish("43", [42, 43], "PR 43")).changed).toBe("false");
+    const cleanup = await publish("", [43]);
+    expect(cleanup.changed).toBe("true");
+    expect(JSON.parse(cleanup.removed_pull_requests)).toEqual([42]);
     const tree = git("--git-dir", remote, "ls-tree", "-r", "--name-only", "gh-pages");
     expect(tree).toContain("pr/43/index.html");
     expect(tree).not.toContain("pr/42/");
@@ -61,8 +84,12 @@ it("bootstraps gh-pages and publishes updates and merge cleanup without changing
     expect(git("--git-dir", remote, "show", "gh-pages:pr/43/index.html")).toBe("PR 43");
     const pagesSha = git("--git-dir", remote, "rev-parse", "gh-pages").trim();
     // A late build from the merged PR makes no new commit and still prepares a retryable upload.
-    await publish("42", [43], "late PR 42");
+    expect((await publish("42", [43], "late PR 42")).changed).toBe("false");
     expect(git("--git-dir", remote, "rev-parse", "gh-pages").trim()).toBe(pagesSha);
+    // A failed deployment must not make a later retry look unchanged.
+    expect((await publish("43", [43], "updated PR 43", false)).changed).toBe("true");
+    expect(git("--git-dir", remote, "rev-parse", "gh-pages").trim()).toBe(pagesSha);
+    expect((await publish("43", [43], "updated PR 43")).changed).toBe("true");
     expect(git("--git-dir", remote, "rev-parse", "main").trim()).toBe(mainSha);
   } finally {
     await rm(root, { recursive: true, force: true });

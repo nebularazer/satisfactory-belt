@@ -33,14 +33,14 @@ it("keeps other previews and main while updating one PR, then removes the merged
   await updateSite(site, [42, 43], { directory: build, target: "42" });
   await writeFile(join(build, "index.html"), "other preview");
   await updateSite(site, [42, 43], { directory: build, target: "43" });
-  await updateSite(site, [43]);
+  expect(await updateSite(site, [43])).toEqual([42]);
   expect(await readdir(join(site, "pr"))).toEqual(["43"]);
   expect(await readFile(join(site, "index.html"), "utf8")).toBe("old main");
   expect(await readFile(join(site, "pr/43/index.html"), "utf8")).toBe("other preview");
   expect(await readFile(join(site, ".git"), "utf8")).toBe("worktree metadata");
   expect(await readFile(join(site, ".nojekyll"), "utf8")).toBe("");
   // A queued build completing after the merge must not bring PR 42 back.
-  await updateSite(site, [43], { directory: build, target: "42" });
+  expect(await updateSite(site, [43], { directory: build, target: "42" })).toEqual([]);
   expect(await readdir(join(site, "pr"))).toEqual(["43"]);
 });
 

@@ -26,12 +26,18 @@ subject to GitHub's workflow approval rules.
 
 **Publish Pages** consumes the build artifact without executing its code. It only
 checks out default-branch scripts, checks that the build still matches the current
-commit, and writes static files to `gh-pages`. The combined site is then deployed
-with the official Pages actions. After a successful PR deployment, the publisher
+commit, and prepares the combined site from a shallow fetch of `gh-pages`. It
+skips uploading and deploying when the site files are unchanged. Manual publisher
+runs and workflow reruns can still deploy an unchanged site to retry a failure.
+The deployment state is pushed to `gh-pages` only after a successful Pages
+deployment, so a failed deployment does not cause an automatic retry to be skipped.
+After a successful PR deployment, the publisher
 adds a comment linking to the preview and updates the same bot comment on later
 deployments. It checks that the PR is still open, still has the `preview` label,
-and its head commit still matches before commenting. Main deployments and preview
-cleanup do not add comments.
+and its head commit still matches before commenting. Cleanup changes the existing
+bot comment to **Preview removed.**, removing its dead link. It does not create a
+comment on PRs that never had a preview, or replace an active comment if the PR
+has already been reopened or relabelled.
 The published preview link also appears in the publisher's job summary.
 
 Removing the `preview` label or closing a PR, including merging it, queues a
@@ -42,12 +48,14 @@ Main deployments preserve eligible previews, and PR deployments preserve the
 main site and other eligible previews. Publishing
 is queued with `queue: max` so pending updates and cleanups do not cancel each other.
 
-The generated `gh-pages` branch holds deployment state only; do not merge it into
+The generated `gh-pages` branch holds successful deployment state only; do not merge it into
 `main`. **Publish Pages** can also be run manually on `main` to retry deployment
 of that state or reconcile ineligible previews. It does not rebuild the app.
 
-Previews share the main site's origin, including its browser storage. Use exported
-plan files when testing a change that affects saved-plan formats.
+Saved plans and preferences use storage names scoped to Vite's deployment base
+path. Main and each PR preview therefore keep separate saved data, and redeploying
+the same preview retains that preview's data. Existing unscoped browser data is
+not migrated; export a plan before updating if you want to keep it.
 
 ## Prepared asset bundle
 

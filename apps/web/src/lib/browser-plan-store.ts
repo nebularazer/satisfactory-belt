@@ -1,6 +1,5 @@
 import type { FactoryDocument } from "@satisfactory-belt/factory-core";
 
-const DATABASE = "satisfactory-belt";
 const STORE = "plans";
 const CURRENT = "current";
 const PLAN_VERSION = 2;
@@ -14,9 +13,10 @@ export interface PlanStore {
 /** Transactions start immediately and IndexedDB serializes writes in edit order. */
 export async function createBrowserPlanStore(
   factory: IDBFactory = window.indexedDB,
+  baseUrl: string = import.meta.env.BASE_URL,
 ): Promise<PlanStore> {
   const database = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = factory.open(DATABASE, 1);
+    const request = factory.open(`satisfactory-belt:${baseUrl}`, 1);
     let blocked = false;
     request.addEventListener("upgradeneeded", () => request.result.createObjectStore(STORE));
     request.addEventListener("error", () => reject(request.error));

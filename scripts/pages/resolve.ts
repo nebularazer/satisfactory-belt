@@ -7,6 +7,7 @@ import { github } from "./github.ts";
 const event: {
   repository: { default_branch: string };
   workflow_run?: PagesBuild;
+  pull_request?: { number: number };
 } = JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH!, "utf8"));
 const defaultBranch = event.repository.default_branch;
 
@@ -22,7 +23,12 @@ for (let page = 1; ; page += 1) {
 const main = await github<{ sha: string }>(`commits/${encodeURIComponent(defaultBranch)}`);
 const target = deploymentTarget(event.workflow_run, defaultBranch, main.sha, openPullRequests);
 const previewPullRequests = openPullRequests.filter(hasPreviewLabel);
+// Keep the event's PR available when retrying cleanup after its files were already removed.
+const cleanupPullRequest =
+  event.pull_request && !previewPullRequests.some((pr) => pr.number === event.pull_request!.number)
+    ? String(event.pull_request.number)
+    : "";
 await appendFile(
   process.env.GITHUB_OUTPUT!,
-  `target=${target}\npreview_pull_requests=${JSON.stringify(previewPullRequests.map((pr) => pr.number))}\n`,
+  `target=${target}\npreview_pull_requests=${JSON.stringify(previewPullRequests.map((pr) => pr.number))}\ncleanup_pull_request=${cleanupPullRequest}\n`,
 );

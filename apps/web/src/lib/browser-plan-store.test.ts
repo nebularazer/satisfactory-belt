@@ -20,6 +20,33 @@ it("distinguishes an absent plan from a saved empty canvas after reopening", asy
   reopened.close();
 });
 
+it("keeps the main plan and each PR preview's plan separate on the same origin", async () => {
+  const factory = new IDBFactory();
+  const main = await createBrowserPlanStore(factory, "/satisfactory-belt/");
+  const preview42 = await createBrowserPlanStore(factory, "/satisfactory-belt/pr/42/");
+  const preview43 = await createBrowserPlanStore(factory, "/satisfactory-belt/pr/43/");
+  const original = createReferencePlans();
+  try {
+    await main.save(original);
+    expect(await preview42.load()).toBeUndefined();
+    expect(await preview43.load()).toBeUndefined();
+    await preview42.save({ nodes: [], links: [] });
+    expect(await main.load()).toEqual(original);
+    expect(await preview43.load()).toBeUndefined();
+    preview42.close();
+    const reopened = await createBrowserPlanStore(factory, "/satisfactory-belt/pr/42/");
+    try {
+      expect(await reopened.load()).toEqual({ nodes: [], links: [] });
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    main.close();
+    preview42.close();
+    preview43.close();
+  }
+});
+
 it("round-trips a complete plan independently of the in-memory document", async () => {
   const factory = new IDBFactory();
   const store = await createBrowserPlanStore(factory);
@@ -95,7 +122,7 @@ it.each([1, 99])("skips unsupported plan version %s without migrating it", async
   const factory = new IDBFactory();
   const store = await createBrowserPlanStore(factory);
   const database = await new Promise<IDBDatabase>((resolve) => {
-    const request = factory.open("satisfactory-belt", 1);
+    const request = factory.open(`satisfactory-belt:${import.meta.env.BASE_URL}`, 1);
     request.addEventListener("success", () => resolve(request.result));
   });
   const record = { version, document: { nodes: [], links: [] } };

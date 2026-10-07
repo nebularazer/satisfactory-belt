@@ -21,7 +21,7 @@ export async function updateSite(
   directory: string,
   previewPullRequests: number[],
   build?: { directory: string; target: string },
-): Promise<void> {
+): Promise<number[]> {
   const eligible = new Set(previewPullRequests.map(String));
   if (build) {
     if (build.target !== "main" && !/^[1-9]\d*$/.test(build.target)) {
@@ -53,10 +53,10 @@ export async function updateSite(
   }
 
   // Reconcile every publish, including builds that became stale while waiting in the queue.
+  const removed = (await readdir(previews)).filter((entry) => !eligible.has(entry));
   await Promise.all(
-    (await readdir(previews))
-      .filter((entry) => !eligible.has(entry))
-      .map((entry) => rm(join(previews, entry), { recursive: true, force: true })),
+    removed.map((entry) => rm(join(previews, entry), { recursive: true, force: true })),
   );
   await writeFile(join(directory, ".nojekyll"), "");
+  return removed.filter((entry) => /^[1-9]\d*$/.test(entry)).map(Number);
 }

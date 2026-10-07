@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { appendFile, rm } from "node:fs/promises";
 
 import { updateSite } from "./site.ts";
 
@@ -12,7 +12,7 @@ function git(...args: string[]) {
 }
 
 if (remote.trim()) {
-  git("fetch", "origin", "gh-pages");
+  git("fetch", "--depth=1", "--no-tags", "origin", "gh-pages");
   git("worktree", "add", "--detach", directory, "FETCH_HEAD");
 } else {
   git("worktree", "add", "--detach", directory, "HEAD");
@@ -21,7 +21,7 @@ if (remote.trim()) {
 
 const target = process.env.PAGES_TARGET;
 const previewPullRequests: number[] = JSON.parse(process.env.PAGES_PREVIEW_PULL_REQUESTS!);
-await updateSite(
+const removedPullRequests = await updateSite(
   directory,
   previewPullRequests,
   target ? { directory: process.env.PAGES_BUILD_DIRECTORY!, target } : undefined,
@@ -38,9 +38,15 @@ git("-C", directory, "add", "--all");
 const diff = spawnSync("git", ["-C", directory, "diff", "--cached", "--quiet"]);
 if (diff.status === 1) {
   git("-C", directory, "commit", "-m", "chore: update Pages deployments");
-  git("-C", directory, "push", "origin", "HEAD:refs/heads/gh-pages");
 } else if (diff.status !== 0) {
   throw new Error("Unable to inspect the staged Pages changes.");
 }
+const commitSha = execFileSync("git", ["-C", directory, "rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
 // The upload contains only the site, without the worktree's Git metadata.
 await rm(`${directory}/.git`);
+await appendFile(
+  process.env.GITHUB_OUTPUT!,
+  `changed=${diff.status === 1}\ncommit_sha=${commitSha}\nremoved_pull_requests=${JSON.stringify(removedPullRequests)}\n`,
+);

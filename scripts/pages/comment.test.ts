@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { commentOnPreview } from "./comment.ts";
+import { commentOnPreview, markPreviewRemoved } from "./comment.ts";
 
 const marker = "<!-- satisfactory-belt-pages-preview -->";
 const siteUrl = "https://owner.github.io/repo/";
 const body = `${marker}\nPreview deployed: [Open preview](https://owner.github.io/repo/pr/42/)`;
 const fetchMock = vi.fn<typeof fetch>();
-const pullRequest = { state: "open", head: { sha: "current" }, labels: [{ name: "preview" }] };
+const pullRequest = {
+  state: "open",
+  head: { sha: "current" },
+  labels: [{ name: "preview" }],
+  base: { ref: "main" },
+};
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
@@ -81,4 +86,37 @@ it("fails visibly if GitHub refuses to create the comment", async () => {
   await expect(commentOnPreview("42", siteUrl, "current")).rejects.toThrow(
     "GitHub API issues/42/comments: 403",
   );
+});
+
+it.each([
+  { ...pullRequest, state: "closed" },
+  { ...pullRequest, labels: [] },
+  { ...pullRequest, base: { ref: "other-branch" } },
+])("replaces the dead preview link after cleanup: %j", async (pr) => {
+  fetchMock
+    .mockResolvedValueOnce(response(pr))
+    .mockResolvedValueOnce(response([{ id: 123, body, user: { login: "github-actions[bot]" } }]))
+    .mockResolvedValueOnce(response({ id: 123 }));
+  await markPreviewRemoved("42", "main");
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    "https://api.github.com/repos/owner/repo/issues/comments/123",
+    expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ body: `${marker}\nPreview removed.` }),
+    }),
+  );
+});
+
+it("leaves the comment active if the PR is reopened or relabelled before cleanup finishes", async () => {
+  fetchMock.mockResolvedValueOnce(response(pullRequest));
+  await markPreviewRemoved("42", "main");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("does not add a removal comment to a PR that never had a preview", async () => {
+  fetchMock
+    .mockResolvedValueOnce(response({ ...pullRequest, labels: [] }))
+    .mockResolvedValueOnce(response([{ id: 1, body: marker, user: { login: "contributor" } }]));
+  await markPreviewRemoved("42", "main");
+  expect(fetchMock.mock.calls.every(([, options]) => !options?.method)).toBe(true);
 });
