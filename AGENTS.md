@@ -22,7 +22,7 @@ This is a performance focused factory planer for the game satisfactory.
 - use squash merge
 - treat the main branch as protected - unless explicitly allowed to push directly
 - split logic from representation / use monorepo packages
-- do not add github ci actions
+- GitHub Actions are allowed for Pages publishing and PR preview cleanup; do not add other CI workflows
 
 ## testing
 - only test relevant parts - do not add tests for the sake of having tests

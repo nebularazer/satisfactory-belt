@@ -1,0 +1,78 @@
+name: Publish Pages
+
+on:
+  workflow_run:
+    workflows: [Build Pages]
+    types: [completed]
+  pull_request_target:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep all pending updates, including cleanup after a merge.
+concurrency:
+  group: pages-publish
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      # Never run PR code with the publisher's credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Resolve the current deployment and open previews
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/pages/resolve.ts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.resolve.outputs.target != ''
+        with:
+          name: pages-build
+          path: ${{ runner.temp }}/pages-build
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Update the site and remove closed PR previews
+        env:
+          PAGES_SITE_DIRECTORY: ${{ runner.temp }}/pages-site
+          PAGES_BUILD_DIRECTORY: ${{ runner.temp }}/pages-build
+          PAGES_TARGET: ${{ steps.resolve.outputs.target }}
+          PAGES_OPEN_PULL_REQUESTS: ${{ steps.resolve.outputs.open_pull_requests }}
+        run: node scripts/pages/publish.ts
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/pages-site
+          include-hidden-files: true
+      - name: Deploy the main site and remaining previews
+        id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - name: Record the published URL
+        env:
+          SITE_URL: ${{ steps.deploy.outputs.page_url }}
+          TARGET: ${{ steps.resolve.outputs.target }}
+        run: |
+          if [[ -n "$TARGET" && "$TARGET" != main ]]; then
+            echo "Preview: ${SITE_URL%/}/pr/$TARGET/" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
