@@ -81,6 +81,8 @@ export type LogisticsNode = Readonly<{
 export type PortDisplay = Readonly<{
   key: string;
   direction: "input" | "output";
+  /** Direction above is the allocation direction, not a physical restriction. */
+  bidirectional?: boolean;
   transport: PortTransport;
   purpose?: "fuel";
   /** Authored output limit; never inferred from machine capacity. */
@@ -120,9 +122,13 @@ export type MachineDisplay = Readonly<{
 }>;
 export type LogisticsDisplay = Readonly<{
   layout: "logistics";
+  /** Draw the fitting's arms to its physical sockets instead of a card icon. */
+  pipeJunction?: "t" | "cross";
   size: number;
   title: string;
   machineIconId: string;
+  /** Optional Lucide SVG path for schematic junctions without a catalog icon. */
+  iconPath?: string;
   ports: readonly (Omit<PortDisplay, "itemId" | "iconId"> & {
     itemId: null;
     iconId: null;
@@ -480,4 +486,4 @@ export { formatPlanningNumber } from "./number-format";
 
 export * from "./flow-controls";
 
-export * from "./distribution-prototype";
+export * from "./distribution";

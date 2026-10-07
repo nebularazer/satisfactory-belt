@@ -108,15 +108,19 @@ export class CanvasController {
   private onMove: (moves: readonly ItemMove[], context?: MoveContext) => void;
 
   private readonly readOnly: boolean;
+  private readonly canMoveNodes: boolean;
 
   constructor(options: {
     readOnly?: boolean;
+    /** Allow layout changes in a read-only view while keeping connections locked. */
+    allowNodeMovement?: boolean;
     items: readonly CanvasItem[];
     onConnect?: (a: PortReference, b: PortReference) => PortCompatibility;
     onRoute?: (id: string, guides: readonly RouteGuide[]) => void;
     onMove: (moves: readonly ItemMove[], context?: MoveContext) => void;
   }) {
     this.readOnly = options.readOnly ?? false;
+    this.canMoveNodes = !this.readOnly || (options.allowNodeMovement ?? false);
     this.onConnect = options.onConnect;
     this.onRoute = options.onRoute;
     this.items = options.items;
@@ -242,12 +246,22 @@ export class CanvasController {
         (sourceMoved && targetMoved ? translateGuides(link.guides, this.dragOffset) : link.guides);
       return {
         ...link,
-        points: routeLink(
-          move(link.points[0]!, sourceMoved),
-          move(link.points.at(-1)!, targetMoved),
-          [],
-          guides,
-        ),
+        // An automatic label location belongs to the old route. The renderer
+        // places it on the new route while the endpoints are moving.
+        labelPosition:
+          sourceMoved && targetMoved && !preview && link.labelPosition
+            ? move(link.labelPosition, true)
+            : undefined,
+        points:
+          sourceMoved && targetMoved && !preview
+            ? link.points.map((point) => move(point, true))
+            : routeLink(
+                move(link.points[0]!, sourceMoved),
+                move(link.points.at(-1)!, targetMoved),
+                [],
+                guides,
+                link.endpointSides,
+              ),
       };
     });
     this.linkPreviewCache = {
@@ -417,7 +431,12 @@ export class CanvasController {
 
   getCursor(pointer = this.hoverPoint): string {
     if (this.pinch || this.gesture?.kind === "pan") return "grabbing";
-    if (this.readOnly) return "grab";
+    if (this.readOnly) {
+      if (!this.canMoveNodes) return "grab";
+      if (this.gesture?.kind === "drag") return "move";
+      if (this.gesture?.kind === "marquee" || pointer?.marquee) return "crosshair";
+      return pointer && this.hitTest(pointer) ? "move" : "grab";
+    }
     if (this.gesture?.kind === "drag") return "move";
     if (this.gesture?.kind === "marquee" || pointer?.marquee) return "crosshair";
     if (this.gesture?.kind === "segment") {
@@ -500,8 +519,8 @@ export class CanvasController {
     }
     if (this.gesture || this.pinch || this.pointers.size > 1) return;
     const previousSelection = this.selection;
-    if (this.readOnly) pointer = { ...pointer, marquee: false, additive: false };
-    const item = this.readOnly ? undefined : this.hitTest(pointer);
+    if (!this.canMoveNodes) pointer = { ...pointer, marquee: false, additive: false };
+    const item = this.canMoveNodes ? this.hitTest(pointer) : undefined;
     let kind: Gesture["kind"] = "pan";
     const candidates =
       !this.readOnly && !pointer.marquee && !pointer.additive ? this.portHits(pointer) : [];
@@ -791,7 +810,13 @@ export class CanvasController {
       command === "move-up" ||
       command === "move-down"
     ) {
-      if (this.readOnly || this.gesture || this.pinch || this.waitForRelease || this.pointers.size)
+      if (
+        !this.canMoveNodes ||
+        this.gesture ||
+        this.pinch ||
+        this.waitForRelease ||
+        this.pointers.size
+      )
         return;
       const selected = this.items.filter((item) => this.selection.has(item.id));
       if (!selected.length) return;

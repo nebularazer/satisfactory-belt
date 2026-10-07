@@ -76,32 +76,116 @@ Saved plans containing the removed sink rate setting are rejected.
 
 ## Distribution preview
 
-Selecting a port offers a separate, read-only distribution canvas. It expands directly
-connected machine groups into individual suppliers and consumers without modifying
-the saved plan. Pan, zoom and Fit remain available. Belts use tier colors and numeric
+Selecting a port offers a separate distribution canvas. Connected nodes is
+the default: each directly connected canvas node keeps its allocated rate as one endpoint.
+Individual machines expands those groups into their members. Both views use the same
+snapshot taken when the preview opens; changing detail does not modify the saved plan.
+Each endpoint currently requires one belt or pipe. Group rates above the selected connection capacity
+explain the limit and offer a higher tier or individual-machine detail.
+Opening allows belts up to Mk.6 or pipes up to Mk.2. Once constructed, the tier selector shows the highest
+tier actually used, including feedback trunks, without regenerating the layout.
+Automatic construction continues to allow the highest available tier until one is chosen manually;
+manual choices stay selected across detail changes. Reopening restores
+automatic selection.
+Nodes can be dragged individually or as a selection; arrow keys move selected nodes.
+Connected belts follow their ports and labels follow the new routes. Rearrangements
+only affect the open view and reset when rebuilding or reopening. Connection editing
+remains disabled, and the saved factory plan is untouched. Pan, zoom and Fit remain available. Belts use tier colors and numeric
 rate labels; dedicated feedback-return belts are dashed. Machines and logistics nodes
-are square and grid aligned. Splitters and mergers retain three ports, using the outer
-two when only two are connected.
+are square and grid aligned. Splitters and mergers retain three branch ports. ELK orders interchangeable belt junction ports
+to reduce crossings, keeping inputs on the left and outputs on the right. Routes use
+grid-sized clearance to avoid unnecessary horizontal spacing.
 
 Balanced layouts use equal two/three-way splits, mergers and feedback where needed.
-Feedback capacity includes recirculating material. Manifolds show steady-state rates
-after consumer buffers fill; manifolds with sinks are excluded because sinks do not
-back up at a target rate. Equal-rate pairs connect directly. Other suppliers split
-independently, merging only when needed by consumers or return loops.
+The generator allocates large chunks to remaining demand, compares halves and thirds,
+and composes reusable five/seven-way feedback patterns. Nearby factorable totals can
+provide a return loop for awkward ratios. Local feedback avoids unnecessarily raising
+the flow on the main trunk; every belt includes its recirculating load in capacity checks.
 
-ELK lays out and routes the network in a worker. Consumers are grouped into columns by
+Equal-rate pairs connect directly. Other suppliers can split independently or pool
+within belt capacity. A bounded construction pass first completes a usable pattern;
+a separate bounded improvement pass retains that pattern when its budget runs out.
+Both passes cache patterns for one preview. Candidates are compared by junction count,
+then belt count, then return-belt count.
+Individual-machine requests retain their connected-node membership. A second candidate
+routes between those groups, merges supplier members and splits consumer groups locally.
+Temporary group endpoints disappear when the networks join, so the result contains
+only real machine endpoints and physical junctions. Groups above belt capacity remain
+independent. Both candidates use the same cost comparison and final flow validation;
+unsupported local ratios or a cheaper flat construction retain the flat result.
+The previous construction remains a fallback. Consecutive mergers collapse when their
+combined inputs fit the three-port limit. An independent validator checks every final
+layout for physical ports, flow conservation, capacity, source-to-destination
+reachability and equal splits for belt splitters.
+Main-flow edges must be acyclic; declared return belts must close a main-flow path.
+These are steady-state checks, not a startup simulation or proof of global optimality.
+
+Liquid and gas ports use a separate pipe construction. Pipeline Mk.1 supports
+300 m³/min and Mk.2 supports 600 m³/min. Three connected pipes use a T-junction;
+four use a cross-junction. Both fittings allow flow in either direction through
+any socket; planned branches need not have equal rates. These are the
+[game's pipeline junctions](https://satisfactory.wiki.gg/wiki/Pipeline_Junction),
+not directional belt splitters or mergers.
+For four or more consumers, the generator prefers one shared manifold with a tap
+per consumer. The first two suppliers prefer opposite ends; additional suppliers
+prefer positions between them. A bounded placement solve adjusts those feed positions
+to keep every segment within its pipe capacity and every fitting within its socket
+count. Unfed terminal consumers connect through an elbow instead of a redundant
+junction. Direct one-to-one rate matches remain separate connections. Small networks
+and requests that do not fit one manifold retain the independent/pooled construction.
+This favors a readable shared header over minimizing the number of fittings.
+For the [standard coal setup](https://satisfactory.guru/articles/read/index/id/6/name/Coal%2BPower%2BTutorial),
+three 120 m³/min extractors feed eight 45 m³/min generators at both ends and near
+the middle of one Mk.1 manifold. Its total demand exceeds 300 m³/min, but no
+individual segment does.
+Each machine keeps
+one pipe connection, and every pipe is checked against its tier. Junction throughput
+has no separate limit. Pipe networks have no balancing feedback loops or ratio search.
+The canvas draws fitting arms to neutral sockets on three/four separate sides,
+with fixed socket positions during layout and local movement. Manifolds use a
+straight header along the consumer column with short branches and feeds at their
+physical stations; net flow direction does not rearrange those stations. Other
+networks use ELK. Machine ports
+retain their supply/consumption direction. The preview counts T-junctions and
+cross-junctions separately and uses m³/min units and a two-tier legend.
+Rates represent planned steady-state net flow, not enforced splits. Zero-net-flow
+header segments remain physically connected. Filling, sloshing and head lift
+are not simulated. Pumps, valves and elevations are not added by this view.
+
+Generation and ELK layout each run in a dedicated worker. Manifold layout is a small,
+deterministic projection of the generated header. Changing settings or closing
+the view cancels pending work, terminates its workers and disposes the canvas. Results
+from superseded requests cannot mount a stale view. Workers are released after both
+success and failure. Each reopening takes a fresh flow snapshot; nothing is persisted
+by the distribution view.
+
+For non-manifold networks, ELK lays out and routes the network. Consumers are grouped into columns by
 recipe; independent recipe branches occupy separate sections with suppliers on the
-left. The preview supports one solid item, direct machine connections, up to 100
-endpoints and bounded rate ratios. Unsupported configurations show an explanation.
+left. The preview supports one solid, liquid or gas material, direct machine connections, up to 100
+endpoints and bounded rate ratios. Unsupported configurations show an explanation. Failures distinguish invalid input,
+unsupported connections/materials, endpoint limits, belt capacity, bounded-construction
+limits and invalid generated results. Failure to find a balanced construction within
+the budget does not imply the requested distribution is impossible; a higher tier
+can provide an alternative.
 It does not guarantee a globally minimal balancer and does not expand existing
-logistics networks or fluids.
+logistics networks.
 
 ## Validation and deferred work
 
 Regressions cover finite supply, branch sizing, clock and limit conversions, unfinished
 ingredients, surplus sinks, recycling, undo/redo, port ordering and inspector interaction.
-Distribution checks cover direct pairs, independent splitting, feedback capacity,
-material conservation and equal splits.
+Distribution checks cover compact constructions, direct pairs, independent and pooled
+suppliers, fractional ratios, local feedback capacity, material conservation, equal splits,
+invalid graphs, endpoint ID collisions and the endpoint limit.
+Pipe checks cover uneven and fractional branches, multi-source flow, mixed junctions,
+per-pipe capacity, three/four-port fitting types and reversed flow through the same
+fitting. Manifold regressions cover the 3:8 and 6:16 coal setups, both-end/interior
+feeds, capacity-driven feed repositioning, a straight header, zero-net-flow pipes,
+and unchanged source plans during layout and dragging. Real ELK and movement tests keep pipes attached to cardinal sockets during
+layout, dragging and committed moves. UI tests cover liquid/gas units and automatic
+pipe-tier selection, capacity errors and machine expansion. Real ELK tests verify
+route attachment, port ordering, layout compactness and local rearrangement. UI and worker tests cover
+cancellation, stale results, close/reopen, capacity errors and failure recovery.
 
 Deferred:
 

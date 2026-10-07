@@ -15,6 +15,12 @@ cannot form machine groups.
 An individual machine within a machine group, retaining its identity when its
 operating settings change.
 
+**Distribution preview**:
+A proposed belt network using splitters and mergers, or a pipe network using
+bidirectional T-junctions and cross-junctions, for the allocated flow at a material
+port. Larger pipe networks prefer a shared manifold. Connected-node detail treats each connected group as one endpoint;
+individual-machine detail distributes that flow to the group's members.
+
 **Mixed setting**:
 An operating setting whose value differs between members of a machine group.
 Editing that setting for All assigns the chosen value to every member.

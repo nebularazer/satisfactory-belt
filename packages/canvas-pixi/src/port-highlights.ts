@@ -37,7 +37,9 @@ export class PortHighlights {
 
     for (let i = 0; i < display.ports.length; i++) {
       const port = display.ports[i]!;
-      const colors = palette[port.direction];
+      const colors = port.bidirectional
+        ? { stroke: palette.muted, fill: palette.card }
+        : palette[port.direction];
       const muted = roles[i] === "muted";
       const radius =
         port.purpose === "fuel"
@@ -58,7 +60,8 @@ export class PortHighlights {
             port.x - size,
             port.y + halfHeight + padding,
           ]);
-        } else if (port.transport.endsWith("-route"))
+        } else if (port.bidirectional) this.view.circle(port.x, port.y, size);
+        else if (port.transport.endsWith("-route"))
           this.view.rect(port.x - size, port.y - size, size * 2, size * 2);
         else if (port.transport === "pipe")
           this.view.poly([
