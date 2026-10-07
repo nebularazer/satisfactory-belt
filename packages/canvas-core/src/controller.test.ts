@@ -489,3 +489,48 @@ it.each([{}, { touch: true }, { marquee: true }, { additive: true }])(
     expect(onRoute).not.toHaveBeenCalled();
   },
 );
+
+it("allows node arrangement in a read-only canvas while keeping connections locked", () => {
+  const onMove = vi.fn();
+  const onRoute = vi.fn();
+  const onConnect = vi.fn();
+  const canvas = new CanvasController({
+    items,
+    onMove,
+    onRoute,
+    onConnect,
+    readOnly: true,
+    allowNodeMovement: true,
+  });
+  canvas.resize({ width: 800, height: 600 });
+  const link = {
+    id: "belt",
+    output: { nodeId: "a", portKey: "out" },
+    input: { nodeId: "b", portKey: "in" },
+    points: [
+      { x: 200, y: 140 },
+      { x: 250, y: 140 },
+    ],
+  };
+  canvas.setLinks([link]);
+  canvas.setPorts([
+    { ...link.output, direction: "output", x: 200, y: 140 },
+    { ...link.input, direction: "input", x: 250, y: 140 },
+  ]);
+  canvas.pointerDown(pointer(120, 120));
+  canvas.pointerMove(pointer(152, 152));
+  expect(canvas.getSnapshot().interaction).toBe("drag");
+  expect(canvas.getCursor()).toBe("move");
+  canvas.pointerUp(pointer(152, 152));
+  expect(onMove).toHaveBeenCalledOnce();
+  canvas.command("move-right");
+  expect(onMove).toHaveBeenCalledTimes(2);
+  canvas.selectLink("belt");
+  canvas.selectPort(link.output);
+  canvas.pointerDown(pointer(225, 140));
+  canvas.pointerUp(pointer(225, 140));
+  expect(canvas.getSnapshot().linkSelection.selected).toBeNull();
+  expect(canvas.getPortSnapshot().anchor).toBeNull();
+  expect(onRoute).not.toHaveBeenCalled();
+  expect(onConnect).not.toHaveBeenCalled();
+});

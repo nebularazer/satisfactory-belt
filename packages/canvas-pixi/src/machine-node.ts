@@ -70,20 +70,21 @@ export class MachineNodeView {
       this.rateKey = rateKey;
     }
     if (changed || this.zoom !== zoom || this.selected !== selected) {
-      this.background
-        .clear()
-        .roundRect(
-          0,
-          0,
-          display.size,
-          display.layout === "machine" ? (display.height ?? display.size) : display.size,
-          8,
-        )
-        .fill(this.palette.card)
-        .stroke({
-          color: selected ? this.palette.highlight : this.palette.separator,
-          width: 1,
-        });
+      this.background.clear();
+      if (display.layout !== "logistics" || !display.pipeJunction || selected)
+        this.background
+          .roundRect(
+            0,
+            0,
+            display.size,
+            display.layout === "machine" ? (display.height ?? display.size) : display.size,
+            8,
+          )
+          .fill(this.palette.card)
+          .stroke({
+            color: selected ? this.palette.highlight : this.palette.separator,
+            width: 1,
+          });
       this.zoom = zoom;
       this.selected = selected;
       this.container.scale.set(zoom);
@@ -113,7 +114,22 @@ export class MachineNodeView {
     const footerY =
       (display.layout === "machine" ? (display.height ?? display.size) : display.size) - 32;
     if (display.layout === "logistics") {
-      this.icon(display.machineIconId, display.size / 2, display.size / 2, 40, 0.7);
+      if (display.pipeJunction) {
+        const fitting = new Graphics();
+        for (const port of display.ports)
+          fitting.moveTo(display.size / 2, display.size / 2).lineTo(port.x, port.y);
+        fitting.stroke({ color: this.palette.muted, width: 8, cap: "round", join: "round" });
+        this.content.addChild(fitting);
+      } else if (display.iconPath) {
+        this.symbol(
+          `<path d="${display.iconPath}"/>`,
+          display.size / 2 - 20,
+          display.size / 2 - 20,
+          this.palette.title,
+          "none",
+          40,
+        );
+      } else this.icon(display.machineIconId, display.size / 2, display.size / 2, 40, 0.7);
     } else {
       // Stop at the inner edge of the one-unit node border.
       const lines = new Graphics()
@@ -280,12 +296,12 @@ export class MachineNodeView {
     this.icons.push({ sprite, placeholder, id, size });
   }
 
-  private symbol(paths: string, x: number, y: number, color: string, fill = "none") {
+  private symbol(paths: string, x: number, y: number, color: string, fill = "none", size = 16) {
     const icon = new Graphics().svg(
       `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="${fill}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`,
     );
     icon.position.set(x, y);
-    icon.scale.set(16 / 24);
+    icon.scale.set(size / 24);
     this.content.addChild(icon);
   }
 

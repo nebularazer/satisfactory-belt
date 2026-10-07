@@ -4,6 +4,10 @@ import type { PortReference } from "./ports";
 
 /** A vertical (x) or horizontal (y) line deliberately positioned by the user. */
 export type RouteGuide = Readonly<{ axis: "x" | "y"; position: number }>;
+export type LinkEndpointSides = Readonly<{
+  output: "north" | "east" | "south" | "west";
+  input: "north" | "east" | "south" | "west";
+}>;
 export type CanvasLink = Readonly<{
   id: string;
   output: PortReference;
@@ -15,6 +19,8 @@ export type CanvasLink = Readonly<{
   color?: number;
   dashed?: boolean;
   guides?: readonly RouteGuide[];
+  /** Physical socket sides for rerouting automatic layouts during movement. */
+  endpointSides?: LinkEndpointSides;
 }>;
 export type LinkHit = Readonly<{ id: string; segment: number }>;
 export type LinkSelection = Readonly<{
@@ -54,7 +60,39 @@ export function routeLink(
   target: Point,
   _obstacles: readonly Bounds[] = [],
   guides?: readonly RouteGuide[],
+  endpointSides?: LinkEndpointSides,
 ): readonly Point[] {
+  if (
+    endpointSides &&
+    (endpointSides.output !== "east" || endpointSides.input !== "west") &&
+    !guides?.length
+  ) {
+    const normals = {
+      north: { x: 0, y: -1 },
+      east: { x: 1, y: 0 },
+      south: { x: 0, y: 1 },
+      west: { x: -1, y: 0 },
+    };
+    const a = normals[endpointSides.output],
+      b = normals[endpointSides.input];
+    const start = { x: source.x + a.x * STUB, y: source.y + a.y * STUB };
+    const end = { x: target.x + b.x * STUB, y: target.y + b.y * STUB };
+    // Leave/approach each stub perpendicularly, so a moved branch never turns
+    // back through its own fitting. Endpoint stubs retain their socket sides.
+    const middle =
+      a.x && b.x
+        ? [
+            { x: start.x, y: (start.y + end.y) / 2 },
+            { x: end.x, y: (start.y + end.y) / 2 },
+          ]
+        : a.y && b.y
+          ? [
+              { x: (start.x + end.x) / 2, y: start.y },
+              { x: (start.x + end.x) / 2, y: end.y },
+            ]
+          : [a.x ? { x: start.x, y: end.y } : { x: end.x, y: start.y }];
+    return [source, ...clean([start, ...middle, end]), target];
+  }
   const stub =
     source.y === target.y && source.x < target.x ? Math.min(STUB, (target.x - source.x) / 3) : STUB;
   const start = { x: source.x + stub, y: source.y },
