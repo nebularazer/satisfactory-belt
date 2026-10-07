@@ -2,6 +2,40 @@ import { expect, it, vi } from "vitest";
 
 import { createBrowserPreferenceStore } from "./browser-preference-store";
 
+it("keeps the main preferences and each PR preview's preferences separate", async () => {
+  const data = new Map<string, string>();
+  const storage = () => ({
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      data.set(key, value);
+    },
+  });
+  const preferences = {
+    gridSnapping: true,
+    showGrid: true,
+    showPerformance: false,
+    theme: "dark",
+  } as const;
+  await createBrowserPreferenceStore(storage, "/satisfactory-belt/").save(preferences);
+  expect(await createBrowserPreferenceStore(storage, "/satisfactory-belt/pr/42/").load()).toEqual(
+    {},
+  );
+  await createBrowserPreferenceStore(storage, "/satisfactory-belt/pr/42/").save({
+    ...preferences,
+    theme: "light",
+  });
+  expect(await createBrowserPreferenceStore(storage, "/satisfactory-belt/").load()).toEqual(
+    preferences,
+  );
+  expect(await createBrowserPreferenceStore(storage, "/satisfactory-belt/pr/42/").load()).toEqual({
+    ...preferences,
+    theme: "light",
+  });
+  expect(await createBrowserPreferenceStore(storage, "/satisfactory-belt/pr/43/").load()).toEqual(
+    {},
+  );
+});
+
 it.each(["light", "system", "dark"] as const)(
   "round-trips %s through a fresh adapter",
   async (theme) => {

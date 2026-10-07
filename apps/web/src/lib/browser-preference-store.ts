@@ -1,15 +1,15 @@
 import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { PreferenceStore, UserPreferences } from "@satisfactory-belt/preferences";
 
-const KEY = "satisfactory-belt:user-preferences";
-
 /** Resolve storage lazily: browsers may deny access, which the caller handles as a failure. */
 export function createBrowserPreferenceStore(
   storage: () => Pick<Storage, "getItem" | "setItem"> = () => window.localStorage,
+  baseUrl: string = import.meta.env.BASE_URL,
 ): PreferenceStore {
+  const key = `satisfactory-belt:${baseUrl}:user-preferences`;
   return {
     async load() {
-      const raw = storage().getItem(KEY);
+      const raw = storage().getItem(key);
       if (!raw) return {};
       let saved: unknown;
       try {
@@ -32,7 +32,7 @@ export function createBrowserPreferenceStore(
       } satisfies Partial<UserPreferences>;
     },
     async save(preferences) {
-      storage().setItem(KEY, JSON.stringify(preferences));
+      storage().setItem(key, JSON.stringify(preferences));
     },
   };
 }
