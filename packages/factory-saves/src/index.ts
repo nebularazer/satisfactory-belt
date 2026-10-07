@@ -23,6 +23,7 @@ export interface FactoryStore {
   select(id: string): Promise<void>;
   create(name: string, document: FactoryDocument): Promise<FactorySave>;
   save(id: string, document: FactoryDocument): Promise<void>;
+  overwrite(id: string, document: FactoryDocument): Promise<FactorySave>;
   delete(id: string): Promise<void>;
   close(): void;
 }
@@ -146,6 +147,23 @@ export async function createFactoryStore(
     });
   }
 
+  function writeFactory(id: string, document: FactoryDocument, select: boolean) {
+    return transaction(
+      "readwrite",
+      (objectStore) => objectStore.get(id),
+      (value: unknown, objectStore, details) => {
+        const saved = readFactory(value, id);
+        if (!saved)
+          throw new Error("This factory is no longer saved. Use Save as… to keep your changes.");
+        const updated = { id, name: saved.name, updatedAt: Date.now() };
+        objectStore.put({ ...updated, document, version: PLAN_VERSION }, id);
+        details.put(updated, id);
+        if (select) objectStore.put(id, ACTIVE);
+        return updated;
+      },
+    );
+  }
+
   const store: FactoryStore = {
     list() {
       return transaction(
@@ -202,22 +220,10 @@ export async function createFactoryStore(
       );
       return saved;
     },
-    save(id, document) {
-      return transaction(
-        "readwrite",
-        (objectStore) => objectStore.get(id),
-        (value: unknown, objectStore, details) => {
-          const saved = readFactory(value, id);
-          if (!saved)
-            throw new Error(
-              "This factory is no longer saved. Use Save as new to keep your changes.",
-            );
-          const updated = { id, name: saved.name, updatedAt: Date.now() };
-          objectStore.put({ ...updated, document, version: PLAN_VERSION }, id);
-          details.put(updated, id);
-        },
-      );
+    async save(id, document) {
+      await writeFactory(id, document, false);
     },
+    overwrite: (id, document) => writeFactory(id, document, true),
     delete(id) {
       return transaction(
         "readwrite",

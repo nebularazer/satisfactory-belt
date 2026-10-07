@@ -15,7 +15,7 @@ import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
-  CopyPlusIcon,
+  SaveIcon,
   FolderOpenIcon,
   Grid2X2Icon,
   Grid3X3Icon,
@@ -153,13 +153,13 @@ function CanvasWorkspace({
   const [editor, setEditor] = useState(initialEditor);
   const [activeSave, setActiveSave] = useState<FactorySave | null>(initialSave);
   const [savesOpen, setSavesOpen] = useState(false);
-  const [saveAsNew, setSaveAsNew] = useState(false);
+  const [saveDialog, setSaveDialog] = useState(false);
   const openSaves = useCallback(() => {
-    setSaveAsNew(false);
+    setSaveDialog(false);
     setSavesOpen(true);
   }, []);
-  const openSaveAsNew = useCallback(() => {
-    setSaveAsNew(true);
+  const openSaveAs = useCallback(() => {
+    setSaveDialog(true);
     setSavesOpen(true);
   }, []);
   const host = useRef<HTMLDivElement>(null);
@@ -194,10 +194,18 @@ function CanvasWorkspace({
     },
     [activeSave, assets, editor, store],
   );
-  const copyFactory = useCallback(
+  const saveAsFactory = useCallback(
     async (name: string) => {
       const document = editor.history.getSnapshot().state;
       const saved = await store.create(name, document);
+      setSaveError(null);
+      setActiveSave(saved);
+    },
+    [editor, store],
+  );
+  const overwriteFactory = useCallback(
+    async (id: string) => {
+      const saved = await store.overwrite(id, editor.history.getSnapshot().state);
       setSaveError(null);
       setActiveSave(saved);
     },
@@ -469,10 +477,11 @@ function CanvasWorkspace({
         <FactorySavesDialog
           store={store}
           activeSave={activeSave}
-          saveAsNew={saveAsNew}
+          kind={saveDialog ? "save" : "open"}
           onOpenChange={setSavesOpen}
           onLoad={loadFactory}
-          onSaveAsNew={copyFactory}
+          onSaveAs={saveAsFactory}
+          onOverwrite={overwriteFactory}
           onDelete={deleteFactory}
           finalFocus={canvasFocus}
         />
@@ -496,7 +505,7 @@ function CanvasWorkspace({
           </div>
         </div>
       )}
-      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))] flex items-center gap-2">
+      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))]">
         <DropdownMenu>
           <DropdownMenuTrigger render={menuButton}>
             <MenuIcon />
@@ -509,11 +518,15 @@ function CanvasWorkspace({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={openSaves}>
                 <FolderOpenIcon className="text-muted-foreground" />
-                Saved factories…
+                Open factory…
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={openSaveAsNew}>
-                <CopyPlusIcon className="text-muted-foreground" />
-                Save as new…
+              <DropdownMenuItem onClick={openSaveAs}>
+                <SaveIcon className="text-muted-foreground" />
+                Save as…
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={openClearCanvas}>
+                <Trash2Icon />
+                Clear canvas…
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -592,20 +605,8 @@ function CanvasWorkspace({
               <ActivityIcon className="text-muted-foreground" />
               Show performance
             </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={openClearCanvas}>
-              <Trash2Icon />
-              Clear canvas…
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button
-          variant="outline"
-          className="max-w-[min(16rem,60vw)] bg-background shadow-sm"
-          onClick={openSaves}
-        >
-          <span className="truncate">{activeSave?.name ?? "Unsaved factory"}</span>
-        </Button>
       </div>
       <div className="pointer-events-none absolute right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] flex flex-col gap-3">
         {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}

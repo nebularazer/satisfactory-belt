@@ -251,3 +251,46 @@ it("does not hide a failed latest save when an earlier save finishes", async () 
   expect(status).toHaveBeenCalledTimes(1);
   stop();
 });
+
+it("overwrites an existing factory, keeps its name and identity, and restores it as active", async () => {
+  const factory = new IDBFactory();
+  const store = await createBrowserPlanStore(factory);
+  const original = createReferencePlans();
+  const source = await store.create("Source", original);
+  const target = await store.create("Target", empty);
+  await store.select(source.id);
+  const overwritten = await store.overwrite(target.id, original);
+  expect(overwritten).toMatchObject({ id: target.id, name: "Target" });
+  expect(await store.list()).toHaveLength(2);
+  await store.save(target.id, empty);
+  expect((await store.load(source.id))?.document).toEqual(original);
+  store.close();
+  const reopened = await createBrowserPlanStore(factory);
+  expect((await reopened.loadActive())?.id).toBe(target.id);
+  expect((await reopened.load(target.id))?.document).toEqual(empty);
+  reopened.close();
+});
+
+it("rolls back document, details and active selection when overwriting fails", async () => {
+  const store = await createBrowserPlanStore(new IDBFactory());
+  const source = await store.create("Source", createReferencePlans());
+  const target = await store.create("Target", empty);
+  await store.select(source.id);
+  const details = await store.list();
+  // oxlint-disable-next-line typescript/unbound-method -- Call the original with its object store below.
+  const put = IDBObjectStore.prototype.put;
+  const failing = vi
+    .spyOn(IDBObjectStore.prototype, "put")
+    .mockImplementation(function (this: IDBObjectStore, value, key) {
+      if (key === "active-factory") throw new DOMException("Storage full", "QuotaExceededError");
+      return put.call(this, value, key);
+    });
+  await expect(store.overwrite(target.id, createReferencePlans())).rejects.toThrow("Storage full");
+  failing.mockRestore();
+  expect((await store.loadActive())?.id).toBe(source.id);
+  expect((await store.load(target.id))?.document).toEqual(empty);
+  expect(await store.list()).toEqual(details);
+  await store.delete(target.id);
+  await expect(store.overwrite(target.id, empty)).rejects.toThrow("no longer saved");
+  store.close();
+});
