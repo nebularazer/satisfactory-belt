@@ -214,6 +214,9 @@ importers:
       '@satisfactory-belt/factory-core':
         specifier: workspace:*
         version: link:../../packages/factory-core
+      '@satisfactory-belt/factory-saves':
+        specifier: workspace:*
+        version: link:../../packages/factory-saves
       '@satisfactory-belt/game-data':
         specifier: workspace:*
         version: link:../../packages/game-data
@@ -315,6 +318,12 @@ importers:
       javascript-lp-solver:
         specifier: ^1.0.3
         version: 1.0.3
+
+  packages/factory-saves:
+    dependencies:
+      '@satisfactory-belt/factory-core':
+        specifier: workspace:*
+        version: link:../factory-core
 
   packages/game-data: {}
 

@@ -8,12 +8,15 @@ import {
 import type { CanvasCommand, CatalogRequest } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView, RenderPerformance } from "@satisfactory-belt/canvas-pixi";
+import type { FactorySave } from "@satisfactory-belt/factory-saves";
 import { createSearchIndex } from "@satisfactory-belt/game-data/search";
 import type { SearchEntry, SearchScope } from "@satisfactory-belt/game-data/search";
 import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
+  CopyPlusIcon,
+  FolderOpenIcon,
   Grid2X2Icon,
   Grid3X3Icon,
   MaximizeIcon,
@@ -33,6 +36,7 @@ import type { KeyboardEvent } from "react";
 
 import { CatalogSearch } from "@/components/catalog-search";
 import { ClearCanvasDialog } from "@/components/clear-canvas-dialog";
+import { FactorySavesDialog } from "@/components/factory-saves-dialog";
 import { Inspector } from "@/components/inspector";
 import { PerformanceBar } from "@/components/performance-bar";
 import { Button } from "@/components/ui/button";
@@ -78,6 +82,7 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
     assets: GameAssets;
     editor: ReturnType<typeof createFactoryEditor>;
     store: PlanStore;
+    saved: FactorySave | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -91,17 +96,11 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
         store.close();
         return;
       }
-      const saved = await store.load();
+      const saved = await store.loadActive();
       if (abort.signal.aborted) return;
-      let editor: ReturnType<typeof createFactoryEditor>;
-      try {
-        editor = createFactoryEditor(assets.catalog, saved ?? createReferencePlans());
-      } catch (reason) {
-        if (!saved) throw reason;
-        // Unsupported documents are skipped, never repaired or migrated.
-        editor = createFactoryEditor(assets.catalog, createReferencePlans());
-      }
-      setWorkspace({ assets, editor, store });
+      const document = saved?.document ?? createReferencePlans();
+      const editor = createFactoryEditor(assets.catalog, document);
+      setWorkspace({ assets, editor, store, saved: saved ?? null });
     }
     void loadWorkspace().catch((reason: unknown) => {
       store?.close();
@@ -128,7 +127,8 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
     <CanvasWorkspace
       preferences={preferences}
       assets={workspace.assets}
-      editor={workspace.editor}
+      initialEditor={workspace.editor}
+      initialSave={workspace.saved}
       store={workspace.store}
       theme={theme}
     />
@@ -138,16 +138,30 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
 function CanvasWorkspace({
   preferences,
   assets,
-  editor,
+  initialEditor,
+  initialSave,
   store,
   theme,
 }: {
   preferences: Preferences;
   assets: GameAssets;
-  editor: ReturnType<typeof createFactoryEditor>;
+  initialEditor: ReturnType<typeof createFactoryEditor>;
+  initialSave: FactorySave | null;
   store: PlanStore;
   theme: BrowserTheme;
 }) {
+  const [editor, setEditor] = useState(initialEditor);
+  const [activeSave, setActiveSave] = useState<FactorySave | null>(initialSave);
+  const [savesOpen, setSavesOpen] = useState(false);
+  const [saveAsNew, setSaveAsNew] = useState(false);
+  const openSaves = useCallback(() => {
+    setSaveAsNew(false);
+    setSavesOpen(true);
+  }, []);
+  const openSaveAsNew = useCallback(() => {
+    setSaveAsNew(true);
+    setSavesOpen(true);
+  }, []);
   const host = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [clearCanvasOpen, setClearCanvasOpen] = useState(false);
@@ -156,7 +170,49 @@ function CanvasWorkspace({
   const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  useEffect(() => startPlanAutosave(editor.history, store, setSaveError), [editor, store]);
+  useEffect(() => {
+    if (!activeSave) return undefined;
+    return startPlanAutosave(
+      editor.history,
+      {
+        save: (document) => store.save(activeSave.id, document),
+      },
+      setSaveError,
+    );
+  }, [editor, store, activeSave]);
+  const loadFactory = useCallback(
+    async (id: string) => {
+      // Persist even after an earlier autosave failure before leaving this factory.
+      if (activeSave) await store.save(activeSave.id, editor.history.getSnapshot().state);
+      const saved = await store.load(id);
+      if (!saved) throw new Error("This factory is no longer saved.");
+      const nextEditor = createFactoryEditor(assets.catalog, saved.document);
+      await store.select(id);
+      setSaveError(null);
+      setEditor(nextEditor);
+      setActiveSave({ id: saved.id, name: saved.name, updatedAt: saved.updatedAt });
+    },
+    [activeSave, assets, editor, store],
+  );
+  const copyFactory = useCallback(
+    async (name: string) => {
+      const document = editor.history.getSnapshot().state;
+      const saved = await store.create(name, document);
+      setSaveError(null);
+      setActiveSave(saved);
+    },
+    [editor, store],
+  );
+  const deleteFactory = useCallback(
+    async (id: string) => {
+      await store.delete(id);
+      if (activeSave?.id === id) {
+        setSaveError(null);
+        setActiveSave(null);
+      }
+    },
+    [activeSave, store],
+  );
   const {
     controller,
     history,
@@ -328,6 +384,7 @@ function CanvasWorkspace({
         if (
           searchOpen ||
           clearCanvasOpen ||
+          savesOpen ||
           event.defaultPrevented ||
           event.nativeEvent.isComposing
         )
@@ -389,6 +446,7 @@ function CanvasWorkspace({
     deleteSelection,
     searchOpen,
     clearCanvasOpen,
+    savesOpen,
     openAdd,
   ]);
 
@@ -407,6 +465,18 @@ function CanvasWorkspace({
         allowedEntryIds={allowedEntryIds}
       />
       <div ref={host} className="absolute inset-0" />
+      {savesOpen && (
+        <FactorySavesDialog
+          store={store}
+          activeSave={activeSave}
+          saveAsNew={saveAsNew}
+          onOpenChange={setSavesOpen}
+          onLoad={loadFactory}
+          onSaveAsNew={copyFactory}
+          onDelete={deleteFactory}
+          finalFocus={canvasFocus}
+        />
+      )}
       <ClearCanvasDialog
         open={clearCanvasOpen}
         onOpenChange={setClearCanvasOpen}
@@ -426,7 +496,7 @@ function CanvasWorkspace({
           </div>
         </div>
       )}
-      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))]">
+      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))] flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger render={menuButton}>
             <MenuIcon />
@@ -434,8 +504,19 @@ function CanvasWorkspace({
           <DropdownMenuContent
             className="w-50"
             sideOffset={8}
-            finalFocus={searchOpen || clearCanvasOpen ? false : canvasFocus}
+            finalFocus={searchOpen || clearCanvasOpen || savesOpen ? false : canvasFocus}
           >
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={openSaves}>
+                <FolderOpenIcon className="text-muted-foreground" />
+                Saved factories…
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={openSaveAsNew}>
+                <CopyPlusIcon className="text-muted-foreground" />
+                Save as new…
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={openAdd} aria-keyshortcuts="n">
                 <PlusIcon className="text-muted-foreground" />
@@ -518,6 +599,13 @@ function CanvasWorkspace({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button
+          variant="outline"
+          className="max-w-[min(16rem,60vw)] bg-background shadow-sm"
+          onClick={openSaves}
+        >
+          <span className="truncate">{activeSave?.name ?? "Unsaved factory"}</span>
+        </Button>
       </div>
       <div className="pointer-events-none absolute right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] flex flex-col gap-3">
         {showPerformance && performanceMonitor && <PerformanceBar monitor={performanceMonitor} />}
