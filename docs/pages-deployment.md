@@ -5,8 +5,10 @@ no-GitHub-CI policy. Other CI remains outside this setup.
 
 ## Initial setup
 
-After merging the workflows, enable **Settings → Pages → Build and deployment →
-Source: GitHub Actions**. The `github-pages` environment must allow deployments
+GitHub Actions must be enabled and **Settings → Pages → Build and deployment →
+Source** must be **GitHub Actions**. These settings can also be configured with
+`gh api`; the Pages API's publishing mode is `build_type: workflow`.
+The `github-pages` environment must allow deployments
 from `main`; both the publisher and closed-PR cleanup run trusted default-branch
 code. Run **Build Pages** manually on `main` if its first build happened before
 Pages was enabled. No additional token or secret is needed.
@@ -23,8 +25,11 @@ the same build path, subject to GitHub's workflow approval rules.
 **Publish Pages** consumes the build artifact without executing its code. It only
 checks out default-branch scripts, checks that the build still matches the current
 commit, and writes static files to `gh-pages`. The combined site is then deployed
-with the official Pages actions. The published preview link appears in the
-publisher's job summary.
+with the official Pages actions. After a successful PR deployment, the publisher
+adds a comment linking to the preview and updates the same bot comment on later
+deployments. It checks that the PR is still open and its head commit still matches
+before commenting. Main deployments and closed-PR cleanup do not add comments.
+The published preview link also appears in the publisher's job summary.
 
 Closing a PR, including merging it, queues a publish that removes its directory.
 Every publish also removes directories whose PRs are no longer open. A late build
