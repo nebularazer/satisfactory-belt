@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-new-array-as-prop, react-perf/jsx-no-new-function-as-prop -- The virtual window bounds icons; fallback state changes only after image errors. */
 import type { Ingredient } from "@satisfactory-belt/game-data";
+import { recipeUnlockDescription } from "@satisfactory-belt/game-data";
 import {
   recipeAlternatives,
   compareRecipes,
@@ -174,6 +175,25 @@ export function CatalogSearchDetails({
               <p className="mb-5 whitespace-pre-line text-sm text-muted-foreground">
                 {description}
               </p>
+            )}
+            {recipe && Boolean(recipe.unlocks?.length) && (
+              <section className="mb-5 space-y-2 text-sm" aria-label="Unlock requirements">
+                <h4 className="font-medium">Unlock requirements</h4>
+                {recipe.unlocks?.map((unlock, routeIndex) => {
+                  const unlockDescription = recipeUnlockDescription(unlock, recipe.name);
+                  return (
+                    <div key={unlock.id}>
+                      {routeIndex > 0 && <p className="mb-2 text-xs text-muted-foreground">or</p>}
+                      <p>{unlockDescription.method}</p>
+                      {unlockDescription.prerequisites.map((requirement) => (
+                        <p key={requirement} className="text-muted-foreground">
+                          {requirement}
+                        </p>
+                      ))}
+                    </div>
+                  );
+                })}
+              </section>
             )}
             {recipe && (
               <div className="grid gap-4 sm:grid-cols-2">

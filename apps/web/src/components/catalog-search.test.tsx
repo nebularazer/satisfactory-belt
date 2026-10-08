@@ -148,6 +148,38 @@ function recipeAssets() {
   return assets;
 }
 
+it("shows alternate prerequisites only in Details and preserves independent unlock routes", async () => {
+  const user = userEvent.setup();
+  const assets = recipeAssets();
+  assets.catalog.recipes.alternative!.unlocks = [
+    {
+      id: "Alternate",
+      name: "Alternate: Pure Iron",
+      kind: "hard-drive",
+      requirements: [
+        {
+          all: true,
+          schematics: [
+            { id: "Milestone", name: "Control System Development", kind: "milestone", tier: 7 },
+          ],
+        },
+      ],
+    },
+    { id: "Research", name: "Iron Research", kind: "research", requirements: [] },
+  ];
+  render(<CatalogSearch assets={assets} open onOpenChange={vi.fn()} finalFocus={finalFocus} />);
+  expect(screen.queryByRole("region", { name: "Unlock requirements" })).toBeNull();
+  await user.click(await screen.findByRole("button", { name: "Details for Pure Iron" }));
+  const unlocks = screen.getByRole("region", { name: "Unlock requirements" });
+  expect(within(unlocks).getByText("Hard Drive research")).toBeTruthy();
+  expect(within(unlocks).getByText("Requires Tier 7 · Control System Development")).toBeTruthy();
+  expect(within(unlocks).getByText("or")).toBeTruthy();
+  expect(within(unlocks).getByText("MAM · Iron Research")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Back to results" }));
+  await user.click(screen.getByRole("button", { name: "Details for Iron Ingot" }));
+  expect(screen.queryByRole("region", { name: "Unlock requirements" })).toBeNull();
+});
+
 it("returns from recipe details to scoped results before leaving the machine scope", async () => {
   const user = userEvent.setup();
   const add = vi.fn();

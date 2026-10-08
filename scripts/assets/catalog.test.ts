@@ -58,6 +58,24 @@ function fixture() {
   ];
 }
 describe("manufacturing catalog", () => {
+  it("attaches unlock routes from schematics to manufacturing recipes", () => {
+    const docs = fixture();
+    docs.push(
+      group("FGSchematic", [
+        {
+          ClassName: "Schematic_C",
+          mType: "EST_Milestone",
+          mDisplayName: "Test milestone",
+          mTechTier: "4",
+          mSchematicDependencies: [],
+          mUnlocks: [{ Class: "BP_UnlockRecipe_C", mRecipes: '("/Game/Test.Recipe_Test_C")' }],
+        },
+      ]),
+    );
+    expect(parseCatalog(docs, source).catalog.recipes.Recipe_Test_C!.unlocks).toEqual([
+      { id: "Schematic_C", name: "Test milestone", kind: "milestone", tier: 4, requirements: [] },
+    ]);
+  });
   it.each(["Splitter", "Merger"])(
     "extracts %s imagery and kind independently of translated names",
     (part) => {
