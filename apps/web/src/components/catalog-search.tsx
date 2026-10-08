@@ -4,8 +4,14 @@ import {
   createSearchIndex,
   searchCatalog,
   recipeSearchSummary,
+  searchEntrySummary,
 } from "@satisfactory-belt/game-data/search";
-import type { SearchEntry, SearchOptions, SearchScope } from "@satisfactory-belt/game-data/search";
+import type {
+  SearchDirection,
+  SearchEntry,
+  SearchOptions,
+  SearchScope,
+} from "@satisfactory-belt/game-data/search";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowLeftIcon, SearchIcon, XIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
@@ -31,10 +37,15 @@ type Frame = {
   query: string;
   category: NonNullable<SearchOptions["category"]>;
   scope?: SearchScope;
+  direction?: SearchDirection;
   offset: number;
   activeId?: string;
 };
 const emptyFrame = (): Frame => ({ query: "", category: "all", offset: 0 });
+export type CatalogConnectionContext = Readonly<{
+  direction: SearchDirection;
+  itemIds: readonly string[];
+}>;
 const label = (entry: SearchEntry) => entry.name;
 const value = (entry: SearchEntry) => entry.id;
 
@@ -45,6 +56,8 @@ export function CatalogSearch({
   finalFocus,
   onAdd,
   allowedEntryIds,
+  connectionContext,
+  searchIndex,
 }: {
   assets: GameAssets;
   open: boolean;
@@ -53,8 +66,13 @@ export function CatalogSearch({
   onAdd?: (entry: SearchEntry, scope?: SearchScope) => void;
   /** Eligibility from the material-link resolver; immutable snapshot of SearchEntry IDs. */
   allowedEntryIds?: ReadonlySet<string>;
+  connectionContext?: CatalogConnectionContext;
+  searchIndex?: readonly SearchEntry[];
 }) {
-  const fullIndex = useMemo(() => createSearchIndex(assets.catalog), [assets.catalog]);
+  const fullIndex = useMemo(
+    () => searchIndex ?? createSearchIndex(assets.catalog),
+    [assets.catalog, searchIndex],
+  );
   const index = useMemo(
     () =>
       allowedEntryIds ? fullIndex.filter((entry) => allowedEntryIds.has(entry.id)) : fullIndex,
@@ -68,6 +86,7 @@ export function CatalogSearch({
   const [searchSession, setSearchSession] = useState(0);
   const [parent, setParent] = useState<Frame | null>(null);
   const [placementError, setPlacementError] = useState<string | null>(null);
+  const [comparisonBaseline, setComparisonBaseline] = useState<SearchEntry | null>(null);
   const [detailEntry, setSelected] = useState<SearchEntry | null>(null);
   const selected =
     detailEntry && index.some((entry) => entry.id === detailEntry.id) ? detailEntry : null;
@@ -125,6 +144,7 @@ export function CatalogSearch({
   function showDetails(entry: SearchEntry, offset: number) {
     restoreInputFocus.current = document.activeElement === input.current;
     setFrame((current) => ({ ...current, offset, activeId: entry.id }));
+    setComparisonBaseline(entry.kind === "recipe" ? entry : null);
     setSelected(entry);
   }
   function showAlternative(entry: SearchEntry) {
@@ -134,14 +154,18 @@ export function CatalogSearch({
       setParent(frame);
       setFrame({ ...emptyFrame(), scope: { kind: selected.kind, id: selected.entityId } });
     }
+    if (!comparisonBaseline && entry.kind === "recipe") setComparisonBaseline(entry);
     setSelected(entry);
   }
   useEffect(() => {
     if (selected) heading.current?.focus();
   }, [selected]);
   function back() {
-    setSelected(null);
-    if (parent) {
+    setPlacementError(null);
+    if (selected) {
+      setSelected(null);
+      setComparisonBaseline(null);
+    } else if (parent) {
       setFrame(parent);
       setParent(null);
     }
@@ -151,6 +175,7 @@ export function CatalogSearch({
     setPlacementError(null);
     if (!next) {
       setSelected(null);
+      setComparisonBaseline(null);
       if (parent) {
         setFrame(parent);
         setParent(null);
@@ -161,7 +186,7 @@ export function CatalogSearch({
   }
   function backShortcut(event: KeyboardEvent<HTMLElement>) {
     if (
-      selected &&
+      (selected || parent) &&
       !event.nativeEvent.isComposing &&
       ((event.altKey && ["ArrowLeft", "Backspace"].includes(event.key)) ||
         event.key === "BrowserBack")
@@ -213,7 +238,7 @@ export function CatalogSearch({
       changeOpen(false);
     }
   }
-  const compact = narrow && viewport.height < 500;
+  const compact = narrow && viewport.height < 600;
   const scopeName =
     frame.scope?.kind === "machine"
       ? assets.catalog.machines[frame.scope.id]?.name
@@ -282,9 +307,11 @@ export function CatalogSearch({
           panelRef={detailPanel}
           assets={assets}
           machineId={frame.scope?.kind === "machine" ? frame.scope.id : undefined}
+          comparisonBaseline={comparisonBaseline ?? undefined}
         />
       )}
       <div
+        hidden={Boolean(selected)}
         className={
           selected
             ? "hidden"
@@ -303,6 +330,7 @@ export function CatalogSearch({
           onDetails={showDetails}
           canAdd={Boolean(onAdd)}
           restricted={allowedEntryIds !== undefined}
+          connectionContext={connectionContext}
           inputRef={input}
           restoreInputFocus={restoreInputFocus}
           compact={compact}
@@ -320,7 +348,7 @@ export function CatalogSearch({
         onKeyDown={keyDown}
         initialFocus={() => (selected ? heading.current : input.current)}
         finalFocus={finalFocus}
-        className="h-[60dvh]"
+        className={compact ? "h-[calc(100dvh-6rem)]" : "h-[60dvh]"}
       >
         {content}
       </DrawerContent>
@@ -356,6 +384,7 @@ function SearchResults({
   onDetails,
   canAdd,
   restricted,
+  connectionContext,
   inputRef,
   restoreInputFocus,
   compact,
@@ -369,6 +398,7 @@ function SearchResults({
   onDetails: (entry: SearchEntry, offset: number) => void;
   canAdd: boolean;
   restricted: boolean;
+  connectionContext?: CatalogConnectionContext;
   inputRef: React.RefObject<HTMLInputElement | null>;
   restoreInputFocus: React.RefObject<boolean>;
   compact: boolean;
@@ -387,8 +417,13 @@ function SearchResults({
     return () => cancelAnimationFrame(focusFrame);
   }, [inputRef, restoreInputFocus, frame.offset, visible]);
   const results = useMemo(
-    () => searchCatalog(index, frame.query, { category: frame.category, scope: frame.scope }),
-    [index, frame.query, frame.category, frame.scope],
+    () =>
+      searchCatalog(index, frame.query, {
+        category: frame.category,
+        scope: frame.scope,
+        direction: frame.direction,
+      }),
+    [index, frame.query, frame.category, frame.scope, frame.direction],
   );
   const scroll = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(() =>
@@ -400,7 +435,7 @@ function SearchResults({
   const virtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scroll.current,
-    estimateSize: () => 72,
+    estimateSize: () => 88,
     overscan: 5,
     getItemKey,
     initialOffset: frame.offset,
@@ -414,11 +449,27 @@ function SearchResults({
   useLayoutEffect(() => {
     if (visible) virtualizer.scrollToOffset(frame.offset);
   }, [frame.offset, virtualizer, visible]);
+  function inspect(entry: SearchEntry) {
+    setActive(results.indexOf(entry));
+    onDetails(entry, scroll.current?.scrollTop ?? 0);
+  }
   function update(change: Partial<Frame>) {
     setActive(0);
     onFrameChange({ ...frame, ...change, offset: 0, activeId: undefined });
     virtualizer.scrollToOffset(0);
   }
+  const activeEntry = results[active] ?? results[0];
+  const chooseAction = activeEntry?.kind === "machine" || activeEntry?.kind === "extractor";
+  const contextLabel = connectionContext
+    ? `${connectionContext.direction === "consumes" ? "Consumes" : "Produces"} ${
+        connectionContext.itemIds
+          .map((id) => assets.catalog.items[id]?.name)
+          .filter(Boolean)
+          .join(" + ") || "compatible items"
+      }`
+    : restricted
+      ? "Compatible choices"
+      : null;
   return (
     <Combobox<SearchEntry>
       inline
@@ -442,7 +493,12 @@ function SearchResults({
         if (details.reason === "pointer" && details.index >= 0) setActive(details.index);
       }}
     >
-      <div className="shrink-0 space-y-3 px-4 pb-3">
+      <div className="shrink-0 space-y-2 px-4 pb-3">
+        {contextLabel && (
+          <p className="truncate text-sm font-medium sm:pr-11" title={contextLabel}>
+            {contextLabel}
+          </p>
+        )}
         <div
           className={frame.scope ? "flex items-center gap-2" : "flex items-center gap-2 sm:pr-11"}
         >
@@ -482,7 +538,7 @@ function SearchResults({
                 event.preventDefault();
                 event.stopPropagation();
                 const entry = results[active] ?? results[0];
-                if (entry) onDetails(entry, scroll.current?.scrollTop ?? 0);
+                if (entry) inspect(entry);
               } else if (event.key === "Enter") {
                 event.preventDefault();
                 event.stopPropagation();
@@ -491,7 +547,13 @@ function SearchResults({
               }
             }}
             aria-label="Search buildings and recipes"
-            placeholder="Search buildings and recipes…"
+            placeholder={
+              frame.direction === "consumes"
+                ? "Search consumed items…"
+                : frame.direction === "produces"
+                  ? "Search produced items…"
+                  : "Search buildings and recipes…"
+            }
           >
             <InputGroupAddon align="inline-start">
               <SearchIcon aria-hidden="true" />
@@ -528,7 +590,34 @@ function SearchResults({
                 size="sm"
                 className="flex-1"
                 aria-pressed={frame.category === category}
-                onClick={() => update({ category })}
+                onClick={() =>
+                  update({
+                    category,
+                    direction: category === "buildings" ? undefined : frame.direction,
+                  })
+                }
+              >
+                {name}
+              </Button>
+            ))}
+          </fieldset>
+        )}
+        {!restricted && frame.category !== "buildings" && frame.scope?.kind !== "extractor" && (
+          <fieldset aria-label="Search mode" className="flex gap-1">
+            {(
+              [
+                [undefined, "Names"],
+                ["produces", "Produces"],
+                ["consumes", "Consumes"],
+              ] as const
+            ).map(([direction, name]) => (
+              <Button
+                key={name}
+                variant={frame.direction === direction ? "secondary" : "ghost"}
+                size="sm"
+                className="flex-1"
+                aria-pressed={frame.direction === direction}
+                onClick={() => update({ direction })}
               >
                 {name}
               </Button>
@@ -560,6 +649,15 @@ function SearchResults({
         >
           {virtualizer.getVirtualItems().map((row) => {
             const entry = results[row.index]!;
+            const summary = searchEntrySummary(
+              assets.catalog,
+              entry,
+              frame.query,
+              connectionContext?.direction ?? frame.direction,
+              connectionContext?.itemIds.length ? connectionContext.itemIds : undefined,
+              frame.scope?.kind === "machine" ? frame.scope.id : undefined,
+            );
+            const chooses = entry.kind === "machine" || entry.kind === "extractor";
             return (
               <ComboboxItem
                 key={entry.id}
@@ -586,31 +684,52 @@ function SearchResults({
                 >
                   <CatalogIcon assets={assets} iconId={entry.iconId} />
                   <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="line-clamp-2 whitespace-normal font-medium leading-5">
+                    <span className="flex items-center gap-2">
+                      <span className="min-w-0 truncate font-medium leading-5" title={entry.name}>
                         {entry.name}
                       </span>
                       {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
                       {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
                     </span>
-                    <span className="mt-0.5 flex items-baseline gap-2 text-xs text-muted-foreground">
-                      <span
-                        className="min-w-0 truncate"
-                        title={entry.machineSummary ?? entry.subtitle}
-                      >
-                        {entry.machineSummary ?? entry.subtitle}
-                      </span>
-                      {entry.productionRate && (
-                        <span className="shrink-0 tabular-nums">· {entry.productionRate}</span>
-                      )}
+                    <span
+                      className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground"
+                      title={summary.machine}
+                    >
+                      {summary.machine}
                     </span>
+                    {entry.kind === "recipe" && (
+                      <span
+                        className="block truncate text-xs leading-4 text-muted-foreground"
+                        title={summary.flow}
+                      >
+                        {summary.flow}
+                      </span>
+                    )}
+                    {summary.rate && (
+                      <span
+                        className="block truncate text-xs leading-4 text-muted-foreground tabular-nums"
+                        title={summary.rate}
+                      >
+                        {connectionContext?.direction === "consumes" ||
+                        frame.direction === "consumes"
+                          ? "Consumes "
+                          : "Produces "}
+                        {summary.rate}
+                      </span>
+                    )}
                   </span>
-                  {canAdd && (
-                    <PlusIcon
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0 text-muted-foreground"
-                    />
-                  )}
+                  {canAdd &&
+                    (chooses ? (
+                      <ChevronRightIcon
+                        aria-label={entry.kind === "machine" ? "Choose recipe" : "Choose resource"}
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                      />
+                    ) : (
+                      <PlusIcon
+                        aria-label="Place"
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                      />
+                    ))}
                 </span>
                 <span role="gridcell" className="shrink-0 border-l border-border pl-1">
                   <Button
@@ -631,7 +750,7 @@ function SearchResults({
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
-                      onDetails(entry, scroll.current?.scrollTop ?? 0);
+                      inspect(entry);
                     }}
                   >
                     Details
@@ -651,7 +770,10 @@ function SearchResults({
               ? "Try another name or reset filters. Only choices that support this connection are available."
               : "Try another name or reset the filters."}
           </p>
-          <Button variant="outline" onClick={() => update({ query: "", category: "all" })}>
+          <Button
+            variant="outline"
+            onClick={() => update({ query: "", category: "all", direction: undefined })}
+          >
             Reset search
           </Button>
         </div>
@@ -661,8 +783,20 @@ function SearchResults({
           compact ? "sr-only" : "shrink-0 border-t px-4 py-3 text-xs text-muted-foreground"
         }
       >
-        Use the details button to inspect a result
-        <span className="hidden sm:inline"> · ↑ ↓ Navigate · Alt+Enter Details · Esc Close</span>
+        {canAdd
+          ? chooseAction
+            ? "Choose a recipe or resource"
+            : "Select a result to place it"
+          : "Use Details to inspect a result"}
+        <span className="hidden sm:inline">
+          {" "}
+          · ↑ ↓ Navigate
+          {canAdd || chooseAction ? ` · Enter ${chooseAction ? "Choose" : "Place"}` : ""} ·
+          Alt+Enter Details · Alt+← Back · Esc Close
+        </span>
+        {results.some((entry) => entry.kind === "recipe") && (
+          <span className="block">Rates per machine at 100% clock, without amplification.</span>
+        )}
       </p>
     </Combobox>
   );

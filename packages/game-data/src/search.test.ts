@@ -7,6 +7,7 @@ import {
   recipeSearchSummary,
   recipeAlternatives,
   compareRecipes,
+  searchEntrySummary,
 } from "./search";
 
 const catalog: GameCatalog = {
@@ -95,13 +96,13 @@ describe("catalog search", () => {
     expect(names("iron ore")).toEqual(["Iron Ore"]); // Ingredients do not pollute ordinary search.
   });
   it("normalizes miner tiers and finds alternate aliases and the AWESOME Sink", () => {
-    expect(names("mk 2")).toEqual(["Miner Mk.2"]);
-    expect(names("MK.2")).toEqual(["Miner Mk.2"]);
+    expect(names("mk 2")).toEqual(["Miner Mk.2", "Copper Ore", "Iron Ore"]);
+    expect(names("MK.2")).toEqual(["Miner Mk.2", "Copper Ore", "Iron Ore"]);
     expect(names("alt plate")).toEqual(["Coated Plate"]);
     expect(names("sink")).toEqual(["AWESOME Sink"]);
   });
   it("uses a bounded typo fallback only when direct matches are absent", () => {
-    expect(names("constrctor")).toEqual(["Coated Plate", "Constructor", "Iron Plate"]);
+    expect(names("constrctor")).toEqual(["Constructor", "Coated Plate", "Iron Plate"]);
     expect(names("plte")).toEqual(["Coated Plate", "Iron Plate"]);
     expect(names("snk")).toEqual([]);
     expect(names("unknown")).toEqual([]);
@@ -273,4 +274,88 @@ it("reports fluid inputs and byproducts at equal output, omitting irrelevant ext
     addedInputIds: ["Iron Ore"],
     removedInputIds: ["Water", "Nitrogen"],
   });
+});
+
+it("ranks recipe name abbreviations and adjacent typos ahead of related matches", () => {
+  const copy = structuredClone(catalog);
+  copy.items["Iron Plate"].name = "Heavy Modular Frame";
+  copy.recipes["Iron Plate"].name = "Heavy Modular Frame";
+  const entries = createSearchIndex(copy);
+  expect(searchCatalog(entries, "hmf").map((entry) => entry.entityId)).toEqual([
+    "Iron Plate",
+    "Coated Plate",
+  ]);
+  expect(names("constrcutor")[0]).toBe("Constructor");
+  expect(names("constrcutor", { allowedEntryIds: new Set(["recipe:Iron Plate"]) })).toEqual([
+    "Iron Plate",
+  ]);
+  expect(names("constrcutor", { allowedEntryIds: new Set() })).toEqual([]);
+  expect(names("iron ore mk2")).toEqual(["Iron Ore"]);
+});
+
+it("searches producers and consumers by individual materials within eligibility and machine scope", () => {
+  expect(names("iron ore", { direction: "consumes" })).toEqual(["Coated Plate", "Iron Plate"]);
+  expect(names("iron ore", { direction: "produces" })).toEqual(["Iron Ore"]);
+  expect(names("plate", { direction: "consumes" })).toEqual([]);
+  expect(
+    names("iron ore", { direction: "consumes", allowedEntryIds: new Set(["recipe:Iron Plate"]) }),
+  ).toEqual(["Iron Plate"]);
+  expect(
+    names("iron ore", { direction: "consumes", scope: { kind: "machine", id: "missing" } }),
+  ).toEqual([]);
+  expect(names("iron ore", { direction: "consumes", allowedEntryIds: new Set() })).toEqual([]);
+  expect(names("iorn ore", { direction: "consumes" })).toEqual(["Coated Plate", "Iron Plate"]);
+  expect(names("coated", { direction: "consumes", itemId: "Iron Ore" })).toEqual(["Coated Plate"]);
+  expect(names("coated", { direction: "consumes", itemId: "Copper Ore" })).toEqual([]);
+  const copy = structuredClone(catalog);
+  copy.recipes["Iron Plate"].ingredients.push({ itemId: "Copper Ore", amount: 1 });
+  expect(searchCatalog(createSearchIndex(copy), "iron copper", { direction: "consumes" })).toEqual(
+    [],
+  );
+});
+
+it("labels the matched byproduct or ingredient rate and scales summaries to the selected machine", () => {
+  const copy = structuredClone(catalog);
+  copy.items["Copper Ore"].unit = "m3";
+  copy.recipes["Iron Plate"].products.push({ itemId: "Copper Ore", amount: 0.5 });
+  copy.machines.fast = {
+    ...copy.machines.Constructor,
+    id: "fast",
+    name: "Fast",
+    manufacturingSpeed: 2,
+  };
+  copy.recipes["Iron Plate"].machineIds.push("fast");
+  const entry = createSearchIndex(copy).find((candidate) => candidate.entityId === "Iron Plate")!;
+  expect(searchEntrySummary(copy, entry, "copper ore")).toMatchObject({
+    flow: "Iron Ore → Iron Plate + Copper Ore",
+    rate: "5 m³/min · Copper Ore",
+  });
+  expect(searchEntrySummary(copy, entry, "", "consumes", ["Iron Ore"], "fast")).toMatchObject({
+    machine: "Fast · 4 MW",
+    rate: "60/min · Iron Ore",
+  });
+  expect(searchEntrySummary(copy, entry, "iorn ore", "consumes").rate).toBe("30/min · Iron Ore");
+  expect(searchEntrySummary(copy, entry, "", "consumes").rate).toBe("30/min · Iron Ore");
+  expect(searchEntrySummary(copy, entry, "", "produces", ["missing"]).rate).toBe("");
+});
+
+it("keeps complete item names distinct from packaged items even when the exact material is ineligible", () => {
+  const copy = structuredClone(catalog);
+  copy.items.packaged = { ...copy.items["Iron Ore"], id: "packaged", name: "Packaged Iron Ore" };
+  copy.recipes["Coated Plate"].ingredients = [{ itemId: "packaged", amount: 1 }];
+  const entries = createSearchIndex(copy);
+  expect(
+    searchCatalog(entries, "iron ore", { direction: "consumes" }).map((entry) => entry.name),
+  ).toEqual(["Iron Plate"]);
+  expect(
+    searchCatalog(entries, "iron ore", {
+      direction: "consumes",
+      allowedEntryIds: new Set(["recipe:Coated Plate"]),
+    }),
+  ).toEqual([]);
+  expect(
+    searchCatalog(entries, "packaged iron ore", { direction: "consumes" }).map(
+      (entry) => entry.name,
+    ),
+  ).toEqual(["Coated Plate"]);
 });

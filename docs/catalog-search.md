@@ -1,11 +1,21 @@
 # Catalog search integration
 
 `createSearchIndex(catalog)` prepares names, related machine/output terms, initialisms,
-icons, and baseline production summaries once per catalog. `searchCatalog(index,
+icons, and input/output material names and rates once per catalog. The workspace
+shares this prepared index with the search UI. `searchCatalog(index,
 query, options)` applies eligibility, category, and building scope before ranking.
-Exact names precede prefixes, partial names, and related terms. One-edit typo
-matching runs only when no direct match exists. Ingredient names do not broaden
-ordinary search.
+Exact names precede name abbreviations, prefixes, partial names, and related terms.
+One-edit typo matching (including adjacent letter swaps) runs only when no direct
+match exists, retaining the same name-first ranking. Resource choices also match
+their extractor name and tier.
+
+Names mode retains ordinary name, output, and machine search. Produces/Consumes
+modes match individual output/input materials, including item abbreviations and
+byproducts. Complete item names select that exact material (separating packaged items); partial
+queries can match several materials. All query tokens must match the same material. Result summaries show
+input/output names and label the matching material's baseline rate; scoped recipes
+use the selected machine's speed. Rates use 100% clock, no amplification, and normal
+resource purity. Ingredient names only participate in explicit Consumes mode.
 
 ## Canvas placement
 
@@ -15,6 +25,12 @@ Search has three insertion contexts:
 - Main menu: unrestricted search at the visible canvas center.
 - Drag a port onto empty canvas, or select a port and then click/tap empty canvas:
   compatible search at the drop/click world position, retaining the source port.
+
+Each insertion request starts a fresh search session so query, category, and
+building scope do not leak between connection contexts. Material connection search
+shows Produces/Consumes and the known source materials. Compatibility remains the
+authoritative boundary, including eligible logistics and facilities; this context
+labels rates without excluding non-recipe choices.
 
 Capture the position before opening the dialog/drawer. Center the new node on that
 point and snap its top-left position when grid snapping is enabled. Logistics nodes
@@ -27,6 +43,13 @@ screen's Place button call the same placement handler. Details place the current
 displayed recipe, including a selected alternative. Preserve the scoped machine when
 it supports the recipe; otherwise use the first supported machine shown in details.
 Defaults are one machine, 100% clock, zero sloops, and existing splitter rules.
+Machine/extractor rows use a choose chevron; directly placeable rows use a plus.
+The desktop keyboard hint reflects the active result's Choose/Place action.
+
+Back from details restores the current results, including their query, scroll, and
+selection. Back from a scoped list restores its parent catalog frame. Alt+Left works
+in both views. Alternative comparisons retain the first inspected recipe's output
+and quantities as a labelled baseline until returning to results.
 
 The editor validates before inserting, selects the new node, and records one history
 edit. Connection-driven placement connects the first valid port in display order.
@@ -59,7 +82,7 @@ not support the connection.
 
 ## Rendering and validation
 
-Results use a fixed 72px virtual row with five rows of overscan. Only the visible
+Results use a fixed 88px virtual row with five rows of overscan. Only the visible
 window, overscan, and keyboard-active row mount. Images use lazy loading, async
 decoding, fixed dimensions, and a bounded fallback through prepared sizes.
 The result list stays mounted while details are visible to preserve its selection;

@@ -180,6 +180,7 @@ function CanvasWorkspace({
   const [searchOpen, setSearchOpen] = useState(false);
   const [clearCanvasOpen, setClearCanvasOpen] = useState(false);
   const openClearCanvas = useCallback(() => setClearCanvasOpen(true), []);
+  const [catalogSession, setCatalogSession] = useState(0);
   const [insertion, setInsertion] = useState<CatalogRequest | null>(null);
   const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
@@ -297,12 +298,30 @@ function CanvasWorkspace({
         : undefined,
     [editor, index, insertion, documentState, searchOpen],
   );
+  const catalogConnectionContext = useMemo(() => {
+    if (
+      !searchOpen ||
+      !insertion?.source ||
+      !documentState.nodes.some((node) => node.id === insertion.source?.nodeId)
+    )
+      return undefined;
+    const source = insertion.source;
+    const port = editor
+      .getPorts(source.nodeId)
+      .find((candidate) => candidate.portKey === source.portKey);
+    if (!port || (port.transport !== "belt" && port.transport !== "pipe")) return undefined;
+    return {
+      direction: port.direction === "output" ? ("consumes" as const) : ("produces" as const),
+      itemIds: [...editor.getMaterials(source)],
+    };
+  }, [editor, insertion, documentState, searchOpen]);
   useEffect(
     () =>
       controller.subscribeCatalog((request) => {
         if (window.matchMedia("(max-width: 639px)").matches) controller.setSelection(new Set());
         placedFromSearch.current = false;
         setInsertion(request);
+        setCatalogSession((current) => current + 1);
         setSearchOpen(true);
       }),
     [controller],
@@ -529,12 +548,15 @@ function CanvasWorkspace({
       onKeyDown={workspaceKeyDown}
     >
       <CatalogSearch
+        key={catalogSession}
         assets={assets}
         open={searchOpen}
         onOpenChange={setSearchOpen}
         finalFocus={searchFinalFocus}
         onAdd={placeResult}
         allowedEntryIds={allowedEntryIds}
+        connectionContext={catalogConnectionContext}
+        searchIndex={index}
       />
       <div ref={host} className="absolute inset-0" />
       {savesOpen && (

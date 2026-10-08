@@ -1,6 +1,10 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-new-array-as-prop, react-perf/jsx-no-new-function-as-prop -- The virtual window bounds icons; fallback state changes only after image errors. */
 import type { Ingredient } from "@satisfactory-belt/game-data";
-import { recipeAlternatives, compareRecipes } from "@satisfactory-belt/game-data/search";
+import {
+  recipeAlternatives,
+  compareRecipes,
+  searchEntrySummary,
+} from "@satisfactory-belt/game-data/search";
 import type { RecipeComparison, SearchEntry } from "@satisfactory-belt/game-data/search";
 import {
   ArrowLeftRightIcon,
@@ -80,6 +84,7 @@ export function CatalogSearchDetails({
   onPlace,
   allowedEntryIds,
   panelRef,
+  comparisonBaseline,
 }: {
   entry: SearchEntry;
   assets: GameAssets;
@@ -89,6 +94,7 @@ export function CatalogSearchDetails({
   onPlace?: (entry: SearchEntry) => void;
   allowedEntryIds?: ReadonlySet<string>;
   panelRef: React.RefObject<HTMLDivElement | null>;
+  comparisonBaseline?: SearchEntry;
 }) {
   const { catalog } = assets;
   const recipe = entry.kind === "recipe" ? catalog.recipes[entry.entityId] : undefined;
@@ -98,6 +104,10 @@ export function CatalogSearchDetails({
       : recipe?.machineIds[0];
   const machine = recipeMachineId ? catalog.machines[recipeMachineId] : undefined;
   const cycles = recipe && machine ? (60 * machine.manufacturingSpeed) / recipe.durationSeconds : 0;
+  const baseline = comparisonBaseline?.kind === "recipe" ? comparisonBaseline : entry;
+  const baselineComparison = recipe
+    ? compareRecipes(catalog, baseline.entityId, recipe.id, machineId)
+    : undefined;
   const alternativeIds = recipe ? new Set(recipeAlternatives(catalog, recipe.id)) : null;
   const related = index.filter((candidate) =>
     alternativeIds
@@ -206,13 +216,25 @@ export function CatalogSearchDetails({
             <h4 className="shrink-0 px-4 pt-3 pb-2 text-sm font-medium">
               {recipe ? "Alternative recipes" : entry.kind === "machine" ? "Recipes" : "Resources"}
             </h4>
+            {baselineComparison && (
+              <p
+                className="shrink-0 px-4 pb-2 text-xs text-muted-foreground"
+                data-catalog-comparison-baseline=""
+              >
+                Compared with {baseline.name} at {number.format(baselineComparison.outputPerMinute)}
+                {assets.catalog.items[baselineComparison.itemId]!.unit === "m3"
+                  ? " m³/min"
+                  : "/min"}{" "}
+                {assets.catalog.items[baselineComparison.itemId]!.name}
+              </p>
+            )}
             <ScrollArea className="min-h-0 flex-1">
               {related.length ? (
                 <ul className="space-y-1 px-4 pb-4">
                   {related.map((candidate) => {
                     const disabled = Boolean(allowedEntryIds && !allowedEntryIds.has(candidate.id));
                     const comparison = recipe
-                      ? compareRecipes(catalog, recipe.id, candidate.entityId, recipeMachineId)
+                      ? compareRecipes(catalog, baseline.entityId, candidate.entityId, machineId)
                       : undefined;
                     return (
                       <li
@@ -246,6 +268,11 @@ export function CatalogSearchDetails({
                             <span className="block whitespace-normal text-xs font-normal text-muted-foreground">
                               {candidate.subtitle}
                             </span>
+                            {candidate.kind === "recipe" && (
+                              <span className="block whitespace-normal text-xs font-normal text-muted-foreground">
+                                {searchEntrySummary(catalog, candidate, "").flow}
+                              </span>
+                            )}
                           </span>
                         </div>
                         {comparison && (
@@ -332,7 +359,7 @@ function ComparisonMetric({
   const label = kind === "machines" ? "Machines" : kind === "power" ? "Power" : "Input types";
   const formatted =
     value === null ? "Variable" : `${number.format(value)}${kind === "power" ? " MW" : ""}`;
-  const description = `${label}: ${formatted}; ${relation}${difference !== null ? `${difference === 0 ? " as" : " than"} selected recipe at equal output` : ""}`;
+  const description = `${label}: ${formatted}; ${relation}${difference !== null ? `${difference === 0 ? " as" : " than"} baseline recipe at equal output` : ""}`;
   return (
     <Tooltip disableHoverablePopup>
       <TooltipTrigger

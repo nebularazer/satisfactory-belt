@@ -1,4 +1,4 @@
-import type { GameCatalog } from "./index";
+import type { GameCatalog, Ingredient } from "./index";
 
 export type SearchKind =
   | "facility"
@@ -9,6 +9,16 @@ export type SearchKind =
   | "logistics"
   | "sink"
   | "resource";
+export type SearchDirection = "produces" | "consumes";
+export type SearchMaterial = Readonly<{
+  itemId: string;
+  name: string;
+  normalizedName: string;
+  terms: string;
+  words: readonly string[];
+  unit: "item" | "m3";
+  perMinute?: number;
+}>;
 export type SearchEntry = Readonly<{
   id: string;
   entityId: string;
@@ -24,13 +34,21 @@ export type SearchEntry = Readonly<{
   extractorId?: string;
   /** Prepared once, independent of UI state and image loading. */
   normalizedName: string;
+  initialism: string;
+  nameWords: readonly string[];
   terms: string;
   words: readonly string[];
+  inputs: readonly SearchMaterial[];
+  outputs: readonly SearchMaterial[];
 }>;
 export type SearchScope = Readonly<{ kind: "machine" | "extractor"; id: string }>;
 export type SearchOptions = Readonly<{
   category?: "all" | "recipes" | "buildings";
   scope?: SearchScope;
+  /** In direction mode the query matches individual input/output items, not recipe names. */
+  direction?: SearchDirection;
+  /** A selected material restricts direction mode; the query then narrows recipe names. */
+  itemId?: string;
   /**
    * Optional eligibility boundary, applied before ranking (including typo fallback).
    * IDs are SearchEntry.id, not entityId. Omitted means unrestricted; empty means no results.
@@ -60,16 +78,40 @@ function searchInitialism(name: string): string {
 
 export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] {
   const entries: SearchEntry[] = [];
-  function add(entry: Omit<SearchEntry, "normalizedName" | "terms" | "words">, extra = "") {
+  function materials(
+    quantities: readonly Ingredient[],
+    cycles?: number,
+  ): readonly SearchMaterial[] {
+    return quantities.map(({ itemId, amount }) => {
+      const item = catalog.items[itemId]!;
+      const normalizedName = normalizeSearch(item.name);
+      const terms = `${normalizedName} ${searchInitialism(item.name)}`.trim();
+      return {
+        itemId,
+        name: item.name,
+        normalizedName,
+        terms,
+        words: terms.split(" "),
+        unit: item.unit,
+        perMinute: cycles === undefined ? undefined : amount * cycles,
+      };
+    });
+  }
+  function add(
+    entry: Omit<SearchEntry, "normalizedName" | "initialism" | "nameWords" | "terms" | "words">,
+    extra = "",
+  ) {
     const terms = normalizeSearch(`${entry.name} ${extra} ${searchInitialism(entry.name)}`);
     entries.push({
       ...entry,
       normalizedName: normalizeSearch(entry.name),
+      initialism: searchInitialism(entry.name),
+      nameWords: normalizeSearch(entry.name).split(" "),
       terms,
       words: terms.split(" "),
     });
   }
-  const base = { alternate: false, events: [], machineIds: [] };
+  const base = { alternate: false, events: [], machineIds: [], inputs: [], outputs: [] };
   for (const recipe of Object.values(catalog.recipes)) {
     const machines = recipe.machineIds.map((id) => catalog.machines[id]!.name).join(" · ");
     const products = recipe.products.map((p) => catalog.items[p.itemId]!.name).join(" + ");
@@ -90,6 +132,16 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
         alternate: recipe.alternate,
         events: recipe.events,
         machineIds: recipe.machineIds,
+        inputs: materials(
+          recipe.ingredients,
+          (60 * catalog.machines[recipe.machineIds[0]!]!.manufacturingSpeed) /
+            recipe.durationSeconds,
+        ),
+        outputs: materials(
+          recipe.products,
+          (60 * catalog.machines[recipe.machineIds[0]!]!.manufacturingSpeed) /
+            recipe.durationSeconds,
+        ),
       },
       `${machines} ${products} ${productInitials} ${recipe.alternate ? "alt alternate alternative" : "standard"}`,
     );
@@ -115,6 +167,8 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
           iconId: entity.iconId,
           subtitle,
           events: "events" in entity ? entity.events : [],
+          outputs:
+            "products" in entity ? materials(entity.products, 60 / entity.durationSeconds) : [],
         },
         kind === "sink"
           ? "awesome sink"
@@ -127,16 +181,20 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
   for (const extractor of Object.values(catalog.extractors)) {
     for (const id of extractor.resourceIds) {
       const item = catalog.items[id]!;
-      add({
-        ...base,
-        id: `resource:${extractor.id}:${id}`,
-        entityId: id,
-        kind: "resource",
-        name: item.name,
-        iconId: item.iconId,
-        subtitle: extractor.name,
-        extractorId: extractor.id,
-      });
+      add(
+        {
+          ...base,
+          id: `resource:${extractor.id}:${id}`,
+          entityId: id,
+          kind: "resource",
+          name: item.name,
+          iconId: item.iconId,
+          subtitle: extractor.name,
+          extractorId: extractor.id,
+          outputs: materials([{ itemId: id, amount: 1 }], extractor.baseRate),
+        },
+        extractor.name,
+      );
     }
   }
   return entries.toSorted(
@@ -144,7 +202,7 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
   );
 }
 
-/** All query tokens must match; name matches outrank related machine/output matches. */
+/** All query tokens must match; names and their abbreviations outrank related terms. */
 export function searchCatalog(
   index: readonly SearchEntry[],
   query: string,
@@ -152,65 +210,157 @@ export function searchCatalog(
 ): readonly SearchEntry[] {
   const normalized = normalizeSearch(query);
   const tokens = normalized.split(" ").filter(Boolean);
-  const ranked: SearchEntry[][] = [[], [], [], []];
-  const candidates: SearchEntry[] = [];
-  for (const entry of index) {
-    if (options.allowedEntryIds && !options.allowedEntryIds.has(entry.id)) continue;
+  // Complete item names select that material, rather than similarly named packaged
+  // items. Resolve before eligibility/scope so filters cannot change the query's meaning.
+  const exactMaterialIds = new Set<string>();
+  if (options.direction && normalized && !options.itemId) {
+    for (const entry of index) {
+      for (const material of [...entry.inputs, ...entry.outputs]) {
+        if (material.normalizedName === normalized) exactMaterialIds.add(material.itemId);
+      }
+    }
+  }
+  const candidates = index.filter((entry) => {
+    if (options.allowedEntryIds && !options.allowedEntryIds.has(entry.id)) return false;
     if (options.scope) {
       if (
         options.scope.kind === "machine"
           ? entry.kind !== "recipe" || !entry.machineIds.includes(options.scope.id)
           : entry.kind !== "resource" || entry.extractorId !== options.scope.id
       )
-        continue;
+        return false;
     } else {
       const production = entry.kind === "recipe" || entry.kind === "resource";
-      if (options.category === "recipes" && !production) continue;
-      if (options.category === "buildings" && production) continue;
+      if (options.category === "recipes" && !production) return false;
+      if (options.category === "buildings" && production) return false;
     }
-    candidates.push(entry);
-    if (!tokens.every((token) => entry.terms.includes(token))) continue;
-    const rank = !normalized
-      ? 0
-      : entry.normalizedName === normalized
+    if (options.direction) {
+      const materials = options.direction === "consumes" ? entry.inputs : entry.outputs;
+      return materials.some((material) => !options.itemId || material.itemId === options.itemId);
+    }
+    return true;
+  });
+  function rank(entry: SearchEntry, fuzzy: boolean): number | undefined {
+    const matches = (terms: string, words: readonly string[]) =>
+      tokens.every(
+        (token) =>
+          terms.includes(token) ||
+          (fuzzy && token.length >= 4 && words.some((word) => oneEditApart(token, word))),
+      );
+    if (options.direction && !options.itemId) {
+      const materials = options.direction === "consumes" ? entry.inputs : entry.outputs;
+      const matching = materials.filter(
+        (material) =>
+          (!exactMaterialIds.size || exactMaterialIds.has(material.itemId)) &&
+          matches(material.terms, material.words),
+      );
+      if (!matching.length) return undefined;
+      return !normalized || matching.some((material) => material.normalizedName === normalized)
         ? 0
-        : entry.normalizedName.startsWith(normalized)
-          ? 1
-          : tokens.every((token) => entry.normalizedName.includes(token))
-            ? 2
-            : 3;
-    ranked[rank]!.push(entry);
+        : 1;
+    }
+    if (!matches(entry.terms, entry.words)) return undefined;
+    if (!normalized || entry.normalizedName === normalized) return 0;
+    if (entry.initialism === normalized) return 1;
+    if (entry.normalizedName.startsWith(normalized)) return 2;
+    if (matches(entry.normalizedName, entry.nameWords)) return 3;
+    return 4;
   }
-  const matches = ranked.flat();
-  // Only pay for fuzzy matching if the entire direct-match pass found nothing.
+  function ranked(fuzzy: boolean) {
+    const buckets: SearchEntry[][] = [[], [], [], [], []];
+    for (const entry of candidates) {
+      const score = rank(entry, fuzzy);
+      if (score !== undefined) buckets[score]!.push(entry);
+    }
+    return buckets.flat();
+  }
+  const direct = ranked(false);
+  // Keep fuzzy work bounded to the empty direct-match case and eligible candidates.
+  return direct.length ? direct : ranked(true);
+}
+
+/** One insertion, deletion, replacement, or adjacent transposition; no distance matrix. */
+function oneEditApart(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && a[i] === b[i]) i++;
+  if (i === a.length) return b.length - i <= 1;
+  if (a.length === b.length) {
+    if (a.slice(i + 1) === b.slice(i + 1)) return true;
+    return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+  }
+  return a.length > b.length ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
+}
+
+/** Prepared material matches for an item query or a known connection material. */
+export function matchingSearchMaterials(
+  entry: SearchEntry,
+  query: string,
+  direction: SearchDirection = "produces",
+  itemIds?: readonly string[],
+): readonly SearchMaterial[] {
+  const materials = direction === "consumes" ? entry.inputs : entry.outputs;
+  if (itemIds) return materials.filter((material) => itemIds.includes(material.itemId));
+  const tokens = normalizeSearch(query).split(" ").filter(Boolean);
+  if (!tokens.length) return [];
+  const matches = materials.filter((material) =>
+    tokens.every((token) => material.terms.includes(token)),
+  );
   return matches.length
     ? matches
-    : candidates.filter((entry) =>
+    : materials.filter((material) =>
         tokens.every(
           (token) =>
-            entry.terms.includes(token) ||
-            (token.length >= 4 && entry.words.some((word) => oneEditApart(token, word))),
+            material.terms.includes(token) ||
+            (token.length >= 4 && material.words.some((word) => oneEditApart(token, word))),
         ),
       );
 }
 
-/** Bounded typo fallback; no matrix allocation or fuzzy matching of short tokens. */
-function oneEditApart(a: string, b: string): boolean {
-  if (Math.abs(a.length - b.length) > 1) return false;
-  let i = 0,
-    j = 0,
-    edits = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      i++;
-      j++;
-      continue;
-    }
-    if (++edits > 1) return false;
-    if (a.length >= b.length) i++;
-    if (b.length >= a.length) j++;
-  }
-  return edits + (a.length - i) + (b.length - j) <= 1;
+export function searchMaterialRate(material: SearchMaterial, multiplier = 1): string {
+  return material.perMinute === undefined
+    ? material.name
+    : `${number.format(material.perMinute * multiplier)}${material.unit === "m3" ? " m³/min" : "/min"} · ${material.name}`;
+}
+
+/** Compact flow names and explicitly labelled rates, scaled to the selected machine. */
+export function searchEntrySummary(
+  catalog: GameCatalog,
+  entry: SearchEntry,
+  query: string,
+  direction: SearchDirection = "produces",
+  itemIds?: readonly string[],
+  machineId?: string,
+): Readonly<{ machine: string; flow: string; rate: string }> {
+  const recipe = entry.kind === "recipe" ? catalog.recipes[entry.entityId] : undefined;
+  const multiplier =
+    recipe && machineId && recipe.machineIds.includes(machineId)
+      ? catalog.machines[machineId]!.manufacturingSpeed /
+        catalog.machines[recipe.machineIds[0]!]!.manufacturingSpeed
+      : 1;
+  const matched = matchingSearchMaterials(entry, query, direction, itemIds);
+  const rateMaterials = matched.length
+    ? matched
+    : itemIds
+      ? []
+      : direction === "consumes"
+        ? entry.inputs
+        : entry.outputs.slice(0, 1);
+  return {
+    machine: recipe
+      ? recipeMachineSummary(
+          catalog,
+          machineId && recipe.machineIds.includes(machineId) ? machineId : recipe.machineIds[0]!,
+        )
+      : entry.subtitle,
+    flow: [
+      entry.inputs.map((material) => material.name).join(" + "),
+      entry.outputs.map((material) => material.name).join(" + "),
+    ]
+      .filter(Boolean)
+      .join(" → "),
+    rate: rateMaterials.map((material) => searchMaterialRate(material, multiplier)).join("; "),
+  };
 }
 
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
