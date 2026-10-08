@@ -32,7 +32,7 @@ export function CatalogIcon({
 }: {
   iconId: string;
   assets: GameAssets;
-  size?: 16 | 24 | 32 | 64;
+  size?: 16 | 20 | 24 | 32 | 64;
 }) {
   const icon = assets.icons.icons[iconId];
   const sizes = size === 64 ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
@@ -51,9 +51,11 @@ function CatalogImage({ sources, size }: { sources: readonly string[]; size: num
       ? "size-16 shrink-0 object-contain"
       : size === 16
         ? "size-4 shrink-0 object-contain"
-        : size === 24
-          ? "size-6 shrink-0 object-contain"
-          : "size-8 shrink-0 object-contain";
+        : size === 20
+          ? "size-5 shrink-0 object-contain"
+          : size === 24
+            ? "size-6 shrink-0 object-contain"
+            : "size-8 shrink-0 object-contain";
   if (!src)
     return <ImageOffIcon aria-hidden="true" className={`${className} text-muted-foreground`} />;
   // Try the next prepared size on failure instead of permanently hiding the image.
@@ -69,6 +71,23 @@ function CatalogImage({ sources, size }: { sources: readonly string[]; size: num
       className={className}
       onError={() => setVariant((current) => current + 1)}
     />
+  );
+}
+
+export function AlternateRecipeIndicator() {
+  return (
+    <Tooltip disableHoverablePopup>
+      <TooltipTrigger
+        render={
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The accessible image wraps an inline Lucide SVG, not a bitmap.
+          <span role="img" aria-label="Alternate" />
+        }
+        className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+      >
+        <GitBranchIcon aria-hidden="true" className="size-4" />
+      </TooltipTrigger>
+      <TooltipContent>Alternate</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -262,7 +281,7 @@ export function CatalogSearchDetails({
                           <span className="min-w-0 flex-1">
                             <span className="flex flex-wrap items-center gap-2">
                               <span>{candidate.name}</span>
-                              {candidate.alternate && <Badge variant="secondary">Alternate</Badge>}
+                              {candidate.alternate && <AlternateRecipeIndicator />}
                               {disabled && (
                                 <Badge variant="outline" title="Doesn’t support this connection">
                                   Incompatible

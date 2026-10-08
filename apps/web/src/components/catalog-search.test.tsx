@@ -274,7 +274,7 @@ it("enables all search fields by default and allows independent combinations", a
   expect(screen.getByText(/Enter Choose/)).toBeTruthy();
 });
 
-it("keeps inputs, the recipe name and badge, and outputs in a single row", async () => {
+it("keeps inputs, the recipe name and alternate indicator, and outputs in a single row with separate Details", async () => {
   const user = userEvent.setup();
   render(
     <CatalogSearch
@@ -287,7 +287,15 @@ it("keeps inputs, the recipe name and badge, and outputs in a single row", async
   );
   const row = await screen.findByRole("row", { name: /Pure Iron/ });
   expect(within(row).getByText("Pure Iron")).toBeTruthy();
-  expect(within(row).getByText("Alternate")).toBeTruthy();
+  const alternate = within(row).getByRole("img", { name: "Alternate" });
+  expect(within(row).queryByText("Alternate")).toBeNull();
+  await user.hover(alternate);
+  // Base UI's rest delay starts with mouse movement after entering the trigger.
+  fireEvent.mouseMove(alternate);
+  expect(
+    (await screen.findByText("Alternate")).closest('[data-slot="tooltip-content"]'),
+  ).toBeTruthy();
+  await user.unhover(alternate);
   const inputs = within(row).getByRole("group", { name: "Inputs" });
   const outputs = within(row).getByRole("group", { name: "Outputs" });
   expect(inputs.children).toHaveLength(4);
@@ -300,11 +308,14 @@ it("keeps inputs, the recipe name and badge, and outputs in a single row", async
   expect(cells).toHaveLength(4);
   expect(cells[0]?.contains(inputs)).toBe(true);
   expect(cells[1]?.contains(within(row).getByText("Pure Iron"))).toBe(true);
-  expect(cells[1]?.contains(within(row).getByText("Alternate"))).toBe(true);
+  expect(cells[1]?.contains(alternate)).toBe(true);
   expect(cells[2]?.contains(outputs)).toBe(true);
   expect(
     cells[3]?.contains(within(row).getByRole("button", { name: "Details for Pure Iron" })),
   ).toBe(true);
+  expect(within(row).getByRole("button", { name: "Details for Pure Iron" }).textContent).toBe(
+    "Details",
+  );
   expect(row.textContent).not.toMatch(/MW|\/min|Iron Ore|Smelter/);
   await user.click(within(row).getByRole("button", { name: "Details for Pure Iron" }));
   expect(screen.getByText(/Smelter · 4 MW · 60\/min/)).toBeTruthy();
@@ -390,7 +401,7 @@ it("does not substitute a packaged input when the exact material is incompatible
   expect(screen.getByRole("row", { name: /Pure Iron/ })).toBeTruthy();
 });
 
-it.each(["Inputs", "Outputs", "Name"])(
+it.each(["Inputs", "Outputs", "Name", "Alternate"])(
   "places a recipe once when clicking its %s area",
   async (side) => {
     const user = userEvent.setup();
@@ -407,9 +418,11 @@ it.each(["Inputs", "Outputs", "Name"])(
     );
     const row = await screen.findByRole("row", { name: /Pure Iron/ });
     await user.click(
-      side === "Name"
-        ? within(row).getByText("Pure Iron")
-        : within(row).getByRole("group", { name: side }),
+      side === "Alternate"
+        ? within(row).getByRole("img", { name: "Alternate" })
+        : side === "Name"
+          ? within(row).getByText("Pure Iron")
+          : within(row).getByRole("group", { name: side }),
     );
     expect(add).toHaveBeenCalledExactlyOnceWith(
       createSearchIndex(assets.catalog).find((entry) => entry.entityId === "alternative"),

@@ -13,11 +13,15 @@ import type {
   SearchScope,
 } from "@satisfactory-belt/game-data/search";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowLeftIcon, CircleCheckIcon, InfoIcon, SearchIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, CircleCheckIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import { CatalogIcon, CatalogSearchDetails } from "@/components/catalog-search-details";
+import {
+  AlternateRecipeIndicator,
+  CatalogIcon,
+  CatalogSearchDetails,
+} from "@/components/catalog-search-details";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
@@ -26,6 +30,7 @@ import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/compone
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Frame = {
@@ -257,7 +262,7 @@ export function CatalogSearch({
       : selected.subtitle
     : "Buildings, recipes, and alternatives";
   const content = (
-    <>
+    <TooltipProvider delay={500} closeDelay={0} timeout={0}>
       <div
         ref={heading}
         tabIndex={-1}
@@ -276,7 +281,7 @@ export function CatalogSearch({
         <div className="min-w-0 flex-1 space-y-0">
           <div className="flex min-h-5 flex-wrap items-center gap-2">
             {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
-            {selected?.alternate && <Badge variant="secondary">Alternate</Badge>}
+            {selected?.alternate && <AlternateRecipeIndicator />}
             {selected && selected.events.length > 0 && <Badge variant="outline">Event</Badge>}
           </div>
           {narrow ? (
@@ -333,7 +338,7 @@ export function CatalogSearch({
           visible={!selected}
         />
       </div>
-    </>
+    </TooltipProvider>
   );
   if (narrow && !open) return null;
   return narrow ? (
@@ -612,12 +617,10 @@ function SearchResults({
           {virtualizer.getVirtualItems().map((row) => {
             const entry = results[row.index]!;
             return (
-              <ComboboxItem
+              <div
                 key={entry.id}
-                render={<div id={`${resultId}-${row.index}`} />}
-                data-highlighted={active === row.index ? "" : undefined}
-                value={entry}
-                index={row.index}
+                id={`${resultId}-${row.index}`}
+                onPointerEnter={() => setActive(row.index)}
                 role="row"
                 aria-rowindex={row.index + 1}
                 style={{
@@ -628,37 +631,49 @@ function SearchResults({
                   height: row.size,
                   transform: `translateY(${row.start}px)`,
                 }}
-                className="grid grid-cols-[4.75rem_minmax(0,1fr)_4.75rem_1.75rem] gap-1 px-2 [&>[data-slot=combobox-item-indicator]]:hidden"
+                className="grid grid-cols-[minmax(0,1fr)_3.75rem] items-center gap-1"
               >
-                <span
-                  role="gridcell"
-                  aria-disabled={!canAdd && entry.kind !== "machine" && entry.kind !== "extractor"}
+                <ComboboxItem
+                  render={<div />}
+                  data-highlighted={active === row.index ? "" : undefined}
+                  value={entry}
+                  index={row.index}
+                  role="presentation"
+                  className="grid h-11 min-w-0 grid-cols-[5.375rem_minmax(0,1fr)_5.375rem] gap-1 px-1 [&>[data-slot=combobox-item-indicator]]:hidden"
                 >
-                  <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
-                </span>
-                <span
-                  role="gridcell"
-                  className="flex min-w-0 items-center justify-center gap-2 text-sm font-medium"
-                >
-                  <span className="min-w-0 truncate" title={entry.name}>
-                    {entry.name}
+                  <span
+                    role="gridcell"
+                    aria-disabled={
+                      !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
+                    }
+                  >
+                    <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
                   </span>
-                  {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
-                  {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
-                </span>
-                <span
-                  role="gridcell"
-                  aria-disabled={!canAdd && entry.kind !== "machine" && entry.kind !== "extractor"}
-                >
-                  <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
-                </span>
-                <span role="gridcell">
+                  <span
+                    role="gridcell"
+                    className="flex min-w-0 items-center justify-center gap-1 text-sm font-medium"
+                  >
+                    <span className="min-w-0 truncate" title={entry.name}>
+                      {entry.name}
+                    </span>
+                    {entry.alternate && <AlternateRecipeIndicator />}
+                    {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
+                  </span>
+                  <span
+                    role="gridcell"
+                    aria-disabled={
+                      !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
+                    }
+                  >
+                    <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
+                  </span>
+                </ComboboxItem>
+                <span role="gridcell" className="border-l pl-1">
                   <Button
                     variant="ghost"
-                    size="icon-sm"
-                    className="h-11 text-muted-foreground"
+                    size="sm"
+                    className="h-11 w-full px-1 text-xs text-muted-foreground"
                     aria-label={`Details for ${entry.name}`}
-                    title="Details"
                     tabIndex={active === row.index ? 0 : -1}
                     onPointerDown={(event) => event.stopPropagation()}
                     onKeyDown={(event) => {
@@ -675,10 +690,10 @@ function SearchResults({
                       inspect(entry);
                     }}
                   >
-                    <InfoIcon aria-hidden="true" className="size-4" />
+                    Details
                   </Button>
                 </span>
-              </ComboboxItem>
+              </div>
             );
           })}
         </div>
@@ -733,7 +748,7 @@ function MaterialSlots({
     <span
       role="group"
       aria-label={side === "input" ? "Inputs" : "Outputs"}
-      className="grid shrink-0 grid-cols-4 gap-1"
+      className="grid shrink-0 grid-cols-4 gap-0.5"
     >
       {Array.from({ length: 4 }, (_, slot) => {
         const material = materials[side === "input" ? slot : slot - (4 - materials.length)];
@@ -743,16 +758,16 @@ function MaterialSlots({
             role="img"
             aria-label={material.name}
             title={material.name}
-            className="size-4"
+            className="size-5"
           >
             <CatalogIcon
               assets={assets}
               iconId={assets.catalog.items[material.itemId]!.iconId}
-              size={16}
+              size={20}
             />
           </span>
         ) : (
-          <span key={slot} aria-hidden="true" className="size-4" />
+          <span key={slot} aria-hidden="true" className="size-5" />
         );
       })}
     </span>
