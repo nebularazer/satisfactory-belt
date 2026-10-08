@@ -161,6 +161,7 @@ it("shows alternate prerequisites only in Details and preserves independent unlo
           all: true,
           schematics: [
             { id: "Milestone", name: "Control System Development", kind: "milestone", tier: 7 },
+            { id: "Caterium", name: "Caterium Ingots", kind: "research" },
           ],
         },
       ],
@@ -171,10 +172,11 @@ it("shows alternate prerequisites only in Details and preserves independent unlo
   expect(screen.queryByRole("region", { name: "Unlock requirements" })).toBeNull();
   await user.click(await screen.findByRole("button", { name: "Details for Pure Iron" }));
   const unlocks = screen.getByRole("region", { name: "Unlock requirements" });
-  expect(within(unlocks).getByText("Hard Drive research")).toBeTruthy();
-  expect(within(unlocks).getByText("Requires Tier 7 · Control System Development")).toBeTruthy();
+  expect(within(unlocks).queryByText(/Hard Drive|Requires/)).toBeNull();
+  expect(within(unlocks).getByText("Tier 7 - Control System Development").tagName).toBe("LI");
+  expect(within(unlocks).getByText("MAM - Caterium Ingots").tagName).toBe("LI");
   expect(within(unlocks).getByText("or")).toBeTruthy();
-  expect(within(unlocks).getByText("MAM · Iron Research")).toBeTruthy();
+  expect(within(unlocks).getByText("MAM - Iron Research")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Back to results" }));
   await user.click(screen.getByRole("button", { name: "Details for Iron Ingot" }));
   expect(screen.queryByRole("region", { name: "Unlock requirements" })).toBeNull();
@@ -224,12 +226,13 @@ it("keeps the first recipe as comparison baseline while browsing and places the 
     />,
   );
   await user.click(await screen.findByRole("button", { name: "Details for Iron Ingot" }));
-  expect(screen.getByText("Compared with Iron Ingot at 30/min Iron Ingot")).toBeTruthy();
+  expect(screen.queryByText(/Compared with/)).toBeNull();
+  expect(screen.queryByText(/Iron Ore → Iron Ingot/)).toBeNull();
   expect(
     screen.getByRole("button", { name: /Machines: 0.5; less than baseline recipe/ }),
   ).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Details for Pure Iron" }));
-  expect(screen.getByText("Compared with Iron Ingot at 30/min Iron Ingot")).toBeTruthy();
+  expect(screen.queryByText(/Compared with/)).toBeNull();
   expect(screen.getByRole("button", { name: /Machines: 1; same as baseline recipe/ })).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Place Smelter" }));
   expect(add).toHaveBeenCalledTimes(1);
@@ -294,11 +297,14 @@ it("keeps inputs, the recipe name and badge, and outputs in a single row", async
   expect(outputs.children[0]?.getAttribute("aria-hidden")).toBe("true");
   expect(outputs.children[3]?.getAttribute("aria-label")).toBe("Iron Ingot");
   const cells = within(row).getAllByRole("gridcell");
-  expect(cells).toHaveLength(3);
+  expect(cells).toHaveLength(4);
   expect(cells[0]?.contains(inputs)).toBe(true);
   expect(cells[1]?.contains(within(row).getByText("Pure Iron"))).toBe(true);
   expect(cells[1]?.contains(within(row).getByText("Alternate"))).toBe(true);
   expect(cells[2]?.contains(outputs)).toBe(true);
+  expect(
+    cells[3]?.contains(within(row).getByRole("button", { name: "Details for Pure Iron" })),
+  ).toBe(true);
   expect(row.textContent).not.toMatch(/MW|\/min|Iron Ore|Smelter/);
   await user.click(within(row).getByRole("button", { name: "Details for Pure Iron" }));
   expect(screen.getByText(/Smelter · 4 MW · 60\/min/)).toBeTruthy();
@@ -384,23 +390,48 @@ it("does not substitute a packaged input when the exact material is incompatible
   expect(screen.getByRole("row", { name: /Pure Iron/ })).toBeTruthy();
 });
 
-it.each(["Inputs", "Outputs"])("places a recipe once when clicking its %s area", async (side) => {
+it.each(["Inputs", "Outputs", "Name"])(
+  "places a recipe once when clicking its %s area",
+  async (side) => {
+    const user = userEvent.setup();
+    const assets = recipeAssets();
+    const add = vi.fn();
+    render(
+      <CatalogSearch
+        assets={assets}
+        open
+        onOpenChange={vi.fn()}
+        finalFocus={finalFocus}
+        onAdd={add}
+      />,
+    );
+    const row = await screen.findByRole("row", { name: /Pure Iron/ });
+    await user.click(
+      side === "Name"
+        ? within(row).getByText("Pure Iron")
+        : within(row).getByRole("group", { name: side }),
+    );
+    expect(add).toHaveBeenCalledExactlyOnceWith(
+      createSearchIndex(assets.catalog).find((entry) => entry.entityId === "alternative"),
+      undefined,
+    );
+  },
+);
+
+it("opens Details from its separate action without placing the recipe", async () => {
   const user = userEvent.setup();
-  const assets = recipeAssets();
   const add = vi.fn();
   render(
     <CatalogSearch
-      assets={assets}
+      assets={recipeAssets()}
       open
       onOpenChange={vi.fn()}
       finalFocus={finalFocus}
       onAdd={add}
     />,
   );
-  const row = await screen.findByRole("row", { name: /Pure Iron/ });
-  await user.click(within(row).getByRole("group", { name: side }));
-  expect(add).toHaveBeenCalledExactlyOnceWith(
-    createSearchIndex(assets.catalog).find((entry) => entry.entityId === "alternative"),
-    undefined,
-  );
+  const details = await screen.findByRole("button", { name: "Details for Pure Iron" });
+  await user.click(details);
+  expect(screen.getByRole("button", { name: "Back to results" })).toBeTruthy();
+  expect(add).not.toHaveBeenCalled();
 });

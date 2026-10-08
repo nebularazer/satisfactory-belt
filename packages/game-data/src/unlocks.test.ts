@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { recipeUnlockDescription } from "./unlocks";
+import { recipeUnlockRequirements } from "./unlocks";
 import type { RecipeUnlock } from "./unlocks";
 
 const alternate: RecipeUnlock = {
@@ -17,11 +17,10 @@ const alternate: RecipeUnlock = {
   ],
 };
 
-it("distinguishes Hard Drive research from its milestone prerequisite", () => {
-  expect(recipeUnlockDescription(alternate, alternate.name)).toEqual({
-    method: "Hard Drive research",
-    prerequisites: ["Requires Tier 7 · Control System Development"],
-  });
+it("omits implicit Hard Drive research and lists its milestone prerequisite", () => {
+  expect(recipeUnlockRequirements(alternate, alternate.name)).toEqual([
+    "Tier 7 - Control System Development",
+  ]);
 });
 
 it("keeps all/any prerequisite semantics and includes MAM names", () => {
@@ -33,22 +32,27 @@ it("keeps all/any prerequisite semantics and includes MAM names", () => {
     ],
   };
   const unlock = { ...alternate, requirements: [requirement] };
-  expect(recipeUnlockDescription(unlock, unlock.name).prerequisites).toEqual([
-    "Requires Tier 7 · Control System Development and MAM · Quartz",
+  expect(recipeUnlockRequirements(unlock, unlock.name)).toEqual([
+    "Tier 7 - Control System Development",
+    "MAM - Quartz",
   ]);
   requirement.all = false;
-  expect(recipeUnlockDescription(unlock, unlock.name).prerequisites).toEqual([
-    "Requires Tier 7 · Control System Development or MAM · Quartz",
+  expect(recipeUnlockRequirements(unlock, unlock.name)).toEqual([
+    "Tier 7 - Control System Development or MAM - Quartz",
   ]);
 });
 
 it("shows the tier threshold when no named milestone is required and identifies a different granting alternate", () => {
   const unlock = { ...alternate, name: "Alternate: Iron Wire", tier: 1, requirements: [] };
-  expect(recipeUnlockDescription(unlock, unlock.name).method).toBe("Hard Drive research · Tier 1");
+  expect(recipeUnlockRequirements(unlock, unlock.name)).toEqual(["Tier 1"]);
   expect(
-    recipeUnlockDescription(
+    recipeUnlockRequirements(
       { ...unlock, name: "Alternate: Quartz Purification" },
       "Alternate: Distilled Silica",
-    ).method,
-  ).toBe("Hard Drive research · Quartz Purification · Tier 1");
+    ),
+  ).toEqual(["Alternate - Quartz Purification", "Tier 1"]);
+});
+
+it("does not invent a requirement for an alternate with no prerequisite metadata", () => {
+  expect(recipeUnlockRequirements({ ...alternate, requirements: [] }, alternate.name)).toEqual([]);
 });

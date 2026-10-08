@@ -1,11 +1,7 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-new-array-as-prop, react-perf/jsx-no-new-function-as-prop -- The virtual window bounds icons; fallback state changes only after image errors. */
 import type { Ingredient } from "@satisfactory-belt/game-data";
-import { recipeUnlockDescription } from "@satisfactory-belt/game-data";
-import {
-  recipeAlternatives,
-  compareRecipes,
-  searchEntrySummary,
-} from "@satisfactory-belt/game-data/search";
+import { recipeUnlockRequirements } from "@satisfactory-belt/game-data";
+import { recipeAlternatives, compareRecipes } from "@satisfactory-belt/game-data/search";
 import type { RecipeComparison, SearchEntry } from "@satisfactory-belt/game-data/search";
 import {
   ArrowLeftRightIcon,
@@ -106,9 +102,13 @@ export function CatalogSearchDetails({
   const machine = recipeMachineId ? catalog.machines[recipeMachineId] : undefined;
   const cycles = recipe && machine ? (60 * machine.manufacturingSpeed) / recipe.durationSeconds : 0;
   const baseline = comparisonBaseline?.kind === "recipe" ? comparisonBaseline : entry;
-  const baselineComparison = recipe
-    ? compareRecipes(catalog, baseline.entityId, recipe.id, machineId)
-    : undefined;
+  const unlockRoutes =
+    recipe?.unlocks
+      ?.map((unlock) => ({
+        id: unlock.id,
+        requirements: recipeUnlockRequirements(unlock, recipe.name),
+      }))
+      .filter((route) => route.requirements.length) ?? [];
   const alternativeIds = recipe ? new Set(recipeAlternatives(catalog, recipe.id)) : null;
   const related = index.filter((candidate) =>
     alternativeIds
@@ -176,23 +176,19 @@ export function CatalogSearchDetails({
                 {description}
               </p>
             )}
-            {recipe && Boolean(recipe.unlocks?.length) && (
+            {unlockRoutes.length > 0 && (
               <section className="mb-5 space-y-2 text-sm" aria-label="Unlock requirements">
                 <h4 className="font-medium">Unlock requirements</h4>
-                {recipe.unlocks?.map((unlock, routeIndex) => {
-                  const unlockDescription = recipeUnlockDescription(unlock, recipe.name);
-                  return (
-                    <div key={unlock.id}>
-                      {routeIndex > 0 && <p className="mb-2 text-xs text-muted-foreground">or</p>}
-                      <p>{unlockDescription.method}</p>
-                      {unlockDescription.prerequisites.map((requirement) => (
-                        <p key={requirement} className="text-muted-foreground">
-                          {requirement}
-                        </p>
+                {unlockRoutes.map((route, routeIndex) => (
+                  <div key={route.id}>
+                    {routeIndex > 0 && <p className="mb-2 text-xs text-muted-foreground">or</p>}
+                    <ul className="space-y-1 text-muted-foreground">
+                      {route.requirements.map((requirement) => (
+                        <li key={requirement}>{requirement}</li>
                       ))}
-                    </div>
-                  );
-                })}
+                    </ul>
+                  </div>
+                ))}
               </section>
             )}
             {recipe && (
@@ -236,18 +232,6 @@ export function CatalogSearchDetails({
             <h4 className="shrink-0 px-4 pt-3 pb-2 text-sm font-medium">
               {recipe ? "Alternative recipes" : entry.kind === "machine" ? "Recipes" : "Resources"}
             </h4>
-            {baselineComparison && (
-              <p
-                className="shrink-0 px-4 pb-2 text-xs text-muted-foreground"
-                data-catalog-comparison-baseline=""
-              >
-                Compared with {baseline.name} at {number.format(baselineComparison.outputPerMinute)}
-                {assets.catalog.items[baselineComparison.itemId]!.unit === "m3"
-                  ? " m³/min"
-                  : "/min"}{" "}
-                {assets.catalog.items[baselineComparison.itemId]!.name}
-              </p>
-            )}
             <ScrollArea className="min-h-0 flex-1">
               {related.length ? (
                 <ul className="space-y-1 px-4 pb-4">
@@ -288,11 +272,6 @@ export function CatalogSearchDetails({
                             <span className="block whitespace-normal text-xs font-normal text-muted-foreground">
                               {candidate.subtitle}
                             </span>
-                            {candidate.kind === "recipe" && (
-                              <span className="block whitespace-normal text-xs font-normal text-muted-foreground">
-                                {searchEntrySummary(catalog, candidate, "").flow}
-                              </span>
-                            )}
                           </span>
                         </div>
                         {comparison && (
