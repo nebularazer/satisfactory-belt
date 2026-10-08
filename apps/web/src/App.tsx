@@ -441,15 +441,23 @@ function CanvasWorkspace({
       workspaceKeyDown: (event: KeyboardEvent<HTMLElement>) => {
         // Document shortcuts also support focused controls and portalled menus.
         // History may already have been handled by the renderer.
-        if (
-          searchOpen ||
-          clearCanvasOpen ||
-          savesOpen ||
-          importedFactory !== null ||
-          event.defaultPrevented ||
-          event.nativeEvent.isComposing
-        )
-          return;
+        if (event.defaultPrevented || event.nativeEvent.isComposing) return;
+        const modalOpen = searchOpen || clearCanvasOpen || savesOpen || importedFactory !== null;
+        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+          const key = event.key.toLowerCase();
+          const action =
+            key === "o" && !event.shiftKey
+              ? openSaves
+              : key === "s" && event.shiftKey
+                ? openSaveAs
+                : null;
+          if (action) {
+            event.preventDefault();
+            if (!modalOpen && !event.repeat) action();
+            return;
+          }
+        }
+        if (modalOpen) return;
         const target = event.target;
         if (
           target instanceof HTMLElement &&
@@ -510,6 +518,8 @@ function CanvasWorkspace({
     savesOpen,
     importedFactory,
     openAdd,
+    openSaves,
+    openSaveAs,
   ]);
 
   return (
@@ -590,11 +600,19 @@ function CanvasWorkspace({
             }
           >
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={openSaves}>
+              <DropdownMenuItem
+                onClick={openSaves}
+                aria-keyshortcuts="Control+o Meta+o"
+                title="Open factory (Ctrl/Cmd+O)"
+              >
                 <FolderOpenIcon className="text-muted-foreground" />
                 Open factory…
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={openSaveAs}>
+              <DropdownMenuItem
+                onClick={openSaveAs}
+                aria-keyshortcuts="Control+Shift+s Meta+Shift+s"
+                title="Save as (Ctrl/Cmd+Shift+S)"
+              >
                 <SaveIcon className="text-muted-foreground" />
                 Save as…
               </DropdownMenuItem>

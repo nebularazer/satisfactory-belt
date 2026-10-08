@@ -1,6 +1,6 @@
 import { serializeFactoryJson } from "@satisfactory-belt/factory-saves";
 import { Preferences } from "@satisfactory-belt/preferences";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
 import { expect, it, vi } from "vitest";
@@ -243,3 +243,43 @@ it("renames the current and another factory while preserving canvas, history and
     store.close();
   }
 });
+
+it.each(["ctrlKey", "metaKey"])(
+  "opens factory dialogs with %s shortcuts and suppresses browser defaults without switching modals",
+  async (modifier) => {
+    const user = userEvent.setup();
+    Object.defineProperty(window, "indexedDB", { configurable: true, value: new IDBFactory() });
+    const fixture = minerFlowFixture();
+    vi.mocked(loadGameAssets).mockResolvedValue(fixture.assets);
+    const store = await createBrowserPlanStore();
+    await store.create("Iron factory", fixture.document);
+    const preferences = new Preferences({ load: async () => ({}), save: async () => {} }, vi.fn());
+    const theme = createBrowserTheme(preferences);
+    const app = render(<App preferences={preferences} theme={theme} />);
+    try {
+      await screen.findByRole("button", { name: "Canvas menu" });
+      const canvas = app.container.querySelector("canvas")!;
+      expect(fireEvent.keyDown(canvas, { key: "o", [modifier]: true, altKey: true })).toBe(true);
+      expect(fireEvent.keyDown(canvas, { key: "s", [modifier]: true })).toBe(true);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(fireEvent.keyDown(canvas, { key: "o", [modifier]: true, repeat: true })).toBe(false);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(fireEvent.keyDown(canvas, { key: "o", [modifier]: true })).toBe(false);
+      await screen.findByRole("dialog", { name: "Open factory" });
+      const search = screen.getByRole("searchbox", { name: "Search factories" });
+      expect(fireEvent.keyDown(search, { key: "S", [modifier]: true, shiftKey: true })).toBe(false);
+      expect(screen.getByRole("dialog", { name: "Open factory" })).toBeTruthy();
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(fireEvent.keyDown(canvas, { key: "S", [modifier]: true, shiftKey: true })).toBe(false);
+      await screen.findByRole("dialog", { name: "Save as…" });
+      const name = screen.getByRole("textbox", { name: "Factory name" });
+      expect(fireEvent.keyDown(name, { key: "o", [modifier]: true })).toBe(false);
+      expect(screen.getByRole("dialog", { name: "Save as…" })).toBeTruthy();
+    } finally {
+      await act(async () => app.unmount());
+      theme.destroy();
+      store.close();
+    }
+  },
+);

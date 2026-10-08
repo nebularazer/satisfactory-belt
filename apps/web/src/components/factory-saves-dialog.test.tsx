@@ -269,3 +269,63 @@ it("supports keyboard row selection and double-click opens only another factory"
   await user.dblClick(copper);
   await waitFor(() => expect(props.onLoad).toHaveBeenCalledExactlyOnceWith("copper"));
 });
+
+it("filters factory names without case sensitivity and navigates only visible results", async () => {
+  const user = userEvent.setup();
+  const props = setup();
+  await screen.findByRole("button", { name: "Copper factory" });
+  const search = screen.getByRole("searchbox", { name: "Search factories" });
+  await user.type(search, "  COPPER  ");
+  expect(screen.queryByRole("button", { name: "Iron factory" })).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Open" }).disabled).toBe(true);
+  await user.keyboard("{ArrowDown}");
+  const copper = screen.getByRole("button", { name: "Copper factory" });
+  expect(document.activeElement).toBe(copper);
+  expect(copper.getAttribute("aria-pressed")).toBe("true");
+  await user.clear(search);
+  await user.type(search, "missing");
+  expect(screen.getByRole("status").textContent).toContain("No factories match");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Open" }).disabled).toBe(true);
+  await user.clear(search);
+  expect(screen.getByRole("button", { name: "Copper factory" }).getAttribute("aria-pressed")).toBe(
+    "true",
+  );
+  expect(props.store.list).toHaveBeenCalledTimes(1);
+  expect(props.onLoad).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Open" }));
+  await waitFor(() => expect(props.onLoad).toHaveBeenCalledWith("copper"));
+});
+
+it("keeps the save name separate from search and confirms overwrites for filtered-out factories", async () => {
+  const user = userEvent.setup();
+  const props = setup(true);
+  await screen.findByRole("button", { name: "Copper factory" });
+  const search = screen.getByRole("searchbox", { name: "Search factories" });
+  await user.type(search, "Iron");
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("dialog", { name: "Save as…" })).toBeTruthy();
+  const name = screen.getByRole<HTMLInputElement>("textbox", { name: "Factory name" });
+  expect(name.value).toBe("Iron factory");
+  await user.clear(name);
+  await user.type(name, "Copper factory");
+  expect(screen.queryByRole("button", { name: "Copper factory" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("button", { name: "Overwrite factory" });
+  expect(props.onSaveAs).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
+  await waitFor(() => expect(props.onOverwrite).toHaveBeenCalledWith("copper"));
+});
+
+it("checks rename uniqueness against factories hidden by search", async () => {
+  const user = userEvent.setup();
+  const props = setup();
+  await screen.findByRole("button", { name: "Copper factory" });
+  await user.type(screen.getByRole("searchbox", { name: "Search factories" }), "Copper");
+  await rowAction(user, "Copper factory", "Rename…");
+  const name = screen.getByRole("textbox", { name: "Factory name" });
+  await user.clear(name);
+  await user.type(name, "Iron factory");
+  expect(screen.getByRole("alert").textContent).toContain("already exists");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Rename" }).disabled).toBe(true);
+  expect(props.onRename).not.toHaveBeenCalled();
+});
