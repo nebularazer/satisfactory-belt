@@ -274,7 +274,7 @@ it("enables all search fields by default and allows independent combinations", a
   expect(screen.getByText(/Enter Choose/)).toBeTruthy();
 });
 
-it("keeps inputs, the recipe name and alternate indicator, and outputs in a single row with separate Details", async () => {
+it("keeps inputs, the recipe name and Alternate badge, and outputs in a single row with separate Details", async () => {
   const user = userEvent.setup();
   render(
     <CatalogSearch
@@ -287,15 +287,7 @@ it("keeps inputs, the recipe name and alternate indicator, and outputs in a sing
   );
   const row = await screen.findByRole("row", { name: /Pure Iron/ });
   expect(within(row).getByText("Pure Iron")).toBeTruthy();
-  const alternate = within(row).getByRole("img", { name: "Alternate" });
-  expect(within(row).queryByText("Alternate")).toBeNull();
-  await user.hover(alternate);
-  // Base UI's rest delay starts with mouse movement after entering the trigger.
-  fireEvent.mouseMove(alternate);
-  expect(
-    (await screen.findByText("Alternate")).closest('[data-slot="tooltip-content"]'),
-  ).toBeTruthy();
-  await user.unhover(alternate);
+  const alternate = within(row).getByText("Alternate");
   const inputs = within(row).getByRole("group", { name: "Inputs" });
   const outputs = within(row).getByRole("group", { name: "Outputs" });
   expect(inputs.children).toHaveLength(4);
@@ -419,7 +411,7 @@ it.each(["Inputs", "Outputs", "Name", "Alternate"])(
     const row = await screen.findByRole("row", { name: /Pure Iron/ });
     await user.click(
       side === "Alternate"
-        ? within(row).getByRole("img", { name: "Alternate" })
+        ? within(row).getByText("Alternate")
         : side === "Name"
           ? within(row).getByText("Pure Iron")
           : within(row).getByRole("group", { name: side }),

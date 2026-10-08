@@ -17,11 +17,7 @@ import { ArrowLeftIcon, CircleCheckIcon, SearchIcon, XIcon } from "lucide-react"
 import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import {
-  AlternateRecipeIndicator,
-  CatalogIcon,
-  CatalogSearchDetails,
-} from "@/components/catalog-search-details";
+import { CatalogIcon, CatalogSearchDetails } from "@/components/catalog-search-details";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
@@ -30,7 +26,6 @@ import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/compone
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Frame = {
@@ -262,7 +257,7 @@ export function CatalogSearch({
       : selected.subtitle
     : "Buildings, recipes, and alternatives";
   const content = (
-    <TooltipProvider delay={500} closeDelay={0} timeout={0}>
+    <>
       <div
         ref={heading}
         tabIndex={-1}
@@ -281,7 +276,7 @@ export function CatalogSearch({
         <div className="min-w-0 flex-1 space-y-0">
           <div className="flex min-h-5 flex-wrap items-center gap-2">
             {narrow ? <DrawerTitle>{title}</DrawerTitle> : <DialogTitle>{title}</DialogTitle>}
-            {selected?.alternate && <AlternateRecipeIndicator />}
+            {selected?.alternate && <Badge variant="secondary">Alternate</Badge>}
             {selected && selected.events.length > 0 && <Badge variant="outline">Event</Badge>}
           </div>
           {narrow ? (
@@ -338,7 +333,7 @@ export function CatalogSearch({
           visible={!selected}
         />
       </div>
-    </TooltipProvider>
+    </>
   );
   if (narrow && !open) return null;
   return narrow ? (
@@ -620,6 +615,7 @@ function SearchResults({
               <div
                 key={entry.id}
                 id={`${resultId}-${row.index}`}
+                data-highlighted={active === row.index ? "" : undefined}
                 onPointerEnter={() => setActive(row.index)}
                 role="row"
                 aria-rowindex={row.index + 1}
@@ -631,7 +627,7 @@ function SearchResults({
                   height: row.size,
                   transform: `translateY(${row.start}px)`,
                 }}
-                className="grid grid-cols-[minmax(0,1fr)_3.75rem] items-center gap-1"
+                className="grid grid-cols-[minmax(0,1fr)_3.75rem] items-center gap-1 rounded-md hover:bg-accent data-highlighted:bg-accent data-highlighted:text-accent-foreground"
               >
                 <ComboboxItem
                   render={<div />}
@@ -639,7 +635,7 @@ function SearchResults({
                   value={entry}
                   index={row.index}
                   role="presentation"
-                  className="grid h-11 min-w-0 grid-cols-[5.375rem_minmax(0,1fr)_5.375rem] gap-1 px-1 [&>[data-slot=combobox-item-indicator]]:hidden"
+                  className="grid h-11 min-w-0 grid-cols-[5.375rem_minmax(0,1fr)_5.375rem] gap-1 px-1 data-highlighted:bg-transparent [&>[data-slot=combobox-item-indicator]]:hidden"
                 >
                   <span
                     role="gridcell"
@@ -656,7 +652,7 @@ function SearchResults({
                     <span className="min-w-0 truncate" title={entry.name}>
                       {entry.name}
                     </span>
-                    {entry.alternate && <AlternateRecipeIndicator />}
+                    {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
                     {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
                   </span>
                   <span
@@ -672,7 +668,7 @@ function SearchResults({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-11 w-full px-1 text-xs text-muted-foreground"
+                    className="h-11 w-full px-1 text-xs text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
                     aria-label={`Details for ${entry.name}`}
                     tabIndex={active === row.index ? 0 : -1}
                     onPointerDown={(event) => event.stopPropagation()}

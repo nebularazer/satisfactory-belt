@@ -74,23 +74,6 @@ function CatalogImage({ sources, size }: { sources: readonly string[]; size: num
   );
 }
 
-export function AlternateRecipeIndicator() {
-  return (
-    <Tooltip disableHoverablePopup>
-      <TooltipTrigger
-        render={
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The accessible image wraps an inline Lucide SVG, not a bitmap.
-          <span role="img" aria-label="Alternate" />
-        }
-        className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-      >
-        <GitBranchIcon aria-hidden="true" className="size-4" />
-      </TooltipTrigger>
-      <TooltipContent>Alternate</TooltipContent>
-    </Tooltip>
-  );
-}
-
 export function CatalogSearchDetails({
   entry,
   assets,
@@ -281,7 +264,7 @@ export function CatalogSearchDetails({
                           <span className="min-w-0 flex-1">
                             <span className="flex flex-wrap items-center gap-2">
                               <span>{candidate.name}</span>
-                              {candidate.alternate && <AlternateRecipeIndicator />}
+                              {candidate.alternate && <Badge variant="secondary">Alternate</Badge>}
                               {disabled && (
                                 <Badge variant="outline" title="Doesn’t support this connection">
                                   Incompatible
