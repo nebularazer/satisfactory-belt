@@ -92,8 +92,8 @@ describe("catalog search", () => {
   it("ranks exact names before output matches and supports unordered words", () => {
     expect(names("iron plate")).toEqual(["Iron Plate", "Coated Plate"]);
     expect(names("plate iron")).toEqual(["Iron Plate", "Coated Plate"]);
-    expect(names("constructor")).toEqual(["Constructor", "Coated Plate", "Iron Plate"]);
-    expect(names("iron ore")).toEqual(["Iron Ore"]); // Ingredients do not pollute ordinary search.
+    expect(names("constructor")).toEqual(["Constructor"]);
+    expect(names("iron ore")).toEqual(["Iron Ore", "Coated Plate", "Iron Plate"]);
   });
   it("normalizes miner tiers and finds alternate aliases and the AWESOME Sink", () => {
     expect(names("mk 2")).toEqual(["Miner Mk.2", "Copper Ore", "Iron Ore"]);
@@ -102,19 +102,12 @@ describe("catalog search", () => {
     expect(names("sink")).toEqual(["AWESOME Sink"]);
   });
   it("uses a bounded typo fallback only when direct matches are absent", () => {
-    expect(names("constrctor")).toEqual(["Constructor", "Coated Plate", "Iron Plate"]);
+    expect(names("constrctor")).toEqual(["Constructor"]);
     expect(names("plte")).toEqual(["Coated Plate", "Iron Plate"]);
     expect(names("snk")).toEqual([]);
     expect(names("unknown")).toEqual([]);
   });
-  it("filters categories and displays alternate badges without a name prefix", () => {
-    expect(names("", { category: "recipes" })).toEqual([
-      "Coated Plate",
-      "Copper Ore",
-      "Iron Ore",
-      "Iron Plate",
-    ]);
-    expect(names("constructor", { category: "buildings" })).toEqual(["Constructor"]);
+  it("displays alternate badges without a name prefix", () => {
     expect(index.find((entry) => entry.entityId === "Coated Plate")).toMatchObject({
       name: "Coated Plate",
       alternate: true,
@@ -144,17 +137,19 @@ describe("catalog search", () => {
     expect(names("", { scope: { kind: "machine", id: "missing" } })).toEqual([]);
     expect(new Set(index.map((entry) => entry.id)).size).toBe(index.length);
   });
-  it("offers extraction directly in global and recipe search while respecting eligibility", () => {
-    for (const category of ["all", "recipes"] as const) {
-      expect(searchCatalog(index, "iron ore", { category })).toMatchObject([
-        { kind: "resource", entityId: "Iron Ore", extractorId: "Miner", subtitle: "Miner Mk.2" },
-      ]);
-      expect(
-        names("ore", { category, allowedEntryIds: new Set(["resource:Miner:Iron Ore"]) }),
-      ).toEqual(["Iron Ore"]);
-    }
-    expect(names("iron ore", { category: "buildings" })).toEqual([]);
-    expect(names("iron ore", { allowedEntryIds: new Set(["recipe:Iron Plate"]) })).toEqual([]);
+  it("offers extraction directly while respecting enabled fields and eligibility", () => {
+    expect(searchCatalog(index, "iron ore", { fields: ["output"] })).toMatchObject([
+      { kind: "resource", entityId: "Iron Ore", extractorId: "Miner", subtitle: "Miner Mk.2" },
+    ]);
+    expect(names("ore", { allowedEntryIds: new Set(["resource:Miner:Iron Ore"]) })).toEqual([
+      "Iron Ore",
+    ]);
+    expect(
+      names("iron ore", { fields: ["name"], allowedEntryIds: new Set(["recipe:Iron Plate"]) }),
+    ).toEqual([]);
+    expect(names("iron ore", { allowedEntryIds: new Set(["recipe:Iron Plate"]) })).toEqual([
+      "Iron Plate",
+    ]);
   });
 });
 
@@ -174,12 +169,12 @@ it("finds alternatives by primary output and excludes the current recipe and byp
   expect(recipeAlternatives(copy, "missing")).toEqual([]);
 });
 
-it("keeps eligibility restrictions through categories, scopes, and typo fallback", () => {
+it("keeps eligibility restrictions through fields, scopes, and typo fallback", () => {
   const allowedEntryIds = new Set(["recipe:Iron Plate", "machine:Constructor"]);
   expect(names("", { allowedEntryIds })).toEqual(["Constructor", "Iron Plate"]);
   expect(names("plate", { allowedEntryIds })).toEqual(["Iron Plate"]);
   expect(names("plte", { allowedEntryIds })).toEqual(["Iron Plate"]);
-  expect(names("", { allowedEntryIds, category: "buildings" })).toEqual(["Constructor"]);
+  expect(names("ore", { allowedEntryIds, fields: ["input"] })).toEqual(["Iron Plate"]);
   expect(names("", { allowedEntryIds, scope: { kind: "machine", id: "Constructor" } })).toEqual([
     "Iron Plate",
   ]);
@@ -286,32 +281,28 @@ it("ranks recipe name abbreviations and adjacent typos ahead of related matches"
     "Coated Plate",
   ]);
   expect(names("constrcutor")[0]).toBe("Constructor");
-  expect(names("constrcutor", { allowedEntryIds: new Set(["recipe:Iron Plate"]) })).toEqual([
-    "Iron Plate",
-  ]);
+  expect(names("constrcutor", { allowedEntryIds: new Set(["recipe:Iron Plate"]) })).toEqual([]);
   expect(names("constrcutor", { allowedEntryIds: new Set() })).toEqual([]);
   expect(names("iron ore mk2")).toEqual(["Iron Ore"]);
 });
 
 it("searches producers and consumers by individual materials within eligibility and machine scope", () => {
-  expect(names("iron ore", { direction: "consumes" })).toEqual(["Coated Plate", "Iron Plate"]);
-  expect(names("iron ore", { direction: "produces" })).toEqual(["Iron Ore"]);
-  expect(names("plate", { direction: "consumes" })).toEqual([]);
+  expect(names("iron ore", { fields: ["input"] })).toEqual(["Coated Plate", "Iron Plate"]);
+  expect(names("iron ore", { fields: ["output"] })).toEqual(["Iron Ore"]);
+  expect(names("plate", { fields: ["input"] })).toEqual([]);
   expect(
-    names("iron ore", { direction: "consumes", allowedEntryIds: new Set(["recipe:Iron Plate"]) }),
+    names("iron ore", { fields: ["input"], allowedEntryIds: new Set(["recipe:Iron Plate"]) }),
   ).toEqual(["Iron Plate"]);
   expect(
-    names("iron ore", { direction: "consumes", scope: { kind: "machine", id: "missing" } }),
+    names("iron ore", { fields: ["input"], scope: { kind: "machine", id: "missing" } }),
   ).toEqual([]);
-  expect(names("iron ore", { direction: "consumes", allowedEntryIds: new Set() })).toEqual([]);
-  expect(names("iorn ore", { direction: "consumes" })).toEqual(["Coated Plate", "Iron Plate"]);
-  expect(names("coated", { direction: "consumes", itemId: "Iron Ore" })).toEqual(["Coated Plate"]);
-  expect(names("coated", { direction: "consumes", itemId: "Copper Ore" })).toEqual([]);
+  expect(names("iron ore", { fields: ["input"], allowedEntryIds: new Set() })).toEqual([]);
+  expect(names("iorn ore", { fields: ["input"] })).toEqual(["Coated Plate", "Iron Plate"]);
+  expect(names("coated", { fields: ["input"] })).toEqual([]);
+  expect(names("coated", { fields: ["name", "input"] })).toEqual(["Coated Plate"]);
   const copy = structuredClone(catalog);
   copy.recipes["Iron Plate"].ingredients.push({ itemId: "Copper Ore", amount: 1 });
-  expect(searchCatalog(createSearchIndex(copy), "iron copper", { direction: "consumes" })).toEqual(
-    [],
-  );
+  expect(searchCatalog(createSearchIndex(copy), "iron copper", { fields: ["input"] })).toEqual([]);
 });
 
 it("labels the matched byproduct or ingredient rate and scales summaries to the selected machine", () => {
@@ -345,17 +336,34 @@ it("keeps complete item names distinct from packaged items even when the exact m
   copy.recipes["Coated Plate"].ingredients = [{ itemId: "packaged", amount: 1 }];
   const entries = createSearchIndex(copy);
   expect(
-    searchCatalog(entries, "iron ore", { direction: "consumes" }).map((entry) => entry.name),
+    searchCatalog(entries, "iron ore", { fields: ["input"] }).map((entry) => entry.name),
   ).toEqual(["Iron Plate"]);
   expect(
     searchCatalog(entries, "iron ore", {
-      direction: "consumes",
+      fields: ["input"],
       allowedEntryIds: new Set(["recipe:Coated Plate"]),
     }),
   ).toEqual([]);
   expect(
-    searchCatalog(entries, "packaged iron ore", { direction: "consumes" }).map(
-      (entry) => entry.name,
-    ),
+    searchCatalog(entries, "packaged iron ore", { fields: ["input"] }).map((entry) => entry.name),
   ).toEqual(["Coated Plate"]);
+});
+
+it("combines enabled search fields and keeps disabled fields out of direct and typo results", () => {
+  expect(names("iron ore", { fields: ["name"] })).toEqual(["Iron Ore"]);
+  expect(names("iron ore", { fields: ["input", "output"] })).toEqual([
+    "Coated Plate",
+    "Iron Ore",
+    "Iron Plate",
+  ]);
+  expect(names("iron ore", { fields: ["name", "input"] })).toEqual([
+    "Iron Ore",
+    "Coated Plate",
+    "Iron Plate",
+  ]);
+  expect(names("iorn ore", { fields: ["name"] })).toEqual(["Iron Ore"]);
+  expect(names("plate", { fields: ["output"] })).toEqual(["Coated Plate", "Iron Plate"]);
+  expect(names("plte", { fields: ["input"] })).toEqual([]);
+  expect(names("", { fields: [] })).toEqual([]);
+  expect(names("plate", { fields: [] })).toEqual([]);
 });

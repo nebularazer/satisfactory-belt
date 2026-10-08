@@ -9,6 +9,7 @@ export type SearchKind =
   | "logistics"
   | "sink"
   | "resource";
+export type SearchField = "name" | "input" | "output";
 export type SearchDirection = "produces" | "consumes";
 export type SearchMaterial = Readonly<{
   itemId: string;
@@ -43,12 +44,9 @@ export type SearchEntry = Readonly<{
 }>;
 export type SearchScope = Readonly<{ kind: "machine" | "extractor"; id: string }>;
 export type SearchOptions = Readonly<{
-  category?: "all" | "recipes" | "buildings";
+  /** Match any enabled field; all query tokens must match one name or material. */
+  fields?: readonly SearchField[];
   scope?: SearchScope;
-  /** In direction mode the query matches individual input/output items, not recipe names. */
-  direction?: SearchDirection;
-  /** A selected material restricts direction mode; the query then narrows recipe names. */
-  itemId?: string;
   /**
    * Optional eligibility boundary, applied before ranking (including typo fallback).
    * IDs are SearchEntry.id, not entityId. Omitted means unrestricted; empty means no results.
@@ -113,11 +111,6 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
   }
   const base = { alternate: false, events: [], machineIds: [], inputs: [], outputs: [] };
   for (const recipe of Object.values(catalog.recipes)) {
-    const machines = recipe.machineIds.map((id) => catalog.machines[id]!.name).join(" · ");
-    const products = recipe.products.map((p) => catalog.items[p.itemId]!.name).join(" + ");
-    const productInitials = recipe.products
-      .map((p) => searchInitialism(catalog.items[p.itemId]!.name))
-      .join(" ");
     add(
       {
         ...base,
@@ -143,7 +136,7 @@ export function createSearchIndex(catalog: GameCatalog): readonly SearchEntry[] 
             recipe.durationSeconds,
         ),
       },
-      `${machines} ${products} ${productInitials} ${recipe.alternate ? "alt alternate alternative" : "standard"}`,
+      recipe.alternate ? "alt alternate alternative" : "standard",
     );
   }
   const collections = [
@@ -210,10 +203,12 @@ export function searchCatalog(
 ): readonly SearchEntry[] {
   const normalized = normalizeSearch(query);
   const tokens = normalized.split(" ").filter(Boolean);
+  const fields = options.fields ?? ["name", "input", "output"];
+  if (!fields.length) return [];
   // Complete item names select that material, rather than similarly named packaged
   // items. Resolve before eligibility/scope so filters cannot change the query's meaning.
   const exactMaterialIds = new Set<string>();
-  if (options.direction && normalized && !options.itemId) {
+  if (normalized && (fields.includes("input") || fields.includes("output"))) {
     for (const entry of index) {
       for (const material of [...entry.inputs, ...entry.outputs]) {
         if (material.normalizedName === normalized) exactMaterialIds.add(material.itemId);
@@ -229,14 +224,6 @@ export function searchCatalog(
           : entry.kind !== "resource" || entry.extractorId !== options.scope.id
       )
         return false;
-    } else {
-      const production = entry.kind === "recipe" || entry.kind === "resource";
-      if (options.category === "recipes" && !production) return false;
-      if (options.category === "buildings" && production) return false;
-    }
-    if (options.direction) {
-      const materials = options.direction === "consumes" ? entry.inputs : entry.outputs;
-      return materials.some((material) => !options.itemId || material.itemId === options.itemId);
     }
     return true;
   });
@@ -247,24 +234,25 @@ export function searchCatalog(
           terms.includes(token) ||
           (fuzzy && token.length >= 4 && words.some((word) => oneEditApart(token, word))),
       );
-    if (options.direction && !options.itemId) {
-      const materials = options.direction === "consumes" ? entry.inputs : entry.outputs;
-      const matching = materials.filter(
-        (material) =>
-          (!exactMaterialIds.size || exactMaterialIds.has(material.itemId)) &&
-          matches(material.terms, material.words),
-      );
-      if (!matching.length) return undefined;
-      return !normalized || matching.some((material) => material.normalizedName === normalized)
-        ? 0
-        : 1;
+    if (!normalized) return 0;
+    if (fields.includes("name") && matches(entry.terms, entry.words)) {
+      if (entry.normalizedName === normalized) return 0;
+      if (entry.initialism === normalized) return 1;
+      if (entry.normalizedName.startsWith(normalized)) return 2;
+      if (matches(entry.normalizedName, entry.nameWords)) return 3;
+      return 4;
     }
-    if (!matches(entry.terms, entry.words)) return undefined;
-    if (!normalized || entry.normalizedName === normalized) return 0;
-    if (entry.initialism === normalized) return 1;
-    if (entry.normalizedName.startsWith(normalized)) return 2;
-    if (matches(entry.normalizedName, entry.nameWords)) return 3;
-    return 4;
+    const materials = [
+      ...(fields.includes("input") ? entry.inputs : []),
+      ...(fields.includes("output") ? entry.outputs : []),
+    ];
+    return materials.some(
+      (material) =>
+        (!exactMaterialIds.size || exactMaterialIds.has(material.itemId)) &&
+        matches(material.terms, material.words),
+    )
+      ? 4
+      : undefined;
   }
   function ranked(fuzzy: boolean) {
     const buckets: SearchEntry[][] = [[], [], [], [], []];

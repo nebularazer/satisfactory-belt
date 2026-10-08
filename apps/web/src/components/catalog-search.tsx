@@ -4,16 +4,16 @@ import {
   createSearchIndex,
   searchCatalog,
   recipeSearchSummary,
-  searchEntrySummary,
 } from "@satisfactory-belt/game-data/search";
 import type {
   SearchDirection,
   SearchEntry,
-  SearchOptions,
+  SearchField,
+  SearchMaterial,
   SearchScope,
 } from "@satisfactory-belt/game-data/search";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowLeftIcon, SearchIcon, XIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, SearchIcon, XIcon, ChevronRightIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
@@ -21,27 +21,22 @@ import { CatalogIcon, CatalogSearchDetails } from "@/components/catalog-search-d
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Frame = {
   query: string;
-  category: NonNullable<SearchOptions["category"]>;
+  fields: readonly SearchField[];
   scope?: SearchScope;
-  direction?: SearchDirection;
   offset: number;
   activeId?: string;
 };
-const emptyFrame = (): Frame => ({ query: "", category: "all", offset: 0 });
+const allFields: readonly SearchField[] = ["name", "input", "output"];
+const emptyFrame = (): Frame => ({ query: "", fields: allFields, offset: 0 });
 export type CatalogConnectionContext = Readonly<{
   direction: SearchDirection;
   itemIds: readonly string[];
@@ -268,7 +263,7 @@ export function CatalogSearch({
         tabIndex={-1}
         className={
           selected || scopeName
-            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 outline-none sm:pr-16"
+            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 outline-none"
             : "sr-only"
         }
       >
@@ -322,7 +317,8 @@ export function CatalogSearch({
       >
         <SearchResults
           key={`${searchSession}:${frame.scope?.id ?? "catalog"}`}
-          index={index}
+          index={fullIndex}
+          allowedEntryIds={allowedEntryIds}
           assets={assets}
           frame={frame}
           onFrameChange={setFrame}
@@ -364,12 +360,6 @@ export function CatalogSearch({
         className="flex h-[min(42rem,calc(100dvh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-160"
       >
         {content}
-        <DialogClose
-          render={<Button variant="ghost" size="icon" className="absolute top-4 right-4 size-9" />}
-          aria-label="Close catalog"
-        >
-          <XIcon />
-        </DialogClose>
       </DialogContent>
     </Dialog>
   );
@@ -377,6 +367,7 @@ export function CatalogSearch({
 
 function SearchResults({
   index,
+  allowedEntryIds,
   assets,
   frame,
   onFrameChange,
@@ -391,6 +382,7 @@ function SearchResults({
   visible,
 }: {
   index: readonly SearchEntry[];
+  allowedEntryIds?: ReadonlySet<string>;
   assets: GameAssets;
   frame: Frame;
   onFrameChange: (frame: Frame) => void;
@@ -419,11 +411,11 @@ function SearchResults({
   const results = useMemo(
     () =>
       searchCatalog(index, frame.query, {
-        category: frame.category,
+        fields: frame.fields,
         scope: frame.scope,
-        direction: frame.direction,
+        allowedEntryIds,
       }),
-    [index, frame.query, frame.category, frame.scope, frame.direction],
+    [index, frame.query, frame.fields, frame.scope, allowedEntryIds],
   );
   const scroll = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(() =>
@@ -435,7 +427,7 @@ function SearchResults({
   const virtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scroll.current,
-    estimateSize: () => 88,
+    estimateSize: () => 72,
     overscan: 5,
     getItemKey,
     initialOffset: frame.offset,
@@ -495,13 +487,11 @@ function SearchResults({
     >
       <div className="shrink-0 space-y-2 px-4 pb-3">
         {contextLabel && (
-          <p className="truncate text-sm font-medium sm:pr-11" title={contextLabel}>
+          <p className="truncate text-sm font-medium" title={contextLabel}>
             {contextLabel}
           </p>
         )}
-        <div
-          className={frame.scope ? "flex items-center gap-2" : "flex items-center gap-2 sm:pr-11"}
-        >
+        <div className="flex items-center gap-2">
           <ComboboxInput
             ref={inputRef}
             type="search"
@@ -547,13 +537,7 @@ function SearchResults({
               }
             }}
             aria-label="Search buildings and recipes"
-            placeholder={
-              frame.direction === "consumes"
-                ? "Search consumed items…"
-                : frame.direction === "produces"
-                  ? "Search produced items…"
-                  : "Search buildings and recipes…"
-            }
+            placeholder="Search buildings and recipes…"
           >
             <InputGroupAddon align="inline-start">
               <SearchIcon aria-hidden="true" />
@@ -575,55 +559,29 @@ function SearchResults({
             )}
           </ComboboxInput>
         </div>
-        {!frame.scope && (
-          <fieldset aria-label="Result category" className="flex gap-1">
-            {(
-              [
-                ["all", "All"],
-                ["recipes", "Recipes"],
-                ["buildings", "Buildings"],
-              ] as const
-            ).map(([category, name]) => (
-              <Button
-                key={category}
-                variant={frame.category === category ? "secondary" : "ghost"}
-                size="sm"
-                className="flex-1"
-                aria-pressed={frame.category === category}
-                onClick={() =>
-                  update({
-                    category,
-                    direction: category === "buildings" ? undefined : frame.direction,
-                  })
-                }
-              >
-                {name}
-              </Button>
-            ))}
-          </fieldset>
-        )}
-        {!restricted && frame.category !== "buildings" && frame.scope?.kind !== "extractor" && (
-          <fieldset aria-label="Search mode" className="flex gap-1">
-            {(
-              [
-                [undefined, "Names"],
-                ["produces", "Produces"],
-                ["consumes", "Consumes"],
-              ] as const
-            ).map(([direction, name]) => (
-              <Button
-                key={name}
-                variant={frame.direction === direction ? "secondary" : "ghost"}
-                size="sm"
-                className="flex-1"
-                aria-pressed={frame.direction === direction}
-                onClick={() => update({ direction })}
-              >
-                {name}
-              </Button>
-            ))}
-          </fieldset>
-        )}
+        <ToggleGroup
+          multiple
+          value={frame.fields}
+          onValueChange={(fields) =>
+            update({ fields: allFields.filter((field) => fields.includes(field)) })
+          }
+          aria-label="Search fields"
+          variant="outline"
+          size="sm"
+          className="w-full"
+        >
+          {(
+            [
+              ["name", "Recipe name"],
+              ["input", "Input"],
+              ["output", "Output"],
+            ] as const
+          ).map(([field, name]) => (
+            <ToggleGroupItem key={field} value={field} className="flex-1">
+              {name}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
       </div>
       <output
         aria-live="polite"
@@ -649,15 +607,6 @@ function SearchResults({
         >
           {virtualizer.getVirtualItems().map((row) => {
             const entry = results[row.index]!;
-            const summary = searchEntrySummary(
-              assets.catalog,
-              entry,
-              frame.query,
-              connectionContext?.direction ?? frame.direction,
-              connectionContext?.itemIds.length ? connectionContext.itemIds : undefined,
-              frame.scope?.kind === "machine" ? frame.scope.id : undefined,
-            );
-            const chooses = entry.kind === "machine" || entry.kind === "extractor";
             return (
               <ComboboxItem
                 key={entry.id}
@@ -691,45 +640,12 @@ function SearchResults({
                       {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
                       {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
                     </span>
-                    <span
-                      className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground"
-                      title={summary.machine}
-                    >
-                      {summary.machine}
+                    <span className="mt-1 flex items-center gap-1 text-muted-foreground">
+                      <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
+                      <ArrowRightIcon aria-hidden="true" className="size-4 shrink-0" />
+                      <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
                     </span>
-                    {entry.kind === "recipe" && (
-                      <span
-                        className="block truncate text-xs leading-4 text-muted-foreground"
-                        title={summary.flow}
-                      >
-                        {summary.flow}
-                      </span>
-                    )}
-                    {summary.rate && (
-                      <span
-                        className="block truncate text-xs leading-4 text-muted-foreground tabular-nums"
-                        title={summary.rate}
-                      >
-                        {connectionContext?.direction === "consumes" ||
-                        frame.direction === "consumes"
-                          ? "Consumes "
-                          : "Produces "}
-                        {summary.rate}
-                      </span>
-                    )}
                   </span>
-                  {canAdd &&
-                    (chooses ? (
-                      <ChevronRightIcon
-                        aria-label={entry.kind === "machine" ? "Choose recipe" : "Choose resource"}
-                        className="size-3.5 shrink-0 text-muted-foreground"
-                      />
-                    ) : (
-                      <PlusIcon
-                        aria-label="Place"
-                        className="size-3.5 shrink-0 text-muted-foreground"
-                      />
-                    ))}
                 </span>
                 <span role="gridcell" className="shrink-0 border-l border-border pl-1">
                   <Button
@@ -753,7 +669,7 @@ function SearchResults({
                       inspect(entry);
                     }}
                   >
-                    Details
+                    <span className="hidden sm:inline">Details</span>
                     <ChevronRightIcon aria-hidden="true" className="size-3.5" />
                   </Button>
                 </span>
@@ -766,14 +682,13 @@ function SearchResults({
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-6 text-center">
           <p>{restricted ? "No compatible choices found" : "No matches found"}</p>
           <p className="text-sm text-muted-foreground">
-            {restricted
-              ? "Try another name or reset filters. Only choices that support this connection are available."
-              : "Try another name or reset the filters."}
+            {!frame.fields.length
+              ? "Enable Recipe name, Input, or Output to search."
+              : restricted
+                ? "Try another name or reset filters. Only choices that support this connection are available."
+                : "Try another name or reset the filters."}
           </p>
-          <Button
-            variant="outline"
-            onClick={() => update({ query: "", category: "all", direction: undefined })}
-          >
+          <Button variant="outline" onClick={() => update({ query: "", fields: allFields })}>
             Reset search
           </Button>
         </div>
@@ -794,10 +709,47 @@ function SearchResults({
           {canAdd || chooseAction ? ` · Enter ${chooseAction ? "Choose" : "Place"}` : ""} ·
           Alt+Enter Details · Alt+← Back · Esc Close
         </span>
-        {results.some((entry) => entry.kind === "recipe") && (
-          <span className="block">Rates per machine at 100% clock, without amplification.</span>
-        )}
       </p>
     </Combobox>
+  );
+}
+
+/** Reserve four slots per side so flows align across every result. */
+function MaterialSlots({
+  assets,
+  materials,
+  side,
+}: {
+  assets: GameAssets;
+  materials: readonly SearchMaterial[];
+  side: "input" | "output";
+}) {
+  return (
+    <span
+      role="group"
+      aria-label={side === "input" ? "Inputs" : "Outputs"}
+      className="grid shrink-0 grid-cols-4 gap-1"
+    >
+      {Array.from({ length: 4 }, (_, slot) => {
+        const material = materials[side === "input" ? slot : slot - (4 - materials.length)];
+        return material ? (
+          <span
+            key={slot}
+            role="img"
+            aria-label={material.name}
+            title={material.name}
+            className="size-4"
+          >
+            <CatalogIcon
+              assets={assets}
+              iconId={assets.catalog.items[material.itemId]!.iconId}
+              size={16}
+            />
+          </span>
+        ) : (
+          <span key={slot} aria-hidden="true" className="size-4" />
+        );
+      })}
+    </span>
   );
 }

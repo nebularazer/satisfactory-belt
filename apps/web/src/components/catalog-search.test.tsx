@@ -1,5 +1,5 @@
 import { createSearchIndex } from "@satisfactory-belt/game-data/search";
-import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -204,7 +204,7 @@ it("keeps the first recipe as comparison baseline while browsing and places the 
   expect(add.mock.calls[0]![0]).toMatchObject({ entityId: "alternative" });
 });
 
-it("switches between producers and consumers and explains the active placement action", async () => {
+it("enables all search fields by default and allows independent combinations", async () => {
   const user = userEvent.setup();
   render(
     <CatalogSearch
@@ -215,22 +215,60 @@ it("switches between producers and consumers and explains the active placement a
       onAdd={vi.fn()}
     />,
   );
+  for (const name of ["Recipe name", "Input", "Output"]) {
+    expect(screen.getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true");
+  }
+  expect(screen.queryByRole("group", { name: "Result category" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Close catalog" })).toBeNull();
   await user.type(screen.getByRole("combobox"), "iron ore");
-  expect(screen.getByRole("row", { name: /Iron Ore.*Miner Mk.2/s })).toBeTruthy();
-  await user.click(screen.getByRole("button", { name: "Consumes" }));
+  expect(screen.getAllByRole("row")).toHaveLength(3);
+  await user.click(screen.getByRole("button", { name: "Recipe name" }));
+  expect(screen.getByRole("button", { name: "Input" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("button", { name: "Output" }).getAttribute("aria-pressed")).toBe("true");
+  await user.click(screen.getByRole("button", { name: "Output" }));
   expect(screen.getAllByRole("row")).toHaveLength(2);
-  expect(screen.getAllByText("Consumes 30/min · Iron Ore")).toHaveLength(2);
   expect(screen.getByText(/Enter Place/)).toBeTruthy();
-  await user.click(screen.getByRole("button", { name: "Produces" }));
-  expect(screen.getAllByRole("row")).toHaveLength(1);
-  await user.click(screen.getByRole("button", { name: "Names" }));
-  await user.clear(screen.getByRole("combobox"));
+  await user.click(screen.getByRole("button", { name: "Input" }));
+  expect(screen.queryByRole("row")).toBeNull();
+  expect(screen.getByText("Enable Recipe name, Input, or Output to search.")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Reset search" }));
+  for (const name of ["Recipe name", "Input", "Output"]) {
+    expect(screen.getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true");
+  }
   await user.type(screen.getByRole("combobox"), "smelter");
   expect(screen.getByText(/Enter Choose/)).toBeTruthy();
-  expect(screen.getByLabelText("Choose recipe")).toBeTruthy();
 });
 
-it("shows connection material rates and never broadens eligibility when clearing or resetting", async () => {
+it("keeps result rows minimal with four input slots, an arrow, and four output slots", async () => {
+  const user = userEvent.setup();
+  render(
+    <CatalogSearch
+      assets={recipeAssets()}
+      open
+      onOpenChange={vi.fn()}
+      finalFocus={finalFocus}
+      onAdd={vi.fn()}
+    />,
+  );
+  const row = await screen.findByRole("row", { name: /Pure Iron/ });
+  expect(within(row).getByText("Pure Iron")).toBeTruthy();
+  expect(within(row).getByText("Alternate")).toBeTruthy();
+  const inputs = within(row).getByRole("group", { name: "Inputs" });
+  const outputs = within(row).getByRole("group", { name: "Outputs" });
+  expect(inputs.children).toHaveLength(4);
+  expect(outputs.children).toHaveLength(4);
+  expect(inputs.children[0]?.getAttribute("aria-label")).toBe("Iron Ore");
+  expect(inputs.children[3]?.getAttribute("aria-hidden")).toBe("true");
+  expect(outputs.children[0]?.getAttribute("aria-hidden")).toBe("true");
+  expect(outputs.children[3]?.getAttribute("aria-label")).toBe("Iron Ingot");
+  expect(inputs.nextElementSibling?.tagName.toLowerCase()).toBe("svg");
+  expect(inputs.nextElementSibling?.nextElementSibling).toBe(outputs);
+  expect(row.textContent).not.toMatch(/MW|\/min|Iron Ore|Smelter/);
+  await user.click(within(row).getByRole("button", { name: "Details for Pure Iron" }));
+  expect(screen.getByText(/Smelter · 4 MW · 60\/min/)).toBeTruthy();
+});
+
+it("shows connection context and never broadens eligibility when clearing or resetting", async () => {
   const user = userEvent.setup();
   const assets = recipeAssets();
   const allowed = new Set(["recipe:ingot", "machine:smelter"]);
@@ -246,8 +284,7 @@ it("shows connection material rates and never broadens eligibility when clearing
     />,
   );
   expect(screen.getByText("Consumes Iron Ore")).toBeTruthy();
-  expect(screen.queryByRole("group", { name: "Search mode" })).toBeNull();
-  expect(screen.getByText("Consumes 30/min · Iron Ore")).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Search fields" })).toBeTruthy();
   expect(screen.queryByRole("row", { name: /Pure Iron/ })).toBeNull();
   await user.type(screen.getByRole("combobox"), "missing");
   expect(screen.getByText("No compatible choices found")).toBeTruthy();
@@ -259,7 +296,7 @@ it("shows connection material rates and never broadens eligibility when clearing
   ).toBe(true);
 });
 
-it("places the eligible consumer after direction search using the shared placement handler", async () => {
+it("places the eligible consumer after input search using the shared placement handler", async () => {
   const user = userEvent.setup();
   const assets = recipeAssets();
   const index = createSearchIndex(assets.catalog);
@@ -274,11 +311,39 @@ it("places the eligible consumer after direction search using the shared placeme
     />,
   );
   await user.type(screen.getByRole("combobox"), "iron ore");
-  await user.click(screen.getByRole("button", { name: "Consumes" }));
+  await user.click(screen.getByRole("button", { name: "Recipe name" }));
+  await user.click(screen.getByRole("button", { name: "Output" }));
   await user.click(screen.getByRole("combobox"));
   await user.keyboard("{Enter}");
   expect(add).toHaveBeenCalledExactlyOnceWith(
     index.find((entry) => entry.entityId === "ingot"),
     undefined,
   );
+});
+
+it("does not substitute a packaged input when the exact material is incompatible", async () => {
+  const user = userEvent.setup();
+  const assets = recipeAssets();
+  assets.catalog.items.packaged = {
+    ...assets.catalog.items.copper!,
+    id: "packaged",
+    name: "Packaged Iron Ore",
+  };
+  assets.catalog.recipes.alternative!.ingredients = [{ itemId: "packaged", amount: 1 }];
+  render(
+    <CatalogSearch
+      assets={assets}
+      open
+      onOpenChange={vi.fn()}
+      finalFocus={finalFocus}
+      allowedEntryIds={new Set(["recipe:alternative"])}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Recipe name" }));
+  await user.click(screen.getByRole("button", { name: "Output" }));
+  await user.type(screen.getByRole("combobox"), "iron ore");
+  expect(screen.queryByRole("row")).toBeNull();
+  await user.clear(screen.getByRole("combobox"));
+  await user.type(screen.getByRole("combobox"), "packaged iron ore");
+  expect(screen.getByRole("row", { name: /Pure Iron/ })).toBeTruthy();
 });
