@@ -65,7 +65,6 @@ import { loadGameAssets } from "@/lib/game-assets";
 import type { GameAssets } from "@/lib/game-assets";
 import { inspectorTarget } from "@/lib/inspector";
 import { startPlanAutosave } from "@/lib/plan-autosave";
-import { createReferencePlans } from "@/lib/reference-plans";
 
 const searchMenuFocus = () =>
   document.querySelector<HTMLButtonElement>('button[aria-label="Canvas menu"]');
@@ -100,7 +99,7 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
       }
       const saved = await store.loadActive();
       if (abort.signal.aborted) return;
-      const document = saved?.document ?? createReferencePlans();
+      const document = saved?.document ?? { nodes: [], links: [] };
       const editor = createFactoryEditor(assets.catalog, document);
       setWorkspace({ assets, editor, store, saved: saved ?? null });
     }
