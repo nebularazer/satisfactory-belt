@@ -324,6 +324,9 @@ importers:
       '@satisfactory-belt/factory-core':
         specifier: workspace:*
         version: link:../factory-core
+      '@satisfactory-belt/game-data':
+        specifier: workspace:*
+        version: link:../game-data
 
   packages/game-data: {}
 

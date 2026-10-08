@@ -8,7 +8,8 @@ import {
 import type { CanvasCommand, CatalogRequest } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView, RenderPerformance } from "@satisfactory-belt/canvas-pixi";
-import type { FactorySave } from "@satisfactory-belt/factory-saves";
+import { parseFactoryJson } from "@satisfactory-belt/factory-saves";
+import type { FactoryFile, FactorySave } from "@satisfactory-belt/factory-saves";
 import { createSearchIndex } from "@satisfactory-belt/game-data/search";
 import type { SearchEntry, SearchScope } from "@satisfactory-belt/game-data/search";
 import { isThemePreference } from "@satisfactory-belt/preferences";
@@ -16,6 +17,8 @@ import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
   SaveIcon,
+  DownloadIcon,
+  UploadIcon,
   FolderOpenIcon,
   Grid2X2Icon,
   Grid3X3Icon,
@@ -32,7 +35,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { KeyboardEvent } from "react";
+import type { ChangeEvent, KeyboardEvent } from "react";
 
 import { CatalogSearch } from "@/components/catalog-search";
 import { ClearCanvasDialog } from "@/components/clear-canvas-dialog";
@@ -54,6 +57,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { downloadFactoryJson } from "@/lib/browser-factory-files";
 import { createBrowserPlanStore } from "@/lib/browser-plan-store";
 import type { PlanStore } from "@/lib/browser-plan-store";
 import type { BrowserTheme } from "@/lib/browser-theme";
@@ -162,6 +166,37 @@ function CanvasWorkspace({
     setSaveDialog(true);
     setSavesOpen(true);
   }, []);
+  const [importedFactory, setImportedFactory] = useState<FactoryFile | null>(null);
+  const [readingImport, setReadingImport] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const importRevision = useRef(0);
+  const openImport = useCallback(() => fileInput.current?.click(), []);
+  const changeImportOpen = useCallback((open: boolean) => {
+    if (!open) setImportedFactory(null);
+  }, []);
+  const readImport = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0];
+      event.currentTarget.value = "";
+      if (!file) return;
+      const revision = ++importRevision.current;
+      setReadingImport(true);
+      setFileError(null);
+      try {
+        const imported = parseFactoryJson(await file.text(), assets.catalog);
+        if (revision === importRevision.current) setImportedFactory(imported);
+      } catch (reason) {
+        if (revision === importRevision.current)
+          setFileError(
+            reason instanceof Error ? reason.message : "The factory file could not be read.",
+          );
+      } finally {
+        if (revision === importRevision.current) setReadingImport(false);
+      }
+    },
+    [assets],
+  );
   const host = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [clearCanvasOpen, setClearCanvasOpen] = useState(false);
@@ -211,6 +246,37 @@ function CanvasWorkspace({
     },
     [editor, store],
   );
+  const commitImport = useCallback(
+    async (name: string, overwriteId?: string) => {
+      if (!importedFactory) throw new Error("Choose a factory file first.");
+      const nextEditor = createFactoryEditor(assets.catalog, importedFactory.document);
+      if (activeSave) await store.save(activeSave.id, editor.history.getSnapshot().state);
+      const document = nextEditor.history.getSnapshot().state;
+      const saved = overwriteId
+        ? await store.overwrite(overwriteId, document)
+        : await store.create(name, document);
+      setSaveError(null);
+      setEditor(nextEditor);
+      setActiveSave(saved);
+    },
+    [activeSave, assets, editor, importedFactory, store],
+  );
+  const importAsFactory = useCallback((name: string) => commitImport(name), [commitImport]);
+  const overwriteImport = useCallback(
+    (id: string) => commitImport(importedFactory?.name ?? "", id),
+    [commitImport, importedFactory],
+  );
+  const exportFactory = useCallback(() => {
+    setFileError(null);
+    try {
+      downloadFactoryJson({
+        name: activeSave?.name ?? "Factory 1",
+        document: editor.history.getSnapshot().state,
+      });
+    } catch (reason) {
+      setFileError(reason instanceof Error ? reason.message : "The factory could not be exported.");
+    }
+  }, [activeSave, editor]);
   const deleteFactory = useCallback(
     async (id: string) => {
       await store.delete(id);
@@ -393,6 +459,7 @@ function CanvasWorkspace({
           searchOpen ||
           clearCanvasOpen ||
           savesOpen ||
+          importedFactory !== null ||
           event.defaultPrevented ||
           event.nativeEvent.isComposing
         )
@@ -455,6 +522,7 @@ function CanvasWorkspace({
     searchOpen,
     clearCanvasOpen,
     savesOpen,
+    importedFactory,
     openAdd,
   ]);
 
@@ -486,6 +554,28 @@ function CanvasWorkspace({
           finalFocus={canvasFocus}
         />
       )}
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        aria-label="Import factory JSON"
+        onChange={readImport}
+      />
+      {importedFactory && (
+        <FactorySavesDialog
+          store={store}
+          activeSave={activeSave}
+          kind="import"
+          initialName={importedFactory.name}
+          onOpenChange={changeImportOpen}
+          onLoad={loadFactory}
+          onSaveAs={importAsFactory}
+          onOverwrite={overwriteImport}
+          onDelete={deleteFactory}
+          finalFocus={canvasFocus}
+        />
+      )}
       <ClearCanvasDialog
         open={clearCanvasOpen}
         onOpenChange={setClearCanvasOpen}
@@ -513,7 +603,9 @@ function CanvasWorkspace({
           <DropdownMenuContent
             className="w-50"
             sideOffset={8}
-            finalFocus={searchOpen || clearCanvasOpen || savesOpen ? false : canvasFocus}
+            finalFocus={
+              searchOpen || clearCanvasOpen || savesOpen || importedFactory ? false : canvasFocus
+            }
           >
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={openSaves}>
@@ -523,6 +615,14 @@ function CanvasWorkspace({
               <DropdownMenuItem onClick={openSaveAs}>
                 <SaveIcon className="text-muted-foreground" />
                 Save as…
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={openImport} disabled={readingImport}>
+                <UploadIcon className="text-muted-foreground" />
+                Import JSON…
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportFactory}>
+                <DownloadIcon className="text-muted-foreground" />
+                Export JSON
               </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onClick={openClearCanvas}>
                 <Trash2Icon />
@@ -675,6 +775,19 @@ function CanvasWorkspace({
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">
           Unable to start the canvas: {error}
+        </p>
+      )}
+      {readingImport && (
+        <output className="absolute top-4 right-4 rounded-lg bg-background p-3 text-sm shadow-sm">
+          Reading factory…
+        </output>
+      )}
+      {fileError && (
+        <p
+          role="alert"
+          className="absolute top-4 right-4 max-w-sm rounded-lg bg-background p-3 text-sm text-destructive shadow-sm"
+        >
+          {fileError}
         </p>
       )}
       {saveError && (

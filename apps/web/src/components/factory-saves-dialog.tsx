@@ -18,6 +18,7 @@ export function FactorySavesDialog({
   store,
   activeSave,
   kind,
+  initialName,
   onOpenChange,
   onLoad,
   onSaveAs,
@@ -27,7 +28,8 @@ export function FactorySavesDialog({
 }: {
   store: Pick<FactoryStore, "list">;
   activeSave: FactorySave | null;
-  kind: "open" | "save";
+  kind: "open" | "save" | "import";
+  initialName?: string;
   onOpenChange: (open: boolean) => void;
   onLoad: (id: string) => Promise<void>;
   onSaveAs: (name: string) => Promise<void>;
@@ -35,22 +37,22 @@ export function FactorySavesDialog({
   onDelete: (id: string) => Promise<void>;
   finalFocus: () => HTMLElement | null;
 }) {
-  const [mode, setMode] = useState<"open" | "save" | "delete" | "overwrite">(kind);
+  const [mode, setMode] = useState<"open" | "save" | "import" | "delete" | "overwrite">(kind);
   const [saves, setSaves] = useState<FactorySave[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(
     kind === "open" ? (activeSave?.id ?? null) : null,
   );
-  const [name, setName] = useState(activeSave?.name ?? "Factory 1");
+  const [name, setName] = useState(initialName ?? activeSave?.name ?? "Factory 1");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const cancelConfirm = useRef<HTMLButtonElement>(null);
   const selected =
-    kind === "save"
+    kind !== "open"
       ? findFactoryByName(saves, name)
       : saves.find((saved) => saved.id === selectedId);
-  const overwriteId = kind === "save" ? selected?.id : undefined;
+  const overwriteId = kind !== "open" ? selected?.id : undefined;
 
   useEffect(() => {
     let active = true;
@@ -75,7 +77,7 @@ export function FactorySavesDialog({
   useEffect(() => {
     if (mode === "delete" || mode === "overwrite") cancelConfirm.current?.focus();
   }, [mode]);
-  const initialFocus = useCallback(() => (kind === "save" ? nameInput.current : null), [kind]);
+  const initialFocus = useCallback(() => (kind !== "open" ? nameInput.current : null), [kind]);
   const changeOpen = useCallback(
     (open: boolean) => {
       if (!busy) onOpenChange(open);
@@ -109,7 +111,7 @@ export function FactorySavesDialog({
   const selectSave = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const id = event.target.value;
-      if (kind === "save") {
+      if (kind !== "open") {
         const saved = saves.find((entry) => entry.id === id);
         if (saved) setName(saved.name);
       } else setSelectedId(id);
@@ -167,8 +169,10 @@ export function FactorySavesDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {mode === "save"
-              ? "Save as…"
+            {mode === "save" || mode === "import"
+              ? kind === "import"
+                ? "Import factory"
+                : "Save as…"
               : mode === "overwrite"
                 ? "Overwrite factory?"
                 : mode === "delete"
@@ -176,18 +180,23 @@ export function FactorySavesDialog({
                   : "Open factory"}
           </DialogTitle>
           <DialogDescription>
-            {mode === "save"
-              ? "Enter a new name or choose an existing factory to overwrite."
+            {mode === "save" || mode === "import"
+              ? kind === "import"
+                ? "Choose a name for the imported factory."
+                : "Enter a new name or choose an existing factory to overwrite."
               : mode === "overwrite"
-                ? `Replace “${selected?.name ?? "this factory"}” with the current canvas? This cannot be undone.`
+                ? `Replace “${selected?.name ?? "this factory"}” with ${kind === "import" ? "the imported factory" : "the current canvas"}? This cannot be undone.`
                 : mode === "delete"
                   ? `Delete “${selected?.name ?? "this factory"}” from your saved factories? This cannot be undone.`
                   : "Saved factories update automatically in this browser."}
           </DialogDescription>
         </DialogHeader>
-        {(mode === "open" || mode === "save") && (
-          <form onSubmit={mode === "save" ? save : undefined} className="space-y-4">
-            {mode === "save" && (
+        {(mode === "open" || mode === "save" || mode === "import") && (
+          <form
+            onSubmit={mode === "save" || mode === "import" ? save : undefined}
+            className="space-y-4"
+          >
+            {(mode === "save" || mode === "import") && (
               <div className="space-y-2">
                 <label htmlFor="factory-name" className="text-sm font-medium">
                   Factory name
@@ -249,13 +258,19 @@ export function FactorySavesDialog({
               </p>
             )}
             <DialogFooter className="flex-row justify-end">
-              {mode === "save" ? (
+              {mode === "save" || mode === "import" ? (
                 <>
                   <Button type="button" variant="outline" disabled={busy} onClick={close}>
                     Cancel
                   </Button>
                   <Button type="submit" disabled={busy || loading || !name.trim()}>
-                    {busy ? "Saving…" : "Save"}
+                    {busy
+                      ? kind === "import"
+                        ? "Importing…"
+                        : "Saving…"
+                      : kind === "import"
+                        ? "Import"
+                        : "Save"}
                   </Button>
                 </>
               ) : (

@@ -1,3 +1,4 @@
+import { serializeFactoryJson } from "@satisfactory-belt/factory-saves";
 import { Preferences } from "@satisfactory-belt/preferences";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -5,11 +6,13 @@ import { IDBFactory } from "fake-indexeddb";
 import { expect, it, vi } from "vitest";
 
 import { App } from "@/App";
+import { downloadFactoryJson } from "@/lib/browser-factory-files";
 import { createBrowserPlanStore } from "@/lib/browser-plan-store";
 import { createBrowserTheme } from "@/lib/browser-theme";
 import { loadGameAssets } from "@/lib/game-assets";
 import { minerFlowFixture } from "@/test/flow-fixture";
 
+vi.mock("@/lib/browser-factory-files", () => ({ downloadFactoryJson: vi.fn() }));
 vi.mock("@/lib/game-assets", () => ({ loadGameAssets: vi.fn() }));
 vi.mock("@satisfactory-belt/canvas-pixi", () => ({
   mountCanvas: vi.fn(async (host: HTMLElement, _controller, options: { signal: AbortSignal }) => {
@@ -93,6 +96,69 @@ it("saves, overwrites, autosaves, opens with fresh history, and retains a delete
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect((await store.loadActive())?.document).toEqual(original);
+  } finally {
+    await act(async () => app.unmount());
+    theme.destroy();
+    store.close();
+  }
+});
+
+it("exports the current canvas, imports with rename or overwrite, and rejects invalid files without changing saves", async () => {
+  const user = userEvent.setup();
+  Object.defineProperty(window, "indexedDB", { configurable: true, value: new IDBFactory() });
+  const fixture = minerFlowFixture();
+  vi.mocked(loadGameAssets).mockResolvedValue(fixture.assets);
+  const store = await createBrowserPlanStore();
+  const source = await store.create("Iron factory", fixture.document);
+  const target = await store.create("Target", { nodes: [], links: [] });
+  await store.select(source.id);
+  const preferences = new Preferences({ load: async () => ({}), save: async () => {} }, vi.fn());
+  const theme = createBrowserTheme(preferences);
+  const app = render(<App preferences={preferences} theme={theme} />);
+  async function upload(text: string) {
+    const file = new File([text], "factory.json", { type: "application/json" });
+    // jsdom has no Blob.text implementation.
+    Object.defineProperty(file, "text", { value: async () => text });
+    await user.upload(screen.getByLabelText("Import factory JSON"), file);
+  }
+  try {
+    await screen.findByRole("button", { name: "Canvas menu" });
+    await menu(user, "Export JSON");
+    const exported = vi.mocked(downloadFactoryJson).mock.lastCall![0];
+    expect(exported.name).toBe("Iron factory");
+    const text = serializeFactoryJson(exported);
+    await upload(text);
+    await screen.findByRole("button", { name: "Import" });
+    await user.clear(screen.getByRole("textbox", { name: "Factory name" }));
+    await user.type(screen.getByRole("textbox", { name: "Factory name" }), "Imported copy");
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const imported = (await store.loadActive())!;
+    expect(imported.name).toBe("Imported copy");
+    expect(imported.document).toEqual(exported.document);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Undo" }).disabled).toBe(true);
+    await upload(text);
+    await screen.findByRole("button", { name: "Import" });
+    await user.clear(screen.getByRole("textbox", { name: "Factory name" }));
+    await user.type(screen.getByRole("textbox", { name: "Factory name" }), "Target");
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    await screen.findByRole("button", { name: "Overwrite factory" });
+    expect((await store.load(target.id))?.document.nodes).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect((await store.loadActive())?.id).toBe(target.id);
+    expect((await store.load(target.id))?.document).toEqual(exported.document);
+    const before = await store.list();
+    await upload("{bad JSON");
+    expect((await screen.findByRole("alert")).textContent).toContain("not valid JSON");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await store.list()).toEqual(before);
+    expect((await store.loadActive())?.id).toBe(target.id);
+    const broken = JSON.parse(text);
+    broken.document.links[0].input.nodeId = "missing";
+    await upload(JSON.stringify(broken));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("invalid"));
+    expect(await store.list()).toEqual(before);
   } finally {
     await act(async () => app.unmount());
     theme.destroy();

@@ -251,3 +251,5 @@ export async function createFactoryStore(
   };
   return store;
 }
+
+export * from "./factory-json";

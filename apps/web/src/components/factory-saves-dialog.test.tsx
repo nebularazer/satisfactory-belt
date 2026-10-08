@@ -10,11 +10,12 @@ const saves = [
 ];
 const finalFocus = () => null;
 
-function setup(save = false) {
+function setup(save: boolean | "import" = false) {
   const props = {
     store: { list: vi.fn().mockResolvedValue(saves) },
     activeSave: saves[0]!,
-    kind: save ? ("save" as const) : ("open" as const),
+    kind: save === "import" ? ("import" as const) : save ? ("save" as const) : ("open" as const),
+    initialName: save === "import" ? "Imported factory" : undefined,
     onOpenChange: vi.fn(),
     onLoad: vi.fn().mockResolvedValue(undefined),
     onSaveAs: vi.fn().mockResolvedValue(undefined),
@@ -168,4 +169,32 @@ it("checks current saves before creating so a name saved in another tab prompts 
   expect(props.onSaveAs).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Overwrite factory" }));
   await waitFor(() => expect(props.onOverwrite).toHaveBeenCalledWith("steel"));
+});
+
+it("allows renaming an imported factory before saving it", async () => {
+  const user = userEvent.setup();
+  const props = setup("import");
+  const input = screen.getByRole<HTMLInputElement>("textbox", { name: "Factory name" });
+  expect(input.value).toBe("Imported factory");
+  await user.clear(input);
+  await user.type(input, "Renamed factory");
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await waitFor(() => expect(props.onSaveAs).toHaveBeenCalledWith("Renamed factory"));
+  expect(props.onOverwrite).not.toHaveBeenCalled();
+});
+
+it("confirms an import name conflict and lets the user return to change the name", async () => {
+  const user = userEvent.setup();
+  const props = setup("import");
+  const input = screen.getByRole("textbox", { name: "Factory name" });
+  await user.clear(input);
+  await user.type(input, "Copper factory");
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  expect(await screen.findByText(/with the imported factory/)).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(props.onOverwrite).not.toHaveBeenCalled();
+  await user.clear(screen.getByRole("textbox", { name: "Factory name" }));
+  await user.type(screen.getByRole("textbox", { name: "Factory name" }), "Different name");
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await waitFor(() => expect(props.onSaveAs).toHaveBeenCalledWith("Different name"));
 });
