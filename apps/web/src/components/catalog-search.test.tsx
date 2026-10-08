@@ -440,3 +440,130 @@ it("opens Details from its separate action without placing the recipe", async ()
   expect(screen.getByRole("button", { name: "Back to results" })).toBeTruthy();
   expect(add).not.toHaveBeenCalled();
 });
+
+function quickSelectionAssets() {
+  const assets = recipeAssets();
+  for (const [id, name, kind] of [
+    ["Build_ConveyorAttachmentSplitter_C", "Conveyor Splitter", "splitter"],
+    ["Build_ConveyorAttachmentMerger_C", "Conveyor Merger", "merger"],
+    ["Build_ConveyorAttachmentSplitterSmart_C", "Smart Splitter", "smart-splitter"],
+  ] as const) {
+    assets.catalog.logistics[id] = {
+      id,
+      name,
+      kind,
+      description: "",
+      descriptorId: id,
+      iconId: "iron",
+    };
+  }
+  for (const [id, name, kind] of [
+    ["Build_StorageContainerMk1_C", "Storage Container", "storage"],
+    ["Build_StorageContainerMk2_C", "Industrial Storage Container", "storage"],
+    ["Build_PipeStorageTank_C", "Fluid Buffer", "storage"],
+    ["Build_CentralStorage_C", "Dimensional Depot Uploader", "depot"],
+  ] as const) {
+    assets.catalog.buildings![id] = { ...assets.catalog.buildings!.augmenter!, id, name, kind };
+  }
+  assets.catalog.sinks.Build_ResourceSink_C = {
+    id: "Build_ResourceSink_C",
+    name: "AWESOME Sink",
+    description: "",
+    descriptorId: "sink",
+    iconId: "iron",
+    powerMegawatts: 30,
+  };
+  return assets;
+}
+
+it("keeps desktop shortcuts available during search and places a shortcut once", async () => {
+  const user = userEvent.setup();
+  const assets = quickSelectionAssets();
+  const add = vi.fn();
+  function Harness() {
+    const [open, setOpen] = useState(true);
+    return (
+      <CatalogSearch
+        assets={assets}
+        open={open}
+        onOpenChange={setOpen}
+        finalFocus={finalFocus}
+        onAdd={add}
+      />
+    );
+  }
+  render(<Harness />);
+  await user.type(screen.getByRole("combobox"), "nothing matches this");
+  const shortcuts = screen.getByRole("region", { name: "Quick add" });
+  expect(within(shortcuts).getAllByRole("button")).toHaveLength(8);
+  expect(screen.getByText("No matches found")).toBeTruthy();
+  const splitter = within(shortcuts).getByRole("button", { name: "Place Conveyor Splitter" });
+  splitter.focus();
+  await user.keyboard("{Enter}");
+  expect(add).toHaveBeenCalledExactlyOnceWith(
+    createSearchIndex(assets.catalog).find(
+      (entry) => entry.entityId === "Build_ConveyorAttachmentSplitter_C",
+    ),
+    undefined,
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+it("preserves shortcut positions and disables incompatible connection choices", async () => {
+  const user = userEvent.setup();
+  const assets = quickSelectionAssets();
+  const add = vi.fn();
+  const props = { assets, open: true, onOpenChange: vi.fn(), finalFocus, onAdd: add };
+  const { rerender } = render(<CatalogSearch {...props} />);
+  const shortcuts = screen.getByRole("region", { name: "Quick add" });
+  const order = within(shortcuts)
+    .getAllByRole("button")
+    .map((button) => button.getAttribute("aria-label"));
+  rerender(<CatalogSearch {...props} allowedEntryIds={new Set(["sink:Build_ResourceSink_C"])} />);
+  expect(
+    within(shortcuts)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual(order);
+  const splitter = within(shortcuts).getByRole<HTMLButtonElement>("button", {
+    name: "Place Conveyor Splitter",
+  });
+  expect(splitter.disabled).toBe(true);
+  await user.click(splitter);
+  expect(add).not.toHaveBeenCalled();
+  await user.click(within(shortcuts).getByRole("button", { name: "Place AWESOME Sink" }));
+  expect(add).toHaveBeenCalledExactlyOnceWith(
+    createSearchIndex(assets.catalog).find((entry) => entry.entityId === "Build_ResourceSink_C"),
+    undefined,
+  );
+});
+
+it("shows mobile shortcuts only for an empty global search and restores them after clearing", async () => {
+  const media = window.matchMedia("(max-width: 639px)");
+  vi.spyOn(window, "matchMedia").mockReturnValue(Object.assign(media, { matches: true }));
+  const user = userEvent.setup();
+  render(
+    <CatalogSearch
+      assets={quickSelectionAssets()}
+      open
+      onOpenChange={vi.fn()}
+      finalFocus={finalFocus}
+      onAdd={vi.fn()}
+    />,
+  );
+  expect(
+    within(screen.getByRole("region", { name: "Quick add" })).getAllByRole("button"),
+  ).toHaveLength(8);
+  await user.type(screen.getByRole("combobox"), "iron");
+  expect(screen.queryByRole("region", { name: "Quick add" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(screen.getByRole("region", { name: "Quick add" })).toBeTruthy();
+  await user.type(screen.getByRole("combobox"), "smelter");
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("heading", { name: "Smelter · Recipes" })).toBeTruthy();
+  expect(screen.getByRole<HTMLInputElement>("combobox").value).toBe("");
+  expect(screen.queryByRole("region", { name: "Quick add" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Back to results" }));
+  await user.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(screen.getByRole("region", { name: "Quick add" })).toBeTruthy();
+});

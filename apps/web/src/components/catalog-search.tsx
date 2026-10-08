@@ -26,6 +26,8 @@ import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/compone
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { catalogQuickSelection } from "@/lib/catalog-quick-selection";
+import type { CatalogShortcut } from "@/lib/catalog-quick-selection";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Frame = {
@@ -330,6 +332,7 @@ export function CatalogSearch({
           inputRef={input}
           restoreInputFocus={restoreInputFocus}
           compact={compact}
+          narrow={narrow}
           visible={!selected}
         />
       </div>
@@ -357,7 +360,7 @@ export function CatalogSearch({
         onKeyDown={keyDown}
         initialFocus={() => (selected ? heading.current : input.current)}
         finalFocus={finalFocus}
-        className="flex h-[min(42rem,calc(100dvh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-160"
+        className="flex h-[min(42rem,calc(100dvh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-225"
       >
         {content}
       </DialogContent>
@@ -379,6 +382,7 @@ function SearchResults({
   inputRef,
   restoreInputFocus,
   compact,
+  narrow,
   visible,
 }: {
   index: readonly SearchEntry[];
@@ -394,8 +398,11 @@ function SearchResults({
   inputRef: React.RefObject<HTMLInputElement | null>;
   restoreInputFocus: React.RefObject<boolean>;
   compact: boolean;
+  narrow: boolean;
   visible: boolean;
 }) {
+  const shortcuts = useMemo(() => catalogQuickSelection(index), [index]);
+  const showQuickSelection = !frame.scope && shortcuts.length > 0;
   useEffect(() => {
     if (!visible || !restoreInputFocus.current) return undefined;
     // Let the dialog restore focus after the details controls leave the DOM first.
@@ -587,128 +594,149 @@ function SearchResults({
           ))}
         </ToggleGroup>
       </div>
-      <output
-        aria-live="polite"
-        className="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground"
-      >
-        {results.length} {results.length === 1 ? "result" : "results"}
-      </output>
-      <ScrollArea
-        className={results.length ? "min-h-0 flex-1" : "hidden"}
-        viewportProps={{
-          ref: scroll,
-          role: "grid",
-          "aria-rowcount": results.length,
-          "aria-colcount": 4,
-          tabIndex: -1,
-          render: <ComboboxList aria-label="Catalog results" className="max-h-none p-0" />,
-          className: "overscroll-contain",
-        }}
-      >
-        <div
-          role="presentation"
-          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-        >
-          {virtualizer.getVirtualItems().map((row) => {
-            const entry = results[row.index]!;
-            return (
-              <div
-                key={entry.id}
-                id={`${resultId}-${row.index}`}
-                data-highlighted={active === row.index ? "" : undefined}
-                onPointerEnter={() => setActive(row.index)}
-                role="row"
-                aria-rowindex={row.index + 1}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 8,
-                  width: "calc(100% - 20px)",
-                  height: row.size,
-                  transform: `translateY(${row.start}px)`,
-                }}
-                className="grid grid-cols-[minmax(0,1fr)_3.75rem] items-center gap-1 rounded-md hover:bg-accent data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-              >
-                <ComboboxItem
-                  render={<div />}
-                  data-highlighted={active === row.index ? "" : undefined}
-                  value={entry}
-                  index={row.index}
-                  role="presentation"
-                  className="grid h-11 min-w-0 grid-cols-[5.375rem_minmax(0,1fr)_5.375rem] gap-1 px-1 data-highlighted:bg-transparent [&>[data-slot=combobox-item-indicator]]:hidden"
-                >
-                  <span
-                    role="gridcell"
-                    aria-disabled={
-                      !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
-                    }
-                  >
-                    <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
-                  </span>
-                  <span
-                    role="gridcell"
-                    className="flex min-w-0 items-center justify-center gap-1 text-sm font-medium"
-                  >
-                    <span className="min-w-0 truncate" title={entry.name}>
-                      {entry.name}
-                    </span>
-                    {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
-                    {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
-                  </span>
-                  <span
-                    role="gridcell"
-                    aria-disabled={
-                      !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
-                    }
-                  >
-                    <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
-                  </span>
-                </ComboboxItem>
-                <span role="gridcell" className="border-l pl-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-11 w-full px-1 text-xs text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
-                    aria-label={`Details for ${entry.name}`}
-                    tabIndex={active === row.index ? 0 : -1}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") return;
-                      event.stopPropagation();
-                      if (event.key === "ArrowLeft") {
-                        event.preventDefault();
-                        inputRef.current?.focus();
-                      }
-                    }}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      inspect(entry);
-                    }}
-                  >
-                    Details
-                  </Button>
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
-      {results.length === 0 && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-6 text-center">
-          <p>{restricted ? "No compatible choices found" : "No matches found"}</p>
-          <p className="text-sm text-muted-foreground">
-            {!frame.fields.length
-              ? "Enable Recipe name, Input, or Output to search."
-              : restricted
-                ? "Try another name or reset filters. Only choices that support this connection are available."
-                : "Try another name or reset the filters."}
-          </p>
-          <Button variant="outline" onClick={() => update({ query: "", fields: allFields })}>
-            Reset search
-          </Button>
-        </div>
+      {narrow && showQuickSelection && !frame.query.trim() && (
+        <QuickSelection
+          shortcuts={shortcuts}
+          assets={assets}
+          allowedEntryIds={allowedEntryIds}
+          canAdd={canAdd}
+          narrow
+          onChoose={onChoose}
+        />
       )}
+      <div className="flex min-h-0 flex-1 border-t">
+        {!narrow && showQuickSelection && (
+          <QuickSelection
+            shortcuts={shortcuts}
+            assets={assets}
+            allowedEntryIds={allowedEntryIds}
+            canAdd={canAdd}
+            narrow={false}
+            onChoose={onChoose}
+          />
+        )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <output aria-live="polite" className="shrink-0 px-4 py-2 text-xs text-muted-foreground">
+            {results.length} {results.length === 1 ? "result" : "results"}
+          </output>
+          <ScrollArea
+            className={results.length ? "min-h-0 flex-1" : "hidden"}
+            viewportProps={{
+              ref: scroll,
+              role: "grid",
+              "aria-rowcount": results.length,
+              "aria-colcount": 4,
+              tabIndex: -1,
+              render: <ComboboxList aria-label="Catalog results" className="max-h-none p-0" />,
+              className: "overscroll-contain",
+            }}
+          >
+            <div
+              role="presentation"
+              style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+            >
+              {virtualizer.getVirtualItems().map((row) => {
+                const entry = results[row.index]!;
+                return (
+                  <div
+                    key={entry.id}
+                    id={`${resultId}-${row.index}`}
+                    data-highlighted={active === row.index ? "" : undefined}
+                    onPointerEnter={() => setActive(row.index)}
+                    role="row"
+                    aria-rowindex={row.index + 1}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 8,
+                      width: "calc(100% - 20px)",
+                      height: row.size,
+                      transform: `translateY(${row.start}px)`,
+                    }}
+                    className="grid grid-cols-[minmax(0,1fr)_3.75rem] items-center gap-1 rounded-md hover:bg-accent data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  >
+                    <ComboboxItem
+                      render={<div />}
+                      data-highlighted={active === row.index ? "" : undefined}
+                      value={entry}
+                      index={row.index}
+                      role="presentation"
+                      className="grid h-11 min-w-0 grid-cols-[5.375rem_minmax(0,1fr)_5.375rem] gap-1 px-1 data-highlighted:bg-transparent [&>[data-slot=combobox-item-indicator]]:hidden"
+                    >
+                      <span
+                        role="gridcell"
+                        aria-disabled={
+                          !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
+                        }
+                      >
+                        <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
+                      </span>
+                      <span
+                        role="gridcell"
+                        className="flex min-w-0 items-center justify-center gap-1 text-sm font-medium"
+                      >
+                        <span className="min-w-0 truncate" title={entry.name}>
+                          {entry.name}
+                        </span>
+                        {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
+                        {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
+                      </span>
+                      <span
+                        role="gridcell"
+                        aria-disabled={
+                          !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
+                        }
+                      >
+                        <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
+                      </span>
+                    </ComboboxItem>
+                    <span role="gridcell" className="border-l pl-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-11 w-full px-1 text-xs text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
+                        aria-label={`Details for ${entry.name}`}
+                        tabIndex={active === row.index ? 0 : -1}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") return;
+                          event.stopPropagation();
+                          if (event.key === "ArrowLeft") {
+                            event.preventDefault();
+                            inputRef.current?.focus();
+                          }
+                        }}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          inspect(entry);
+                        }}
+                      >
+                        Details
+                      </Button>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+          {results.length === 0 && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-6 text-center">
+              <p>{restricted ? "No compatible choices found" : "No matches found"}</p>
+              <p className="text-sm text-muted-foreground">
+                {!frame.fields.length
+                  ? "Enable Recipe name, Input, or Output to search."
+                  : restricted
+                    ? "Try another name or reset filters. Only choices that support this connection are available."
+                    : "Try another name or reset the filters."}
+              </p>
+              <Button variant="outline" onClick={() => update({ query: "", fields: allFields })}>
+                Reset search
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
       <p
         className={
           compact ? "sr-only" : "shrink-0 border-t px-4 py-3 text-xs text-muted-foreground"
@@ -727,6 +755,67 @@ function SearchResults({
         </span>
       </p>
     </Combobox>
+  );
+}
+
+function QuickSelection({
+  shortcuts,
+  assets,
+  allowedEntryIds,
+  canAdd,
+  narrow,
+  onChoose,
+}: {
+  shortcuts: readonly CatalogShortcut[];
+  assets: GameAssets;
+  allowedEntryIds?: ReadonlySet<string>;
+  canAdd: boolean;
+  narrow: boolean;
+  onChoose: (entry: SearchEntry, offset: number) => void;
+}) {
+  const headingId = useId();
+  return (
+    <section
+      aria-labelledby={headingId}
+      className={
+        narrow ? "shrink-0 border-t pt-2 pb-1" : "flex w-52 shrink-0 flex-col border-r pt-2"
+      }
+    >
+      <h2 id={headingId} className="px-4 pb-1 text-xs font-medium text-muted-foreground">
+        Quick add
+      </h2>
+      <ScrollArea
+        orientation={narrow ? "horizontal" : "vertical"}
+        className={narrow ? "h-22" : "min-h-0 flex-1"}
+        viewportProps={{ className: narrow ? "overscroll-x-contain" : "overscroll-contain" }}
+      >
+        <div className={narrow ? "flex w-max gap-1 px-3 pb-2" : "space-y-1 px-2 pb-2"}>
+          {shortcuts.map(({ entry, label: shortLabel }) => {
+            const incompatible = Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id));
+            return (
+              <Button
+                key={entry.id}
+                variant="ghost"
+                disabled={!canAdd || incompatible}
+                aria-label={`Place ${entry.name}`}
+                title={
+                  incompatible ? `${entry.name} does not support this connection.` : entry.name
+                }
+                onClick={() => onChoose(entry, 0)}
+                className={
+                  narrow
+                    ? "h-20 w-20 flex-col gap-1 px-1 text-xs whitespace-normal"
+                    : "h-12 w-full justify-start gap-3 px-2 text-left text-xs whitespace-normal"
+                }
+              >
+                <CatalogIcon assets={assets} iconId={entry.iconId} size={32} />
+                <span className="min-w-0 leading-tight">{narrow ? shortLabel : entry.name}</span>
+              </Button>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </section>
   );
 }
 

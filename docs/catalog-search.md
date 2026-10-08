@@ -21,10 +21,18 @@ at a fixed size so switching fields does not move the labels or other controls.
 
 Each result uses one row: four input slots aligned left, the name and Alternate/Event
 badge centered in the remaining space, and four output slots aligned right. Long
-names truncate without moving the slots. The centered name opens Details; the
-material areas and remaining row space retain the placement/choose action.
+names truncate without moving the slots. The main item places/chooses it; a separate
+labeled Details button opens inspection. Hover highlights the entire row.
 Material names appear on hover and remain accessible to assistive technology.
 Machine, power, quantities, and comparisons are available in Details.
+
+The desktop catalog is up to 900px wide with a fixed Quick add column beside results.
+It offers Splitter, Merger, Smart Splitter, Storage Container, Industrial Storage
+Container, Fluid Buffer, AWESOME Sink, and Dimensional Depot Uploader. Shortcuts
+remain in their curated order while searching, with incompatible choices disabled.
+On mobile they appear in a horizontal strip below the search controls only when
+the query is empty. Quick add is hidden in recipe/resource scopes and Details.
+Shortcuts call the same placement handler as search results.
 
 ## Canvas placement
 
