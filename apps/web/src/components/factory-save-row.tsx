@@ -74,7 +74,8 @@ export function FactorySaveRow({
   return (
     <li
       data-selected={selected || undefined}
-      className="flex items-center gap-1 rounded-lg border pr-2 data-selected:border-primary data-selected:bg-muted/50"
+      data-disabled={disabled || undefined}
+      className="flex items-center gap-1 rounded-lg border pr-2 not-data-disabled:hover:bg-muted/50 data-selected:border-primary data-selected:bg-muted/50 data-selected:not-data-disabled:hover:bg-muted"
     >
       <button
         id={`factory-row-${saved.id}`}
@@ -87,7 +88,7 @@ export function FactorySaveRow({
         onClick={select}
         onDoubleClick={open}
         onKeyDown={onNavigate}
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-3 text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{saved.name}</span>
