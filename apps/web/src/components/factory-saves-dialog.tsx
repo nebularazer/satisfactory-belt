@@ -2,8 +2,9 @@ import { findFactoryByName } from "@satisfactory-belt/factory-saves";
 import type { FactorySave, FactoryStore } from "@satisfactory-belt/factory-saves";
 import { DownloadIcon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, FocusEvent, FormEvent, KeyboardEvent } from "react";
 
+import { FactorySaveRow } from "@/components/factory-save-row";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +26,7 @@ export function FactorySavesDialog({
   onSaveAs,
   onOverwrite,
   onDelete,
+  onRename,
   onImport,
   onExport,
   finalFocus,
@@ -38,11 +40,14 @@ export function FactorySavesDialog({
   onSaveAs: (name: string) => Promise<void>;
   onOverwrite: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onRename: (id: string, name: string) => Promise<FactorySave>;
   onImport?: (file: File) => Promise<void>;
   onExport?: (name: string) => void;
   finalFocus: () => HTMLElement | null;
 }) {
-  const [mode, setMode] = useState<"open" | "save" | "import" | "delete" | "overwrite">(kind);
+  const [mode, setMode] = useState<"open" | "save" | "import" | "rename" | "delete" | "overwrite">(
+    kind,
+  );
   const [saves, setSaves] = useState<FactorySave[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(
     kind === "open" ? (activeSave?.id ?? null) : null,
@@ -51,14 +56,21 @@ export function FactorySavesDialog({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionSave, setActionSave] = useState<FactorySave | null>(null);
+  const [renameName, setRenameName] = useState("");
+  const renameInput = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const cancelConfirm = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const returnFocusId = useRef<string | null>(null);
   const selected =
     kind !== "open"
       ? findFactoryByName(saves, name)
       : saves.find((saved) => saved.id === selectedId);
   const overwriteId = kind !== "open" ? selected?.id : undefined;
+  const renameConflict = findFactoryByName(saves, renameName);
+  const duplicateRename = renameConflict && renameConflict.id !== actionSave?.id;
 
   useEffect(() => {
     let active = true;
@@ -82,6 +94,18 @@ export function FactorySavesDialog({
   }, [store]);
   useEffect(() => {
     if (mode === "delete" || mode === "overwrite") cancelConfirm.current?.focus();
+    if (mode === "rename") {
+      renameInput.current?.focus();
+      renameInput.current?.select();
+    }
+    if ((mode === "open" || mode === "save" || mode === "import") && returnFocusId.current) {
+      const row = document.getElementById(`factory-row-${returnFocusId.current}`);
+      const fallback =
+        nameInput.current ??
+        list.current?.querySelector<HTMLButtonElement>("button[data-factory-row]");
+      (row ?? fallback)?.focus();
+      returnFocusId.current = null;
+    }
   }, [mode]);
   const initialFocus = useCallback(() => (kind !== "open" ? nameInput.current : null), [kind]);
   const changeOpen = useCallback(
@@ -102,9 +126,18 @@ export function FactorySavesDialog({
     }
   }, []);
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
-  const openDelete = useCallback(() => {
+  const openDelete = useCallback((saved: FactorySave) => {
+    returnFocusId.current = saved.id;
     setError(null);
+    setActionSave(saved);
     setMode("delete");
+  }, []);
+  const openRename = useCallback((saved: FactorySave) => {
+    returnFocusId.current = saved.id;
+    setError(null);
+    setActionSave(saved);
+    setRenameName(saved.name);
+    setMode("rename");
   }, []);
   const cancel = useCallback(() => {
     setError(null);
@@ -114,23 +147,65 @@ export function FactorySavesDialog({
     (event: ChangeEvent<HTMLInputElement>) => setName(event.target.value),
     [],
   );
+  const changeRenameName = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setRenameName(event.target.value);
+    setError(null);
+  }, []);
+  const selectText = useCallback(
+    (event: FocusEvent<HTMLInputElement>) => event.currentTarget.select(),
+    [],
+  );
   const selectSave = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const id = event.target.value;
-      if (kind !== "open") {
-        const saved = saves.find((entry) => entry.id === id);
-        if (saved) setName(saved.name);
-      } else setSelectedId(id);
+    (saved: FactorySave) => {
+      if (kind !== "open") setName(saved.name);
+      else setSelectedId(saved.id);
     },
-    [kind, saves],
+    [kind],
+  );
+  const openFactory = useCallback(
+    (id: string) => {
+      if (!busy && id !== activeSave?.id)
+        void run(async () => {
+          await onLoad(id);
+          close();
+        });
+    },
+    [busy, activeSave, run, onLoad, close],
   );
   const load = useCallback(() => {
-    if (selectedId)
-      void run(async () => {
-        await onLoad(selectedId);
-        close();
-      });
-  }, [selectedId, run, onLoad, close]);
+    if (selectedId) openFactory(selectedId);
+  }, [selectedId, openFactory]);
+  const navigateRows = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (busy || !(event.target instanceof HTMLButtonElement) || !event.target.dataset.factoryRow)
+        return;
+      const rows = Array.from(
+        event.currentTarget
+          .closest("ul")
+          ?.querySelectorAll<HTMLButtonElement>("button[data-factory-row]") ?? [],
+      );
+      const index = rows.indexOf(event.target);
+      const next =
+        event.key === "ArrowDown"
+          ? Math.min(index + 1, rows.length - 1)
+          : event.key === "ArrowUp"
+            ? Math.max(index - 1, 0)
+            : event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? rows.length - 1
+                : null;
+      if (next === null) return;
+      event.preventDefault();
+      const row = rows[next];
+      const saved = saves.find((entry) => entry.id === row?.dataset.factoryRow);
+      if (saved) {
+        selectSave(saved);
+        row?.focus();
+      }
+    },
+    [busy, saves, selectSave],
+  );
   const save = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -156,14 +231,31 @@ export function FactorySavesDialog({
       });
   }, [overwriteId, run, onOverwrite, close]);
   const remove = useCallback(() => {
-    if (!selectedId) return;
+    if (!actionSave) return;
     void run(async () => {
-      await onDelete(selectedId);
-      setSaves((previous) => previous.filter((entry) => entry.id !== selectedId));
-      setSelectedId(null);
-      setMode("open");
+      await onDelete(actionSave.id);
+      setSaves((previous) => previous.filter((entry) => entry.id !== actionSave.id));
+      if (selectedId === actionSave.id) setSelectedId(null);
+      setMode(kind);
+      setActionSave(null);
     });
-  }, [selectedId, run, onDelete]);
+  }, [actionSave, selectedId, kind, run, onDelete]);
+  const rename = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (busy || !actionSave || !renameName.trim() || duplicateRename) return;
+      void run(async () => {
+        const renamed = await onRename(actionSave.id, renameName.trim());
+        setSaves((previous) =>
+          previous.map((entry) => (entry.id === renamed.id ? renamed : entry)),
+        );
+        if (kind !== "open" && selected?.id === renamed.id) setName(renamed.name);
+        setMode(kind);
+        setActionSave(null);
+      });
+    },
+    [busy, actionSave, renameName, duplicateRename, run, onRename, kind, selected],
+  );
   const openJson = useCallback(() => fileInput.current?.click(), []);
   const readJson = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -199,18 +291,22 @@ export function FactorySavesDialog({
                 ? "Overwrite factory?"
                 : mode === "delete"
                   ? "Delete factory?"
-                  : "Open factory"}
+                  : mode === "rename"
+                    ? "Rename factory"
+                    : "Open factory"}
           </DialogTitle>
           <DialogDescription>
             {mode === "save" || mode === "import"
               ? kind === "import"
                 ? "Choose a name for the imported factory."
-                : "Enter a new name or choose an existing factory to overwrite."
+                : "Enter a name or select a factory to overwrite."
               : mode === "overwrite"
                 ? `Replace “${selected?.name ?? "this factory"}” with ${kind === "import" ? "the imported factory" : "the current canvas"}? This cannot be undone.`
                 : mode === "delete"
-                  ? `Delete “${selected?.name ?? "this factory"}” from your saved factories? This cannot be undone.`
-                  : "Saved factories update automatically in this browser."}
+                  ? `Delete “${actionSave?.name ?? "this factory"}” from your saved factories? This cannot be undone.`
+                  : mode === "rename"
+                    ? `Choose a new name for “${actionSave?.name ?? "this factory"}”.`
+                    : "Saved in this browser."}
           </DialogDescription>
         </DialogHeader>
         {(mode === "open" || mode === "save" || mode === "import") && (
@@ -228,52 +324,46 @@ export function FactorySavesDialog({
                   id="factory-name"
                   value={name}
                   onChange={changeName}
+                  onFocus={selectText}
                   disabled={busy}
                   required
                 />
               </div>
             )}
-            <div
+            <ul
+              ref={list}
               className="max-h-[40dvh] space-y-2 overflow-y-auto pr-3 [scrollbar-gutter:stable]"
               aria-label="Saved factories"
               aria-busy={loading}
             >
               {loading ? (
-                <output className="block py-6 text-center text-muted-foreground">
-                  Loading factories…
-                </output>
+                <li>
+                  <output className="block py-6 text-center text-muted-foreground">
+                    Loading factories…
+                  </output>
+                </li>
               ) : !saves.length ? (
-                <p className="py-6 text-center text-muted-foreground">No saved factories yet.</p>
+                <li>
+                  <p className="py-6 text-center text-muted-foreground">No saved factories yet.</p>
+                </li>
               ) : (
                 saves.map((saved) => (
-                  <label
+                  <FactorySaveRow
                     key={saved.id}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-muted/50"
-                  >
-                    <input
-                      type="radio"
-                      name="factory-save"
-                      value={saved.id}
-                      checked={selected?.id === saved.id}
-                      onChange={selectSave}
-                      disabled={busy}
-                      className="shrink-0 accent-primary"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{saved.name}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {saved.updatedAt
-                          ? new Date(saved.updatedAt).toLocaleString()
-                          : "Previous autosave"}
-                      </span>
-                    </span>
-                    {saved.id === activeSave?.id && (
-                      <span className="shrink-0 text-xs text-muted-foreground">Current</span>
-                    )}
-                  </label>
+                    saved={saved}
+                    selected={selected?.id === saved.id}
+                    current={saved.id === activeSave?.id}
+                    disabled={busy}
+                    canOpen={kind === "open"}
+                    onSelect={selectSave}
+                    onOpen={openFactory}
+                    onRename={openRename}
+                    onDelete={openDelete}
+                    onNavigate={navigateRows}
+                  />
                 ))
               )}
-            </div>
+            </ul>
             {error && (
               <p role="alert" className="text-sm text-destructive">
                 {error}
@@ -290,43 +380,7 @@ export function FactorySavesDialog({
                 disabled={busy}
               />
             )}
-            <DialogFooter className="flex-col sm:flex-col">
-              <div className="flex justify-end gap-2">
-                {mode === "save" || mode === "import" ? (
-                  <>
-                    <Button type="button" variant="outline" disabled={busy} onClick={close}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={busy || loading || !name.trim()}>
-                      {busy
-                        ? kind === "import"
-                          ? "Importing…"
-                          : "Saving…"
-                        : kind === "import"
-                          ? "Import"
-                          : "Save"}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      disabled={busy || !selected}
-                      onClick={openDelete}
-                    >
-                      Delete…
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={busy || !selected || selectedId === activeSave?.id}
-                      onClick={load}
-                    >
-                      {busy ? "Opening…" : "Open"}
-                    </Button>
-                  </>
-                )}
-              </div>
+            <DialogFooter className="flex-row flex-wrap items-center justify-between sm:justify-between">
               {mode === "open" && onImport && (
                 <Button type="button" variant="outline" disabled={busy} onClick={openJson}>
                   <UploadIcon />
@@ -341,15 +395,79 @@ export function FactorySavesDialog({
                   onClick={saveJson}
                 >
                   <DownloadIcon />
-                  Save JSON
+                  Download JSON
                 </Button>
               )}
+              <div className="ml-auto flex justify-end gap-2">
+                <Button type="button" variant="outline" disabled={busy} onClick={close}>
+                  Cancel
+                </Button>
+                {mode === "save" || mode === "import" ? (
+                  <Button type="submit" disabled={busy || loading || !name.trim()}>
+                    {busy
+                      ? kind === "import"
+                        ? "Importing…"
+                        : "Saving…"
+                      : kind === "import"
+                        ? "Import"
+                        : selected
+                          ? "Overwrite…"
+                          : "Save"}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    disabled={busy || !selected || selectedId === activeSave?.id}
+                    onClick={load}
+                  >
+                    {busy ? "Opening…" : "Open"}
+                  </Button>
+                )}
+              </div>
+            </DialogFooter>
+          </form>
+        )}
+        {mode === "rename" && (
+          <form onSubmit={rename} className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="rename-factory" className="text-sm font-medium">
+                Factory name
+              </label>
+              <Input
+                ref={renameInput}
+                id="rename-factory"
+                value={renameName}
+                onChange={changeRenameName}
+                onFocus={selectText}
+                disabled={busy}
+                required
+                aria-invalid={Boolean(duplicateRename || error)}
+                aria-describedby={duplicateRename || error ? "rename-error" : undefined}
+              />
+              {(duplicateRename || error) && (
+                <p id="rename-error" role="alert" className="text-sm text-destructive">
+                  {duplicateRename
+                    ? `A factory named “${renameName.trim()}” already exists. Choose another name.`
+                    : error}
+                </p>
+              )}
+            </div>
+            <DialogFooter className="flex-row justify-end">
+              <Button type="button" variant="outline" disabled={busy} onClick={cancel}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={busy || !renameName.trim() || Boolean(duplicateRename)}
+              >
+                {busy ? "Renaming…" : "Rename"}
+              </Button>
             </DialogFooter>
           </form>
         )}
         {(mode === "delete" || mode === "overwrite") && (
           <>
-            {mode === "delete" && selectedId === activeSave?.id && (
+            {mode === "delete" && actionSave?.id === activeSave?.id && (
               <p className="text-sm text-muted-foreground">
                 The current canvas will stay open as an unsaved factory.
               </p>

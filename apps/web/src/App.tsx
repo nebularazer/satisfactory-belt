@@ -184,16 +184,17 @@ function CanvasWorkspace({
   const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const activeSaveId = activeSave?.id;
   useEffect(() => {
-    if (!activeSave) return undefined;
+    if (!activeSaveId) return undefined;
     return startPlanAutosave(
       editor.history,
       {
-        save: (document) => store.save(activeSave.id, document),
+        save: (document) => store.save(activeSaveId, document),
       },
       setSaveError,
     );
-  }, [editor, store, activeSave]);
+  }, [editor, store, activeSaveId]);
   const loadFactory = useCallback(
     async (id: string) => {
       // Persist even after an earlier autosave failure before leaving this factory.
@@ -263,6 +264,14 @@ function CanvasWorkspace({
       }
     },
     [activeSave, store],
+  );
+  const renameFactory = useCallback(
+    async (id: string, name: string) => {
+      const renamed = await store.rename(id, name);
+      setActiveSave((previous) => (previous?.id === id ? renamed : previous));
+      return renamed;
+    },
+    [store],
   );
   const {
     controller,
@@ -528,6 +537,7 @@ function CanvasWorkspace({
           onSaveAs={saveAsFactory}
           onOverwrite={overwriteFactory}
           onDelete={deleteFactory}
+          onRename={renameFactory}
           onImport={readImport}
           onExport={exportFactory}
           finalFocus={canvasFocus}
@@ -544,6 +554,7 @@ function CanvasWorkspace({
           onSaveAs={importAsFactory}
           onOverwrite={overwriteImport}
           onDelete={deleteFactory}
+          onRename={renameFactory}
           finalFocus={canvasFocus}
         />
       )}

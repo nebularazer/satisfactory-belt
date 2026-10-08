@@ -325,3 +325,66 @@ it("serializes same-name creation across connections so only one factory is crea
   first.close();
   second.close();
 });
+
+it("renames only the saved name, preserves selection and document, and keeps it after reopening", async () => {
+  const factory = new IDBFactory();
+  const store = await createBrowserPlanStore(factory);
+  const saved = await store.create("Iron", createReferencePlans());
+  const active = await store.create("Other", empty);
+  const original = await store.load(saved.id);
+  const renamed = await store.rename(saved.id, " Steel ");
+  expect(renamed).toEqual({ ...saved, name: "Steel" });
+  expect(await store.load(saved.id)).toEqual({ ...original, name: "Steel" });
+  expect((await store.loadActive())?.id).toBe(active.id);
+  await store.select(saved.id);
+  await store.save(saved.id, empty);
+  store.close();
+  const reopened = await createBrowserPlanStore(factory);
+  expect(await reopened.loadActive()).toMatchObject({
+    id: saved.id,
+    name: "Steel",
+    document: empty,
+  });
+  reopened.close();
+});
+
+it("rejects blank, duplicate and deleted rename targets, and rolls back a failed rename", async () => {
+  const store = await createBrowserPlanStore(new IDBFactory());
+  const saved = await store.create("Iron", createReferencePlans());
+  await store.create("Copper", empty);
+  const before = await store.load(saved.id);
+  await expect(store.rename(saved.id, " ")).rejects.toThrow("name");
+  await expect(store.rename(saved.id, " Copper ")).rejects.toThrow("already exists");
+  await expect(store.rename("missing", "Steel")).rejects.toThrow("no longer saved");
+  expect(await store.rename(saved.id, " Iron ")).toEqual(saved);
+  // oxlint-disable-next-line typescript/unbound-method -- Call the original with its object store below.
+  const put = IDBObjectStore.prototype.put;
+  vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(
+    function (this: IDBObjectStore, value, key) {
+      if (this.name === "factory-details")
+        throw new DOMException("Storage full", "QuotaExceededError");
+      return put.call(this, value, key);
+    },
+  );
+  await expect(store.rename(saved.id, "Steel")).rejects.toThrow("Storage full");
+  expect(await store.load(saved.id)).toEqual(before);
+  expect((await store.list()).find((entry) => entry.id === saved.id)).toEqual(saved);
+  expect((await store.loadActive())?.name).toBe("Copper");
+  store.close();
+});
+
+it("enforces unique rename destinations across simultaneous tabs", async () => {
+  const factory = new IDBFactory();
+  const first = await createBrowserPlanStore(factory);
+  const second = await createBrowserPlanStore(factory);
+  const iron = await first.create("Iron", empty);
+  const copper = await second.create("Copper", createReferencePlans());
+  const results = await Promise.allSettled([
+    first.rename(iron.id, "Steel"),
+    second.rename(copper.id, " Steel "),
+  ]);
+  expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"]);
+  expect((await first.list()).map((entry) => entry.name).toSorted()).toEqual(["Copper", "Steel"]);
+  first.close();
+  second.close();
+});

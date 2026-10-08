@@ -24,6 +24,7 @@ export interface FactoryStore {
   create(name: string, document: FactoryDocument): Promise<FactorySave>;
   save(id: string, document: FactoryDocument): Promise<void>;
   overwrite(id: string, document: FactoryDocument): Promise<FactorySave>;
+  rename(id: string, name: string): Promise<FactorySave>;
   delete(id: string): Promise<void>;
   close(): void;
 }
@@ -126,13 +127,22 @@ export async function createFactoryStore(
   function transaction<T, R>(
     mode: IDBTransactionMode,
     run: (store: IDBObjectStore, details: IDBObjectStore) => IDBRequest<T>,
-    read: (value: T, store: IDBObjectStore, details: IDBObjectStore) => R,
+    read: (
+      value: T,
+      store: IDBObjectStore,
+      details: IDBObjectStore,
+      abort: (reason: unknown) => void,
+    ) => R,
   ): Promise<R> {
     return new Promise((resolve, reject) => {
       const tx = database.transaction([STORE, DETAILS], mode);
       const objectStore = tx.objectStore(STORE);
       const details = tx.objectStore(DETAILS);
       let result: R;
+      const abort = (reason: unknown) => {
+        reject(reason);
+        tx.abort();
+      };
       tx.addEventListener("complete", () => resolve(result));
       tx.addEventListener("abort", () =>
         reject(tx.error ?? new Error("Factory storage was interrupted.")),
@@ -142,7 +152,7 @@ export async function createFactoryStore(
         const request = run(objectStore, details);
         request.addEventListener("success", () => {
           try {
-            result = read(request.result, objectStore, details);
+            result = read(request.result, objectStore, details, abort);
           } catch (error) {
             reject(error);
             tx.abort();
@@ -235,6 +245,38 @@ export async function createFactoryStore(
       await writeFactory(id, document, false);
     },
     overwrite: (id, document) => writeFactory(id, document, true),
+    rename(id, name) {
+      const trimmed = name.trim();
+      if (!trimmed) return Promise.reject(new Error("Enter a factory name."));
+      return transaction(
+        "readwrite",
+        (_objectStore, details) => details.getAll(),
+        (values: unknown[], objectStore, details, abort) => {
+          const saves = values.map(readDetails);
+          const saved = saves.find((entry) => entry.id === id);
+          if (!saved) throw new Error("This factory is no longer saved.");
+          const existing = findFactoryByName(saves, trimmed);
+          if (existing && existing.id !== id)
+            throw new Error(`A factory named “${trimmed}” already exists. Choose another name.`);
+          const updated = { ...saved, name: trimmed };
+          const request = objectStore.get(id);
+          request.addEventListener("success", () => {
+            try {
+              const savedFactory = readFactory(request.result, id);
+              if (!savedFactory) throw new Error("This factory is no longer saved.");
+              objectStore.put(
+                { ...updated, document: savedFactory.document, version: PLAN_VERSION },
+                id,
+              );
+              details.put(updated, id);
+            } catch (reason) {
+              abort(reason);
+            }
+          });
+          return updated;
+        },
+      );
+    },
     delete(id) {
       return transaction(
         "readwrite",
