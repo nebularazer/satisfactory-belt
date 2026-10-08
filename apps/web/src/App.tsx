@@ -8,12 +8,16 @@ import {
 import type { CanvasCommand, CatalogRequest } from "@satisfactory-belt/canvas-core";
 import { mountCanvas } from "@satisfactory-belt/canvas-pixi";
 import type { CanvasView, RenderPerformance } from "@satisfactory-belt/canvas-pixi";
+import { parseFactoryJson } from "@satisfactory-belt/factory-saves";
+import type { FactoryFile, FactorySave } from "@satisfactory-belt/factory-saves";
 import { createSearchIndex } from "@satisfactory-belt/game-data/search";
 import type { SearchEntry, SearchScope } from "@satisfactory-belt/game-data/search";
 import { isThemePreference } from "@satisfactory-belt/preferences";
 import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
+  SaveIcon,
+  FolderOpenIcon,
   Grid2X2Icon,
   Grid3X3Icon,
   MaximizeIcon,
@@ -33,6 +37,7 @@ import type { KeyboardEvent } from "react";
 
 import { CatalogSearch } from "@/components/catalog-search";
 import { ClearCanvasDialog } from "@/components/clear-canvas-dialog";
+import { FactorySavesDialog } from "@/components/factory-saves-dialog";
 import { Inspector } from "@/components/inspector";
 import { PerformanceBar } from "@/components/performance-bar";
 import { Button } from "@/components/ui/button";
@@ -50,6 +55,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { downloadFactoryJson } from "@/lib/browser-factory-files";
 import { createBrowserPlanStore } from "@/lib/browser-plan-store";
 import type { PlanStore } from "@/lib/browser-plan-store";
 import type { BrowserTheme } from "@/lib/browser-theme";
@@ -78,6 +84,7 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
     assets: GameAssets;
     editor: ReturnType<typeof createFactoryEditor>;
     store: PlanStore;
+    saved: FactorySave | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -91,17 +98,11 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
         store.close();
         return;
       }
-      const saved = await store.load();
+      const saved = await store.loadActive();
       if (abort.signal.aborted) return;
-      let editor: ReturnType<typeof createFactoryEditor>;
-      try {
-        editor = createFactoryEditor(assets.catalog, saved ?? createReferencePlans());
-      } catch (reason) {
-        if (!saved) throw reason;
-        // Unsupported documents are skipped, never repaired or migrated.
-        editor = createFactoryEditor(assets.catalog, createReferencePlans());
-      }
-      setWorkspace({ assets, editor, store });
+      const document = saved?.document ?? createReferencePlans();
+      const editor = createFactoryEditor(assets.catalog, document);
+      setWorkspace({ assets, editor, store, saved: saved ?? null });
     }
     void loadWorkspace().catch((reason: unknown) => {
       store?.close();
@@ -128,7 +129,8 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
     <CanvasWorkspace
       preferences={preferences}
       assets={workspace.assets}
-      editor={workspace.editor}
+      initialEditor={workspace.editor}
+      initialSave={workspace.saved}
       store={workspace.store}
       theme={theme}
     />
@@ -138,16 +140,42 @@ export function App({ preferences, theme }: { preferences: Preferences; theme: B
 function CanvasWorkspace({
   preferences,
   assets,
-  editor,
+  initialEditor,
+  initialSave,
   store,
   theme,
 }: {
   preferences: Preferences;
   assets: GameAssets;
-  editor: ReturnType<typeof createFactoryEditor>;
+  initialEditor: ReturnType<typeof createFactoryEditor>;
+  initialSave: FactorySave | null;
   store: PlanStore;
   theme: BrowserTheme;
 }) {
+  const [editor, setEditor] = useState(initialEditor);
+  const [activeSave, setActiveSave] = useState<FactorySave | null>(initialSave);
+  const [savesOpen, setSavesOpen] = useState(false);
+  const [saveDialog, setSaveDialog] = useState(false);
+  const openSaves = useCallback(() => {
+    setSaveDialog(false);
+    setSavesOpen(true);
+  }, []);
+  const openSaveAs = useCallback(() => {
+    setSaveDialog(true);
+    setSavesOpen(true);
+  }, []);
+  const [importedFactory, setImportedFactory] = useState<FactoryFile | null>(null);
+  const changeImportOpen = useCallback((open: boolean) => {
+    if (!open) setImportedFactory(null);
+  }, []);
+  const readImport = useCallback(
+    async (file: File) => {
+      const imported = parseFactoryJson(await file.text(), assets.catalog);
+      setImportedFactory(imported);
+      setSavesOpen(false);
+    },
+    [assets],
+  );
   const host = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [clearCanvasOpen, setClearCanvasOpen] = useState(false);
@@ -156,7 +184,95 @@ function CanvasWorkspace({
   const placedFromSearch = useRef(false);
   const view = useRef<CanvasView | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  useEffect(() => startPlanAutosave(editor.history, store, setSaveError), [editor, store]);
+  const activeSaveId = activeSave?.id;
+  useEffect(() => {
+    if (!activeSaveId) return undefined;
+    return startPlanAutosave(
+      editor.history,
+      {
+        save: (document) => store.save(activeSaveId, document),
+      },
+      setSaveError,
+    );
+  }, [editor, store, activeSaveId]);
+  const loadFactory = useCallback(
+    async (id: string) => {
+      // Persist even after an earlier autosave failure before leaving this factory.
+      if (activeSave) await store.save(activeSave.id, editor.history.getSnapshot().state);
+      const saved = await store.load(id);
+      if (!saved) throw new Error("This factory is no longer saved.");
+      const nextEditor = createFactoryEditor(assets.catalog, saved.document);
+      await store.select(id);
+      setSaveError(null);
+      setEditor(nextEditor);
+      setActiveSave({ id: saved.id, name: saved.name, updatedAt: saved.updatedAt });
+    },
+    [activeSave, assets, editor, store],
+  );
+  const saveAsFactory = useCallback(
+    async (name: string) => {
+      const document = editor.history.getSnapshot().state;
+      const saved = await store.create(name, document);
+      setSaveError(null);
+      setActiveSave(saved);
+    },
+    [editor, store],
+  );
+  const overwriteFactory = useCallback(
+    async (id: string) => {
+      const saved = await store.overwrite(id, editor.history.getSnapshot().state);
+      setSaveError(null);
+      setActiveSave(saved);
+    },
+    [editor, store],
+  );
+  const commitImport = useCallback(
+    async (name: string, overwriteId?: string) => {
+      if (!importedFactory) throw new Error("Choose a factory file first.");
+      const nextEditor = createFactoryEditor(assets.catalog, importedFactory.document);
+      if (activeSave) await store.save(activeSave.id, editor.history.getSnapshot().state);
+      const document = nextEditor.history.getSnapshot().state;
+      const saved = overwriteId
+        ? await store.overwrite(overwriteId, document)
+        : await store.create(name, document);
+      setSaveError(null);
+      setEditor(nextEditor);
+      setActiveSave(saved);
+    },
+    [activeSave, assets, editor, importedFactory, store],
+  );
+  const importAsFactory = useCallback((name: string) => commitImport(name), [commitImport]);
+  const overwriteImport = useCallback(
+    (id: string) => commitImport(importedFactory?.name ?? "", id),
+    [commitImport, importedFactory],
+  );
+  const exportFactory = useCallback(
+    (name: string) => {
+      downloadFactoryJson({
+        name,
+        document: editor.history.getSnapshot().state,
+      });
+    },
+    [editor],
+  );
+  const deleteFactory = useCallback(
+    async (id: string) => {
+      await store.delete(id);
+      if (activeSave?.id === id) {
+        setSaveError(null);
+        setActiveSave(null);
+      }
+    },
+    [activeSave, store],
+  );
+  const renameFactory = useCallback(
+    async (id: string, name: string) => {
+      const renamed = await store.rename(id, name);
+      setActiveSave((previous) => (previous?.id === id ? renamed : previous));
+      return renamed;
+    },
+    [store],
+  );
   const {
     controller,
     history,
@@ -325,13 +441,23 @@ function CanvasWorkspace({
       workspaceKeyDown: (event: KeyboardEvent<HTMLElement>) => {
         // Document shortcuts also support focused controls and portalled menus.
         // History may already have been handled by the renderer.
-        if (
-          searchOpen ||
-          clearCanvasOpen ||
-          event.defaultPrevented ||
-          event.nativeEvent.isComposing
-        )
-          return;
+        if (event.defaultPrevented || event.nativeEvent.isComposing) return;
+        const modalOpen = searchOpen || clearCanvasOpen || savesOpen || importedFactory !== null;
+        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+          const key = event.key.toLowerCase();
+          const action =
+            key === "o" && !event.shiftKey
+              ? openSaves
+              : key === "s" && event.shiftKey
+                ? openSaveAs
+                : null;
+          if (action) {
+            event.preventDefault();
+            if (!modalOpen && !event.repeat) action();
+            return;
+          }
+        }
+        if (modalOpen) return;
         const target = event.target;
         if (
           target instanceof HTMLElement &&
@@ -389,7 +515,11 @@ function CanvasWorkspace({
     deleteSelection,
     searchOpen,
     clearCanvasOpen,
+    savesOpen,
+    importedFactory,
     openAdd,
+    openSaves,
+    openSaveAs,
   ]);
 
   return (
@@ -407,6 +537,37 @@ function CanvasWorkspace({
         allowedEntryIds={allowedEntryIds}
       />
       <div ref={host} className="absolute inset-0" />
+      {savesOpen && (
+        <FactorySavesDialog
+          store={store}
+          activeSave={activeSave}
+          kind={saveDialog ? "save" : "open"}
+          onOpenChange={setSavesOpen}
+          onLoad={loadFactory}
+          onSaveAs={saveAsFactory}
+          onOverwrite={overwriteFactory}
+          onDelete={deleteFactory}
+          onRename={renameFactory}
+          onImport={readImport}
+          onExport={exportFactory}
+          finalFocus={canvasFocus}
+        />
+      )}
+      {importedFactory && (
+        <FactorySavesDialog
+          store={store}
+          activeSave={activeSave}
+          kind="import"
+          initialName={importedFactory.name}
+          onOpenChange={changeImportOpen}
+          onLoad={loadFactory}
+          onSaveAs={importAsFactory}
+          onOverwrite={overwriteImport}
+          onDelete={deleteFactory}
+          onRename={renameFactory}
+          finalFocus={canvasFocus}
+        />
+      )}
       <ClearCanvasDialog
         open={clearCanvasOpen}
         onOpenChange={setClearCanvasOpen}
@@ -434,8 +595,33 @@ function CanvasWorkspace({
           <DropdownMenuContent
             className="w-50"
             sideOffset={8}
-            finalFocus={searchOpen || clearCanvasOpen ? false : canvasFocus}
+            finalFocus={
+              searchOpen || clearCanvasOpen || savesOpen || importedFactory ? false : canvasFocus
+            }
           >
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={openSaves}
+                aria-keyshortcuts="Control+o Meta+o"
+                title="Open factory (Ctrl/Cmd+O)"
+              >
+                <FolderOpenIcon className="text-muted-foreground" />
+                Open factory…
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={openSaveAs}
+                aria-keyshortcuts="Control+Shift+s Meta+Shift+s"
+                title="Save as (Ctrl/Cmd+Shift+S)"
+              >
+                <SaveIcon className="text-muted-foreground" />
+                Save as…
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={openClearCanvas}>
+                <Trash2Icon />
+                Clear canvas…
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={openAdd} aria-keyshortcuts="n">
                 <PlusIcon className="text-muted-foreground" />
@@ -511,11 +697,6 @@ function CanvasWorkspace({
               <ActivityIcon className="text-muted-foreground" />
               Show performance
             </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={openClearCanvas}>
-              <Trash2Icon />
-              Clear canvas…
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

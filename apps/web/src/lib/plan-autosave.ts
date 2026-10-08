@@ -1,12 +1,10 @@
 import type { EditHistory } from "@satisfactory-belt/edit-history";
 import type { FactoryDocument } from "@satisfactory-belt/factory-core";
 
-import type { PlanStore } from "./browser-plan-store";
-
 /** Save document commits, never transient pointer movement, selection, or camera changes. */
 export function startPlanAutosave(
   history: EditHistory<FactoryDocument>,
-  store: Pick<PlanStore, "save">,
+  store: { save(document: FactoryDocument): Promise<void> },
   onStatus: (error: string | null) => void,
 ) {
   let active = true;

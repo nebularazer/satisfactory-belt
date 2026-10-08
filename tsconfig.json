@@ -8,6 +8,7 @@
     { "path": "./packages/canvas-pixi" },
     { "path": "./packages/preferences" },
     { "path": "./packages/edit-history" },
+    { "path": "./packages/factory-saves" },
     { "path": "./apps/web" }
   ]
 }

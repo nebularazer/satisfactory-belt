@@ -18,6 +18,7 @@
     { "path": "../../packages/preferences" },
     { "path": "../../packages/edit-history" },
     { "path": "../../packages/factory-core" },
-    { "path": "../../packages/game-data" }
+    { "path": "../../packages/game-data" },
+    { "path": "../../packages/factory-saves" }
   ]
 }
