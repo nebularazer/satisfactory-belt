@@ -116,6 +116,8 @@ it("exports the current canvas, imports with rename or overwrite, and rejects in
   const theme = createBrowserTheme(preferences);
   const app = render(<App preferences={preferences} theme={theme} />);
   async function upload(text: string) {
+    if (!screen.queryByRole("dialog")) await menu(user, "Open factory…");
+    await user.click(screen.getByRole("button", { name: "Open JSON…" }));
     const file = new File([text], "factory.json", { type: "application/json" });
     // jsdom has no Blob.text implementation.
     Object.defineProperty(file, "text", { value: async () => text });
@@ -123,9 +125,24 @@ it("exports the current canvas, imports with rename or overwrite, and rejects in
   }
   try {
     await screen.findByRole("button", { name: "Canvas menu" });
-    await menu(user, "Export JSON");
+    await user.click(screen.getByRole("button", { name: "Canvas menu" }));
+    expect(screen.queryByRole("menuitem", { name: /Import JSON|Export JSON/ })).toBeNull();
+    await user.click(await screen.findByRole("menuitem", { name: "Save as…" }));
+    const beforeExport = await store.list();
+    await user.clear(screen.getByRole("textbox", { name: "Factory name" }));
+    await user.type(screen.getByRole("textbox", { name: "Factory name" }), "Portable factory");
+    vi.mocked(downloadFactoryJson).mockImplementationOnce(() => {
+      throw new Error("Download failed");
+    });
+    await user.click(screen.getByRole("button", { name: "Save JSON" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Download failed");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save JSON" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const exported = vi.mocked(downloadFactoryJson).mock.lastCall![0];
-    expect(exported.name).toBe("Iron factory");
+    expect(exported.name).toBe("Portable factory");
+    expect(await store.list()).toEqual(beforeExport);
+    expect((await store.loadActive())?.id).toBe(source.id);
     const text = serializeFactoryJson(exported);
     await upload(text);
     await screen.findByRole("button", { name: "Import" });
@@ -151,7 +168,7 @@ it("exports the current canvas, imports with rename or overwrite, and rejects in
     const before = await store.list();
     await upload("{bad JSON");
     expect((await screen.findByRole("alert")).textContent).toContain("not valid JSON");
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Open factory" })).toBeTruthy();
     expect(await store.list()).toEqual(before);
     expect((await store.loadActive())?.id).toBe(target.id);
     const broken = JSON.parse(text);

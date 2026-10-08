@@ -1,5 +1,6 @@
 import { findFactoryByName } from "@satisfactory-belt/factory-saves";
 import type { FactorySave, FactoryStore } from "@satisfactory-belt/factory-saves";
+import { DownloadIcon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 
@@ -24,6 +25,8 @@ export function FactorySavesDialog({
   onSaveAs,
   onOverwrite,
   onDelete,
+  onImport,
+  onExport,
   finalFocus,
 }: {
   store: Pick<FactoryStore, "list">;
@@ -35,6 +38,8 @@ export function FactorySavesDialog({
   onSaveAs: (name: string) => Promise<void>;
   onOverwrite: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onImport?: (file: File) => Promise<void>;
+  onExport?: (name: string) => void;
   finalFocus: () => HTMLElement | null;
 }) {
   const [mode, setMode] = useState<"open" | "save" | "import" | "delete" | "overwrite">(kind);
@@ -48,6 +53,7 @@ export function FactorySavesDialog({
   const [error, setError] = useState<string | null>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const cancelConfirm = useRef<HTMLButtonElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const selected =
     kind !== "open"
       ? findFactoryByName(saves, name)
@@ -158,6 +164,22 @@ export function FactorySavesDialog({
       setMode("open");
     });
   }, [selectedId, run, onDelete]);
+  const openJson = useCallback(() => fileInput.current?.click(), []);
+  const readJson = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0];
+      event.currentTarget.value = "";
+      if (file && onImport) void run(() => onImport(file));
+    },
+    [onImport, run],
+  );
+  const saveJson = useCallback(() => {
+    if (!onExport || !name.trim()) return;
+    void run(async () => {
+      onExport(name.trim());
+      close();
+    });
+  }, [onExport, name, run, close]);
 
   return (
     <Dialog open onOpenChange={changeOpen}>
@@ -257,40 +279,70 @@ export function FactorySavesDialog({
                 {error}
               </p>
             )}
-            <DialogFooter className="flex-row justify-end">
-              {mode === "save" || mode === "import" ? (
-                <>
-                  <Button type="button" variant="outline" disabled={busy} onClick={close}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={busy || loading || !name.trim()}>
-                    {busy
-                      ? kind === "import"
-                        ? "Importing…"
-                        : "Saving…"
-                      : kind === "import"
-                        ? "Import"
-                        : "Save"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={busy || !selected}
-                    onClick={openDelete}
-                  >
-                    Delete…
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={busy || !selected || selectedId === activeSave?.id}
-                    onClick={load}
-                  >
-                    {busy ? "Opening…" : "Open"}
-                  </Button>
-                </>
+            {mode === "open" && onImport && (
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                aria-label="Import factory JSON"
+                onChange={readJson}
+                disabled={busy}
+              />
+            )}
+            <DialogFooter className="flex-col sm:flex-col">
+              <div className="flex justify-end gap-2">
+                {mode === "save" || mode === "import" ? (
+                  <>
+                    <Button type="button" variant="outline" disabled={busy} onClick={close}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={busy || loading || !name.trim()}>
+                      {busy
+                        ? kind === "import"
+                          ? "Importing…"
+                          : "Saving…"
+                        : kind === "import"
+                          ? "Import"
+                          : "Save"}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={busy || !selected}
+                      onClick={openDelete}
+                    >
+                      Delete…
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={busy || !selected || selectedId === activeSave?.id}
+                      onClick={load}
+                    >
+                      {busy ? "Opening…" : "Open"}
+                    </Button>
+                  </>
+                )}
+              </div>
+              {mode === "open" && onImport && (
+                <Button type="button" variant="outline" disabled={busy} onClick={openJson}>
+                  <UploadIcon />
+                  Open JSON…
+                </Button>
+              )}
+              {mode === "save" && onExport && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || !name.trim()}
+                  onClick={saveJson}
+                >
+                  <DownloadIcon />
+                  Save JSON
+                </Button>
               )}
             </DialogFooter>
           </form>

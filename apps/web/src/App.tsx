@@ -17,8 +17,6 @@ import type { Preferences } from "@satisfactory-belt/preferences";
 import {
   ActivityIcon,
   SaveIcon,
-  DownloadIcon,
-  UploadIcon,
   FolderOpenIcon,
   Grid2X2Icon,
   Grid3X3Icon,
@@ -35,7 +33,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { ChangeEvent, KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
 
 import { CatalogSearch } from "@/components/catalog-search";
 import { ClearCanvasDialog } from "@/components/clear-canvas-dialog";
@@ -167,33 +165,14 @@ function CanvasWorkspace({
     setSavesOpen(true);
   }, []);
   const [importedFactory, setImportedFactory] = useState<FactoryFile | null>(null);
-  const [readingImport, setReadingImport] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const importRevision = useRef(0);
-  const openImport = useCallback(() => fileInput.current?.click(), []);
   const changeImportOpen = useCallback((open: boolean) => {
     if (!open) setImportedFactory(null);
   }, []);
   const readImport = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.currentTarget.files?.[0];
-      event.currentTarget.value = "";
-      if (!file) return;
-      const revision = ++importRevision.current;
-      setReadingImport(true);
-      setFileError(null);
-      try {
-        const imported = parseFactoryJson(await file.text(), assets.catalog);
-        if (revision === importRevision.current) setImportedFactory(imported);
-      } catch (reason) {
-        if (revision === importRevision.current)
-          setFileError(
-            reason instanceof Error ? reason.message : "The factory file could not be read.",
-          );
-      } finally {
-        if (revision === importRevision.current) setReadingImport(false);
-      }
+    async (file: File) => {
+      const imported = parseFactoryJson(await file.text(), assets.catalog);
+      setImportedFactory(imported);
+      setSavesOpen(false);
     },
     [assets],
   );
@@ -266,17 +245,15 @@ function CanvasWorkspace({
     (id: string) => commitImport(importedFactory?.name ?? "", id),
     [commitImport, importedFactory],
   );
-  const exportFactory = useCallback(() => {
-    setFileError(null);
-    try {
+  const exportFactory = useCallback(
+    (name: string) => {
       downloadFactoryJson({
-        name: activeSave?.name ?? "Factory 1",
+        name,
         document: editor.history.getSnapshot().state,
       });
-    } catch (reason) {
-      setFileError(reason instanceof Error ? reason.message : "The factory could not be exported.");
-    }
-  }, [activeSave, editor]);
+    },
+    [editor],
+  );
   const deleteFactory = useCallback(
     async (id: string) => {
       await store.delete(id);
@@ -551,17 +528,11 @@ function CanvasWorkspace({
           onSaveAs={saveAsFactory}
           onOverwrite={overwriteFactory}
           onDelete={deleteFactory}
+          onImport={readImport}
+          onExport={exportFactory}
           finalFocus={canvasFocus}
         />
       )}
-      <input
-        ref={fileInput}
-        type="file"
-        accept=".json,application/json"
-        className="hidden"
-        aria-label="Import factory JSON"
-        onChange={readImport}
-      />
       {importedFactory && (
         <FactorySavesDialog
           store={store}
@@ -615,14 +586,6 @@ function CanvasWorkspace({
               <DropdownMenuItem onClick={openSaveAs}>
                 <SaveIcon className="text-muted-foreground" />
                 Save as…
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={openImport} disabled={readingImport}>
-                <UploadIcon className="text-muted-foreground" />
-                Import JSON…
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportFactory}>
-                <DownloadIcon className="text-muted-foreground" />
-                Export JSON
               </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onClick={openClearCanvas}>
                 <Trash2Icon />
@@ -775,19 +738,6 @@ function CanvasWorkspace({
       {error && (
         <p role="alert" className="absolute inset-x-8 top-1/2 text-center text-sm text-destructive">
           Unable to start the canvas: {error}
-        </p>
-      )}
-      {readingImport && (
-        <output className="absolute top-4 right-4 rounded-lg bg-background p-3 text-sm shadow-sm">
-          Reading factory…
-        </output>
-      )}
-      {fileError && (
-        <p
-          role="alert"
-          className="absolute top-4 right-4 max-w-sm rounded-lg bg-background p-3 text-sm text-destructive shadow-sm"
-        >
-          {fileError}
         </p>
       )}
       {saveError && (
