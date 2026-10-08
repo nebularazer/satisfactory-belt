@@ -568,7 +568,7 @@ function SearchResults({
           aria-label="Search fields"
           variant="outline"
           size="sm"
-          className="w-full"
+          spacing={0}
         >
           {(
             [
@@ -577,7 +577,7 @@ function SearchResults({
               ["output", "Output"],
             ] as const
           ).map(([field, name]) => (
-            <ToggleGroupItem key={field} value={field} className="flex-1">
+            <ToggleGroupItem key={field} value={field}>
               {name}
             </ToggleGroupItem>
           ))}
