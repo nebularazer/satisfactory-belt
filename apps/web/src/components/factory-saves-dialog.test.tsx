@@ -100,14 +100,14 @@ it("selects an existing save and confirms before overwriting it", async () => {
   expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Factory name" }).value).toBe(
     "Copper factory",
   );
-  await user.click(screen.getByRole("button", { name: "Overwrite…" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByText(/Replace “Copper factory”/)).toBeTruthy();
   await waitFor(() =>
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" })),
   );
   await user.keyboard("{Enter}");
   expect(props.onOverwrite).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Overwrite…" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
   await user.click(await screen.findByRole("button", { name: "Overwrite factory" }));
   await waitFor(() => expect(props.onOverwrite).toHaveBeenCalledWith("copper"));
   expect(props.onSaveAs).not.toHaveBeenCalled();
@@ -119,7 +119,7 @@ it("retains overwrite selection on failure and lets the user retry", async () =>
   const props = setup(true);
   props.onOverwrite.mockRejectedValueOnce(new Error("Storage full"));
   await user.click(await screen.findByRole("button", { name: "Copper factory" }));
-  await user.click(screen.getByRole("button", { name: "Overwrite…" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
   await user.click(await screen.findByRole("button", { name: "Overwrite factory" }));
   expect((await screen.findByRole("alert")).textContent).toBe("Storage full");
   expect(props.onOpenChange).not.toHaveBeenCalled();

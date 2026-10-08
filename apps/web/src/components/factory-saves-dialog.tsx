@@ -410,9 +410,7 @@ export function FactorySavesDialog({
                         : "Saving…"
                       : kind === "import"
                         ? "Import"
-                        : selected
-                          ? "Overwrite…"
-                          : "Save"}
+                        : "Save"}
                   </Button>
                 ) : (
                   <Button

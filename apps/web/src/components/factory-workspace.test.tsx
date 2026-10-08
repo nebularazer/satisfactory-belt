@@ -68,7 +68,7 @@ it("saves, overwrites, autosaves, opens with fresh history, and retains a delete
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Undo" }).disabled).toBe(false);
     await menu(user, "Save as…");
     await user.click(await screen.findByRole("button", { name: "Iron factory" }));
-    await user.click(screen.getByRole("button", { name: "Overwrite…" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await user.click(await screen.findByRole("button", { name: "Overwrite factory" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect((await store.loadActive())?.id).toBe(source.id);
