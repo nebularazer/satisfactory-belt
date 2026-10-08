@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { validateGameData } from "./index";
-import type { GameCatalog, IconManifest } from "./index";
+import type { GameCatalog, IconManifest, RecipeUnlock } from "./index";
 
 const hash = "a".repeat(64);
 function fixture(): { catalog: GameCatalog; icons: IconManifest } {
@@ -72,6 +72,23 @@ function fixture(): { catalog: GameCatalog; icons: IconManifest } {
   };
 }
 describe("game data validation", () => {
+  it("rejects incomplete unlock tiers and empty prerequisite groups", () => {
+    const { catalog, icons } = fixture();
+    const unlock: RecipeUnlock = {
+      id: "Milestone",
+      name: "Milestone",
+      kind: "milestone",
+      requirements: [],
+      tier: 7,
+    };
+    catalog.recipes.Recipe.unlocks = [unlock];
+    expect(() => validateGameData(catalog, icons)).not.toThrow();
+    unlock.tier = -1;
+    expect(() => validateGameData(catalog, icons)).toThrow("Invalid unlock tier");
+    unlock.tier = 7;
+    unlock.requirements.push({ all: true, schematics: [] });
+    expect(() => validateGameData(catalog, icons)).toThrow("Invalid unlock requirements");
+  });
   it("rejects logistics parts with missing images or invalid identities", () => {
     const { catalog, icons } = fixture();
     catalog.logistics.Part = {

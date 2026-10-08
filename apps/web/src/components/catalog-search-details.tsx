@@ -1,5 +1,6 @@
 /* oxlint-disable react-perf/jsx-no-jsx-as-prop, react-perf/jsx-no-new-object-as-prop, react-perf/jsx-no-new-array-as-prop, react-perf/jsx-no-new-function-as-prop -- The virtual window bounds icons; fallback state changes only after image errors. */
 import type { Ingredient } from "@satisfactory-belt/game-data";
+import { recipeUnlockRequirements } from "@satisfactory-belt/game-data";
 import { recipeAlternatives, compareRecipes } from "@satisfactory-belt/game-data/search";
 import type { RecipeComparison, SearchEntry } from "@satisfactory-belt/game-data/search";
 import {
@@ -31,7 +32,7 @@ export function CatalogIcon({
 }: {
   iconId: string;
   assets: GameAssets;
-  size?: 16 | 24 | 32 | 64;
+  size?: 16 | 20 | 24 | 32 | 64;
 }) {
   const icon = assets.icons.icons[iconId];
   const sizes = size === 64 ? ([128, 256, 64] as const) : ([64, 128, 256] as const);
@@ -50,9 +51,11 @@ function CatalogImage({ sources, size }: { sources: readonly string[]; size: num
       ? "size-16 shrink-0 object-contain"
       : size === 16
         ? "size-4 shrink-0 object-contain"
-        : size === 24
-          ? "size-6 shrink-0 object-contain"
-          : "size-8 shrink-0 object-contain";
+        : size === 20
+          ? "size-5 shrink-0 object-contain"
+          : size === 24
+            ? "size-6 shrink-0 object-contain"
+            : "size-8 shrink-0 object-contain";
   if (!src)
     return <ImageOffIcon aria-hidden="true" className={`${className} text-muted-foreground`} />;
   // Try the next prepared size on failure instead of permanently hiding the image.
@@ -80,6 +83,7 @@ export function CatalogSearchDetails({
   onPlace,
   allowedEntryIds,
   panelRef,
+  comparisonBaseline,
 }: {
   entry: SearchEntry;
   assets: GameAssets;
@@ -89,6 +93,7 @@ export function CatalogSearchDetails({
   onPlace?: (entry: SearchEntry) => void;
   allowedEntryIds?: ReadonlySet<string>;
   panelRef: React.RefObject<HTMLDivElement | null>;
+  comparisonBaseline?: SearchEntry;
 }) {
   const { catalog } = assets;
   const recipe = entry.kind === "recipe" ? catalog.recipes[entry.entityId] : undefined;
@@ -98,6 +103,14 @@ export function CatalogSearchDetails({
       : recipe?.machineIds[0];
   const machine = recipeMachineId ? catalog.machines[recipeMachineId] : undefined;
   const cycles = recipe && machine ? (60 * machine.manufacturingSpeed) / recipe.durationSeconds : 0;
+  const baseline = comparisonBaseline?.kind === "recipe" ? comparisonBaseline : entry;
+  const unlockRoutes =
+    recipe?.unlocks
+      ?.map((unlock) => ({
+        id: unlock.id,
+        requirements: recipeUnlockRequirements(unlock, recipe.name),
+      }))
+      .filter((route) => route.requirements.length) ?? [];
   const alternativeIds = recipe ? new Set(recipeAlternatives(catalog, recipe.id)) : null;
   const related = index.filter((candidate) =>
     alternativeIds
@@ -165,6 +178,21 @@ export function CatalogSearchDetails({
                 {description}
               </p>
             )}
+            {unlockRoutes.length > 0 && (
+              <section className="mb-5 space-y-2 text-sm" aria-label="Unlock requirements">
+                <h4 className="font-medium">Unlock requirements</h4>
+                {unlockRoutes.map((route, routeIndex) => (
+                  <div key={route.id}>
+                    {routeIndex > 0 && <p className="mb-2 text-xs text-muted-foreground">or</p>}
+                    <ul className="space-y-1 text-muted-foreground">
+                      {route.requirements.map((requirement) => (
+                        <li key={requirement}>{requirement}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </section>
+            )}
             {recipe && (
               <div className="grid gap-4 sm:grid-cols-2">
                 {quantities("Inputs", recipe.ingredients, cycles)}
@@ -212,7 +240,7 @@ export function CatalogSearchDetails({
                   {related.map((candidate) => {
                     const disabled = Boolean(allowedEntryIds && !allowedEntryIds.has(candidate.id));
                     const comparison = recipe
-                      ? compareRecipes(catalog, recipe.id, candidate.entityId, recipeMachineId)
+                      ? compareRecipes(catalog, baseline.entityId, candidate.entityId, machineId)
                       : undefined;
                     return (
                       <li
@@ -332,7 +360,7 @@ function ComparisonMetric({
   const label = kind === "machines" ? "Machines" : kind === "power" ? "Power" : "Input types";
   const formatted =
     value === null ? "Variable" : `${number.format(value)}${kind === "power" ? " MW" : ""}`;
-  const description = `${label}: ${formatted}; ${relation}${difference !== null ? `${difference === 0 ? " as" : " than"} selected recipe at equal output` : ""}`;
+  const description = `${label}: ${formatted}; ${relation}${difference !== null ? `${difference === 0 ? " as" : " than"} baseline recipe at equal output` : ""}`;
   return (
     <Tooltip disableHoverablePopup>
       <TooltipTrigger

@@ -11,6 +11,7 @@ import type {
 } from "@satisfactory-belt/game-data";
 
 import { parseBuildings } from "./buildings.ts";
+import { parseRecipeUnlocks } from "./unlocks.ts";
 import { classId, parseUnreal } from "./unreal.ts";
 
 export interface ExcludedRecipe {
@@ -264,6 +265,9 @@ export function parseCatalog(
         factorMegawatts: number(data, "mVariablePowerConsumptionFactor"),
       },
     };
+  }
+  for (const [id, unlocks] of parseRecipeUnlocks(classes, new Set(Object.keys(recipes)))) {
+    recipes[id]!.unlocks = unlocks;
   }
   if (
     Object.keys(items).length === 0 ||

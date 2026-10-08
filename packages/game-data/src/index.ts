@@ -1,5 +1,7 @@
 import type { Building } from "./buildings";
+import type { RecipeUnlock, UnlockSchematic } from "./unlocks";
 export * from "./buildings";
+export * from "./unlocks";
 
 export type ItemForm = "solid" | "liquid" | "gas";
 export type IconSize = 64 | 128 | 256;
@@ -105,6 +107,8 @@ export interface Recipe {
   events: string[];
   /** Upstream cycle power parameters, relevant to variable-power machines. */
   variablePower: { constantMegawatts: number; factorMegawatts: number };
+  /** Alternative unlock routes. Missing metadata does not imply availability. */
+  unlocks?: RecipeUnlock[];
 }
 
 export interface GameCatalog {
@@ -313,6 +317,16 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
   }
   for (const [id, recipe] of Object.entries(catalog.recipes)) {
     check(id === recipe.id && Boolean(recipe.name.trim()), `Invalid recipe ${id}.`);
+    for (const unlock of recipe.unlocks ?? []) {
+      validateUnlock(unlock, id);
+      for (const group of unlock.requirements) {
+        check(
+          typeof group.all === "boolean" && group.schematics.length > 0,
+          `Invalid unlock requirements in ${id}.`,
+        );
+        for (const schematic of group.schematics) validateUnlock(schematic, id);
+      }
+    }
     check(
       Number.isFinite(recipe.durationSeconds) && recipe.durationSeconds > 0,
       `Invalid duration for ${id}.`,
@@ -357,6 +371,27 @@ export function validateGameData(catalog: GameCatalog, manifest: IconManifest): 
       check(variant.path === `icons/${variant.sha256}.webp`, `Invalid image path for ${id}.`);
     }
   }
+}
+
+function validateUnlock(schematic: UnlockSchematic, recipeId: string): void {
+  check(
+    Boolean(schematic.id?.trim()) && Boolean(schematic.name?.trim()),
+    `Invalid unlock in ${recipeId}.`,
+  );
+  check(
+    ["milestone", "research", "hard-drive", "tutorial", "starting", "event", "other"].includes(
+      schematic.kind,
+    ),
+    `Invalid unlock kind in ${recipeId}.`,
+  );
+  check(
+    schematic.tier === undefined || (Number.isSafeInteger(schematic.tier) && schematic.tier >= 0),
+    `Invalid unlock tier in ${recipeId}.`,
+  );
+  check(
+    schematic.kind !== "milestone" || schematic.tier !== undefined,
+    `Missing unlock tier in ${recipeId}.`,
+  );
 }
 
 function check(condition: boolean, message: string): void {

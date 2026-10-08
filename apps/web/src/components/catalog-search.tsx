@@ -5,9 +5,15 @@ import {
   searchCatalog,
   recipeSearchSummary,
 } from "@satisfactory-belt/game-data/search";
-import type { SearchEntry, SearchOptions, SearchScope } from "@satisfactory-belt/game-data/search";
+import type {
+  SearchDirection,
+  SearchEntry,
+  SearchField,
+  SearchMaterial,
+  SearchScope,
+} from "@satisfactory-belt/game-data/search";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowLeftIcon, SearchIcon, XIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ArrowLeftIcon, CircleCheckIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
@@ -15,26 +21,28 @@ import { CatalogIcon, CatalogSearchDetails } from "@/components/catalog-search-d
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { catalogQuickSelection } from "@/lib/catalog-quick-selection";
+import type { CatalogShortcut } from "@/lib/catalog-quick-selection";
 import type { GameAssets } from "@/lib/game-assets";
 
 type Frame = {
   query: string;
-  category: NonNullable<SearchOptions["category"]>;
+  fields: readonly SearchField[];
   scope?: SearchScope;
   offset: number;
   activeId?: string;
 };
-const emptyFrame = (): Frame => ({ query: "", category: "all", offset: 0 });
+const allFields: readonly SearchField[] = ["name", "input", "output"];
+const emptyFrame = (): Frame => ({ query: "", fields: allFields, offset: 0 });
+export type CatalogConnectionContext = Readonly<{
+  direction: SearchDirection;
+  itemIds: readonly string[];
+}>;
 const label = (entry: SearchEntry) => entry.name;
 const value = (entry: SearchEntry) => entry.id;
 
@@ -45,6 +53,8 @@ export function CatalogSearch({
   finalFocus,
   onAdd,
   allowedEntryIds,
+  connectionContext,
+  searchIndex,
 }: {
   assets: GameAssets;
   open: boolean;
@@ -53,8 +63,13 @@ export function CatalogSearch({
   onAdd?: (entry: SearchEntry, scope?: SearchScope) => void;
   /** Eligibility from the material-link resolver; immutable snapshot of SearchEntry IDs. */
   allowedEntryIds?: ReadonlySet<string>;
+  connectionContext?: CatalogConnectionContext;
+  searchIndex?: readonly SearchEntry[];
 }) {
-  const fullIndex = useMemo(() => createSearchIndex(assets.catalog), [assets.catalog]);
+  const fullIndex = useMemo(
+    () => searchIndex ?? createSearchIndex(assets.catalog),
+    [assets.catalog, searchIndex],
+  );
   const index = useMemo(
     () =>
       allowedEntryIds ? fullIndex.filter((entry) => allowedEntryIds.has(entry.id)) : fullIndex,
@@ -68,6 +83,7 @@ export function CatalogSearch({
   const [searchSession, setSearchSession] = useState(0);
   const [parent, setParent] = useState<Frame | null>(null);
   const [placementError, setPlacementError] = useState<string | null>(null);
+  const [comparisonBaseline, setComparisonBaseline] = useState<SearchEntry | null>(null);
   const [detailEntry, setSelected] = useState<SearchEntry | null>(null);
   const selected =
     detailEntry && index.some((entry) => entry.id === detailEntry.id) ? detailEntry : null;
@@ -125,6 +141,7 @@ export function CatalogSearch({
   function showDetails(entry: SearchEntry, offset: number) {
     restoreInputFocus.current = document.activeElement === input.current;
     setFrame((current) => ({ ...current, offset, activeId: entry.id }));
+    setComparisonBaseline(entry.kind === "recipe" ? entry : null);
     setSelected(entry);
   }
   function showAlternative(entry: SearchEntry) {
@@ -134,14 +151,18 @@ export function CatalogSearch({
       setParent(frame);
       setFrame({ ...emptyFrame(), scope: { kind: selected.kind, id: selected.entityId } });
     }
+    if (!comparisonBaseline && entry.kind === "recipe") setComparisonBaseline(entry);
     setSelected(entry);
   }
   useEffect(() => {
     if (selected) heading.current?.focus();
   }, [selected]);
   function back() {
-    setSelected(null);
-    if (parent) {
+    setPlacementError(null);
+    if (selected) {
+      setSelected(null);
+      setComparisonBaseline(null);
+    } else if (parent) {
       setFrame(parent);
       setParent(null);
     }
@@ -151,6 +172,7 @@ export function CatalogSearch({
     setPlacementError(null);
     if (!next) {
       setSelected(null);
+      setComparisonBaseline(null);
       if (parent) {
         setFrame(parent);
         setParent(null);
@@ -161,7 +183,7 @@ export function CatalogSearch({
   }
   function backShortcut(event: KeyboardEvent<HTMLElement>) {
     if (
-      selected &&
+      (selected || parent) &&
       !event.nativeEvent.isComposing &&
       ((event.altKey && ["ArrowLeft", "Backspace"].includes(event.key)) ||
         event.key === "BrowserBack")
@@ -213,7 +235,7 @@ export function CatalogSearch({
       changeOpen(false);
     }
   }
-  const compact = narrow && viewport.height < 500;
+  const compact = narrow && viewport.height < 600;
   const scopeName =
     frame.scope?.kind === "machine"
       ? assets.catalog.machines[frame.scope.id]?.name
@@ -243,7 +265,7 @@ export function CatalogSearch({
         tabIndex={-1}
         className={
           selected || scopeName
-            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 outline-none sm:pr-16"
+            ? "flex shrink-0 items-center gap-2 px-4 pt-4 pb-3 outline-none"
             : "sr-only"
         }
       >
@@ -282,9 +304,11 @@ export function CatalogSearch({
           panelRef={detailPanel}
           assets={assets}
           machineId={frame.scope?.kind === "machine" ? frame.scope.id : undefined}
+          comparisonBaseline={comparisonBaseline ?? undefined}
         />
       )}
       <div
+        hidden={Boolean(selected)}
         className={
           selected
             ? "hidden"
@@ -295,7 +319,8 @@ export function CatalogSearch({
       >
         <SearchResults
           key={`${searchSession}:${frame.scope?.id ?? "catalog"}`}
-          index={index}
+          index={fullIndex}
+          allowedEntryIds={allowedEntryIds}
           assets={assets}
           frame={frame}
           onFrameChange={setFrame}
@@ -303,9 +328,11 @@ export function CatalogSearch({
           onDetails={showDetails}
           canAdd={Boolean(onAdd)}
           restricted={allowedEntryIds !== undefined}
+          connectionContext={connectionContext}
           inputRef={input}
           restoreInputFocus={restoreInputFocus}
           compact={compact}
+          narrow={narrow}
           visible={!selected}
         />
       </div>
@@ -320,7 +347,7 @@ export function CatalogSearch({
         onKeyDown={keyDown}
         initialFocus={() => (selected ? heading.current : input.current)}
         finalFocus={finalFocus}
-        className="h-[60dvh]"
+        className={compact ? "h-[calc(100dvh-6rem)]" : "h-[60dvh]"}
       >
         {content}
       </DrawerContent>
@@ -333,15 +360,9 @@ export function CatalogSearch({
         onKeyDown={keyDown}
         initialFocus={() => (selected ? heading.current : input.current)}
         finalFocus={finalFocus}
-        className="flex h-[min(42rem,calc(100dvh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-160"
+        className="flex h-[min(42rem,calc(100dvh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-225"
       >
         {content}
-        <DialogClose
-          render={<Button variant="ghost" size="icon" className="absolute top-4 right-4 size-9" />}
-          aria-label="Close catalog"
-        >
-          <XIcon />
-        </DialogClose>
       </DialogContent>
     </Dialog>
   );
@@ -349,6 +370,7 @@ export function CatalogSearch({
 
 function SearchResults({
   index,
+  allowedEntryIds,
   assets,
   frame,
   onFrameChange,
@@ -356,12 +378,15 @@ function SearchResults({
   onDetails,
   canAdd,
   restricted,
+  connectionContext,
   inputRef,
   restoreInputFocus,
   compact,
+  narrow,
   visible,
 }: {
   index: readonly SearchEntry[];
+  allowedEntryIds?: ReadonlySet<string>;
   assets: GameAssets;
   frame: Frame;
   onFrameChange: (frame: Frame) => void;
@@ -369,11 +394,15 @@ function SearchResults({
   onDetails: (entry: SearchEntry, offset: number) => void;
   canAdd: boolean;
   restricted: boolean;
+  connectionContext?: CatalogConnectionContext;
   inputRef: React.RefObject<HTMLInputElement | null>;
   restoreInputFocus: React.RefObject<boolean>;
   compact: boolean;
+  narrow: boolean;
   visible: boolean;
 }) {
+  const shortcuts = useMemo(() => catalogQuickSelection(index), [index]);
+  const showQuickSelection = !frame.scope && shortcuts.length > 0;
   useEffect(() => {
     if (!visible || !restoreInputFocus.current) return undefined;
     // Let the dialog restore focus after the details controls leave the DOM first.
@@ -387,8 +416,13 @@ function SearchResults({
     return () => cancelAnimationFrame(focusFrame);
   }, [inputRef, restoreInputFocus, frame.offset, visible]);
   const results = useMemo(
-    () => searchCatalog(index, frame.query, { category: frame.category, scope: frame.scope }),
-    [index, frame.query, frame.category, frame.scope],
+    () =>
+      searchCatalog(index, frame.query, {
+        fields: frame.fields,
+        scope: frame.scope,
+        allowedEntryIds,
+      }),
+    [index, frame.query, frame.fields, frame.scope, allowedEntryIds],
   );
   const scroll = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(() =>
@@ -400,7 +434,7 @@ function SearchResults({
   const virtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scroll.current,
-    estimateSize: () => 72,
+    estimateSize: () => 48,
     overscan: 5,
     getItemKey,
     initialOffset: frame.offset,
@@ -414,11 +448,27 @@ function SearchResults({
   useLayoutEffect(() => {
     if (visible) virtualizer.scrollToOffset(frame.offset);
   }, [frame.offset, virtualizer, visible]);
+  function inspect(entry: SearchEntry) {
+    setActive(results.indexOf(entry));
+    onDetails(entry, scroll.current?.scrollTop ?? 0);
+  }
   function update(change: Partial<Frame>) {
     setActive(0);
     onFrameChange({ ...frame, ...change, offset: 0, activeId: undefined });
     virtualizer.scrollToOffset(0);
   }
+  const activeEntry = results[active] ?? results[0];
+  const chooseAction = activeEntry?.kind === "machine" || activeEntry?.kind === "extractor";
+  const contextLabel = connectionContext
+    ? `${connectionContext.direction === "consumes" ? "Consumes" : "Produces"} ${
+        connectionContext.itemIds
+          .map((id) => assets.catalog.items[id]?.name)
+          .filter(Boolean)
+          .join(" + ") || "compatible items"
+      }`
+    : restricted
+      ? "Compatible choices"
+      : null;
   return (
     <Combobox<SearchEntry>
       inline
@@ -442,10 +492,13 @@ function SearchResults({
         if (details.reason === "pointer" && details.index >= 0) setActive(details.index);
       }}
     >
-      <div className="shrink-0 space-y-3 px-4 pb-3">
-        <div
-          className={frame.scope ? "flex items-center gap-2" : "flex items-center gap-2 sm:pr-11"}
-        >
+      <div className="shrink-0 space-y-2 px-4 pb-3">
+        {contextLabel && (
+          <p className="truncate text-sm font-medium" title={contextLabel}>
+            {contextLabel}
+          </p>
+        )}
+        <div className="flex items-center gap-2">
           <ComboboxInput
             ref={inputRef}
             type="search"
@@ -482,7 +535,7 @@ function SearchResults({
                 event.preventDefault();
                 event.stopPropagation();
                 const entry = results[active] ?? results[0];
-                if (entry) onDetails(entry, scroll.current?.scrollTop ?? 0);
+                if (entry) inspect(entry);
               } else if (event.key === "Enter") {
                 event.preventDefault();
                 event.stopPropagation();
@@ -513,157 +566,295 @@ function SearchResults({
             )}
           </ComboboxInput>
         </div>
-        {!frame.scope && (
-          <fieldset aria-label="Result category" className="flex gap-1">
-            {(
-              [
-                ["all", "All"],
-                ["recipes", "Recipes"],
-                ["buildings", "Buildings"],
-              ] as const
-            ).map(([category, name]) => (
-              <Button
-                key={category}
-                variant={frame.category === category ? "secondary" : "ghost"}
-                size="sm"
-                className="flex-1"
-                aria-pressed={frame.category === category}
-                onClick={() => update({ category })}
-              >
-                {name}
-              </Button>
-            ))}
-          </fieldset>
-        )}
-      </div>
-      <output
-        aria-live="polite"
-        className="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground"
-      >
-        {results.length} {results.length === 1 ? "result" : "results"}
-      </output>
-      <ScrollArea
-        className={results.length ? "min-h-0 flex-1" : "hidden"}
-        viewportProps={{
-          ref: scroll,
-          role: "grid",
-          "aria-rowcount": results.length,
-          "aria-colcount": 2,
-          tabIndex: -1,
-          render: <ComboboxList aria-label="Catalog results" className="max-h-none p-0" />,
-          className: "overscroll-contain",
-        }}
-      >
-        <div
-          role="presentation"
-          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+        <ToggleGroup
+          multiple
+          value={frame.fields}
+          onValueChange={(fields) =>
+            update({ fields: allFields.filter((field) => fields.includes(field)) })
+          }
+          aria-label="Search fields"
+          variant="outline"
+          size="sm"
+          className="w-full"
         >
-          {virtualizer.getVirtualItems().map((row) => {
-            const entry = results[row.index]!;
-            return (
-              <ComboboxItem
-                key={entry.id}
-                render={<div id={`${resultId}-${row.index}`} />}
-                data-highlighted={active === row.index ? "" : undefined}
-                value={entry}
-                index={row.index}
-                role="row"
-                aria-rowindex={row.index + 1}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 8,
-                  width: "calc(100% - 20px)",
-                  height: row.size,
-                  transform: `translateY(${row.start}px)`,
-                }}
-                className="gap-2 px-2 pr-1 [&>[data-slot=combobox-item-indicator]]:hidden"
-              >
-                <span
-                  role="gridcell"
-                  className="flex min-w-0 flex-1 items-center gap-3"
-                  aria-disabled={!canAdd && entry.kind !== "machine" && entry.kind !== "extractor"}
-                >
-                  <CatalogIcon assets={assets} iconId={entry.iconId} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="line-clamp-2 whitespace-normal font-medium leading-5">
-                        {entry.name}
-                      </span>
-                      {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
-                      {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
-                    </span>
-                    <span className="mt-0.5 flex items-baseline gap-2 text-xs text-muted-foreground">
-                      <span
-                        className="min-w-0 truncate"
-                        title={entry.machineSummary ?? entry.subtitle}
-                      >
-                        {entry.machineSummary ?? entry.subtitle}
-                      </span>
-                      {entry.productionRate && (
-                        <span className="shrink-0 tabular-nums">· {entry.productionRate}</span>
-                      )}
-                    </span>
-                  </span>
-                  {canAdd && (
-                    <PlusIcon
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0 text-muted-foreground"
-                    />
-                  )}
-                </span>
-                <span role="gridcell" className="shrink-0 border-l border-border pl-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-11 min-w-11 shrink-0 gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
-                    aria-label={`Details for ${entry.name}`}
-                    tabIndex={active === row.index ? 0 : -1}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") return;
-                      event.stopPropagation();
-                      if (event.key === "ArrowLeft") {
-                        event.preventDefault();
-                        inputRef.current?.focus();
-                      }
-                    }}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onDetails(entry, scroll.current?.scrollTop ?? 0);
-                    }}
-                  >
-                    Details
-                    <ChevronRightIcon aria-hidden="true" className="size-3.5" />
-                  </Button>
-                </span>
-              </ComboboxItem>
-            );
-          })}
-        </div>
-      </ScrollArea>
-      {results.length === 0 && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-6 text-center">
-          <p>{restricted ? "No compatible choices found" : "No matches found"}</p>
-          <p className="text-sm text-muted-foreground">
-            {restricted
-              ? "Try another name or reset filters. Only choices that support this connection are available."
-              : "Try another name or reset the filters."}
-          </p>
-          <Button variant="outline" onClick={() => update({ query: "", category: "all" })}>
-            Reset search
-          </Button>
-        </div>
+          {(
+            [
+              ["name", "Recipe name"],
+              ["input", "Input"],
+              ["output", "Output"],
+            ] as const
+          ).map(([field, name]) => (
+            <ToggleGroupItem key={field} value={field} className="flex-1">
+              <CircleCheckIcon
+                aria-hidden="true"
+                className="size-3.5 fill-transparent stroke-muted-foreground group-aria-pressed/toggle:fill-foreground group-aria-pressed/toggle:stroke-background group-aria-pressed/toggle:[&_path]:opacity-100 [&_path]:opacity-0"
+              />
+              {name}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      {narrow && showQuickSelection && !frame.query.trim() && (
+        <QuickSelection
+          shortcuts={shortcuts}
+          assets={assets}
+          allowedEntryIds={allowedEntryIds}
+          canAdd={canAdd}
+          narrow
+          onChoose={onChoose}
+        />
       )}
+      <div className="flex min-h-0 flex-1 border-t">
+        {!narrow && showQuickSelection && (
+          <QuickSelection
+            shortcuts={shortcuts}
+            assets={assets}
+            allowedEntryIds={allowedEntryIds}
+            canAdd={canAdd}
+            narrow={false}
+            onChoose={onChoose}
+          />
+        )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <output aria-live="polite" className="shrink-0 px-4 py-2 text-xs text-muted-foreground">
+            {results.length} {results.length === 1 ? "result" : "results"}
+          </output>
+          <ScrollArea
+            className={results.length ? "min-h-0 flex-1" : "hidden"}
+            viewportProps={{
+              ref: scroll,
+              role: "grid",
+              "aria-rowcount": results.length,
+              "aria-colcount": 4,
+              tabIndex: -1,
+              render: <ComboboxList aria-label="Catalog results" className="max-h-none p-0" />,
+              className: "overscroll-contain",
+            }}
+          >
+            <div
+              role="presentation"
+              style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+            >
+              {virtualizer.getVirtualItems().map((row) => {
+                const entry = results[row.index]!;
+                return (
+                  <div
+                    key={entry.id}
+                    id={`${resultId}-${row.index}`}
+                    data-highlighted={active === row.index ? "" : undefined}
+                    onPointerEnter={() => setActive(row.index)}
+                    role="row"
+                    aria-rowindex={row.index + 1}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 8,
+                      width: "calc(100% - 20px)",
+                      height: row.size,
+                      transform: `translateY(${row.start}px)`,
+                    }}
+                    className="grid grid-cols-[minmax(0,1fr)_3.75rem] items-center gap-1 rounded-md hover:bg-accent data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  >
+                    <ComboboxItem
+                      render={<div />}
+                      data-highlighted={active === row.index ? "" : undefined}
+                      value={entry}
+                      index={row.index}
+                      role="presentation"
+                      className="grid h-11 min-w-0 grid-cols-[5.375rem_minmax(0,1fr)_5.375rem] gap-1 px-1 data-highlighted:bg-transparent [&>[data-slot=combobox-item-indicator]]:hidden"
+                    >
+                      <span
+                        role="gridcell"
+                        aria-disabled={
+                          !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
+                        }
+                      >
+                        <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
+                      </span>
+                      <span
+                        role="gridcell"
+                        className="flex min-w-0 items-center justify-center gap-1 text-sm font-medium"
+                      >
+                        <span className="min-w-0 truncate" title={entry.name}>
+                          {entry.name}
+                        </span>
+                        {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
+                        {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
+                      </span>
+                      <span
+                        role="gridcell"
+                        aria-disabled={
+                          !canAdd && entry.kind !== "machine" && entry.kind !== "extractor"
+                        }
+                      >
+                        <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
+                      </span>
+                    </ComboboxItem>
+                    <span role="gridcell" className="border-l pl-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-11 w-full px-1 text-xs text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
+                        aria-label={`Details for ${entry.name}`}
+                        tabIndex={active === row.index ? 0 : -1}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") return;
+                          event.stopPropagation();
+                          if (event.key === "ArrowLeft") {
+                            event.preventDefault();
+                            inputRef.current?.focus();
+                          }
+                        }}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          inspect(entry);
+                        }}
+                      >
+                        Details
+                      </Button>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+          {results.length === 0 && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 pb-6 text-center">
+              <p>{restricted ? "No compatible choices found" : "No matches found"}</p>
+              <p className="text-sm text-muted-foreground">
+                {!frame.fields.length
+                  ? "Enable Recipe name, Input, or Output to search."
+                  : restricted
+                    ? "Try another name or reset filters. Only choices that support this connection are available."
+                    : "Try another name or reset the filters."}
+              </p>
+              <Button variant="outline" onClick={() => update({ query: "", fields: allFields })}>
+                Reset search
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
       <p
         className={
           compact ? "sr-only" : "shrink-0 border-t px-4 py-3 text-xs text-muted-foreground"
         }
       >
-        Use the details button to inspect a result
-        <span className="hidden sm:inline"> · ↑ ↓ Navigate · Alt+Enter Details · Esc Close</span>
+        {canAdd
+          ? chooseAction
+            ? "Choose a recipe or resource"
+            : "Select a result to place it"
+          : "Use Details to inspect a result"}
+        <span className="hidden sm:inline">
+          {" "}
+          · ↑ ↓ Navigate
+          {canAdd || chooseAction ? ` · Enter ${chooseAction ? "Choose" : "Place"}` : ""} ·
+          Alt+Enter Details · Alt+← Back · Esc Close
+        </span>
       </p>
     </Combobox>
+  );
+}
+
+function QuickSelection({
+  shortcuts,
+  assets,
+  allowedEntryIds,
+  canAdd,
+  narrow,
+  onChoose,
+}: {
+  shortcuts: readonly CatalogShortcut[];
+  assets: GameAssets;
+  allowedEntryIds?: ReadonlySet<string>;
+  canAdd: boolean;
+  narrow: boolean;
+  onChoose: (entry: SearchEntry, offset: number) => void;
+}) {
+  const headingId = useId();
+  return (
+    <section
+      aria-labelledby={headingId}
+      className={
+        narrow ? "shrink-0 border-t pt-2 pb-1" : "flex w-52 shrink-0 flex-col border-r pt-2"
+      }
+    >
+      <h2 id={headingId} className="px-4 pb-1 text-xs font-medium text-muted-foreground">
+        Quick add
+      </h2>
+      <ScrollArea
+        orientation={narrow ? "horizontal" : "vertical"}
+        className={narrow ? "h-22" : "min-h-0 flex-1"}
+        viewportProps={{ className: narrow ? "overscroll-x-contain" : "overscroll-contain" }}
+      >
+        <div className={narrow ? "flex w-max gap-1 px-3 pb-2" : "space-y-1 px-2 pb-2"}>
+          {shortcuts.map(({ entry, label: shortLabel }) => {
+            const incompatible = Boolean(allowedEntryIds && !allowedEntryIds.has(entry.id));
+            return (
+              <Button
+                key={entry.id}
+                variant="ghost"
+                disabled={!canAdd || incompatible}
+                aria-label={`Place ${entry.name}`}
+                title={
+                  incompatible ? `${entry.name} does not support this connection.` : entry.name
+                }
+                onClick={() => onChoose(entry, 0)}
+                className={
+                  narrow
+                    ? "h-20 w-20 flex-col gap-1 px-1 text-xs whitespace-normal"
+                    : "h-12 w-full justify-start gap-3 px-2 text-left text-xs whitespace-normal"
+                }
+              >
+                <CatalogIcon assets={assets} iconId={entry.iconId} size={32} />
+                <span className="min-w-0 leading-tight">{narrow ? shortLabel : entry.name}</span>
+              </Button>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </section>
+  );
+}
+
+/** Reserve four slots per side so flows align across every result. */
+function MaterialSlots({
+  assets,
+  materials,
+  side,
+}: {
+  assets: GameAssets;
+  materials: readonly SearchMaterial[];
+  side: "input" | "output";
+}) {
+  return (
+    <span
+      role="group"
+      aria-label={side === "input" ? "Inputs" : "Outputs"}
+      className="grid shrink-0 grid-cols-4 gap-0.5"
+    >
+      {Array.from({ length: 4 }, (_, slot) => {
+        const material = materials[side === "input" ? slot : slot - (4 - materials.length)];
+        return material ? (
+          <span
+            key={slot}
+            role="img"
+            aria-label={material.name}
+            title={material.name}
+            className="size-5"
+          >
+            <CatalogIcon
+              assets={assets}
+              iconId={assets.catalog.items[material.itemId]!.iconId}
+              size={20}
+            />
+          </span>
+        ) : (
+          <span key={slot} aria-hidden="true" className="size-5" />
+        );
+      })}
+    </span>
   );
 }
