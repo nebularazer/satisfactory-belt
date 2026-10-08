@@ -15,11 +15,16 @@ An empty field selection gives no results. Input/output matching includes item
 abbreviations and byproducts. Complete item names select that exact material
 (separating packaged items); partial queries can match several materials.
 
-Each result keeps its large icon, title, and Alternate/Event badge. A single row of
-material icons reserves four slots for inputs aligned left, a Lucide arrow, and
-four slots for outputs aligned right. Material names appear on hover and remain
-accessible to assistive technology. Machine, power, quantities, and comparisons
-are available in Details.
+The full-width shadcn toggles use a Lucide CircleCheck indicator: an outline circle
+when inactive and a filled circle with a check when active. The icon remains mounted
+at a fixed size so switching fields does not move the labels or other controls.
+
+Each result uses one row: four input slots aligned left, the name and Alternate/Event
+badge centered in the remaining space, and four output slots aligned right. Long
+names truncate without moving the slots. The centered name opens Details; the
+material areas and remaining row space retain the placement/choose action.
+Material names appear on hover and remain accessible to assistive technology.
+Machine, power, quantities, and comparisons are available in Details.
 
 ## Canvas placement
 
@@ -85,7 +90,7 @@ not support the connection.
 
 ## Rendering and validation
 
-Results use a fixed 72px virtual row with five rows of overscan. Only the visible
+Results use a fixed 48px virtual row with five rows of overscan. Only the visible
 window, overscan, and keyboard-active row mount. Images use lazy loading, async
 decoding, fixed dimensions, and a bounded fallback through prepared sizes.
 The result list stays mounted while details are visible to preserve its selection;

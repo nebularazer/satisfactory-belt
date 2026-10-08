@@ -13,7 +13,7 @@ import type {
   SearchScope,
 } from "@satisfactory-belt/game-data/search";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowLeftIcon, ArrowRightIcon, SearchIcon, XIcon, ChevronRightIcon } from "lucide-react";
+import { ArrowLeftIcon, CircleCheckIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
@@ -427,7 +427,7 @@ function SearchResults({
   const virtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scroll.current,
-    estimateSize: () => 72,
+    estimateSize: () => 48,
     overscan: 5,
     getItemKey,
     initialOffset: frame.offset,
@@ -568,7 +568,7 @@ function SearchResults({
           aria-label="Search fields"
           variant="outline"
           size="sm"
-          spacing={0}
+          className="w-full"
         >
           {(
             [
@@ -577,7 +577,11 @@ function SearchResults({
               ["output", "Output"],
             ] as const
           ).map(([field, name]) => (
-            <ToggleGroupItem key={field} value={field}>
+            <ToggleGroupItem key={field} value={field} className="flex-1">
+              <CircleCheckIcon
+                aria-hidden="true"
+                className="size-3.5 fill-transparent stroke-muted-foreground group-aria-pressed/toggle:fill-foreground group-aria-pressed/toggle:stroke-background group-aria-pressed/toggle:[&_path]:opacity-100 [&_path]:opacity-0"
+              />
               {name}
             </ToggleGroupItem>
           ))}
@@ -595,7 +599,7 @@ function SearchResults({
           ref: scroll,
           role: "grid",
           "aria-rowcount": results.length,
-          "aria-colcount": 2,
+          "aria-colcount": 3,
           tabIndex: -1,
           render: <ComboboxList aria-label="Catalog results" className="max-h-none p-0" />,
           className: "overscroll-contain",
@@ -624,34 +628,19 @@ function SearchResults({
                   height: row.size,
                   transform: `translateY(${row.start}px)`,
                 }}
-                className="gap-2 px-2 pr-1 [&>[data-slot=combobox-item-indicator]]:hidden"
+                className="grid grid-cols-[4.75rem_minmax(0,1fr)_4.75rem] gap-2 px-2 [&>[data-slot=combobox-item-indicator]]:hidden"
               >
                 <span
                   role="gridcell"
-                  className="flex min-w-0 flex-1 items-center gap-3"
                   aria-disabled={!canAdd && entry.kind !== "machine" && entry.kind !== "extractor"}
                 >
-                  <CatalogIcon assets={assets} iconId={entry.iconId} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="min-w-0 truncate font-medium leading-5" title={entry.name}>
-                        {entry.name}
-                      </span>
-                      {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
-                      {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
-                    </span>
-                    <span className="mt-1 flex items-center gap-1 text-muted-foreground">
-                      <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
-                      <ArrowRightIcon aria-hidden="true" className="size-4 shrink-0" />
-                      <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
-                    </span>
-                  </span>
+                  <MaterialSlots assets={assets} materials={entry.inputs} side="input" />
                 </span>
-                <span role="gridcell" className="shrink-0 border-l border-border pl-1">
+                <span role="gridcell" className="min-w-0">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-11 min-w-11 shrink-0 gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
+                    className="h-11 w-full min-w-0 gap-2 rounded-md px-0 text-sm font-medium hover:bg-transparent dark:hover:bg-transparent"
                     aria-label={`Details for ${entry.name}`}
                     tabIndex={active === row.index ? 0 : -1}
                     onPointerDown={(event) => event.stopPropagation()}
@@ -669,9 +658,18 @@ function SearchResults({
                       inspect(entry);
                     }}
                   >
-                    <span className="hidden sm:inline">Details</span>
-                    <ChevronRightIcon aria-hidden="true" className="size-3.5" />
+                    <span className="min-w-0 truncate" title={entry.name}>
+                      {entry.name}
+                    </span>
+                    {entry.alternate && <Badge variant="secondary">Alternate</Badge>}
+                    {entry.events.length > 0 && <Badge variant="outline">Event</Badge>}
                   </Button>
+                </span>
+                <span
+                  role="gridcell"
+                  aria-disabled={!canAdd && entry.kind !== "machine" && entry.kind !== "extractor"}
+                >
+                  <MaterialSlots assets={assets} materials={entry.outputs} side="output" />
                 </span>
               </ComboboxItem>
             );

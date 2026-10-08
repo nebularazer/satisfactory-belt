@@ -239,7 +239,7 @@ it("enables all search fields by default and allows independent combinations", a
   expect(screen.getByText(/Enter Choose/)).toBeTruthy();
 });
 
-it("keeps result rows minimal with four input slots, an arrow, and four output slots", async () => {
+it("keeps inputs, the recipe name and badge, and outputs in a single row", async () => {
   const user = userEvent.setup();
   render(
     <CatalogSearch
@@ -261,8 +261,12 @@ it("keeps result rows minimal with four input slots, an arrow, and four output s
   expect(inputs.children[3]?.getAttribute("aria-hidden")).toBe("true");
   expect(outputs.children[0]?.getAttribute("aria-hidden")).toBe("true");
   expect(outputs.children[3]?.getAttribute("aria-label")).toBe("Iron Ingot");
-  expect(inputs.nextElementSibling?.tagName.toLowerCase()).toBe("svg");
-  expect(inputs.nextElementSibling?.nextElementSibling).toBe(outputs);
+  const cells = within(row).getAllByRole("gridcell");
+  expect(cells).toHaveLength(3);
+  expect(cells[0]?.contains(inputs)).toBe(true);
+  expect(cells[1]?.contains(within(row).getByText("Pure Iron"))).toBe(true);
+  expect(cells[1]?.contains(within(row).getByText("Alternate"))).toBe(true);
+  expect(cells[2]?.contains(outputs)).toBe(true);
   expect(row.textContent).not.toMatch(/MW|\/min|Iron Ore|Smelter/);
   await user.click(within(row).getByRole("button", { name: "Details for Pure Iron" }));
   expect(screen.getByText(/Smelter · 4 MW · 60\/min/)).toBeTruthy();
@@ -346,4 +350,25 @@ it("does not substitute a packaged input when the exact material is incompatible
   await user.clear(screen.getByRole("combobox"));
   await user.type(screen.getByRole("combobox"), "packaged iron ore");
   expect(screen.getByRole("row", { name: /Pure Iron/ })).toBeTruthy();
+});
+
+it.each(["Inputs", "Outputs"])("places a recipe once when clicking its %s area", async (side) => {
+  const user = userEvent.setup();
+  const assets = recipeAssets();
+  const add = vi.fn();
+  render(
+    <CatalogSearch
+      assets={assets}
+      open
+      onOpenChange={vi.fn()}
+      finalFocus={finalFocus}
+      onAdd={add}
+    />,
+  );
+  const row = await screen.findByRole("row", { name: /Pure Iron/ });
+  await user.click(within(row).getByRole("group", { name: side }));
+  expect(add).toHaveBeenCalledExactlyOnceWith(
+    createSearchIndex(assets.catalog).find((entry) => entry.entityId === "alternative"),
+    undefined,
+  );
 });
